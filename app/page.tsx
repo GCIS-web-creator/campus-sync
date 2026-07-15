@@ -38,6 +38,9 @@ export default function CampusSyncApp() {
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
   
+  // 🌟 学校貢献度ポイントのステート（初期値は仮に42）
+  const [score, setScore] = useState(42);
+
   // 学食の混雑度投票ステート
   const [crowdVotes, setCrowdVotes] = useState({ empty: 15, normal: 60, crowded: 25 });
   const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
@@ -49,8 +52,22 @@ export default function CampusSyncApp() {
     return Math.round((adjustedVal / totalVotes) * 100) || 0;
   };
 
+  // 🌟 投票時にポイントを連動させる処理
   const handleVote = (type: 'empty' | 'normal' | 'crowded') => {
-    setUserVote(userVote === type ? null : type);
+    if (userVote !== type) {
+      setUserVote(type);
+      setScore(prev => Math.min(prev + 5, 100)); // 投票で+5ポイント
+    } else {
+      setUserVote(null);
+      setScore(prev => Math.max(prev - 5, 0)); // キャンセルで-5ポイント
+    }
+  };
+
+  // 🌟 エアコン報告時にポイントを加算する処理
+  const submitAcReport = () => {
+    setShowTempModal(false);
+    setScore(prev => Math.min(prev + 10, 100)); // 報告で+10ポイント
+    alert("報告ありがとうございます！学校貢献度 +10pt 獲得しました！🎉"); 
   };
 
   // タブごとのコンテンツを描画する関数
@@ -65,14 +82,16 @@ export default function CampusSyncApp() {
               <div className="flex justify-between items-end mb-2 relative z-10">
                 <div>
                   <h2 className="text-sm font-medium text-white/90 mb-1">今日の学校貢献度</h2>
-                  <p className="text-3xl font-bold tracking-tight">42 <span className="text-base font-normal text-white/80">/ 100 pt</span></p>
+                  {/* 🌟 ポイントが動的に変わるように修正 */}
+                  <p className="text-3xl font-bold tracking-tight">{score} <span className="text-base font-normal text-white/80">/ 100 pt</span></p>
                 </div>
                 <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
                   <CheckCircle size={24} className="text-white" />
                 </div>
               </div>
               <div className="h-2 bg-black/10 rounded-full overflow-hidden mt-4 relative z-10">
-                <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out" style={{ width: '42%' }}></div>
+                {/* 🌟 メーターの長さがポイントに連動するように修正 */}
+                <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out" style={{ width: `${score}%` }}></div>
               </div>
             </div>
 
@@ -173,7 +192,6 @@ export default function CampusSyncApp() {
       case 'facilities':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* 施設タブは以前のコードと同様 */}
             <section>
               <h3 className="text-[17px] font-bold text-gray-800 mb-3 flex items-center">
                 <BookOpen size={20} className="mr-2 text-indigo-600"/> 図書館
@@ -261,10 +279,9 @@ export default function CampusSyncApp() {
   };
 
   return (
-    // PCでは左右分割、スマホでは今まで通りのレイアウトにするレスポンシブ設定
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
       
-      {/* PC用サイドバー（スマホでは非表示） */}
+      {/* PC用サイドバー */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-sm z-30 relative">
         <div className="p-6">
           <h1 className="text-2xl font-black text-gray-800 tracking-tight mb-8">
@@ -283,19 +300,19 @@ export default function CampusSyncApp() {
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col relative w-full max-w-2xl mx-auto shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent">
         
-        {/* スマホ用ヘッダー（PCでは非表示） */}
+        {/* スマホ用ヘッダー */}
         <header className="md:hidden flex justify-between items-center px-5 py-3.5 bg-white/80 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
           <h1 className="text-xl font-black text-gray-800 tracking-tight">
             Campus<span className="text-blue-600">Sync</span>
           </h1>
         </header>
 
-        {/* スクロール領域（overflow-y-scroll でガタつき防止） */}
+        {/* スクロール領域 */}
         <main className="flex-1 overflow-y-scroll pb-24 md:pb-10 px-5 pt-5 md:pt-10">
           {renderContent()}
         </main>
 
-        {/* スマホ用ボトムナビゲーション（PCでは非表示） */}
+        {/* スマホ用ボトムナビゲーション */}
         <nav className="md:hidden absolute bottom-0 w-full bg-white border-t border-gray-100 flex justify-around items-center h-20 pb-4 px-2 z-20">
           <NavItem icon={<Home size={24} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} />
           <NavItem icon={<Utensils size={24} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} />
@@ -356,7 +373,8 @@ export default function CampusSyncApp() {
                 </div>
               </div>
             </div>
-            <button onClick={() => setShowTempModal(false)} className="w-full py-3.5 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl shadow-md shadow-teal-200 transition-colors">
+            {/* 🌟 送信ボタンをポイント連動関数に接続 */}
+            <button onClick={submitAcReport} className="w-full py-3.5 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl shadow-md shadow-teal-200 transition-colors">
               送信する
             </button>
           </div>
@@ -369,7 +387,6 @@ export default function CampusSyncApp() {
 
 // --- サブコンポーネント ---
 
-// 学食投票用のバーコンポーネント
 function VoteBar({ label, count, type, userVote, percent, color }: { label: string, count: number, type: string, userVote: string | null, percent: number, color: string }) {
   const isVoted = userVote === type;
   return (
@@ -387,7 +404,6 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
   )
 }
 
-// スマホ用ボトムナビゲーションアイテム
 function NavItem({ icon, label, isActive, onClick }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex flex-col items-center justify-center w-16 pt-2 gap-1 relative">
@@ -401,7 +417,6 @@ function NavItem({ icon, label, isActive, onClick }: { icon: React.ReactNode, la
   );
 }
 
-// PC用サイドバーアイテム
 function SidebarItem({ icon, label, isActive, onClick, badge }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-500 hover:bg-gray-50 font-medium'}`}>
