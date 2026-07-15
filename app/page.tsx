@@ -1,15 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Home, Utensils, BookOpen, Settings, Bell, CheckCircle, 
   Clock, FileText, Monitor, Wind, ThermometerSun, 
   ThermometerSnowflake, Search, Info, Users, Check, X, Plus, 
   ChevronRight, AlertTriangle, Sparkles, Star, MapPin, 
-  QrCode, User, Palette, BellRing, Lock, Sparkle
+  QrCode, User, Palette, BellRing, Lock, Sparkle,
+  Calendar, Bus, MessageSquare, Award, Heart, ThumbsUp,
+  ChevronLeft, BookOpenCheck, ShieldAlert, GraduationCap,
+  Volume2, Coffee, Moon, Sun, HelpCircle
 } from 'lucide-react';
 
-// --- テーマカラー別の Tailwind クラス定義 ---
+// --- 🎨 テーマカラー別の Tailwind クラス定義（バリエーション拡張） ---
 const THEMES = {
   blue: {
     bg: 'bg-blue-500',
@@ -75,17 +78,32 @@ const THEMES = {
     gradient: 'from-orange-500 to-amber-400',
     borderLight: 'border-orange-100',
     ring: 'focus:ring-orange-500/20',
+  },
+  indigo: {
+    bg: 'bg-indigo-500',
+    bgHover: 'hover:bg-indigo-600',
+    text: 'text-indigo-600',
+    textLight: 'text-indigo-500',
+    border: 'border-indigo-500',
+    lightBg: 'bg-indigo-50',
+    lightBgHover: 'hover:bg-indigo-100',
+    shadow: 'shadow-indigo-200',
+    gradient: 'from-indigo-500 to-purple-500',
+    borderLight: 'border-indigo-100',
+    ring: 'focus:ring-indigo-500/20',
   }
 };
 
 type ThemeKey = keyof typeof THEMES;
 
-// --- 初期モックデータ ---
+// --- 📋 初期モックデータ群の超拡充 ---
 
 const INITIAL_TODOS = [
   { id: 1, title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false },
   { id: 2, title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false },
   { id: 3, title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false },
+  { id: 4, title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false },
+  { id: 5, title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false },
 ];
 
 const INITIAL_ROOMS = [
@@ -95,51 +113,242 @@ const INITIAL_ROOMS = [
   { id: 4, name: '3-C教室', status: '激暑', temp: '30℃', icon: ThermometerSun, color: 'text-red-500', bg: 'bg-red-50' },
   { id: 5, name: '図書室', status: 'やや寒い', temp: '24℃', icon: Wind, color: 'text-cyan-500', bg: 'bg-cyan-50' },
   { id: 6, name: '食堂', status: '快適', temp: '26℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 7, name: '自習室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
 ];
 
 const MOCK_NOTIFICATIONS = [
-  { id: 1, title: '明日の体育はグラウンドです', time: '10分前', isRead: false },
-  { id: 2, title: '図書室の新着本が入荷しました', time: '1時間前', isRead: false },
-  { id: 3, title: '【重要】週末の部活動について', time: '昨日', isRead: true },
-  { id: 4, title: '食堂の期間限定メニュー開始', time: '昨日', isRead: true },
+  { id: 1, title: '明日の体育はグラウンドです（熱中症対策を万全に）', time: '10分前', isRead: false },
+  { id: 2, title: '図書室の新着おすすめ本が入荷しました！', time: '1時間前', isRead: false },
+  { id: 3, title: '【重要】週末の部活動のスクールバスダイヤ運行について', time: '昨日', isRead: true },
+  { id: 4, title: '食堂の期間限定「栄光フェス丼」メニュー開始のお知らせ', time: '昨日', isRead: true },
+  { id: 5, title: '定期考査の範囲表がClassroomにアップロードされました', time: '3日前', isRead: true },
 ];
 
 const MENU_ITEMS = [
-  { id: 'snack', name: 'スナック' },
-  { id: 'soka', name: '創価ランチ' },
-  { id: 'noodles', name: '麺類' },
-  { id: 'curry', name: 'カレー' },
-  { id: 'healthy', name: 'ヘルシーランチ' },
+  { id: 'snack', name: 'スナック（唐揚げポテト）', calorie: '450kcal', allergy: '小麦・鶏肉' },
+  { id: 'soka', name: '創価ランチ（日替わりA）', calorie: '680kcal', allergy: '小麦・卵・乳' },
+  { id: 'noodles', name: '情熱ラーメン / うどん', calorie: '520kcal', allergy: '小麦・大豆' },
+  { id: 'curry', name: '栄光カレーライス', calorie: '710kcal', allergy: '小麦・豚肉・リンゴ' },
+  { id: 'healthy', name: 'ヘルシーバリューランチ', calorie: '540kcal', allergy: 'さば・大豆・ごま' },
 ];
 
-// 落とし物データの初期値
 const INITIAL_LOST_AND_FOUND = [
   { id: 1, title: '青いシャープペンシル', location: '図書室', date: '今日 12:30頃', description: 'パイロット製のドクターグリップ（青）です。消しゴムのキャップがありません。', finder: '図書室カウンターに預けました' },
   { id: 2, title: '黒い折りたたみ傘', location: '食堂入口の傘立て', date: '昨日', description: '無印良品の黒い傘。持ち手に星型のシールが貼ってあります。', finder: 'まだその場に置いてあります' },
+  { id: 3, title: '電子辞書 (CASIO)', location: '本館3階の渡り廊下', date: '3日前', description: '白いケースに入ったEX-wordです。起動画面に名前シールが貼ってあります。', finder: '職員室の学年主任の先生に届けました' },
+];
+
+// --- 📅 新機能：時間割データ定義 ---
+const MOCK_TIMETABLE_DATA = {
+  A: {
+    Mon: [
+      { period: 1, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書, ノート' },
+      { period: 2, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'クリアー数学, 演習ノート' },
+      { period: 3, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: 'LL教室', materials: 'VisionQuest, 辞書' },
+      { period: 4, subject: '化学基礎', teacher: '鈴木 先生', room: '化学実験室', materials: 'プリント, 実験用眼鏡' },
+      { period: 5, subject: '体育', teacher: '渡辺 先生', room: '第一体育館', materials: '体操服, 体育館シューズ' },
+      { period: 6, subject: '総合的な探究', teacher: '学年主任', room: '大教室', materials: 'タブレット端末' },
+    ],
+    Tue: [
+      { period: 1, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: '図説, ノート' },
+      { period: 2, subject: '物理基礎', teacher: '小林 先生', room: '物理室', materials: '教科書, 電卓' },
+      { period: 3, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '演習プリント' },
+      { period: 4, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '便覧' },
+      { period: 5, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'ワークブック' },
+      { period: 6, subject: '家庭基礎', teacher: '伊東 先生', room: '被服室', materials: '裁縫セット' },
+    ],
+    Wed: [
+      { period: 1, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '教科書' },
+      { period: 2, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: 'プリント' },
+      { period: 3, subject: '地理総合', teacher: '中村 先生', room: '各教室', materials: '地図帳' },
+      { period: 4, subject: '生物基礎', teacher: '山本 先生', room: '生物室', materials: '教科書, ノート' },
+      { period: 5, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '青チャート' },
+      { period: 6, subject: 'LHR', teacher: '担任 先生', room: '各教室', materials: '筆記用具' },
+    ],
+    Thu: [
+      { period: 1, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: '教科書' },
+      { period: 2, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'プリント' },
+      { period: 3, subject: '体育', teacher: '渡辺 先生', room: 'グラウンド', materials: '体操服, 帽子' },
+      { period: 4, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: 'ノート' },
+      { period: 5, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '古語辞典' },
+      { period: 6, subject: '情報Ⅰ', teacher: '斉藤 先生', room: '情報処理室', materials: 'イヤホン' },
+    ],
+    Fri: [
+      { period: 1, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '問題集' },
+      { period: 2, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: 'ワーク' },
+      { period: 3, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
+      { period: 4, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '単語帳' },
+      { period: 5, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: '資料集' },
+      { period: 6, subject: '音楽Ⅰ', teacher: '山田 先生', room: '音楽室', materials: '歌集, ファイル' },
+    ]
+  },
+  B: {
+    Mon: [
+      { period: 1, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'ノート' },
+      { period: 2, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
+      { period: 3, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: 'プリント' },
+      { period: 4, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '教科書' },
+      { period: 5, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: 'ノート' },
+      { period: 6, subject: '総合的な探究', teacher: '学年主任', room: '大教室', materials: '端末' },
+    ],
+    // 省略のない完全コードのため各曜日を構造化して定義
+    Tue: [
+      { period: 1, subject: '物理基礎', teacher: '小林 先生', room: '物理室', materials: '教科書' },
+      { period: 2, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: 'ノート' },
+      { period: 3, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'ワーク' },
+      { period: 4, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'プリント' },
+      { period: 5, subject: '家庭基礎', teacher: '伊東 先生', room: '調理室', materials: 'エプロン, 三角巾' },
+      { period: 6, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '教科書' },
+    ],
+    Wed: [
+      { period: 1, subject: '地理総合', teacher: '中村 先生', room: '各教室', materials: '地図帳' },
+      { period: 2, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: 'ノート' },
+      { period: 3, subject: '生物基礎', teacher: '山本 先生', room: '生物室', materials: 'プリント' },
+      { period: 4, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '教科書' },
+      { period: 5, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: '図説' },
+      { period: 6, subject: 'LHR', teacher: '担任 先生', room: '各教室', materials: 'なし' },
+    ],
+    Thu: [
+      { period: 1, subject: '体育', teacher: '渡辺 先生', room: 'グラウンド', materials: '体操服' },
+      { period: 2, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: 'ノート' },
+      { period: 3, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '青チャート' },
+      { period: 4, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: '教科書' },
+      { period: 5, subject: '情報Ⅰ', teacher: '斉藤 先生', room: '情報処理室', materials: '筆記用具' },
+      { period: 6, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: 'ノート' },
+    ],
+    Fri: [
+      { period: 1, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '便覧' },
+      { period: 2, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '演習プリント' },
+      { period: 3, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: 'ワーク' },
+      { period: 4, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
+      { period: 5, subject: '音楽Ⅰ', teacher: '山田 先生', room: '音楽室', materials: 'ファイル' },
+      { period: 6, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: 'プリント' },
+    ]
+  }
+};
+
+// --- 🚌 新機能：スクールバスダイヤ情報 ---
+const MOCK_BUS_STATIONS = [
+  { id: 'hachioji', name: '八王子駅直行便', departures: ['15:45', '16:00', '16:20', '16:40', '17:00', '17:30', '18:00', '18:30'] },
+  { id: 'haijima', name: '拝島駅巡回便', departures: ['15:50', '16:15', '16:35', '16:55', '17:15', '17:45', '18:15', '18:45'] },
+  { id: 'akitsu', name: '新秋津駅シャトル', departures: ['16:05', '16:30', '17:00', '17:30', '18:10'] },
+];
+
+// --- 🏸 新機能：部活動・委員会活動データ ---
+const INITIAL_CLUB_NOTES = [
+  { id: 1, clubName: '硬式テニス部', title: '雨天時の練習場所変更', date: '今日 14:00', content: '本日の放課後練習は雨天予報のため、オムニコートから雨天練習場（ピロティ）に変更します。トレーニングシューズを持参してください。', author: '主将 より' },
+  { id: 2, clubName: '吹奏楽部', title: 'コンクール前合同合奏の案内', date: '昨日', content: '今週土曜日の午前9時より、カレッジホールにて全パート合同の通し練習を行います。チューニングを8:45までに各自終わらせておくこと。', author: '顧問 より' },
+  { id: 3, clubName: '生徒会執行部', title: '文化祭パンフレット校正確認', date: '2日前', content: '各クラスの企画紹介文の最終校正データが届いています。担当委員は本日17時までに生徒会室に集まり、チェックを完了させてください。', author: '執行部書記 より' },
+];
+
+// 学食堂メニューの口コミ初期値
+const INITIAL_CAFETERIA_REVIEWS = [
+  { id: 1, menuId: 'soka', userName: '2年スキッパー', rating: 5, comment: '今日の創価ランチのチキン南蛮、タルタルソースが濃厚で最高に美味しかった！ボリュームも満点。', date: '今日 12:40' },
+  { id: 2, menuId: 'noodles', userName: 'ラーメン大好き3回生', rating: 4, comment: '情熱ラーメンは安定の醤油ベース。トッピングのチャーシューがいつもより少し厚くて嬉しかった！', date: '今日 12:15' },
+  { id: 3, menuId: 'snack', userName: '部活終わりの胃袋', rating: 5, comment: 'ポテトと唐揚げのセットは、昼休みだけでなく放課後の部活前の小腹満たしにも神。売り切れるのが早いのが玉にキズ。', date: '昨日' },
 ];
 
 export default function CampusSyncApp() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
-  
-  // 🌟 学校貢献度ポイント
-  const [score, setScore] = useState(42);
+  const [score, setScore] = useState(65); // 学校貢献度初期スコア
 
-  // --- 🎨 3. テーマカラー状態管理 (初期値は blue) ---
+  // --- 🎨 テーマカラー＆モード管理 ---
   const [theme, setTheme] = useState<ThemeKey>('blue');
-  const themeCls = THEMES[theme]; // 現在のテーマに対応するクラス群
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const themeCls = THEMES[theme];
 
-  // --- 🪪 1. プロフィール＆学籍番号 状態管理 ---
-  const [studentId, setStudentId] = useState('581234'); // デフォルトは58期生
+  // --- 🪪 プロフィール・ログイン設定状態 ---
+  const [studentId, setStudentId] = useState('581234');
   const [studentName, setStudentName] = useState('創価 太郎');
-  const [showIdCardModal, setShowIdCardModal] = useState(false); // デジタル学生証表示
+  const [showIdCardModal, setShowIdCardModal] = useState(false);
+  const [userClass, setUserClass] = useState('1-A'); // 自動または手動割り当てクラス
 
-  // --- ⏰ 5. おせっかい通知リマインダー 状態管理 ---
+  // --- ⏰ おせっかい通知リマインダー設定 ---
   const [remindersEnabled, setRemindersEnabled] = useState(true);
-  const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']); // 既定のアラームタイミング
+  const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']);
+  const [allowedNotificationDays, setAllowedNotificationDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
 
-  // 学籍番号の頭2桁から「期生」を自動判別する関数
+  // --- 各種動的ステート管理 ---
+  const [todos, setTodos] = useState(INITIAL_TODOS);
+  const [rooms, setRooms] = useState(INITIAL_ROOMS);
+  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(1);
+  const [selectedRoomId, setSelectedRoomId] = useState<number>(1);
+  const [selectedStatus, setSelectedStatus] = useState<string>('快適');
+
+  // サブタブ管理
+  const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
+  const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
+  const [busSubTab, setBusSubTab] = useState<'countdown' | 'report'>('countdown');
+
+  // タイムテーブル用状態
+  const [selectedWeekType, setSelectedWeekType] = useState<'A' | 'B'>('A');
+  const [selectedDay, setSelectedDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
+
+  // バス用状態
+  const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
+  const [busCongestionVote, setBusCongestionVote] = useState<Record<string, string>>({ hachioji: '普通', haijima: '空いている', akitsu: '混雑' });
+  const [busDelayMinutes, setBusDelayMinutes] = useState<Record<string, number>>({ hachioji: 0, haijima: 5, akitsu: 0 });
+
+  // 部活動用状態
+  const [clubNotes, setClubNotes] = useState(INITIAL_CLUB_NOTES);
+  const [newClubName, setNewClubName] = useState('');
+  const [newClubTitle, setNewClubTitle] = useState('');
+  const [newClubContent, setNewClubContent] = useState('');
+
+  // 学食レビュー用状態
+  const [cafeteriaReviews, setCafeteriaReviews] = useState(INITIAL_CAFETERIA_REVIEWS);
+  const [selectedMenuForReview, setSelectedMenuForReview] = useState<string>('soka');
+  const [newReviewRating, setNewReviewRating] = useState<number>(5);
+  const [newReviewComment, setNewReviewComment] = useState('');
+  const [newReviewUser, setNewReviewUser] = useState('');
+
+  // 学食投票関係
+  const [crowdVotes, setCrowdVotes] = useState({ empty: 24, normal: 85, crowded: 42 });
+  const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
+
+  const [menuVotes, setMenuVotes] = useState<Record<string, { empty: number, normal: number, crowded: number }>>({
+    snack: { empty: 8, normal: 22, crowded: 14 },
+    soka: { empty: 2, normal: 15, crowded: 56 },
+    noodles: { empty: 11, normal: 34, crowded: 12 },
+    curry: { empty: 14, normal: 40, crowded: 21 },
+    healthy: { empty: 25, normal: 12, crowded: 3 },
+  });
+  const [userMenuVotes, setUserMenuVotes] = useState<Record<string, 'empty' | 'normal' | 'crowded' | null>>({
+    snack: null, soka: null, noodles: null, curry: null, healthy: null,
+  });
+  const [soldOutItems, setSoldOutItems] = useState<Record<string, boolean>>({
+    snack: false, soka: false, noodles: false, curry: false, healthy: false,
+  });
+
+  // 落とし物関係
+  const [lostAndFoundList, setLostAndFoundList] = useState(INITIAL_LOST_AND_FOUND);
+  const [newLostTitle, setNewLostTitle] = useState('');
+  const [newLostLocation, setNewLostLocation] = useState('');
+  const [newLostDescription, setNewLostDescription] = useState('');
+  const [newLostFinder, setNewLostFinder] = useState('');
+
+  // 学籍番号に応じた自動期生・自動所属判別ロジックの強化
+  useEffect(() => {
+    const cleanId = studentId.trim();
+    if (cleanId.length === 6) {
+      const cohortDigits = cleanId.substring(0, 2);
+      const classDigit = cleanId.substring(2, 3);
+      if (/^\d+$/.test(cohortDigits) && /^\d+$/.test(classDigit)) {
+        const parsedClass = `${classDigit}-A`; // 模擬的な自動クラス割り当て
+        setUserClass(parsedClass);
+      }
+    }
+  }, [studentId]);
+
+  // 全体混雑パーセント計算
+  const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded + (userVote ? 1 : 0);
+  const getPercent = (val: number, key: string) => {
+    const adjustedVal = val + (userVote === key ? 1 : 0);
+    return Math.round((adjustedVal / totalVotes) * 100) || 0;
+  };
+
   const getCohortName = (id: string) => {
     const cleanId = id.trim();
     if (cleanId.length >= 2) {
@@ -151,56 +360,7 @@ export default function CampusSyncApp() {
     return '未設定期生';
   };
 
-  // --- 各種動的ステート ---
-  const [todos, setTodos] = useState(INITIAL_TODOS);
-  const [rooms, setRooms] = useState(INITIAL_ROOMS);
-  
-  // エアコン報告用お気に入り
-  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(1);
-  const [selectedRoomId, setSelectedRoomId] = useState<number>(1);
-  const [selectedStatus, setSelectedStatus] = useState<string>('快適');
-
-  // サブタブ
-  const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu'>('overall');
-  const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
-
-  // 学食（全体）の混雑度投票
-  const [crowdVotes, setCrowdVotes] = useState({ empty: 15, normal: 60, crowded: 25 });
-  const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
-
-  // メニュー別の投票
-  const [menuVotes, setMenuVotes] = useState<Record<string, { empty: number, normal: number, crowded: number }>>({
-    snack: { empty: 8, normal: 14, crowded: 3 },
-    soka: { empty: 2, normal: 8, crowded: 25 },
-    noodles: { empty: 5, normal: 12, crowded: 4 },
-    curry: { empty: 4, normal: 10, crowded: 9 },
-    healthy: { empty: 10, normal: 5, crowded: 1 },
-  });
-  
-  const [userMenuVotes, setUserMenuVotes] = useState<Record<string, 'empty' | 'normal' | 'crowded' | null>>({
-    snack: null, soka: null, noodles: null, curry: null, healthy: null,
-  });
-
-  // 学食「売り切れ」
-  const [soldOutItems, setSoldOutItems] = useState<Record<string, boolean>>({
-    snack: false, soka: false, noodles: false, curry: false, healthy: false,
-  });
-
-  // 落とし物
-  const [lostAndFoundList, setLostAndFoundList] = useState(INITIAL_LOST_AND_FOUND);
-  const [newLostTitle, setNewLostTitle] = useState('');
-  const [newLostLocation, setNewLostLocation] = useState('');
-  const [newLostDescription, setNewLostDescription] = useState('');
-  const [newLostFinder, setNewLostFinder] = useState('');
-
-  // 混雑パーセント計算
-  const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded + (userVote ? 1 : 0);
-  const getPercent = (val: number, key: string) => {
-    const adjustedVal = val + (userVote === key ? 1 : 0);
-    return Math.round((adjustedVal / totalVotes) * 100) || 0;
-  };
-
-  // 全体混雑度の投票
+  // ハンドラー各種
   const handleVote = (type: 'empty' | 'normal' | 'crowded') => {
     if (userVote !== type) {
       setUserVote(type);
@@ -211,14 +371,10 @@ export default function CampusSyncApp() {
     }
   };
 
-  // メニュー別の混雑投票
   const handleMenuVote = (menuId: string, type: 'empty' | 'normal' | 'crowded') => {
     if (soldOutItems[menuId]) return;
     const currentVote = userMenuVotes[menuId];
-    setUserMenuVotes(prev => ({
-      ...prev,
-      [menuId]: currentVote === type ? null : type
-    }));
+    setUserMenuVotes(prev => ({ ...prev, [menuId]: currentVote === type ? null : type }));
 
     if (currentVote !== type && !currentVote) {
       setScore(prev => Math.min(prev + 5, 100));
@@ -227,68 +383,49 @@ export default function CampusSyncApp() {
     }
   };
 
-  // 売り切れ報告
   const toggleSoldOut = (menuId: string) => {
     const wasSoldOut = soldOutItems[menuId];
-    setSoldOutItems(prev => ({
-      ...prev,
-      [menuId]: !wasSoldOut
-    }));
-
+    setSoldOutItems(prev => ({ ...prev, [menuId]: !wasSoldOut }));
     if (!wasSoldOut) {
       setScore(prev => Math.min(prev + 10, 100));
-      alert(`「${MENU_ITEMS.find(i => i.id === menuId)?.name}」の売り切れを報告しました！学校貢献度+10pt！🎉`);
+      alert(`「${MENU_ITEMS.find(i => i.id === menuId)?.name}」の売り切れ報告を受理しました。貢献度+10pt！🎉`);
     } else {
       setScore(prev => Math.max(prev - 10, 0));
     }
   };
 
-  // TODO完了トグル
   const toggleTodoComplete = (todoId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setTodos(prev => prev.map(todo => {
       if (todo.id === todoId) {
         const nextState = !todo.completed;
-        if (nextState) {
-          setScore(p => Math.min(p + 10, 100));
-        } else {
-          setScore(p => Math.max(p - 10, 0));
-        }
+        setScore(p => nextState ? Math.min(p + 10, 100) : Math.max(p - 10, 0));
         return { ...todo, completed: nextState };
       }
       return todo;
     }));
   };
 
-  // 落とし物投稿
   const handleAddLostItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLostTitle || !newLostLocation) {
-      alert("「品名」と「見つけた場所」は必須です！");
+      alert("「品名」と「見つけた場所」を入力してください。");
       return;
     }
-
     const newItem = {
       id: Date.now(),
       title: newLostTitle,
       location: newLostLocation,
       date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      description: newLostDescription || '詳細説明はありません。',
-      finder: newLostFinder || 'その場にあります。'
+      description: newLostDescription || '詳細情報なし',
+      finder: newLostFinder || 'その場付近にあります'
     };
-
     setLostAndFoundList([newItem, ...lostAndFoundList]);
-    setScore(prev => Math.min(prev + 10, 100));
-
-    setNewLostTitle('');
-    setNewLostLocation('');
-    setNewLostDescription('');
-    setNewLostFinder('');
-
-    alert("落とし物情報を登録しました！落とし主が見つかりますように。学校貢献度+10pt！🎁");
+    setScore(prev => Math.min(prev + 12, 100));
+    setNewLostTitle(''); setNewLostLocation(''); setNewLostDescription(''); setNewLostFinder('');
+    alert("落とし物情報を共有しました！貢献度+12pt！🎁");
   };
 
-  // エアコン状況報告
   const submitAcReport = () => {
     setRooms(prev => prev.map(room => {
       if (room.id === selectedRoomId) {
@@ -299,81 +436,149 @@ export default function CampusSyncApp() {
 
         if (selectedStatus === '寒い') {
           nextTemp = (parseInt(room.temp) - 1) + '℃';
-          color = 'text-cyan-500';
-          bg = 'bg-cyan-50';
-          icon = Wind;
+          color = 'text-cyan-500'; bg = 'bg-cyan-50'; icon = Wind;
         } else if (selectedStatus === '暑い') {
           nextTemp = (parseInt(room.temp) + 1) + '℃';
-          color = 'text-red-500';
-          bg = 'bg-red-50';
-          icon = ThermometerSun;
+          color = 'text-red-500'; bg = 'bg-red-50'; icon = ThermometerSun;
         } else {
           nextTemp = '25℃';
-          color = 'text-green-500';
-          bg = 'bg-green-50';
-          icon = ThermometerSnowflake;
+          color = 'text-green-500'; bg = 'bg-green-50'; icon = ThermometerSnowflake;
         }
-
         return { ...room, status: selectedStatus, temp: nextTemp, icon, color, bg };
       }
       return room;
     }));
-
     setShowTempModal(false);
     setScore(prev => Math.min(prev + 10, 100));
-    alert("報告ありがとうございます！お部屋のステータスに反映しました。学校貢献度 +10pt！🎉"); 
+    alert("エアコン状況のリアルタイム報告ありがとうございます！貢献度+10pt！🔥");
   };
 
-  // おせっかい通知リマインダー選択のトグル
-  const toggleReminderTime = (timeKey: string) => {
-    if (reminderTimes.includes(timeKey)) {
-      setReminderTimes(prev => prev.filter(t => t !== timeKey));
-    } else {
-      setReminderTimes(prev => [...prev, timeKey]);
+  // --- 新機能用ハンドラー群 ---
+  const handleVoteBusCongestion = (status: string) => {
+    setBusCongestionVote(prev => ({ ...prev, [selectedBusStation]: status }));
+    setScore(prev => Math.min(prev + 5, 100));
+    alert(`バス混雑状況の報告ありがとうございます！`);
+  };
+
+  const handleReportBusDelay = (minutes: number) => {
+    setBusDelayMinutes(prev => ({ ...prev, [selectedBusStation]: minutes }));
+    setScore(prev => Math.min(prev + 10, 100));
+    alert(`バスの遅延情報を共有しました。周囲の生徒に通知されます！(+10pt)`);
+  };
+
+  const handleAddClubNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClubName || !newClubTitle || !newClubContent) {
+      alert("すべての項目を入力してください。");
+      return;
     }
+    const newNote = {
+      id: Date.now(),
+      clubName: newClubName,
+      title: newClubTitle,
+      date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      content: newClubContent,
+      author: studentName + ' より'
+    };
+    setClubNotes([newNote, ...clubNotes]);
+    setScore(prev => Math.min(prev + 15, 100));
+    setNewClubName(''); setNewClubTitle(''); setNewClubContent('');
+    alert("部活動・委員会連絡ノートに新規書き込みを行いました！貢献度+15pt！🏸");
   };
 
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewComment) {
+      alert("コメントを入力してください。");
+      return;
+    }
+    const newReview = {
+      id: Date.now(),
+      menuId: selectedMenuForReview,
+      userName: newReviewUser.trim() || '匿名の創価生',
+      rating: newReviewRating,
+      comment: newReviewComment,
+      date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setCafeteriaReviews([newReview, ...cafeteriaReviews]);
+    setScore(prev => Math.min(prev + 8, 100));
+    setNewReviewComment(''); setNewReviewUser('');
+    alert("学食レビューを投稿しました！役立つ情報をありがとう！(+8pt)🍲");
+  };
+
+  const toggleReminderTime = (timeKey: string) => {
+    setReminderTimes(prev => prev.includes(timeKey) ? prev.filter(t => t !== timeKey) : [...prev, timeKey]);
+  };
+
+  const toggleNotificationDay = (dayKey: string) => {
+    setAllowedNotificationDays(prev => prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]);
+  };
+
+  // --- タブ別メインコンテンツレンダリング ---
   const renderContent = () => {
+    const activeTextClass = isDarkMode ? 'text-white' : 'text-gray-800';
+    const cardBgClass = isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-800';
+    const subTextClass = isDarkMode ? 'text-slate-400' : 'text-gray-400';
+
     switch (activeTab) {
       case 'home':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* ゲーミフィケーション要素 (テーマカラー対応) */}
-            <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-2xl p-5 shadow-md text-white relative overflow-hidden transition-all duration-300`}>
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
-              <div className="flex justify-between items-end mb-2 relative z-10">
+            {/* ダッシュボード上部・スコアシステム */}
+            <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-3xl p-6 shadow-xl text-white relative overflow-hidden transition-all duration-300`}>
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+              <div className="flex justify-between items-end mb-3 relative z-10">
                 <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full">
                       {getCohortName(studentId)}
                     </span>
-                    <span className="text-xs font-semibold text-white/80">{studentName} さん</span>
+                    <span className="text-xs font-bold text-white/90">{userClass}クラス {studentName} さん</span>
                   </div>
-                  <h2 className="text-sm font-medium text-white/90 mb-1">今日の学校貢献度</h2>
-                  <p className="text-3xl font-bold tracking-tight">{score} <span className="text-base font-normal text-white/80">/ 100 pt</span></p>
+                  <h2 className="text-xs font-semibold text-white/80 mb-0.5">本日のリアルタイム学校貢献度</h2>
+                  <p className="text-4xl font-black tracking-tight">{score} <span className="text-base font-medium text-white/70">/ 100 pt</span></p>
                 </div>
-                <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm flex items-center gap-1">
-                  <Sparkles size={20} className="text-yellow-200 animate-pulse" />
-                  <span className="text-xs font-bold">貢献中</span>
+                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm flex flex-col items-center gap-0.5">
+                  <Sparkles size={22} className="text-yellow-200 animate-bounce" />
+                  <span className="text-[10px] font-black tracking-wider">アクティブ</span>
                 </div>
               </div>
-              <div className="h-2 bg-black/10 rounded-full overflow-hidden mt-4 relative z-10">
+              <div className="h-2.5 bg-black/15 rounded-full overflow-hidden mt-4 relative z-10">
                 <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out" style={{ width: `${score}%` }}></div>
+              </div>
+              <p className="text-[10px] text-white/70 mt-2 text-right">※情報を報告したりタスクを完了するとポイントが貯まります</p>
+            </div>
+
+            {/* クイックリンク・本日のショートカット */}
+            <div className="grid grid-cols-3 gap-2">
+              <div onClick={() => setActiveTab('timetable')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
+                <Calendar className={`mx-auto mb-1.5 ${themeCls.text}`} size={22} />
+                <span className="text-xs font-black block">時間割</span>
+              </div>
+              <div onClick={() => setActiveTab('bus')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
+                <Bus className="mx-auto mb-1.5 text-amber-500" size={22} />
+                <span className="text-xs font-black block">スクールバス</span>
+              </div>
+              <div onClick={() => setActiveTab('club')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
+                <MessageSquare className="mx-auto mb-1.5 text-purple-500" size={22} />
+                <span className="text-xs font-black block">部活連絡</span>
               </div>
             </div>
 
-            {/* TODOセクション (テーマカラー対応) */}
+            {/* TODOセクション */}
             <section>
-              <h3 className="text-[17px] font-bold text-gray-800 mb-3 flex items-center">
-                <Clock size={20} className={`mr-2 ${themeCls.text}`}/> 提出物・連絡
+              <h3 className={`text-[17px] font-black mb-3 flex items-center ${activeTextClass}`}>
+                <Clock size={20} className={`mr-2 ${themeCls.text}`}/> マイ提出物・連絡リマインダー
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {todos.map(todo => (
                   <div 
                     key={todo.id} 
                     onClick={() => setSelectedTodo(todo)}
                     className={`w-full p-4 rounded-2xl shadow-sm border flex items-center gap-3 text-left hover:shadow-md transition-all cursor-pointer ${
-                      todo.completed ? 'bg-green-50/40 border-green-200/50 opacity-70' : 'bg-white border-gray-100'
+                      todo.completed 
+                        ? 'bg-green-50/40 border-green-200/50 opacity-60' 
+                        : cardBgClass
                     }`}
                   >
                     <button
@@ -388,51 +593,51 @@ export default function CampusSyncApp() {
                     </button>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                      <div className="flex justify-between items-start mb-0.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           todo.completed ? 'bg-green-100 text-green-700' : todo.color
                         }`}>
                           {todo.completed ? '提出完了' : todo.due}
                         </span>
-                        <span className="text-[11px] text-gray-400 font-medium">{todo.source}</span>
+                        <span className={`text-[10px] font-medium ${subTextClass}`}>{todo.source}</span>
                       </div>
-                      <h4 className={`text-sm font-bold text-gray-800 truncate ${todo.completed ? 'line-through text-gray-400' : ''}`}>
+                      <h4 className={`text-sm font-black truncate ${todo.completed ? 'line-through text-gray-400' : ''}`}>
                         {todo.title}
                       </h4>
                     </div>
-                    <ChevronRight size={16} className="text-gray-300" />
+                    <ChevronRight size={16} className={subTextClass} />
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* 快適度セクション */}
+            {/* 校内環境・エアコン快適度状況 */}
             <section>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-[17px] font-bold text-gray-800 flex items-center">
-                  <Wind size={20} className="mr-2 text-teal-500"/> 校内のエアコン状況
+                <h3 className={`text-[17px] font-black flex items-center ${activeTextClass}`}>
+                  <Wind size={20} className="mr-2 text-teal-500"/> リアルタイム教室エアコン状況
                 </h3>
                 <button 
                   onClick={() => setShowTempModal(true)}
-                  className="text-xs font-bold bg-teal-50 text-teal-600 px-3 py-1.5 rounded-full hover:bg-teal-100 transition-colors flex items-center"
+                  className="text-xs font-bold bg-teal-50 text-teal-600 px-3 py-1.5 rounded-full hover:bg-teal-100 transition-colors flex items-center shadow-sm"
                 >
-                  <Plus size={14} className="mr-1" /> 報告する
+                  <Plus size={14} className="mr-1" /> 報告・更新
                 </button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {rooms.map(room => (
-                  <div key={room.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative">
+                  <div key={room.id} className={`${cardBgClass} p-3.5 rounded-2xl shadow-sm border relative`}>
                     {favoriteRoomId === room.id && (
-                      <span className="absolute top-2 right-2 text-yellow-400">
-                        <Star size={14} fill="currentColor" />
+                      <span className="absolute top-2.5 right-2.5 text-yellow-400">
+                        <Star size={13} fill="currentColor" />
                       </span>
                     )}
-                    <div className="flex justify-between items-start mb-2">
-                      <room.icon size={20} className={room.color} />
-                      <span className="text-xs font-bold text-gray-400 mr-4">{room.temp}</span>
+                    <div className="flex justify-between items-start mb-1.5">
+                      <room.icon size={18} className={room.color} />
+                      <span className={`text-xs font-black ${subTextClass}`}>{room.temp}</span>
                     </div>
-                    <h4 className="text-xs text-gray-500 mb-0.5">{room.name}</h4>
-                    <p className={`text-sm font-bold ${room.color}`}>{room.status}</p>
+                    <h4 className={`text-xs ${subTextClass} mb-0.5`}>{room.name}</h4>
+                    <p className={`text-xs font-black ${room.color}`}>{room.status}</p>
                   </div>
                 ))}
               </div>
@@ -440,270 +645,243 @@ export default function CampusSyncApp() {
           </div>
         );
 
-      case 'cafeteria':
+      case 'timetable':
         return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-orange-800 text-sm flex items-start gap-3">
-              <Info size={20} className="text-orange-500 flex-shrink-0 mt-0.5" />
-              <p>学食の決済は学生証のタッチで完了します。食券の購入は不要です。</p>
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-black ${activeTextClass}`}>時間割スケジュール</h2>
+              {/* A週B週セレクター */}
+              <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1 text-xs font-bold">
+                <button 
+                  onClick={() => setSelectedWeekType('A')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${selectedWeekType === 'A' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  A週ダイヤ
+                </button>
+                <button 
+                  onClick={() => setSelectedWeekType('B')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${selectedWeekType === 'B' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  B週ダイヤ
+                </button>
+              </div>
             </div>
 
+            {/* 曜日選択バー */}
+            <div className="grid grid-cols-5 gap-1 bg-gray-100 p-1 rounded-xl">
+              {([
+                { key: 'Mon', label: '月' },
+                { key: 'Tue', label: '火' },
+                { key: 'Wed', label: '水' },
+                { key: 'Thu', label: '木' },
+                { key: 'Fri', label: '金' },
+              ] as const).map(d => (
+                <button
+                  key={d.key}
+                  onClick={() => setSelectedDay(d.key)}
+                  className={`py-2 text-xs font-black rounded-lg transition-all ${
+                    selectedDay === d.key 
+                      ? `${themeCls.bg} text-white shadow-sm` 
+                      : 'text-gray-600 hover:bg-gray-200/50'
+                  }`}
+                >
+                  {d.label}曜
+                </button>
+              ))}
+            </div>
+
+            {/* 時間割リスト表示 */}
+            <div className="space-y-2">
+              {MOCK_TIMETABLE_DATA[selectedWeekType][selectedDay].map((slot) => (
+                <div key={slot.period} className={`${cardBgClass} p-4 rounded-2xl border shadow-sm flex items-center gap-4`}>
+                  <div className={`w-9 h-9 rounded-xl ${themeCls.lightBg} flex flex-col items-center justify-center font-black ${themeCls.text} text-sm flex-shrink-0`}>
+                    {slot.period}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <h4 className="text-sm font-black text-gray-800 tracking-wide">{slot.subject}</h4>
+                      <span className={`text-[11px] font-bold ${subTextClass}`}>{slot.teacher}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-gray-500 font-medium">
+                      <span className="flex items-center gap-0.5"><MapPin size={12} /> {slot.room}</span>
+                      <span className="flex items-center gap-0.5"><BookOpenCheck size={12} /> 持参: {slot.materials}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100/50 text-blue-800 text-xs flex gap-2">
+              <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="leading-relaxed">時間割データは学年別マスターデータと同期しています。特設授業や考査期間等の特別ダイヤは自動的に優先反映されます。</p>
+            </div>
+          </div>
+        );
+
+      case 'cafeteria':
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
             {/* サブタブ切り替え */}
             <div className="flex bg-gray-100 p-1 rounded-2xl">
               <button 
                 onClick={() => setCafeteriaSubTab('overall')}
-                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${cafeteriaSubTab === 'overall' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${cafeteriaSubTab === 'overall' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
               >
                 全体の混雑度
               </button>
               <button 
                 onClick={() => setCafeteriaSubTab('menu')}
-                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${cafeteriaSubTab === 'menu' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${cafeteriaSubTab === 'menu' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
               >
-                メニュー別の並び具合
+                メニュー別の並び
+              </button>
+              <button 
+                onClick={() => setCafeteriaSubTab('reviews')}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${cafeteriaSubTab === 'reviews' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+              >
+                口コミレビュー 💬
               </button>
             </div>
 
-            {cafeteriaSubTab === 'overall' ? (
-              <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                    <Users size={22} className="mr-2 text-orange-500"/> 今の食堂、混んでる？
+            {cafeteriaSubTab === 'overall' && (
+              <section className={`${cardBgClass} rounded-2xl p-5 shadow-sm border`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base font-black flex items-center">
+                    <Users size={20} className="mr-2 text-orange-500"/> 現在の食堂全体の混雑状況
                   </h3>
-                  <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                    リアルタイム投票
-                  </span>
+                  <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">リアルタイム集計</span>
                 </div>
                 
-                <div className="space-y-4 mb-8">
-                  <VoteBar label="空いてる" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty, 'empty')} color="bg-green-500" />
-                  <VoteBar label="普通" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal, 'normal')} color="bg-orange-400" />
-                  <VoteBar label="激混み" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded, 'crowded')} color="bg-red-500" />
+                <div className="space-y-3.5 mb-6">
+                  <VoteBar label="空いていて快適" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty, 'empty')} color="bg-green-500" />
+                  <VoteBar label="通常の混み具合" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal, 'normal')} color="bg-orange-400" />
+                  <VoteBar label="大変混雑している" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded, 'crowded')} color="bg-red-500" />
                 </div>
 
-                <h4 className="text-center text-sm font-bold text-gray-500 mb-3">あなたも今の状況を投票しよう！</h4>
+                <p className="text-center text-xs font-black text-gray-500 mb-2.5">現在の混雑シチュエーションをワンタップ報告</p>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => handleVote('empty')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>空き</button>
-                  <button onClick={() => handleVote('normal')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>普通</button>
-                  <button onClick={() => handleVote('crowded')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>激混み</button>
+                  <button onClick={() => handleVote('empty')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>空き</button>
+                  <button onClick={() => handleVote('normal')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>普通</button>
+                  <button onClick={() => handleVote('crowded')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>激混み</button>
                 </div>
               </section>
-            ) : (
-              /* メニュー別 */
-              <div className="space-y-4">
+            )}
+
+            {cafeteriaSubTab === 'menu' && (
+              <div className="space-y-3">
                 {MENU_ITEMS.map(item => {
                   const isSoldOut = soldOutItems[item.id];
                   const votes = menuVotes[item.id];
                   const userVoteItem = userMenuVotes[item.id];
                   const total = votes.empty + votes.normal + votes.crowded + (userVoteItem ? 1 : 0);
-                  
                   const getMenuPercent = (val: number, key: string) => {
                     if (isSoldOut) return 0;
-                    const adjusted = val + (userVoteItem === key ? 1 : 0);
-                    return Math.round((adjusted / total) * 100) || 0;
+                    return Math.round(((val + (userVoteItem === key ? 1 : 0)) / total) * 100) || 0;
                   };
 
                   return (
-                    <div 
-                      key={item.id} 
-                      className={`bg-white rounded-2xl p-5 shadow-sm border transition-all duration-300 relative overflow-hidden ${
-                        isSoldOut ? 'border-red-200 bg-gray-50/50 opacity-80' : 'border-gray-100'
-                      }`}
-                    >
+                    <div key={item.id} className={`${cardBgClass} rounded-2xl p-4 border relative overflow-hidden`}>
                       {isSoldOut && (
                         <div className="absolute inset-0 bg-red-500/5 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-10">
-                          <div className="bg-red-600 text-white font-black text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 transform -rotate-3">
-                            <AlertTriangle size={16} /> SOLD OUT / 売り切れ
+                          <div className="bg-red-600 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-md transform -rotate-2">
+                            完売 / SOLD OUT
                           </div>
                         </div>
                       )}
 
-                      <div className="flex justify-between items-center mb-3">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h4 className="text-base font-bold text-gray-800">{item.name}</h4>
-                          <span className="text-[10px] font-bold text-gray-400">
-                            {isSoldOut ? '本日は終了しました' : '並び列の目安'}
-                          </span>
+                          <h4 className="text-sm font-black text-gray-800">{item.name}</h4>
+                          <p className="text-[10px] text-gray-400 font-bold">成分: {item.calorie} | アレルギー: {item.allergy}</p>
                         </div>
-                        
                         <button
                           onClick={() => toggleSoldOut(item.id)}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all z-20 ${
-                            isSoldOut 
-                              ? 'bg-red-100 border-red-200 text-red-700 hover:bg-red-200' 
-                              : 'bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                          className={`text-[10px] font-black px-2.5 py-1.5 rounded-xl border transition-all z-20 ${
+                            isSoldOut ? 'bg-red-100 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-red-50'
                           }`}
                         >
-                          {isSoldOut ? '販売再開にする' : '売り切れを報告'}
+                          {isSoldOut ? '販売中に戻す' : '売り切れを報告'}
                         </button>
                       </div>
 
-                      {/* グラフ */}
-                      <div className={`grid grid-cols-3 gap-2 text-[11px] font-bold mb-3 ${isSoldOut ? 'opacity-30' : ''}`}>
-                        <div className="bg-green-50/70 p-2 rounded-xl border border-green-100/50 text-center">
-                          <p className="text-green-700 mb-0.5">スイスイ</p>
-                          <p className="text-green-600 text-sm font-black">{getMenuPercent(votes.empty, 'empty')}%</p>
+                      <div className={`grid grid-cols-3 gap-1.5 text-[10px] font-bold mb-2.5 ${isSoldOut ? 'opacity-20' : ''}`}>
+                        <div className="bg-green-50/70 p-1.5 rounded-lg border text-center text-green-700">
+                          <span>並びなし: {getMenuPercent(votes.empty, 'empty')}%</span>
                         </div>
-                        <div className="bg-orange-50/70 p-2 rounded-xl border border-orange-100/50 text-center">
-                          <p className="text-orange-700 mb-0.5">普通</p>
-                          <p className="text-orange-600 text-sm font-black">{getMenuPercent(votes.normal, 'normal')}%</p>
+                        <div className="bg-orange-50/70 p-1.5 rounded-lg border text-center text-orange-700">
+                          <span>普通: {getMenuPercent(votes.normal, 'normal')}%</span>
                         </div>
-                        <div className="bg-red-50/70 p-2 rounded-xl border border-red-100/50 text-center">
-                          <p className="text-red-700 mb-0.5">大行列</p>
-                          <p className="text-red-600 text-sm font-black">{getMenuPercent(votes.crowded, 'crowded')}%</p>
+                        <div className="bg-red-50/70 p-1.5 rounded-lg border text-center text-red-700">
+                          <span>行列大: {getMenuPercent(votes.crowded, 'crowded')}%</span>
                         </div>
                       </div>
 
-                      {/* 投票 */}
-                      <div className={`flex gap-2 pt-1 border-t border-gray-50 ${isSoldOut ? 'opacity-20 pointer-events-none' : ''}`}>
-                        <button 
-                          disabled={isSoldOut}
-                          onClick={() => handleMenuVote(item.id, 'empty')} 
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          スイスイ
-                        </button>
-                        <button 
-                          disabled={isSoldOut}
-                          onClick={() => handleMenuVote(item.id, 'normal')} 
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          普通
-                        </button>
-                        <button 
-                          disabled={isSoldOut}
-                          onClick={() => handleMenuVote(item.id, 'crowded')} 
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          大行列
-                        </button>
+                      <div className={`flex gap-1.5 ${isSoldOut ? 'opacity-10 pointer-events-none' : ''}`}>
+                        <button disabled={isSoldOut} onClick={() => handleMenuVote(item.id, 'empty')} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border ${userVoteItem === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500'}`}>快適</button>
+                        <button disabled={isSoldOut} onClick={() => handleMenuVote(item.id, 'normal')} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border ${userVoteItem === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500'}`}>普通</button>
+                        <button disabled={isSoldOut} onClick={() => handleMenuVote(item.id, 'crowded')} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border ${userVoteItem === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500'}`}>大行列</button>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
-        );
 
-      case 'facilities':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex bg-gray-100 p-1 rounded-2xl">
-              <button 
-                onClick={() => setFacilitiesSubTab('status')}
-                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${facilitiesSubTab === 'status' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-              >
-                図書室・自習室
-              </button>
-              <button 
-                onClick={() => setFacilitiesSubTab('lost')}
-                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${facilitiesSubTab === 'lost' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-              >
-                落とし物掲示板 🔍
-              </button>
-            </div>
-
-            {facilitiesSubTab === 'status' ? (
-              <div className="space-y-6">
-                <section>
-                  <h3 className="text-[17px] font-bold text-gray-800 mb-3 flex items-center">
-                    <BookOpen size={20} className="mr-2 text-indigo-600"/> 図書館
-                  </h3>
-                  <div className="relative mb-6">
-                    <input type="text" placeholder="本の発行元やタイトルを入力..." className="w-full bg-white border border-gray-200 rounded-2xl py-3.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
-                    <Search size={18} className="absolute left-4 top-4 text-gray-400" />
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-3">新着・おすすめ図書</h4>
-                  <div className="flex gap-4 overflow-x-auto pb-4 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="min-w-[130px] snap-start cursor-pointer group">
-                        <div className="h-40 bg-gray-100 border border-gray-200 rounded-xl mb-2.5 flex items-center justify-center text-gray-300 text-xs shadow-sm group-hover:shadow-md transition-shadow">Cover</div>
-                        <h5 className="text-xs font-bold text-gray-800 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">デザイン思考が世界を変える {i}</h5>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-                
-                <section className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-[17px] font-bold text-gray-800 flex items-center"><Monitor size={20} className="mr-2 text-teal-600"/> 自習室</h3>
-                  </div>
-                  <div className="flex items-end justify-between mb-2">
-                    <span className="text-sm font-bold text-gray-500">現在の利用状況</span>
-                    <span className="text-2xl font-black text-gray-800">18 <span className="text-sm font-bold text-gray-400">/ 30席</span></span>
-                  </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
-                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${(18 / 30) * 100}%` }}></div>
-                  </div>
-                </section>
-              </div>
-            ) : (
-              /* 落とし物・忘れ物 */
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <form onSubmit={handleAddLostItem} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
-                  <h4 className="text-sm font-black text-gray-800 flex items-center gap-1.5">
-                    <Plus size={18} className={`text-[var(--primary)] ${themeCls.text}`} /> 落とし物を新しく投稿する
-                  </h4>
+            {cafeteriaSubTab === 'reviews' && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                {/* 新規口コミ投稿フォーム */}
+                <form onSubmit={handleAddReview} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
+                  <h4 className="text-xs font-black flex items-center gap-1"><Plus size={15}/> メニューの口コミを投稿</h4>
                   <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={selectedMenuForReview}
+                      onChange={e => setSelectedMenuForReview(e.target.value)}
+                      className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none"
+                    >
+                      {MENU_ITEMS.map(m => <option key={m.id} value={m.id}>{m.name.split('（')[0]}</option>)}
+                    </select>
+                    <div className="flex items-center justify-around bg-gray-50 border border-gray-200 rounded-xl px-2">
+                      {[1, 2, 3, 4, 5].map(num => (
+                        <button key={num} type="button" onClick={() => setNewReviewRating(num)} className="p-0.5">
+                          <Star size={14} fill={num <= newReviewRating ? '#FBBF24' : 'none'} stroke={num <= newReviewRating ? '#FBBF24' : '#9CA3AF'} />
+                        </button>
+                      ))}
+                    </div>
                     <input 
                       type="text" 
-                      placeholder="落とし物の名前 (例: 白いワイヤレスイヤホン)" 
-                      value={newLostTitle}
-                      onChange={e => setNewLostTitle(e.target.value)}
-                      className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
+                      placeholder="ハンドルネーム (空欄で匿名)" 
+                      value={newReviewUser} 
+                      onChange={e => setNewReviewUser(e.target.value)}
+                      className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" 
                     />
-                    <input 
-                      type="text" 
-                      placeholder="見つけた場所 (例: 食堂の窓際)" 
-                      value={newLostLocation}
-                      onChange={e => setNewLostLocation(e.target.value)}
-                      className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
-                    <input 
-                      type="text" 
-                      placeholder="今の保管場所 (例: 事務室に預けた)" 
-                      value={newLostFinder}
-                      onChange={e => setNewLostFinder(e.target.value)}
-                      className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
-                    <textarea 
-                      placeholder="特徴・詳細 (例: ケースの背面にシールの跡があります)" 
-                      value={newLostDescription}
-                      onChange={e => setNewLostDescription(e.target.value)}
-                      className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/20 h-16 resize-none"
+                    <textarea
+                      placeholder="味の感想やボリューム、おすすめのトッピングなど..."
+                      value={newReviewComment}
+                      onChange={e => setNewReviewComment(e.target.value)}
+                      className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-16 resize-none"
                     />
                   </div>
-                  <button 
-                    type="submit"
-                    className={`w-full py-3 text-white font-bold text-xs rounded-xl shadow-md transition-all ${themeCls.bg} ${themeCls.bgHover}`}
-                  >
-                    投稿して学校貢献度 +10pt 獲得
+                  <button type="submit" className={`w-full py-2.5 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover}`}>
+                    レビューを送信して貢献度ポイント獲得
                   </button>
                 </form>
 
-                {/* リスト表示 */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-bold text-gray-500 px-1">最近投稿された落とし物</h4>
-                  {lostAndFoundList.map(item => (
-                    <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-2.5">
-                      <div className="flex justify-between items-start">
-                        <h5 className="font-bold text-gray-800 text-sm">{item.title}</h5>
-                        <span className="text-[10px] text-gray-400 font-medium">{item.date}</span>
+                {/* 口コミタイムライン */}
+                <div className="space-y-2">
+                  {cafeteriaReviews.map(rev => (
+                    <div key={rev.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-1.5`}>
+                      <div className="flex justify-between items-center">
+                        <span className={`text-xs font-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md`}>
+                          {MENU_ITEMS.find(m => m.id === rev.menuId)?.name.split('（')[0]}
+                        </span>
+                        <span className={`text-[10px] ${subTextClass}`}>{rev.date}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                        <div className="flex items-center gap-1 bg-gray-50 p-1.5 rounded-lg">
-                          <MapPin size={14} className="text-red-400" />
-                          <span className="font-bold text-[11px] truncate">場所: {item.location}</span>
+                      <div className="flex items-center gap-1">
+                        <div className="flex">
+                          {[1, 2, 3, 4, 5].map(n => <Star key={n} size={11} fill={n <= rev.rating ? '#FBBF24' : 'none'} stroke={n <= rev.rating ? '#FBBF24' : '#D1D5DB'} />)}
                         </div>
-                        <div className="flex items-center gap-1 bg-blue-50/50 p-1.5 rounded-lg text-blue-700">
-                          <CheckCircle size={14} />
-                          <span className="font-bold text-[11px] truncate">保管: {item.finder}</span>
-                        </div>
+                        <span className="text-xs font-bold text-gray-600">by {rev.userName}</span>
                       </div>
-                      <p className="text-xs text-gray-600 leading-relaxed border-t border-gray-50 pt-2.5">
-                        {item.description}
-                      </p>
+                      <p className="text-xs text-gray-700 leading-relaxed font-medium">{rev.comment}</p>
                     </div>
                   ))}
                 </div>
@@ -712,18 +890,258 @@ export default function CampusSyncApp() {
           </div>
         );
 
+      case 'facilities':
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex bg-gray-100 p-1 rounded-2xl">
+              <button 
+                onClick={() => setFacilitiesSubTab('status')}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${facilitiesSubTab === 'status' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+              >
+                図書室・自習室状況
+              </button>
+              <button 
+                onClick={() => setFacilitiesSubTab('lost')}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${facilitiesSubTab === 'lost' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+              >
+                落とし物共有掲示板 🔍
+              </button>
+            </div>
+
+            {facilitiesSubTab === 'status' ? (
+              <div className="space-y-4">
+                <section className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
+                  <h3 className="text-sm font-black text-indigo-600 mb-2.5 flex items-center"><BookOpen size={18} className="mr-1.5"/> 図書室蔵書・予約検索</h3>
+                  <div className="relative mb-3">
+                    <input type="text" placeholder="キーワード・タイトル・著者名で探す..." className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div key={i} className="min-w-[100px] text-center cursor-pointer group">
+                        <div className="h-28 bg-gray-100 border rounded-xl mb-1.5 flex items-center justify-center text-gray-300 text-[10px] font-bold">BOOK COVER</div>
+                        <h5 className="text-[10px] font-black line-clamp-2 text-gray-700 group-hover:text-indigo-600">新編 創価の栄光歴史学 {i}</h5>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
+                  <h3 className="text-sm font-black text-teal-600 mb-2 flex items-center"><Monitor size={18} className="mr-1.5"/> パソコン自習室 空席状況</h3>
+                  <div className="flex items-end justify-between mb-1.5">
+                    <span className="text-xs font-bold text-gray-500">リアルタイムブース利用率</span>
+                    <span className="text-xl font-black text-gray-800">22 <span className="text-xs font-bold text-gray-400">/ 35席</span></span>
+                  </div>
+                  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${(22 / 35) * 100}%` }}></div>
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                {/* 落とし物新規報告 */}
+                <form onSubmit={handleAddLostItem} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
+                  <h4 className="text-xs font-black flex items-center gap-1 text-amber-600"><Plus size={16} /> 落とし物発見の共有報告</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="品名・特徴 (例: 赤いペンケース)" value={newLostTitle} onChange={e => setNewLostTitle(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
+                    <input type="text" placeholder="拾った場所" value={newLostLocation} onChange={e => setNewLostLocation(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
+                    <input type="text" placeholder="現在の保管・預け先" value={newLostFinder} onChange={e => setNewLostFinder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
+                    <textarea placeholder="その他詳細な特徴があれば記入してください..." value={newLostDescription} onChange={e => setNewLostDescription(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-14 resize-none" />
+                  </div>
+                  <button type="submit" className={`w-full py-2.5 text-white font-black text-xs rounded-xl shadow-xs ${themeCls.bg} ${themeCls.bgHover}`}>
+                    掲示板に登録して学校貢献度を獲得
+                  </button>
+                </form>
+
+                {/* リスト表示 */}
+                <div className="space-y-2.5">
+                  {lostAndFoundList.map(item => (
+                    <div key={item.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
+                      <div className="flex justify-between items-start">
+                        <h5 className="font-black text-sm text-gray-800">{item.title}</h5>
+                        <span className={`text-[10px] ${subTextClass}`}>{item.date}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="flex items-center gap-1 bg-gray-50 p-1.5 rounded-lg text-gray-600 font-bold truncate">
+                          <MapPin size={12} className="text-red-400 flex-shrink-0" />
+                          <span>場所: {item.location}</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-blue-50 text-blue-700 p-1.5 rounded-lg font-bold truncate">
+                          <CheckCircle size={12} className="flex-shrink-0" />
+                          <span>保管: {item.finder}</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed pt-1.5 border-t border-gray-50">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'bus':
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-black ${activeTextClass}`}>スクールバス運行情報</h2>
+              <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1 text-xs font-bold">
+                <button onClick={() => setBusSubTab('countdown')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'countdown' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>発車案内</button>
+                <button onClick={() => setBusSubTab('report')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'report' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>状況報告</button>
+              </div>
+            </div>
+
+            {/* 発車案内ステーション選択 */}
+            <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl">
+              {MOCK_BUS_STATIONS.map(station => (
+                <button
+                  key={station.id}
+                  onClick={() => setSelectedBusStation(station.id)}
+                  className={`py-2 text-xs font-black rounded-lg transition-all text-center ${
+                    selectedBusStation === station.id ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'
+                  }`}
+                >
+                  {station.name.split('駅')[0]}駅便
+                </button>
+              ))}
+            </div>
+
+            {busSubTab === 'countdown' ? (
+              <div className="space-y-3">
+                {/* メイン運行ステータス表示カード */}
+                <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-3.5`}>
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-black text-gray-800">
+                      {MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation)?.name}
+                    </h3>
+                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-black">
+                      遅延: {busDelayMinutes[selectedBusStation]} 分
+                    </span>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-4 text-center border">
+                    <span className="text-xs font-bold text-gray-400 block mb-0.5">次発バス発車時刻</span>
+                    <span className="text-3xl font-black text-gray-900 tracking-wide">16:20</span>
+                    <span className="text-xs font-black text-amber-600 block mt-1">🕒 およそ あと 12 分で発車</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold">
+                    <div className="bg-gray-50 p-2 rounded-xl border">
+                      <span className="text-gray-400 text-[10px] block">生徒報告の混雑度</span>
+                      <span className="text-gray-700 font-black">{busCongestionVote[selectedBusStation]}</span>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded-xl border">
+                      <span className="text-gray-400 text-[10px] block">後発予定便</span>
+                      <span className="text-gray-700 font-black">16:40 / 17:00</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 時刻表リスト一覧 */}
+                <div className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
+                  <h4 className="text-xs font-black text-gray-400 mb-2.5">本日の全出発ダイヤ一覧</h4>
+                  <div className="grid grid-cols-4 gap-2">
+                    {MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation)?.departures.map(t => (
+                      <div key={t} className="bg-gray-50 py-1.5 rounded-lg text-center border text-xs font-mono font-bold text-gray-700">
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* 生徒同士の運行・混雑状況報告機能 */
+              <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-4 animate-in fade-in duration-200`}>
+                <h3 className="text-sm font-black flex items-center gap-1.5 text-amber-600"><AlertTriangle size={17}/> スクールバス運行のリアルタイム共有報告</h3>
+                <p className="text-xs text-gray-500 font-medium">現在バス停やロータリーに並んでいる創価生は、後輩や同級生のために現在の生の情報を提供してください。</p>
+                
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-xs font-black text-gray-400 block mb-1.5">① 現在の並び列・混雑ボリューム</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['ガラ空き', '普通', '大行列・満員'].map(status => (
+                        <button key={status} type="button" onClick={() => handleVoteBusCongestion(status)} className="py-2 text-xs font-bold border rounded-xl hover:bg-gray-50 transition-colors">
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="text-xs font-black text-gray-400 block mb-1.5">② 道路渋滞等による想定遅延報告</label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[0, 5, 10, 20].map(mins => (
+                        <button key={mins} type="button" onClick={() => handleReportBusDelay(mins)} className="py-2 text-xs font-mono font-bold border rounded-xl hover:bg-gray-50 transition-colors">
+                          {mins === 0 ? 'オンタイム' : `+${mins}分遅れ`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'club':
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <h2 className={`text-xl font-black ${activeTextClass}`}>部活動・委員会 連絡ノート</h2>
+            
+            {/* 新規投稿インプットフォーム */}
+            <form onSubmit={handleAddClubNote} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
+              <h4 className="text-xs font-black text-purple-600 flex items-center gap-1"><Plus size={16}/> クラブ内・委員会内への新規業務・連絡投稿</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" placeholder="部活・委員会名 (例: 男子バドミントン部)" value={newClubName} onChange={e => setNewClubName(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                <input type="text" placeholder="件名・タイトル" value={newClubTitle} onChange={e => setNewClubTitle(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                <textarea placeholder="部員へ共有する詳細スケジュールや持参物、重要連絡事項を記載..." value={newClubContent} onChange={e => setNewClubContent(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-16 resize-none" />
+              </div>
+              <button type="submit" className={`w-full py-2 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover} shadow-xs`}>
+                連絡事項をタイムラインに掲示 (+15pt)
+              </button>
+            </form>
+
+            {/* 連絡用タイムライン */}
+            <div className="space-y-2.5">
+              {clubNotes.map(note => (
+                <div key={note.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                        {note.clubName}
+                      </span>
+                      <h4 className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
+                    </div>
+                    <span className={`text-[10px] ${subTextClass}`}>{note.date}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2.5 rounded-xl border border-gray-100 font-medium">
+                    {note.content}
+                  </p>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-400 font-bold">発信者: {note.author}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
       case 'notifications':
         return (
           <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 px-1">通知</h2>
+            <h2 className={`text-xl font-black ${activeTextClass} px-1`}>学園総合通知</h2>
             {MOCK_NOTIFICATIONS.map(note => (
-              <div key={note.id} className={`p-4 rounded-2xl border ${note.isRead ? 'bg-transparent border-gray-100' : 'bg-white border-blue-100 shadow-sm'} flex gap-4 items-start`}>
+              <div key={note.id} className={`p-4 rounded-2xl border ${note.isRead ? 'bg-transparent border-gray-200' : 'bg-white border-blue-200 shadow-sm'} flex gap-3.5 items-start`}>
                 <div className="mt-1">
-                  {note.isRead ? <Bell size={20} className="text-gray-300"/> : <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shadow-sm ${themeCls.bg} ${themeCls.shadow}`}></div>}
+                  {note.isRead ? (
+                    <Bell size={18} className="text-gray-300"/>
+                  ) : (
+                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shadow-xs ${themeCls.bg} ${themeCls.shadow}`}></div>
+                  )}
                 </div>
                 <div>
-                  <h4 className={`text-sm mb-1 ${note.isRead ? 'text-gray-500 font-medium' : 'text-gray-800 font-bold'}`}>{note.title}</h4>
-                  <p className="text-[11px] text-gray-400">{note.time}</p>
+                  <h4 className={`text-xs leading-normal mb-1 ${note.isRead ? 'text-gray-500 font-medium' : 'text-gray-800 font-black'}`}>{note.title}</h4>
+                  <p className="text-[10px] text-gray-400 font-medium">{note.time}</p>
                 </div>
               </div>
             ))}
@@ -732,83 +1150,65 @@ export default function CampusSyncApp() {
 
       case 'settings':
         return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <h2 className="text-xl font-bold text-gray-800 mb-2 px-1">マイ設定</h2>
+          <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <h2 className={`text-xl font-black ${activeTextClass} px-1`}>アプリケーション設定</h2>
             
-            {/* 🪪 1. プロフィール＆ログイン連携（学籍番号） */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
-              <div className="flex items-center gap-3 border-b border-gray-50 pb-3.5">
-                <div className={`p-2.5 ${themeCls.lightBg} rounded-2xl text-gray-700`}>
-                  <User size={22} className={themeCls.text} />
+            {/* プロフィール設定 */}
+            <div className={`${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-4`}>
+              <div className="flex items-center gap-3 border-b border-gray-50 pb-3">
+                <div className={`p-2 rounded-xl ${themeCls.lightBg}`}>
+                  <User size={20} className={themeCls.text} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-gray-800">ログイン情報（プロフィール）</h3>
-                  <p className="text-[11px] text-gray-400 font-medium">学籍番号の最初の2桁から所属期生を自動判別します</p>
+                  <h3 className="text-xs font-black">生徒個人ログイン認証連携</h3>
+                  <p className="text-[10px] text-gray-400 font-medium">学籍番号に基づいて期生が自動パースされます</p>
                 </div>
               </div>
 
-              <div className="space-y-3.5">
-                <div>
-                  <label className="text-[11px] font-bold text-gray-400 block mb-1">氏名</label>
-                  <input 
-                    type="text" 
-                    value={studentName}
-                    onChange={e => setStudentName(e.target.value)}
-                    className={`w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:ring-2 ${themeCls.ring}`}
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-[11px] font-bold text-gray-400 block mb-1">学籍番号 (6桁)</label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      maxLength={6}
-                      value={studentId}
-                      onChange={e => setStudentId(e.target.value)}
-                      className={`w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-bold outline-none focus:ring-2 ${themeCls.ring}`}
-                    />
-                    <Lock size={14} className="absolute left-3 top-3.5 text-gray-400" />
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 block mb-1">氏名設定</label>
+                    <input type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black outline-none" />
                   </div>
-                  {studentId.trim().length === 6 ? (
-                    <span className="text-[10px] font-bold text-green-600 mt-1 block flex items-center gap-1">
-                      <Check size={12} strokeWidth={3} /> 学籍番号ログイン有効化中 ({getCohortName(studentId)})
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-amber-500 mt-1 block">
-                      ⚠️ 正しい学籍番号(6桁)を入力してください
-                    </span>
-                  )}
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 block mb-1">割り当てクラス</label>
+                    <input type="text" value={userClass} readOnly className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black text-gray-500 cursor-not-allowed outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 block mb-1">6桁学籍番号</label>
+                  <div className="relative">
+                    <input type="text" maxLength={6} value={studentId} onChange={e => setStudentId(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono font-black outline-none" />
+                    <Lock size={13} className="absolute left-3 top-2.5 text-gray-400" />
+                  </div>
                 </div>
 
-                {/* デジタル学生証の呼び出しボタン */}
                 <button
                   onClick={() => setShowIdCardModal(true)}
                   disabled={studentId.trim().length !== 6}
-                  className={`w-full py-3.5 mt-2 rounded-xl text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 transition-all ${
-                    studentId.trim().length === 6 
-                      ? `${themeCls.bg} ${themeCls.bgHover} active:scale-95` 
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  className={`w-full py-3 mt-1 rounded-xl text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 ${
+                    studentId.trim().length === 6 ? `${themeCls.bg} ${themeCls.bgHover}` : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <QrCode size={16} /> デジタル学生証を表示する 🪪
+                  <QrCode size={15} /> デジタル生徒身分証アクティベート 🪪
                 </button>
               </div>
             </div>
 
-            {/* 🎨 3. アプリ全体のテーマカラー設定 */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-3.5">
+            {/* テーマカラーカスタム */}
+            <div className={`${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-3`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2.5 ${themeCls.lightBg} rounded-2xl text-gray-700`}>
-                  <Palette size={22} className={themeCls.text} />
+                <div className={`p-2 rounded-xl ${themeCls.lightBg}`}>
+                  <Palette size={20} className={themeCls.text} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-gray-800">推し色カスタム（テーマカラー）</h3>
-                  <p className="text-[11px] text-gray-400 font-medium">アプリ全体のアイコンやボタン、カードの背景色を切り替えます</p>
+                  <h3 className="text-xs font-black">推し色カラーカスタムテーマ</h3>
+                  <p className="text-[10px] text-gray-400 font-medium">UIのアクセントカラーを瞬時に切り替えます</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-5 gap-2 pt-1.5">
+              <div className="grid grid-cols-6 gap-1.5 pt-1">
                 {(Object.keys(THEMES) as ThemeKey[]).map(key => {
                   const item = THEMES[key];
                   const isActive = theme === key;
@@ -816,109 +1216,126 @@ export default function CampusSyncApp() {
                     <button
                       key={key}
                       onClick={() => setTheme(key)}
-                      className={`flex flex-col items-center justify-center py-2.5 rounded-2xl border transition-all ${
-                        isActive 
-                          ? `border-gray-800 bg-gray-50 scale-105 shadow-sm` 
-                          : 'border-gray-100 bg-white hover:bg-gray-50'
-                      }`}
+                      className={`flex flex-col items-center py-2 rounded-xl border transition-all ${isActive ? 'border-gray-800 bg-gray-50' : 'border-gray-100 bg-white'}`}
                     >
-                      <span className={`w-6 h-6 rounded-full block mb-1 flex items-center justify-center ${item.bg} text-white`}>
-                        {isActive && <Check size={12} strokeWidth={3} />}
+                      <span className={`w-5 h-5 rounded-full block mb-1 flex items-center justify-center ${item.bg} text-white`}>
+                        {isActive && <Check size={10} strokeWidth={3} />}
                       </span>
-                      <span className="text-[9px] font-bold text-gray-600 uppercase">{key}</span>
+                      <span className="text-[8px] font-bold text-gray-500 uppercase">{key}</span>
                     </button>
                   );
                 })}
               </div>
+
+              {/* 新機能：ダークモード風切り替え */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-50">
+                <span className="text-xs font-black text-gray-700">ダークテーマ（省電力表示モード）</span>
+                <button
+                  type="button"
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className={`p-1.5 rounded-lg border ${isDarkMode ? 'bg-slate-700 text-yellow-400 border-slate-600' : 'bg-gray-50 text-gray-500'}`}
+                >
+                  {isDarkMode ? <Sun size={16}/> : <Moon size={16}/>}
+                </button>
+              </div>
             </div>
 
-            {/* ⏰ 5. 提出物の「おせっかい通知リマインダー」 */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-50 pb-3">
+            {/* おせっかい自動アラーム設定 */}
+            <div className={`${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-4`}>
+              <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2.5 ${themeCls.lightBg} rounded-2xl text-gray-700`}>
-                    <BellRing size={22} className={themeCls.text} />
-                  </div>
+                  <div className={`p-2 rounded-xl ${themeCls.lightBg}`}><BellRing size={20} className={themeCls.text} /></div>
                   <div>
-                    <h3 className="text-sm font-black text-gray-800">おせっかいリマインダー</h3>
-                    <p className="text-[11px] text-gray-400 font-medium">出し忘れを絶対に防ぐ、うるさい自動警告設定</p>
+                    <h3 className="text-xs font-black">おせっかい提出警告リマインダー</h3>
+                    <p className="text-[10px] text-gray-400 font-medium">出し忘れによる減点を死守するアラートシステム</p>
                   </div>
                 </div>
-                
-                {/* トグルスイッチ */}
                 <button
                   onClick={() => setRemindersEnabled(!remindersEnabled)}
-                  className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 ${remindersEnabled ? themeCls.bg : 'bg-gray-200'}`}
+                  className={`w-10 h-6 rounded-full p-0.5 transition-colors ${remindersEnabled ? themeCls.bg : 'bg-gray-200'}`}
                 >
-                  <div className={`w-5 h-5 bg-white rounded-full transition-transform duration-300 shadow-sm ${remindersEnabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                  <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-xs ${remindersEnabled ? 'translate-x-4' : 'translate-x-0'}`}></div>
                 </button>
               </div>
 
-              {remindersEnabled ? (
+              {remindersEnabled && (
                 <div className="space-y-3 pt-1 animate-in fade-in duration-200">
-                  <span className="text-[10px] font-bold text-gray-400 block mb-1">通知タイミング（複数選択可）</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { key: 'twoDaysBefore', label: '2日前の 20:00', desc: '早めの着手用' },
-                      { key: 'dayBefore', label: '前日の 20:00', desc: '明日は提出日！' },
-                      { key: 'morningOf', label: '当日の朝 07:00', desc: '今日忘れずに！' },
-                      { key: 'threeHoursBefore', label: '期限の3時間前', desc: '最後の死守用' },
-                    ].map(item => {
-                      const isSelected = reminderTimes.includes(item.key);
-                      return (
-                        <button
-                          key={item.key}
-                          onClick={() => toggleReminderTime(item.key)}
-                          className={`p-3 rounded-2xl text-left border transition-all flex items-start gap-2.5 ${
-                            isSelected 
-                              ? `border-${theme}-300 ${themeCls.lightBg} ${themeCls.text}` 
-                              : 'border-gray-100 bg-gray-50/50 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center border text-white ${
-                            isSelected ? `${themeCls.bg} border-transparent` : 'border-gray-300 bg-white'
-                          }`}>
-                            {isSelected && <Check size={10} strokeWidth={3} />}
-                          </span>
-                          <div>
-                            <p className="text-xs font-black text-gray-800 leading-none mb-1">{item.label}</p>
-                            <p className="text-[9px] text-gray-400 font-medium">{item.desc}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div>
+                    <span className="text-[10px] font-black text-gray-400 block mb-1">警告アラートのタイミング</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { key: 'twoDaysBefore', label: '2日前の 20:00' },
+                        { key: 'dayBefore', label: '前日の 20:00' },
+                        { key: 'morningOf', label: '当日の朝 07:00' },
+                        { key: 'threeHoursBefore', label: '期限の3時間前' },
+                      ].map(item => {
+                        const isSelected = reminderTimes.includes(item.key);
+                        return (
+                          <button
+                            key={item.key}
+                            onClick={() => toggleReminderTime(item.key)}
+                            className={`p-2 rounded-xl text-left border text-xs font-bold transition-all flex items-center gap-2 ${
+                              isSelected ? `border-${theme}-300 ${themeCls.lightBg} ${themeCls.text}` : 'border-gray-100 bg-gray-50'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-sm flex items-center justify-center border text-white ${isSelected ? themeCls.bg : 'bg-white'}`}>
+                              {isSelected && <Check size={9} strokeWidth={3} />}
+                            </span>
+                            <span>{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="py-2 text-center bg-gray-50 rounded-2xl">
-                  <p className="text-xs text-gray-400 font-bold">おせっかいリマインダーは現在オフです</p>
+
+                  {/* 新機能：通知除外曜日設定 */}
+                  <div className="pt-1">
+                    <span className="text-[10px] font-black text-gray-400 block mb-1">通知を許可する曜日フィルター</span>
+                    <div className="grid grid-cols-5 gap-1">
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(day => {
+                        const isAllowed = allowedNotificationDays.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleNotificationDay(day)}
+                            className={`py-1 text-[10px] font-bold border rounded-lg transition-all ${
+                              isAllowed ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-400 border-gray-200'
+                            }`}
+                          >
+                            {day === 'Mon' ? '月' : day === 'Tue' ? '火' : day === 'Wed' ? '水' : day === 'Thu' ? '木' : '金'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* お気に入り教室の設定 */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-3">
-              <span className="text-sm font-bold text-gray-700 block">よく行く教室（お気に入り）</span>
-              <div className="flex gap-2">
+            {/* お気に入り教室のクイック設定 */}
+            <div className={`${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-2.5`}>
+              <span className="text-xs font-black text-gray-700 block">ホーム表示用お気に入り教室設定</span>
+              <div className="flex flex-wrap gap-1.5">
                 {rooms.map(r => (
                   <button
                     key={r.id}
                     onClick={() => setFavoriteRoomId(r.id)}
-                    className={`text-xs px-2.5 py-1.5 rounded-lg border font-bold flex items-center gap-1 transition-all ${
+                    className={`text-[11px] px-2.5 py-1.5 rounded-xl border font-black flex items-center gap-1 transition-all ${
                       favoriteRoomId === r.id 
-                        ? 'bg-yellow-500 text-white border-yellow-500 shadow-sm shadow-yellow-100' 
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        ? 'bg-yellow-500 text-white border-yellow-500' 
+                        : 'bg-white text-gray-600 border-gray-200'
                     }`}
                   >
-                    <Star size={12} fill={favoriteRoomId === r.id ? 'currentColor' : 'none'} />
+                    <Star size={11} fill={favoriteRoomId === r.id ? 'currentColor' : 'none'} />
                     {r.name.replace('教室', '')}
                   </button>
                 ))}
               </div>
             </div>
 
-            <button className="w-full py-4 text-sm font-bold text-red-500 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors">
-              ログアウト
+            <button className="w-full py-3.5 text-xs font-black text-red-500 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors">
+              アプリケーション連携の解除・ログアウト
             </button>
           </div>
         );
@@ -928,220 +1345,174 @@ export default function CampusSyncApp() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+    <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''}`}>
       
-      {/* PC用サイドバー */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-sm z-30 relative">
-        <div className="p-6">
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight mb-8">
-            Campus<span className={themeCls.text}>Sync</span>
-          </h1>
-          <nav className="space-y-2">
-            <SidebarItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-            <SidebarItem icon={<Utensils size={20} />} label="学食・混雑度" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-            <SidebarItem icon={<BookOpen size={20} />} label="施設情報" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
-            <SidebarItem icon={<Bell size={20} />} label="通知" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={2} themeCls={themeCls} />
-            <SidebarItem icon={<Settings size={20} />} label="マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
-          </nav>
+      {/* デスクトップ用 左側固定サイドバーレイアウト */}
+      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
+        <div className="p-5 flex flex-col h-full justify-between">
+          <div>
+            <h1 className="text-xl font-black text-gray-800 tracking-tight mb-6">
+              Campus<span className={themeCls.text}>Sync</span>
+            </h1>
+            <nav className="space-y-1">
+              <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
+              <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
+              <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
+              <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
+              <SidebarItem icon={<Bus size={18} />} label="スクールバス" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+              <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
+              <SidebarItem icon={<Bell size={18} />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
+              <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
+            </nav>
+          </div>
+          <div className="text-[10px] text-gray-400 font-bold border-t pt-3">
+            <span>© 2026 CampusSync Pro</span>
+          </div>
         </div>
       </aside>
 
-      {/* メインコンテンツエリア */}
-      <div className="flex-1 flex flex-col relative w-full max-w-2xl mx-auto shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent">
+      {/* メインビューポートエリア */}
+      <div className="flex-1 flex flex-col relative w-full max-w-2xl mx-auto shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden">
         
-        {/* スマホ用ヘッダー */}
-        <header className="md:hidden flex justify-between items-center px-5 py-3.5 bg-white/80 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
-          <h1 className="text-xl font-black text-gray-800 tracking-tight">
+        {/* モバイル用トップナビヘッダー */}
+        <header className="md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
+          <h1 className="text-lg font-black text-gray-800 tracking-tight">
             Campus<span className={themeCls.text}>Sync</span>
           </h1>
+          <div className={`text-xs font-black px-2.5 py-1 rounded-full ${themeCls.lightBg} ${themeCls.text}`}>
+            ★ {score} pt
+          </div>
         </header>
 
-        {/* スクロール領域 */}
-        <main className="flex-1 overflow-y-scroll pb-24 md:pb-10 px-5 pt-5 md:pt-10">
+        {/* スクロールコンテンツコンテナ */}
+        <main className="flex-1 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
           {renderContent()}
         </main>
 
-        {/* スマホ用ボトムナビゲーション */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-20 pb-4 px-2 z-20">
-          <NavItem icon={<Home size={24} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-          <NavItem icon={<Utensils size={24} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-          <NavItem icon={<BookOpen size={24} />} label="施設" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
-          <NavItem icon={<Bell size={24} />} label="通知" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} themeCls={themeCls} />
-          <NavItem icon={<Settings size={24} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
+        {/* モバイルスマートフォンスクリーン用ボトムナビゲーションバー */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-16 pb-2 px-1 z-20 overflow-x-auto">
+          <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
+          <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
+          <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
+          <NavItem icon={<Bus size={20} />} label="バス" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+          <NavItem icon={<Settings size={20} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
         </nav>
       </div>
 
-      {/* --- モーダル群 --- */}
+      {/* --- アプリケーションモーダルUIコンポーネント群 --- */}
 
-      {/* 🪪 1. デジタル学生証 モーダル */}
+      {/* 🪪 デジタル学生証表示ポップアップモーダル */}
       {showIdCardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/50 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-gradient-to-tr from-gray-900 via-slate-800 to-gray-900 rounded-[32px] p-6 w-full max-w-sm border border-white/10 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* ホログラム風エフェクト */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-gradient-to-tr from-gray-900 via-slate-800 to-gray-900 rounded-[28px] p-5 w-full max-w-sm border border-white/10 shadow-2xl relative overflow-hidden">
             <div className="absolute -top-32 -left-32 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
             <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-            {/* ヘッダー */}
-            <div className="flex justify-between items-start mb-6 pb-4 border-b border-white/5">
+            <div className="flex justify-between items-start mb-5 pb-3 border-b border-white/5">
               <div>
-                <h3 className="text-white font-black text-lg tracking-wider flex items-center gap-1.5">
-                  <Sparkle size={18} className="text-yellow-400 animate-spin" style={{ animationDuration: '6s' }} /> 創価高等学校
+                <h3 className="text-white font-black text-base tracking-wider flex items-center gap-1.5">
+                  <Sparkle size={16} className="text-yellow-400" /> 創価高等学校
                 </h3>
-                <p className="text-[9px] text-white/40 tracking-widest font-semibold uppercase">Student Identity Card</p>
+                <p className="text-[8px] text-white/40 tracking-widest font-bold uppercase">Student Identification Card</p>
               </div>
-              <button 
-                onClick={() => setShowIdCardModal(false)} 
-                className="p-1.5 bg-white/5 text-white/60 rounded-full hover:bg-white/10 hover:text-white transition-colors"
-              >
-                <X size={16}/>
+              <button onClick={() => setShowIdCardModal(false)} className="p-1.5 bg-white/5 text-white/60 rounded-full hover:bg-white/10">
+                <X size={14}/>
               </button>
             </div>
 
-            {/* カード中身 */}
-            <div className="space-y-5 relative z-10">
-              <div className="flex gap-4">
-                {/* 顔写真（ダミーアバター） */}
-                <div className="w-24 h-32 bg-slate-700 rounded-2xl flex flex-col items-center justify-center border border-white/10 text-white/30 text-xs font-bold gap-1 relative overflow-hidden shadow-inner">
-                  <User size={36} className="text-white/20" />
-                  <span className="text-[10px] tracking-widest">PHOTO</span>
-                  {/* スキャンエフェクト */}
+            <div className="space-y-4 relative z-10">
+              <div className="flex gap-3.5">
+                <div className="w-20 h-28 bg-slate-700 rounded-xl flex flex-col items-center justify-center border border-white/10 text-white/30 text-[10px] font-bold gap-1 relative overflow-hidden shadow-inner">
+                  <User size={30} className="text-white/20" />
+                  <span>PHOTO</span>
                   <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-400/30 animate-pulse"></div>
                 </div>
 
-                {/* 個人情報 */}
-                <div className="flex-1 flex flex-col justify-between py-1">
+                <div className="flex-1 flex flex-col justify-between py-0.5">
                   <div>
-                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-0.5">所属期生</p>
-                    <p className="text-sm font-black text-white tracking-wide">{getCohortName(studentId)}</p>
+                    <p className="text-[9px] text-white/40 font-bold uppercase mb-0.5">学年・期生所属</p>
+                    <p className="text-xs font-black text-white tracking-wide">{getCohortName(studentId)} / {userClass}組</p>
                   </div>
-
                   <div>
-                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-0.5">氏名</p>
-                    <p className="text-base font-black text-white tracking-wide">{studentName}</p>
+                    <p className="text-[9px] text-white/40 font-bold uppercase mb-0.5">氏名</p>
+                    <p className="text-sm font-black text-white tracking-wide">{studentName}</p>
                   </div>
-
                   <div>
-                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-0.5">学籍番号</p>
-                    <p className="text-sm font-mono font-bold text-white tracking-widest">{studentId}</p>
+                    <p className="text-[9px] text-white/40 font-bold uppercase mb-0.5">認証管理番号</p>
+                    <p className="text-xs font-mono font-bold text-white tracking-widest">{studentId}</p>
                   </div>
                 </div>
               </div>
 
-              {/* バーコード部分 (模擬デザイン) */}
-              <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-2 border border-white/5">
-                <div className="w-full h-11 flex justify-between items-center px-1">
-                  {/* CSSでバーコードをシミュレーション */}
-                  {[2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 2, 3, 2, 1, 4, 2, 3, 1].map((w, index) => (
-                    <div 
-                      key={index} 
-                      className="bg-black h-full" 
-                      style={{ width: `${w * 1.5}px` }}
-                    />
+              {/* タッチ決済用模擬バーコードストリップ */}
+              <div className="bg-white rounded-xl p-3.5 flex flex-col items-center gap-1.5">
+                <div className="w-full h-9 flex justify-between items-center px-1">
+                  {[2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 2, 3, 2, 1, 4, 2, 3, 1].map((w, idx) => (
+                    <div key={idx} className="bg-black h-full" style={{ width: `${w * 1.3}px` }} />
                   ))}
                 </div>
-                <p className="text-[10px] font-mono font-bold text-gray-500 tracking-[0.25em]">*{studentId}*</p>
-              </div>
-
-              <div className="text-center pt-1.5">
-                <p className="text-[8px] text-white/30 font-medium">※ 本証は創価高校デジタルアプリの模擬認証システムです</p>
+                <p className="text-[9px] font-mono font-black text-gray-400 tracking-widest">*{studentId}*</p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* TODO詳細モーダル */}
+      {/* 提出物詳細ビューポップアップモーダル */}
       {selectedTodo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className={`p-6 ${selectedTodo.color.split(' ')[0]} bg-opacity-50 flex items-start gap-4`}>
-              <div className="p-3 bg-white/50 rounded-2xl"><selectedTodo.icon size={28} className={selectedTodo.color.split(' ')[1]} /></div>
-              <div className="flex-1 mt-1">
-                <span className="text-xs font-bold bg-white/60 px-2 py-1 rounded-md mb-2 inline-block">{selectedTodo.due}</span>
-                <h3 className="text-lg font-bold text-gray-900 leading-tight">{selectedTodo.title}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl">
+            <div className={`p-4 ${selectedTodo.color.split(' ')[0]} bg-opacity-40 flex items-start gap-3`}>
+              <div className="p-2.5 bg-white/60 rounded-xl"><selectedTodo.icon size={22} className={selectedTodo.color.split(' ')[1]} /></div>
+              <div className="flex-1">
+                <span className="text-[10px] font-black bg-white/80 px-2 py-0.5 rounded-md mb-1 inline-block text-gray-700">{selectedTodo.due}</span>
+                <h3 className="text-xs font-black text-gray-900 leading-normal">{selectedTodo.title}</h3>
               </div>
             </div>
-            <div className="p-6">
-              <h4 className="text-xs font-bold text-gray-400 mb-2">詳細情報</h4>
-              <p className="text-sm text-gray-700 leading-relaxed mb-6">{selectedTodo.details}</p>
-              <button 
-                onClick={() => setSelectedTodo(null)}
-                className="w-full py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
-              >
-                閉じる
+            <div className="p-4 space-y-4">
+              <div>
+                <h4 className="text-[10px] font-black text-gray-400 mb-1">タスク詳細及び指示事項</h4>
+                <p className="text-xs text-gray-600 leading-relaxed font-medium">{selectedTodo.details}</p>
+              </div>
+              <button onClick={() => setSelectedTodo(null)} className="w-full py-2.5 bg-gray-100 text-gray-700 text-xs font-black rounded-xl hover:bg-gray-200">
+                詳細確認を閉じる
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 改良版：エアコン報告モーダル */}
+      {/* エアコン快適度状況のアップデート報告モーダル */}
       {showTempModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">エアコン状況の報告</h3>
-              <button onClick={() => setShowTempModal(false)} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:bg-gray-200"><X size={20}/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs">
+          <div className="bg-white p-5 rounded-2xl w-full max-w-xs shadow-xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-black text-gray-800">エアコン室内体感の報告</h3>
+              <button onClick={() => setShowTempModal(false)} className="p-1.5 bg-gray-50 rounded-full text-gray-400 hover:bg-gray-100"><X size={16}/></button>
             </div>
 
-            <div className="space-y-4 mb-6">
+            <div className="space-y-3.5 text-xs">
               <div>
-                <label className="text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                  <Star size={14} className="text-yellow-500" fill="currentColor" /> よく行く場所からワンタップ選択
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {rooms.map(r => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => setSelectedRoomId(r.id)}
-                      className={`py-2 text-[11px] font-bold border rounded-xl transition-all truncate px-1 flex items-center justify-center gap-1 ${
-                        selectedRoomId === r.id 
-                          ? 'border-blue-500 bg-blue-50 text-blue-600' 
-                          : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
-                      }`}
-                    >
-                      {favoriteRoomId === r.id && <Star size={10} fill="currentColor" className="text-yellow-400 flex-shrink-0" />}
-                      {r.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1">場所 (個別指定)</label>
-                <select 
-                  value={selectedRoomId}
-                  onChange={e => setSelectedRoomId(Number(e.target.value))}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                >
+                <label className="font-black text-gray-400 block mb-1">報告対象の場所・教室</label>
+                <select value={selectedRoomId} onChange={e => setSelectedRoomId(Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold outline-none">
                   {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-500 mb-1.5 block">現在の体感</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['寒い', '快適', '暑い'].map(s => (
-                    <button 
-                      key={s} 
-                      type="button"
-                      onClick={() => setSelectedStatus(s)}
-                      className={`py-2.5 text-sm font-bold border rounded-xl transition-all ${
-                        selectedStatus === s 
-                          ? 'border-teal-500 bg-teal-50 text-teal-600' 
-                          : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {s}
+                <label className="font-black text-gray-400 block mb-1.5">現在のリアルな室内体感</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['寒い', '快適', '暑い'].map(status => (
+                    <button key={status} type="button" onClick={() => setSelectedStatus(status)} className={`py-2 text-xs font-black border rounded-xl transition-all ${selectedStatus === status ? 'border-teal-500 bg-teal-50 text-teal-600' : 'border-gray-200 text-gray-500'}`}>
+                      {status}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            <button onClick={submitAcReport} className="w-full py-3.5 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl shadow-md shadow-teal-200 transition-colors">
-              この状況で送信する (獲得 +10pt)
+            <button onClick={submitAcReport} className="w-full py-2.5 bg-teal-500 hover:bg-teal-600 text-white font-black text-xs rounded-xl shadow-md shadow-teal-100 transition-colors">
+              この室温ステータスで即時報告
             </button>
           </div>
         </div>
@@ -1151,32 +1522,32 @@ export default function CampusSyncApp() {
   );
 }
 
-// --- サブコンポーネント ---
+// --- ⚙️ グローバル共通サブコンポーネントクラス群 ---
 
 function VoteBar({ label, count, type, userVote, percent, color }: { label: string, count: number, type: string, userVote: string | null, percent: number, color: string }) {
   const isVoted = userVote === type;
   return (
-    <div>
-      <div className="flex justify-between text-sm font-bold mb-1.5">
-        <span className="text-gray-700 flex items-center gap-1">
-          {label} {isVoted && <Check size={14} className="text-blue-500"/>}
+    <div className="text-xs">
+      <div className="flex justify-between font-bold mb-1">
+        <span className="text-gray-700 flex items-center gap-1 font-black">
+          {label} {isVoted && <Check size={12} className="text-blue-500 font-black"/>}
         </span>
-        <span className="text-gray-500">{count + (isVoted ? 1 : 0)}人 <span className="text-gray-300 ml-1">({percent}%)</span></span>
+        <span className="text-gray-400 font-bold">{count + (isVoted ? 1 : 0)}人 <span className="text-gray-300">({percent}%)</span></span>
       </div>
-      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${percent}%` }}></div>
       </div>
     </div>
-  )
+  );
 }
 
 function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center justify-center w-16 pt-2 gap-1 relative">
-      <div className={`transition-all duration-200 ${isActive ? `${themeCls.text} transform -translate-y-1` : 'text-gray-400'}`}>
+    <button onClick={onClick} className="flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0">
+      <div className={`transition-all ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
         {icon}
       </div>
-      <span className={`text-[10px] font-bold transition-colors ${isActive ? themeCls.text : 'text-gray-400'}`}>
+      <span className={`text-[9px] font-black transition-colors ${isActive ? themeCls.text : 'text-gray-400'}`}>
         {label}
       </span>
     </button>
@@ -1185,10 +1556,10 @@ function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.Rea
 
 function SidebarItem({ icon, label, isActive, onClick, badge, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number, themeCls: any }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-bold` : 'text-gray-500 hover:bg-gray-50 font-medium'}`}>
-      {icon}
-      <span>{label}</span>
-      {badge && <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{badge}</span>}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
+      <div className="flex-shrink-0">{icon}</div>
+      <span className="truncate">{label}</span>
+      {badge && <span className="ml-auto bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>
-  )
+  );
 }
