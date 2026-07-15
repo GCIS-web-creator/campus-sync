@@ -31,6 +31,15 @@ const MOCK_NOTIFICATIONS = [
   { id: 4, title: '食堂の期間限定メニュー開始', time: '昨日', isRead: true },
 ];
 
+// 🌟 メニューの定義
+const MENU_ITEMS = [
+  { id: 'snack', name: 'スナック' },
+  { id: 'soka', name: '創価ランチ' },
+  { id: 'noodles', name: '麺類' },
+  { id: 'curry', name: 'カレー' },
+  { id: 'healthy', name: 'ヘルシーランチ' },
+];
+
 // --- メインコンポーネント ---
 
 export default function CampusSyncApp() {
@@ -38,21 +47,42 @@ export default function CampusSyncApp() {
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
   
-  // 🌟 学校貢献度ポイントのステート（初期値は仮に42）
+  // 🌟 学校貢献度ポイントのステート
   const [score, setScore] = useState(42);
 
-  // 学食の混雑度投票ステート
+  // 🌟 学食タブ内のサブタブ状態 ('overall' = 全体の混雑, 'menu' = メニュー別の並び具合)
+  const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu'>('overall');
+
+  // 学食（全体）の混雑度投票ステート
   const [crowdVotes, setCrowdVotes] = useState({ empty: 15, normal: 60, crowded: 25 });
   const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
 
-  // 混雑度の計算
+  // 🌟 メニュー別の投票データ
+  const [menuVotes, setMenuVotes] = useState<Record<string, { empty: number, normal: number, crowded: number }>>({
+    snack: { empty: 8, normal: 14, crowded: 3 },
+    soka: { empty: 2, normal: 8, crowded: 25 }, // 創価ランチは大人気想定！
+    noodles: { empty: 5, normal: 12, crowded: 4 },
+    curry: { empty: 4, normal: 10, crowded: 9 },
+    healthy: { empty: 10, normal: 5, crowded: 1 },
+  });
+  
+  // 🌟 ユーザーが各メニューに対して何を投票したか
+  const [userMenuVotes, setUserMenuVotes] = useState<Record<string, 'empty' | 'normal' | 'crowded' | null>>({
+    snack: null,
+    soka: null,
+    noodles: null,
+    curry: null,
+    healthy: null,
+  });
+
+  // 混雑度の計算（全体）
   const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded + (userVote ? 1 : 0);
   const getPercent = (val: number, key: string) => {
     const adjustedVal = val + (userVote === key ? 1 : 0);
     return Math.round((adjustedVal / totalVotes) * 100) || 0;
   };
 
-  // 🌟 投票時にポイントを連動させる処理
+  // 投票時にポイントを連動させる処理（全体）
   const handleVote = (type: 'empty' | 'normal' | 'crowded') => {
     if (userVote !== type) {
       setUserVote(type);
@@ -63,7 +93,27 @@ export default function CampusSyncApp() {
     }
   };
 
-  // 🌟 エアコン報告時にポイントを加算する処理
+  // 🌟 メニュー個別の投票処理
+  const handleMenuVote = (menuId: string, type: 'empty' | 'normal' | 'crowded') => {
+    const currentVote = userMenuVotes[menuId];
+    
+    setUserMenuVotes(prev => ({
+      ...prev,
+      [menuId]: currentVote === type ? null : type
+    }));
+
+    if (currentVote !== type) {
+      // 新しい投票、または変更
+      if (!currentVote) {
+        setScore(prev => Math.min(prev + 5, 100)); // 新規投票で+5ポイント
+      }
+    } else {
+      // 投票取り消し
+      setScore(prev => Math.max(prev - 5, 0)); // -5ポイント
+    }
+  };
+
+  // エアコン報告時にポイントを加算する処理
   const submitAcReport = () => {
     setShowTempModal(false);
     setScore(prev => Math.min(prev + 10, 100)); // 報告で+10ポイント
@@ -82,7 +132,6 @@ export default function CampusSyncApp() {
               <div className="flex justify-between items-end mb-2 relative z-10">
                 <div>
                   <h2 className="text-sm font-medium text-white/90 mb-1">今日の学校貢献度</h2>
-                  {/* 🌟 ポイントが動的に変わるように修正 */}
                   <p className="text-3xl font-bold tracking-tight">{score} <span className="text-base font-normal text-white/80">/ 100 pt</span></p>
                 </div>
                 <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
@@ -90,7 +139,6 @@ export default function CampusSyncApp() {
                 </div>
               </div>
               <div className="h-2 bg-black/10 rounded-full overflow-hidden mt-4 relative z-10">
-                {/* 🌟 メーターの長さがポイントに連動するように修正 */}
                 <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out" style={{ width: `${score}%` }}></div>
               </div>
             </div>
@@ -157,35 +205,118 @@ export default function CampusSyncApp() {
       case 'cafeteria':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-orange-800 text-sm mb-6 flex items-start gap-3">
+            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-orange-800 text-sm flex items-start gap-3">
               <Info size={20} className="text-orange-500 flex-shrink-0 mt-0.5" />
               <p>学食の決済は学生証のタッチで完了します。食券の購入は不要です。</p>
             </div>
 
-            {/* 混雑度セクション */}
-            <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                  <Users size={22} className="mr-2 text-orange-500"/> 今の食堂、混んでる？
-                </h3>
-                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                  リアルタイム投票
-                </span>
-              </div>
-              
-              <div className="space-y-4 mb-8">
-                <VoteBar label="空いてる" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty, 'empty')} color="bg-green-500" />
-                <VoteBar label="普通" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal, 'normal')} color="bg-orange-400" />
-                <VoteBar label="激混み" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded, 'crowded')} color="bg-red-500" />
-              </div>
+            {/* 🌟 サブタブ：全体混雑度 vs メニュー別並び具合 */}
+            <div className="flex bg-gray-100 p-1 rounded-2xl">
+              <button 
+                onClick={() => setCafeteriaSubTab('overall')}
+                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${cafeteriaSubTab === 'overall' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+              >
+                全体の混雑度
+              </button>
+              <button 
+                onClick={() => setCafeteriaSubTab('menu')}
+                className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${cafeteriaSubTab === 'menu' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+              >
+                メニュー別の並び具合
+              </button>
+            </div>
 
-              <h4 className="text-center text-sm font-bold text-gray-500 mb-3">あなたも今の状況を投票しよう！</h4>
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => handleVote('empty')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>空き</button>
-                <button onClick={() => handleVote('normal')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>普通</button>
-                <button onClick={() => handleVote('crowded')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>激混み</button>
+            {/* 🌟 条件分岐レンダリング */}
+            {cafeteriaSubTab === 'overall' ? (
+              /* --- 全体の混雑度表示 --- */
+              <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 animate-in fade-in duration-200">
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                    <Users size={22} className="mr-2 text-orange-500"/> 今の食堂、混んでる？
+                  </h3>
+                  <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                    リアルタイム投票
+                  </span>
+                </div>
+                
+                <div className="space-y-4 mb-8">
+                  <VoteBar label="空いてる" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty, 'empty')} color="bg-green-500" />
+                  <VoteBar label="普通" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal, 'normal')} color="bg-orange-400" />
+                  <VoteBar label="激混み" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded, 'crowded')} color="bg-red-500" />
+                </div>
+
+                <h4 className="text-center text-sm font-bold text-gray-500 mb-3">あなたも今の状況を投票しよう！</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => handleVote('empty')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>空き</button>
+                  <button onClick={() => handleVote('normal')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>普通</button>
+                  <button onClick={() => handleVote('crowded')} className={`py-3 text-sm font-bold rounded-xl border transition-all ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>激混み</button>
+                </div>
+              </section>
+            ) : (
+              /* --- メニュー別の並び具合（専用タブ） --- */
+              <div className="space-y-4 animate-in fade-in duration-200">
+                {MENU_ITEMS.map(item => {
+                  const votes = menuVotes[item.id];
+                  const userVoteItem = userMenuVotes[item.id];
+                  const total = votes.empty + votes.normal + votes.crowded + (userVoteItem ? 1 : 0);
+                  
+                  const getMenuPercent = (val: number, key: string) => {
+                    const adjusted = val + (userVoteItem === key ? 1 : 0);
+                    return Math.round((adjusted / total) * 100) || 0;
+                  };
+
+                  return (
+                    <div key={item.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
+                      {/* メニュー名 */}
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-base font-bold text-gray-800">{item.name}</h4>
+                        <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-md">
+                          並び列の長さ
+                        </span>
+                      </div>
+
+                      {/* グラフ（空き、普通、大行列の比率表示） */}
+                      <div className="grid grid-cols-3 gap-2 text-[11px] font-bold">
+                        <div className="bg-green-50/70 p-2 rounded-xl border border-green-100/50 text-center">
+                          <p className="text-green-700 mb-0.5">スイスイ</p>
+                          <p className="text-green-600 text-sm font-black">{getMenuPercent(votes.empty, 'empty')}%</p>
+                        </div>
+                        <div className="bg-orange-50/70 p-2 rounded-xl border border-orange-100/50 text-center">
+                          <p className="text-orange-700 mb-0.5">普通</p>
+                          <p className="text-orange-600 text-sm font-black">{getMenuPercent(votes.normal, 'normal')}%</p>
+                        </div>
+                        <div className="bg-red-50/70 p-2 rounded-xl border border-red-100/50 text-center">
+                          <p className="text-red-700 mb-0.5">大行列</p>
+                          <p className="text-red-600 text-sm font-black">{getMenuPercent(votes.crowded, 'crowded')}%</p>
+                        </div>
+                      </div>
+
+                      {/* 投票ボタン（タップで個別に投票可能） */}
+                      <div className="flex gap-2 pt-1 border-t border-gray-50">
+                        <button 
+                          onClick={() => handleMenuVote(item.id, 'empty')} 
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          スイスイ
+                        </button>
+                        <button 
+                          onClick={() => handleMenuVote(item.id, 'normal')} 
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          普通
+                        </button>
+                        <button 
+                          onClick={() => handleMenuVote(item.id, 'crowded')} 
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${userVoteItem === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          大行列
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </section>
+            )}
           </div>
         );
 
@@ -307,13 +438,13 @@ export default function CampusSyncApp() {
           </h1>
         </header>
 
-        {/* スクロール領域 */}
+        {/* スクロール領域（ボトムナビゲーションと被らないようpb-24を設定） */}
         <main className="flex-1 overflow-y-scroll pb-24 md:pb-10 px-5 pt-5 md:pt-10">
           {renderContent()}
         </main>
 
-        {/* スマホ用ボトムナビゲーション */}
-        <nav className="md:hidden absolute bottom-0 w-full bg-white border-t border-gray-100 flex justify-around items-center h-20 pb-4 px-2 z-20">
+        {/* 🌟 スマホ用ボトムナビゲーション（fixedで完全に画面最下部に固定・すりガラス風） */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-20 pb-4 px-2 z-20">
           <NavItem icon={<Home size={24} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} />
           <NavItem icon={<Utensils size={24} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} />
           <NavItem icon={<BookOpen size={24} />} label="施設" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} />
@@ -373,7 +504,6 @@ export default function CampusSyncApp() {
                 </div>
               </div>
             </div>
-            {/* 🌟 送信ボタンをポイント連動関数に接続 */}
             <button onClick={submitAcReport} className="w-full py-3.5 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl shadow-md shadow-teal-200 transition-colors">
               送信する
             </button>
