@@ -30,6 +30,13 @@ function normalizeSchoolClass(value: string | null | undefined): string {
   return '1-1';
 }
 
+// 学校メールだけを認証対象にし、@の前の6桁を学籍番号として使う。
+const SCHOOL_EMAIL_PATTERN = /^[0-9]{6}@tokyo\.soka\.ed\.jp$/i;
+const getStudentIdFromSchoolEmail = (email: string | null | undefined): string => {
+  const normalized = (email || '').trim().toLowerCase();
+  return SCHOOL_EMAIL_PATTERN.test(normalized) ? normalized.split('@')[0] : '';
+};
+
 function getSchoolRoomDisplay(room: string, className: string): string {
   const roomName = (room || '').trim();
   if (/化学実験室/.test(roomName)) return '化学実験室';
@@ -602,17 +609,8 @@ const getOrCreateVoteId = (studentId: string): string => {
 };
 
 export default function CampusSyncApp() {
-  // オープニング演出。Supabaseのデータ読み込みとは並行して再生する。
-  const [showCampusIntro, setShowCampusIntro] = useState(true);
-  useEffect(() => {
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) {
-      setShowCampusIntro(false);
-      return;
-    }
-    const introTimer = window.setTimeout(() => setShowCampusIntro(false), 6300);
-    return () => window.clearTimeout(introTimer);
-  }, []);
+  // オープニング演出はメール認証後に再生する。
+  const [showCampusIntro, setShowCampusIntro] = useState(false);
 
   const [activeTab, setActiveTab] = useState('home');
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
@@ -624,16 +622,184 @@ export default function CampusSyncApp() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const themeCls = THEMES[theme];
 
-  // --- 🪪 プロフィール・ログイン設定状態 ---
-  const [studentId, setStudentId] = useState('581234');
-  const [studentName, setStudentName] = useState('創価 太郎');
+  // --- 🔐 学校メール認証・プロフィール ---
+  const [authUser, setAuthUser] = useState<any>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginOtp, setLoginOtp] = useState('');
+  const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [studentName, setStudentName] = useState('');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
-  const [studentCardToken, setStudentCardToken] = useState('');
   const [showCardScanner, setShowCardScanner] = useState(false);
   const [cardScanDone, setCardScanDone] = useState(false);
   const [cardScanStatus, setCardScanStatus] = useState('カメラを準備しています…');
   const [scannedStudent, setScannedStudent] = useState<{ student_name: string; user_class: string } | null>(null);
   const [userClass, setUserClass] = useState('1-1'); // 1-1〜3-8から選択
+  const [loginHandoffId, setLoginHandoffId] = useState('');
+  const [loginHandoffSecret, setLoginHandoffSecret] = useState('');
+  const [loginHandoffExpiresAt, setLoginHandoffExpiresAt] = useState('');
+  const [loginHandoffStatus, setLoginHandoffStatus] = useState<'idle' | 'waiting' | 'requested' | 'approved' | 'denied' | 'expired' | 'used'>('idle');
+  const [loginHandoffMessage, setLoginHandoffMessage] = useState('');
+  const [loginHandoffBusy, setLoginHandoffBusy] = useState(false);
+
+  // 最初は必ずSupabase Authのセッションを確認し、認証済みメールから学籍番号を決める。
+  useEffect(() => {
+    let alive = true;
+    const acceptSessionUser = (user: any | null) => {
+      if (!alive) return;
+      const email = String(user?.email || '').trim().toLowerCase();
+      const derivedStudentId = getStudentIdFromSchoolEmail(email);
+      if (user && derivedStudentId) {
+        setAuthUser(user);
+        setStudentId(derivedStudentId);
+        setLoginEmail(email);
+      } else {
+        setAuthUser(null);
+        setStudentId('');
+      }
+    };
+
+    void (async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (!alive) return;
+      if (error) console.error('ログイン状態の取得に失敗:', error);
+      const user = data.session?.user ?? null;
+      if (user && !getStudentIdFromSchoolEmail(user.email)) {
+        await supabase.auth.signOut();
+        acceptSessionUser(null);
+      } else {
+        acceptSessionUser(user);
+      }
+      setAuthChecking(false);
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      acceptSessionUser(session?.user ?? null);
+    });
+    return () => {
+      alive = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) {
+      setShowCampusIntro(false);
+      return;
+    }
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      setShowCampusIntro(false);
+      return;
+    }
+    setShowCampusIntro(true);
+    const introTimer = window.setTimeout(() => setShowCampusIntro(false), 6300);
+    return () => window.clearTimeout(introTimer);
+  }, [authUser]);
+
+  // ログインした本人のプロフィールのみ読み込み、メールの@前6桁を固定の学籍番号として使う。
+  useEffect(() => {
+    if (!authUser) return;
+    const email = String(authUser.email || '').trim().toLowerCase();
+    const derivedStudentId = getStudentIdFromSchoolEmail(email);
+    if (!derivedStudentId) return;
+    setStudentId(derivedStudentId);
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('student_id, student_name, user_class')
+        .eq('student_id', derivedStudentId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error('ログインプロフィールの取得に失敗:', error);
+        setAuthMessage('ログインできましたが、プロフィールを読み込めません。profilesのSQLとRLSを確認してください。');
+        return;
+      }
+      if (data) {
+        setStudentName(data.student_name || '');
+        setUserClass(normalizeSchoolClass(data.user_class));
+      } else {
+        setStudentName('');
+        setUserClass('1-1');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authUser]);
+
+  const requestSchoolEmailCode = async () => {
+    const email = loginEmail.trim().toLowerCase();
+    if (!SCHOOL_EMAIL_PATTERN.test(email)) {
+      setAuthMessage('6桁の学籍番号@tokyo.soka.ed.jp の学校メールアドレスを入力してください。');
+      return;
+    }
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: true },
+      });
+      if (error) throw error;
+      setLoginEmail(email);
+      setAuthStep('otp');
+      setAuthMessage('学校メールに確認コードを送信しました。メールに届いた6桁コードを入力してください。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setAuthMessage(`確認コードを送信できませんでした: ${message}`);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const verifySchoolEmailCode = async () => {
+    const email = loginEmail.trim().toLowerCase();
+    const token = loginOtp.trim();
+    if (!SCHOOL_EMAIL_PATTERN.test(email)) {
+      setAuthMessage('学校メールアドレスを確認してください。');
+      setAuthStep('email');
+      return;
+    }
+    if (!/^\d{6}$/.test(token)) {
+      setAuthMessage('メールに届いた6桁の確認コードを入力してください。');
+      return;
+    }
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+      if (error) throw error;
+      const user = data.user ?? data.session?.user;
+      const derivedStudentId = getStudentIdFromSchoolEmail(user?.email || email);
+      if (!user || !derivedStudentId) throw new Error('学校メールの認証を確認できませんでした。');
+      setAuthUser(user);
+      setStudentId(derivedStudentId);
+      setLoginOtp('');
+      setAuthMessage('メール認証が完了しました。プロフィールを確認してください。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setAuthMessage(`ログインできませんでした: ${message}`);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const signOutStudent = async () => {
+    await supabase.auth.signOut();
+    setAuthUser(null);
+    setStudentId('');
+    setStudentName('');
+    setLoginHandoffId('');
+    setLoginHandoffSecret('');
+    setLoginHandoffStatus('idle');
+    setShowIdCardModal(false);
+    setAuthStep('email');
+    setAuthMessage('ログアウトしました。');
+  };
 
   // --- ⏰ おせっかい通知リマインダー設定 ---
   const [remindersEnabled, setRemindersEnabled] = useState(true);
@@ -723,6 +889,7 @@ export default function CampusSyncApp() {
 
 // Adminと共有する図書室蔵書を読み込む
 useEffect(() => {
+  if (!authUser) { setLibraryBooksLoading(false); return; }
   let cancelled = false;
 
   const fetchLibraryBooks = async () => {
@@ -757,10 +924,11 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, []);
+}, [authUser]);
 
 // Adminサイトで設定したキャリアセンター自習室の座席状況を読み込む
 useEffect(() => {
+  if (!authUser) return;
   let cancelled = false;
   const loadStudyRoomStatus = async () => {
     const { data, error } = await supabase
@@ -787,10 +955,11 @@ useEffect(() => {
 
   void loadStudyRoomStatus();
   return () => { cancelled = true; };
-}, []);
+}, [authUser]);
 
 // Supabaseから落とし物・教室状況データを取得
 useEffect(() => {
+  if (!authUser) return;
   const fetchSharedData = async () => {
     let fetchStep = '投票IDの準備';
     try {
@@ -1110,7 +1279,7 @@ useEffect(() => {
       fetchStep = 'プロフィール取得（profiles）';
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('student_id, student_name, user_class, card_token')
+        .select('student_id, student_name, user_class')
         .eq('student_id', initialStudentId)
         .maybeSingle();
 
@@ -1119,7 +1288,6 @@ useEffect(() => {
       } else if (profileData) {
         setStudentName(profileData.student_name);
         setUserClass(normalizeSchoolClass(profileData.user_class));
-        setStudentCardToken(profileData.card_token ?? '');
       }
     }
 
@@ -1737,14 +1905,14 @@ Supabaseの設定を確認してください。
   };
 
   const handleSaveProfile = async (): Promise<boolean> => {
-    const cleanStudentId = studentId.trim();
+    const email = String(authUser?.email || '').trim().toLowerCase();
+    const cleanStudentId = getStudentIdFromSchoolEmail(email);
     const cleanStudentName = studentName.trim();
 
-    if (!/^\d{6}$/.test(cleanStudentId)) {
-      alert('学籍番号は6桁の数字で入力してください。');
+    if (!authUser || !cleanStudentId) {
+      alert('学校メールでログインしてください。学籍番号はメールアドレスから自動設定されます。');
       return false;
     }
-
     if (!cleanStudentName) {
       alert('氏名を入力してください。');
       return false;
@@ -1752,50 +1920,138 @@ Supabaseの設定を確認してください。
 
     setProfileSaving(true);
     try {
-      // 既存プロフィールのトークンを優先し、初回のみ安全なランダムトークンを発行する
-      let cardTokenToSave = studentCardToken;
-      if (!cardTokenToSave) {
-        const { data: existingProfile, error: lookupError } = await supabase
-          .from('profiles')
-          .select('card_token')
-          .eq('student_id', cleanStudentId)
-          .maybeSingle();
-        if (lookupError) throw lookupError;
-        cardTokenToSave = existingProfile?.card_token || window.crypto.randomUUID();
-      }
-
       const { error } = await supabase
         .from('profiles')
         .upsert({
           student_id: cleanStudentId,
           student_name: cleanStudentName,
           user_class: userClass,
-          card_token: cardTokenToSave,
+          email,
+          auth_user_id: authUser.id,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'student_id' });
 
       if (error) throw error;
+      setStudentId(cleanStudentId);
       setStudentName(cleanStudentName);
-      setStudentCardToken(cardTokenToSave);
-      alert('プロフィールを保存しました！QR学生証を発行できます。');
+      alert('プロフィールを保存しました！');
       return true;
     } catch (error) {
       console.error('プロフィールの保存に失敗:', error);
       const message = error && typeof error === 'object' && 'message' in error
         ? String((error as { message: unknown }).message)
         : '不明なエラー';
-      alert(`プロフィールの保存に失敗しました: ${message}\nSupabaseで student card 用SQLを実行済みか確認してください。`);
+      alert(`プロフィールの保存に失敗しました: ${message}\nSupabaseの学校メール認証SQLとprofilesのRLSを確認してください。`);
       return false;
     } finally {
       setProfileSaving(false);
     }
   };
 
-  const handleActivateStudentCard = async () => {
-    // プロフィールを保存してからカードを表示する。未保存の名前・クラスでQRを発行しない。
-    const saved = await handleSaveProfile();
-    if (saved) setShowIdCardModal(true);
+  // ログイン済み端末から90秒・一回限りのログイン引き継ぎQRを発行する。
+  const createStudentLoginHandoff = async () => {
+    if (!authUser) return;
+    setLoginHandoffBusy(true);
+    setLoginHandoffMessage('別の端末用QRを発行しています…');
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('ログインセッションが見つかりません。再ログインしてください。');
+      const response = await fetch('/api/student-login-handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'create' }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || `QR発行に失敗しました（HTTP ${response.status}）。`);
+      setLoginHandoffId(result.id);
+      setLoginHandoffSecret(result.secret);
+      setLoginHandoffExpiresAt(result.expires_at);
+      setLoginHandoffStatus('waiting');
+      setLoginHandoffMessage('QRを別の端末で読み取ると、この画面にログイン承認が表示されます。90秒で失効します。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setLoginHandoffMessage(`QR発行に失敗しました: ${message}`);
+    } finally {
+      setLoginHandoffBusy(false);
+    }
   };
+
+  const handleActivateStudentCard = async () => {
+    const saved = await handleSaveProfile();
+    if (saved) {
+      setShowIdCardModal(true);
+      setLoginHandoffId('');
+      setLoginHandoffSecret('');
+      setLoginHandoffStatus('idle');
+      setLoginHandoffMessage('別の端末にログインするための一回限りQRを発行してください。');
+    }
+  };
+
+  const decideStudentLoginHandoff = async (decision: 'approve' | 'deny') => {
+    if (!authUser || !loginHandoffId || loginHandoffBusy) return;
+    setLoginHandoffBusy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('ログインセッションが見つかりません。');
+      const response = await fetch('/api/student-login-handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: decision, id: loginHandoffId }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || 'ログイン要求を処理できませんでした。');
+      setLoginHandoffStatus(decision === 'approve' ? 'approved' : 'denied');
+      setLoginHandoffMessage(decision === 'approve' ? '許可しました。別の端末でログイン処理が進みます。' : 'ログイン要求を拒否しました。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setLoginHandoffMessage(`処理に失敗しました: ${message}`);
+    } finally {
+      setLoginHandoffBusy(false);
+    }
+  };
+
+  // QRを表示している元端末は、読み取り要求をポーリングし、本人が明示的に承認する。
+  useEffect(() => {
+    if (!showIdCardModal || !authUser || !loginHandoffId || !['waiting', 'requested'].includes(loginHandoffStatus)) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const pollStatus = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) return;
+        const response = await fetch('/api/student-login-handoff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'status', id: loginHandoffId }),
+          cache: 'no-store',
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success || cancelled) return;
+        if (result.status === 'requested') {
+          setLoginHandoffStatus('requested');
+          setLoginHandoffMessage('別の端末からログイン要求が届きました。心当たりがある場合だけ許可してください。');
+        } else if (result.status === 'expired') {
+          setLoginHandoffStatus('expired');
+          setLoginHandoffMessage('QRの有効期限が切れました。新しいQRを発行してください。');
+        } else if (result.status === 'used') {
+          setLoginHandoffStatus('used');
+          setLoginHandoffMessage('別の端末でログインが完了しました。');
+        }
+      } catch (error) {
+        console.error('ログイン引き継ぎ状態の確認に失敗:', error);
+      }
+      if (!cancelled && ['waiting', 'requested'].includes(loginHandoffStatus)) {
+        timer = window.setTimeout(pollStatus, 1500);
+      }
+    };
+    timer = window.setTimeout(pollStatus, 1200);
+    return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [showIdCardModal, authUser, loginHandoffId, loginHandoffStatus]);
 
   useEffect(() => {
     if (!showCardScanner || cardScanDone) return;
@@ -1817,32 +2073,66 @@ Supabaseの設定を確認してください。
           async (decodedText: string) => {
             if (cancelled || alreadyDecoded) return;
             alreadyDecoded = true;
-            setCardScanDone(true);
-            setCardScanStatus('QRコードを照合しています…');
+            setCardScanDone(false);
+            setCardScanStatus('ログイン要求を送信しています…');
+            try { if (scanner) await scanner.stop(); } catch { /* 読取直後にカメラを停止 */ }
             try {
-              const match = /^CAMPUSSYNC-STUDENT:([0-9a-f-]{36})$/i.exec(decodedText.trim());
+              const match = /^CAMPUSSYNC-LOGIN:([0-9a-f-]{36}):([A-Za-z0-9_-]{32,})$/i.exec(decodedText.trim());
               if (!match) {
                 setScannedStudent(null);
-                setCardScanStatus('CampusSyncの学生証QRコードではありません。');
+                setCardScanDone(true);
+                setCardScanStatus('有効な一回限りのCampusSyncログインQRではありません。ログイン用QRを表示してください。');
                 return;
               }
-              const { data, error } = await supabase.rpc('verify_student_card', { p_token: match[1] });
-              if (error) throw error;
-              const found = Array.isArray(data) ? data[0] : data;
-              if (!found) {
-                setScannedStudent(null);
-                setCardScanStatus('この学生証は登録されていないか、無効です。');
-                return;
+              const handoff = { id: match[1], secret: match[2] };
+              const postHandoff = async (action: string) => {
+                const response = await fetch('/api/student-login-handoff', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action, ...handoff }),
+                  cache: 'no-store',
+                });
+                const result = await response.json().catch(() => null);
+                if (!response.ok || !result?.success) throw new Error(result?.message || `ログイン連携エラー（HTTP ${response.status}）`);
+                return result;
+              };
+              const requested = await postHandoff('request');
+              if (requested.status === 'expired') throw new Error('QRの有効期限が切れています。元の端末で新しいQRを発行してください。');
+              setCardScanStatus('QRを表示した端末で承認してください。知らない相手の要求は許可しないでください。');
+              let completed = false;
+              for (let attempt = 0; attempt < 55 && !cancelled; attempt++) {
+                await new Promise(resolve => window.setTimeout(resolve, 1400));
+                const pollResult = await postHandoff('poll');
+                if (pollResult.status === 'denied') throw new Error('元の端末でログイン要求が拒否されました。');
+                if (pollResult.status === 'expired') throw new Error('QRの有効期限が切れました。元の端末で新しいQRを発行してください。');
+                if (pollResult.status === 'approved') {
+                  setCardScanStatus('ログインを完了しています…');
+                  const redemption = await postHandoff('redeem');
+                  const { data: verified, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: redemption.token_hash, type: 'magiclink' });
+                  if (verifyError) throw verifyError;
+                  const user = verified.user ?? verified.session?.user;
+                  const derivedStudentId = getStudentIdFromSchoolEmail(user?.email);
+                  if (!user || !derivedStudentId) throw new Error('ログイン後の学校メールを確認できませんでした。');
+                  setAuthUser(user);
+                  setStudentId(derivedStudentId);
+                  setAuthMessage('別の端末からログインしました。');
+                  setCardScanStatus('ログインしました。画面を切り替えています…');
+                  setCardScanDone(true);
+                  setShowCardScanner(false);
+                  completed = true;
+                  break;
+                }
               }
-              setScannedStudent({ student_name: found.student_name, user_class: normalizeSchoolClass(found.user_class) });
-              setCardScanStatus('学生証を確認しました。');
+              if (!completed && !cancelled) {
+                setCardScanDone(true);
+                setCardScanStatus('ログイン要求がタイムアウトしました。もう一度QRを読み取ってください。');
+              }
             } catch (error) {
-              console.error('学生証QRの照合に失敗:', error);
-              const message = error && typeof error === 'object' && 'message' in error
-                ? String((error as { message: unknown }).message)
-                : '不明なエラー';
+              console.error('QRログインに失敗:', error);
+              const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
               setScannedStudent(null);
-              setCardScanStatus(`照合に失敗しました: ${message}`);
+              setCardScanDone(true);
+              setCardScanStatus(`QRログインに失敗しました: ${message}`);
             }
           },
           () => undefined
@@ -2690,6 +2980,7 @@ Supabaseの設定を確認してください。
                 <div>
                   <h3 className="text-xs font-black">生徒個人ログイン認証連携</h3>
                   <p className="text-[10px] text-gray-400 font-medium">所属クラスは1-1〜3-8から選択して保存できます</p>
+                  <p className="mt-1 text-[10px] font-bold text-emerald-600">認証済み：{authUser?.email}（学籍番号 {studentId}）</p>
                 </div>
               </div>
 
@@ -2711,7 +3002,7 @@ Supabaseの設定を確認してください。
                 <div>
                   <label className="text-[10px] font-black text-gray-400 block mb-1">6桁学籍番号</label>
                   <div className="relative">
-                    <input type="text" inputMode="numeric" autoComplete="off" maxLength={6} value={studentId} onChange={e => { setStudentId(e.target.value.replace(/\D/g, '').slice(0, 6)); setStudentCardToken(''); }} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono font-black outline-none" />
+                    <input type="text" inputMode="numeric" autoComplete="off" maxLength={6} value={studentId} readOnly aria-readonly="true" placeholder="学校メール認証後に自動設定" className="w-full bg-gray-100 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono font-black outline-none text-gray-600" />
                     <Lock size={13} className="absolute left-3 top-2.5 text-gray-400" />
                   </div>
                 </div>
@@ -2730,7 +3021,7 @@ Supabaseの設定を確認してください。
 
                 <button
                   onClick={handleActivateStudentCard}
-                  disabled={profileSaving || !/^\d{6}$/.test(studentId.trim()) || !studentName.trim()}
+                  disabled={!authUser || profileSaving || !/^\d{6}$/.test(studentId.trim()) || !studentName.trim()}
                   className={`w-full py-3 mt-1 rounded-xl text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 ${
                     /^\d{6}$/.test(studentId.trim()) && studentName.trim() ? `${themeCls.bg} ${themeCls.bgHover}` : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
@@ -2742,7 +3033,7 @@ Supabaseの設定を確認してください。
                   onClick={() => { setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); setShowCardScanner(true); }}
                   className="w-full py-2.5 rounded-xl font-black text-xs border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
-                  <QrCode size={14} /> スマホカメラで学生証QRを読み取る
+                  <QrCode size={14} /> 別端末ログインQRを読み取る
                 </button>
               </div>
             </div>
@@ -2885,8 +3176,8 @@ Supabaseの設定を確認してください。
               </div>
             </div>
 
-            <button className="w-full py-3.5 text-xs font-black text-red-500 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors">
-              アプリケーション連携の解除・ログアウト
+            <button type="button" onClick={() => void signOutStudent()} className="w-full py-3.5 text-xs font-black text-red-500 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors">
+              ログアウト
             </button>
           </div>
         );
@@ -2894,6 +3185,53 @@ Supabaseの設定を確認してください。
         return null;
     }
   };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6">
+        <div className="text-center space-y-3"><div className="mx-auto h-10 w-10 rounded-full border-4 border-cyan-300/30 border-t-cyan-300 animate-spin" /><p className="text-sm font-bold">CampusSyncのログイン状態を確認しています…</p></div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-5">
+          <div className="text-center space-y-2"><div className="mx-auto h-14 w-14 rounded-2xl bg-cyan-400/15 border border-cyan-300/30 flex items-center justify-center"><GraduationCap size={28} className="text-cyan-200" /></div><h1 className="text-3xl font-black tracking-tight">Campus<span className="text-cyan-300">Sync</span></h1><p className="text-sm text-slate-300">学校メールで安全にログイン</p></div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl space-y-4">
+            {authStep === 'email' ? (
+              <>
+                <div><h2 className="text-lg font-black">生徒ログイン</h2><p className="mt-1 text-xs leading-relaxed text-slate-300">@tokyo.soka.ed.jp の学校メールのみ利用できます。メールの@より前にある6桁を学籍番号として自動設定します。</p></div>
+                <div className="space-y-2"><label className="block text-xs font-bold text-slate-300">学校メールアドレス</label><input type="email" autoComplete="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="123456@tokyo.soka.ed.jp" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" /><p className="text-[11px] text-slate-400">例：123456@tokyo.soka.ed.jp → 学籍番号 123456</p></div>
+                <button type="button" onClick={() => void requestSchoolEmailCode()} disabled={authBusy} className="w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black py-3 text-sm disabled:opacity-50">{authBusy ? '送信中…' : 'メールにログインコードを送る'}</button>
+                <button type="button" onClick={() => { setShowCardScanner(true); setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 py-3 text-sm font-bold flex items-center justify-center gap-2"><QrCode size={17} /> 別の端末のログインQRを読み取る</button>
+              </>
+            ) : (
+              <>
+                <div><h2 className="text-lg font-black">メール認証</h2><p className="mt-1 text-xs text-slate-300">{loginEmail} に届いた6桁コードを入力してください。</p></div>
+                <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={loginOtp} onChange={e => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="123456" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-center text-2xl tracking-[0.4em] font-mono text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+                <button type="button" onClick={() => void verifySchoolEmailCode()} disabled={authBusy} className="w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black py-3 text-sm disabled:opacity-50">{authBusy ? '確認中…' : '認証してログイン'}</button>
+                <button type="button" onClick={() => { setAuthStep('email'); setLoginOtp(''); setAuthMessage(''); }} className="w-full text-xs font-bold text-slate-300 underline">メールアドレスを変更する</button>
+              </>
+            )}
+            {authMessage && <p role="status" className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs leading-relaxed text-cyan-100">{authMessage}</p>}
+          </div>
+          <p className="text-center text-[11px] text-slate-400">ログイン用QRは、一回限り・短時間のみ有効です。QRを表示した端末で承認が必要です。</p>
+        </div>
+        {showCardScanner && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl bg-white text-slate-900 p-5 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center gap-3"><div><h3 className="font-black text-base">ログインQRを読み取る</h3><p className="text-xs text-slate-500 mt-1">QRを表示した端末で承認してもらいます。</p></div><button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-slate-100"><X size={18} /></button></div>
+              {!cardScanDone && <div id="campus-sync-qr-reader" className="w-full overflow-hidden rounded-2xl" />}
+              <p className="text-sm font-bold">{cardScanStatus}</p>
+              {cardScanDone && <button type="button" onClick={() => { setCardScanDone(false); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl bg-cyan-600 text-white py-3 text-sm font-black">もう一度読み取る</button>}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''}`}>
@@ -3004,14 +3342,14 @@ Supabaseの設定を確認してください。
         </div>
       )}
 
-      {/* 📷 スマホカメラで別の学生証QRを読み取ってSupabaseで照合 */}
+      {/* 📷 スマホカメラで別端末ログインQRを読み取り、本人承認後にSupabase Authへログイン */}
       {showCardScanner && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-md">
           <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-gray-900">学生証QRを読み取る</h3>
-                <p className="text-xs text-gray-500 mt-1">カメラでQRコードを枠内に合わせてください。</p>
+                <h3 className="text-base font-black text-gray-900">別端末ログインQRを読み取る</h3>
+                <p className="text-xs text-gray-500 mt-1">QRを表示した端末で承認するとログインできます。</p>
               </div>
               <button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-gray-100 text-gray-600" aria-label="閉じる"><X size={18} /></button>
             </div>
@@ -3077,22 +3415,35 @@ Supabaseの設定を確認してください。
                 </div>
               </div>
 
-              {/* ランダムトークンを格納した実際に読み取れるQRコード */}
-              <div className="bg-white rounded-xl p-4 flex flex-col items-center gap-2">
-                {studentCardToken ? (
+              {/* 一回限り・90秒有効の別端末ログインQR。読み取り後にこの端末で承認する */}
+              <div className="bg-white rounded-xl p-4 flex flex-col items-center gap-3">
+                {loginHandoffId && loginHandoffSecret && ['waiting', 'requested'].includes(loginHandoffStatus) ? (
                   <QRCodeSVG
-                    value={`CAMPUSSYNC-STUDENT:${studentCardToken}`}
+                    value={`CAMPUSSYNC-LOGIN:${loginHandoffId}:${loginHandoffSecret}`}
                     size={188}
                     level="M"
                     includeMargin
                     bgColor="#FFFFFF"
                     fgColor="#0F172A"
-                    title="CampusSync デジタル学生証QRコード"
+                    title="CampusSync 別端末ログイン用ワンタイムQR"
                   />
                 ) : (
-                  <p className="text-xs text-red-600 font-bold text-center">プロフィールを保存するとQRコードが発行されます。</p>
+                  <div className="py-8 text-center text-xs font-bold text-gray-500">別の端末にログインするための一回限りQRを発行します。</div>
                 )}
-                <p className="text-[9px] font-bold text-gray-500 text-center">読み取りにはCampusSyncのQR確認機能を使用してください。</p>
+                <p className="text-[10px] font-bold text-gray-600 text-center">QRは90秒で失効します。読み取り後、この端末で承認すると別端末にログインします。</p>
+                {loginHandoffExpiresAt && ['waiting', 'requested'].includes(loginHandoffStatus) && <p className="text-[9px] text-gray-400">有効期限：{new Date(loginHandoffExpiresAt).toLocaleTimeString('ja-JP')}</p>}
+                {loginHandoffMessage && <p className={`text-xs text-center font-bold ${loginHandoffStatus === 'requested' ? 'text-orange-600' : 'text-gray-600'}`}>{loginHandoffMessage}</p>}
+                {loginHandoffStatus === 'requested' && (
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button type="button" disabled={loginHandoffBusy} onClick={() => void decideStudentLoginHandoff('approve')} className="rounded-xl bg-emerald-600 text-white py-3 text-xs font-black disabled:opacity-50">この端末へのログインを許可</button>
+                    <button type="button" disabled={loginHandoffBusy} onClick={() => void decideStudentLoginHandoff('deny')} className="rounded-xl bg-red-50 text-red-600 py-3 text-xs font-black disabled:opacity-50">拒否</button>
+                  </div>
+                )}
+                {(!loginHandoffId || ['idle', 'expired', 'denied', 'used'].includes(loginHandoffStatus)) && (
+                  <button type="button" onClick={() => void createStudentLoginHandoff()} disabled={loginHandoffBusy} className={`w-full rounded-xl py-3 text-xs font-black text-white ${themeCls.bg} ${themeCls.bgHover} disabled:opacity-50`}>
+                    {loginHandoffBusy ? 'QRを発行中…' : '別の端末ログインQRを発行'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
