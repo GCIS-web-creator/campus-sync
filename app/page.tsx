@@ -483,6 +483,55 @@ const INITIAL_CLUB_NOTES = [
   { id: 3, clubName: '生徒会執行部', title: '文化祭パンフレット校正確認', date: '2日前', content: '各クラスの企画紹介文の最終校正データが届いています。担当委員は本日17時までに生徒会室に集まり、チェックを完了させてください。', author: '執行部書記 より' },
 ];
 
+type LibraryBook = {
+  id: string;
+  title: string;
+  author: string;
+  code: string;
+  status: string;
+  cover_url?: string | null;
+  created_at?: string;
+};
+
+
+type LostAndFoundItem = {
+  id: string | number;
+  title: string;
+  location: string;
+  date: string;
+  description: string;
+  finder: string;
+  created_at?: string;
+};
+
+type StudyRoomStatus = {
+  room_key: string;
+  room_name: string;
+  occupied_seats: number;
+  total_seats: number;
+  updated_at?: string;
+};
+
+const formatLostItemDate = (value?: string | null): string => {
+  if (!value) return '日時不明';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const time = date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return `今日 ${time}`;
+  return `${date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} ${time}`;
+};
+
+const normalizeLostAndFoundRow = (row: any): LostAndFoundItem => ({
+  id: row.id ?? `${row.title ?? 'lost'}-${row.created_at ?? Date.now()}`,
+  title: row.title ?? row.item_name ?? '品名未登録',
+  location: row.location ?? row.found_location ?? '',
+  date: row.created_at ? formatLostItemDate(row.created_at) : (row.date ? formatLostItemDate(row.date) : '日時不明'),
+  description: row.description ?? row.details ?? '詳細情報なし',
+  finder: row.finder ?? row.storage_location ?? row.storage ?? row.found_by ?? '',
+  created_at: row.created_at,
+});
+
 type CafeteriaReview = {
   id: string | number;
   menuId: string;
@@ -517,6 +566,18 @@ const getOrCreateVoteId = (studentId: string): string => {
 };
 
 export default function CampusSyncApp() {
+  // オープニング演出。Supabaseのデータ読み込みとは並行して再生する。
+  const [showCampusIntro, setShowCampusIntro] = useState(true);
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      setShowCampusIntro(false);
+      return;
+    }
+    const introTimer = window.setTimeout(() => setShowCampusIntro(false), 6300);
+    return () => window.clearTimeout(introTimer);
+  }, []);
+
   const [activeTab, setActiveTab] = useState('home');
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
@@ -595,15 +656,97 @@ export default function CampusSyncApp() {
     snack: false, soka: false, noodles: false, curry: false, healthy: false,
   });
 
-  // 落とし物関係
-  const [lostAndFoundList, setLostAndFoundList] = useState(INITIAL_LOST_AND_FOUND);
+  // 落とし物関係（Supabaseに保存し、再読み込み後も共有）
+  const [lostAndFoundList, setLostAndFoundList] = useState<LostAndFoundItem[]>(INITIAL_LOST_AND_FOUND);
   const [newLostTitle, setNewLostTitle] = useState('');
   const [newLostLocation, setNewLostLocation] = useState('');
   const [newLostDescription, setNewLostDescription] = useState('');
   const [newLostFinder, setNewLostFinder] = useState('');
+  const [lostAndFoundError, setLostAndFoundError] = useState('');
+  const [lostSubmitting, setLostSubmitting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [scoreSaving, setScoreSaving] = useState(false);
   const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>([]);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryBooksLoading, setLibraryBooksLoading] = useState(true);
+  const [libraryBooksError, setLibraryBooksError] = useState('');
+  const [selectedLibraryBook, setSelectedLibraryBook] = useState<LibraryBook | null>(null);
+  const [studyRoomStatus, setStudyRoomStatus] = useState<StudyRoomStatus>({
+    room_key: 'career_center',
+    room_name: 'キャリアセンター自習室',
+    occupied_seats: 22,
+    total_seats: 35,
+  });
+
+
+// Adminと共有する図書室蔵書を読み込む
+useEffect(() => {
+  let cancelled = false;
+
+  const fetchLibraryBooks = async () => {
+    setLibraryBooksLoading(true);
+    setLibraryBooksError('');
+
+    const { data, error } = await supabase
+      .from('library_books')
+      .select('id, title, author, code, status, cover_url, created_at')
+      .order('created_at', { ascending: false });
+
+    if (cancelled) return;
+
+    if (error) {
+      console.error('図書室蔵書の取得に失敗:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      setLibraryBooksError('蔵書を読み込めませんでした。時間をおいて再読み込みしてください。');
+      setLibraryBooks([]);
+    } else {
+      setLibraryBooks(data ?? []);
+    }
+
+    setLibraryBooksLoading(false);
+  };
+
+  void fetchLibraryBooks();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+// Adminサイトで設定したキャリアセンター自習室の座席状況を読み込む
+useEffect(() => {
+  let cancelled = false;
+  const loadStudyRoomStatus = async () => {
+    const { data, error } = await supabase
+      .from('study_room_status')
+      .select('room_key, room_name, occupied_seats, total_seats, updated_at')
+      .eq('room_key', 'career_center')
+      .maybeSingle();
+
+    if (cancelled) return;
+    if (error) {
+      console.error('キャリアセンター自習室の状況取得に失敗:', error);
+      return;
+    }
+    if (data) {
+      setStudyRoomStatus({
+        room_key: data.room_key,
+        room_name: data.room_name || 'キャリアセンター自習室',
+        occupied_seats: Number(data.occupied_seats),
+        total_seats: Number(data.total_seats),
+        updated_at: data.updated_at,
+      });
+    }
+  };
+
+  void loadStudyRoomStatus();
+  return () => { cancelled = true; };
+}, []);
 
 // Supabaseから落とし物・教室状況データを取得
 useEffect(() => {
@@ -619,8 +762,11 @@ useEffect(() => {
 
     if (lostError) {
       console.error('落とし物データの取得に失敗:', lostError);
-    } else if (lostData) {
-      setLostAndFoundList(lostData);
+      setLostAndFoundError('落とし物を読み込めません。Supabaseの lost_and_found テーブルとRLS設定を確認してください。');
+      setLostAndFoundList([]);
+    } else {
+      setLostAndFoundList((lostData ?? []).map(normalizeLostAndFoundRow));
+      setLostAndFoundError('');
     }
 
     fetchStep = '教室状況取得（room_status）';
@@ -1290,24 +1436,55 @@ useEffect(() => {
     );
   };
 
-  const handleAddLostItem = (e: React.FormEvent) => {
+  const handleAddLostItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLostTitle || !newLostLocation) {
-      alert("「品名」と「見つけた場所」を入力してください。");
+    const title = newLostTitle.trim();
+    const location = newLostLocation.trim();
+    const description = newLostDescription.trim() || '詳細情報なし';
+    const finder = newLostFinder.trim() || '保管場所未入力';
+
+    if (!title || !location) {
+      alert('「品名」と「見つけた場所」を入力してください。');
       return;
     }
-    const newItem = {
-      id: Date.now(),
-      title: newLostTitle,
-      location: newLostLocation,
-      date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      description: newLostDescription || '詳細情報なし',
-      finder: newLostFinder || 'その場付近にあります'
-    };
-    setLostAndFoundList([newItem, ...lostAndFoundList]);
-    void updateContribution(12, '落とし物情報を共有');
-    setNewLostTitle(''); setNewLostLocation(''); setNewLostDescription(''); setNewLostFinder('');
-    alert("落とし物情報を共有しました！貢献度+12pt！🎁");
+    if (lostSubmitting) return;
+
+    setLostSubmitting(true);
+    setLostAndFoundError('');
+    try {
+      const { data, error } = await supabase
+        .from('lost_and_found')
+        .insert({
+          title,
+          location,
+          description,
+          finder,
+          // 既存テーブルに date 列がある環境でも登録できるよう日付を送る
+          date: new Date().toISOString().slice(0, 10),
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error('保存したデータが返されませんでした。');
+
+      setLostAndFoundList(prev => [normalizeLostAndFoundRow(data), ...prev]);
+      void updateContribution(12, '落とし物情報を共有');
+      setNewLostTitle('');
+      setNewLostLocation('');
+      setNewLostDescription('');
+      setNewLostFinder('');
+      alert('落とし物情報をSupabaseに保存して共有しました！貢献度+12pt！🎁');
+    } catch (unexpectedError) {
+      console.error('落とし物の保存に失敗:', unexpectedError);
+      const detail = unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError);
+      setLostAndFoundError('落とし物を保存できませんでした。lost_and_found テーブルとRLS設定を確認してください。');
+      alert(`落とし物を保存できませんでした。
+Supabaseの設定を確認してください。
+詳細: ${detail}`);
+    } finally {
+      setLostSubmitting(false);
+    }
   };
 
   const submitAcReport = async () => {
@@ -2024,27 +2201,95 @@ useEffect(() => {
                 <section className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
                   <h3 className="text-sm font-black text-indigo-600 mb-2.5 flex items-center"><BookOpen size={18} className="mr-1.5"/> 図書室蔵書・予約検索</h3>
                   <div className="relative mb-3">
-                    <input type="text" placeholder="キーワード・タイトル・著者名で探す..." className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    <input
+                      type="search"
+                      value={librarySearch}
+                      onChange={e => setLibrarySearch(e.target.value)}
+                      placeholder="タイトル・著者名・管理番号で検索..."
+                      aria-label="蔵書をタイトルや著者名で検索"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
                     <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
                   </div>
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i} className="min-w-[100px] text-center cursor-pointer group">
-                        <div className="h-28 bg-gray-100 border rounded-xl mb-1.5 flex items-center justify-center text-gray-300 text-[10px] font-bold">BOOK COVER</div>
-                        <h5 className="text-[10px] font-black line-clamp-2 text-gray-700 group-hover:text-indigo-600">新編 創価の栄光歴史学 {i}</h5>
-                      </div>
-                    ))}
-                  </div>
+
+                  {libraryBooksLoading ? (
+                    <p className="py-5 text-center text-xs text-gray-400">蔵書を読み込み中...</p>
+                  ) : libraryBooksError ? (
+                    <p className="py-5 text-center text-xs text-red-500">{libraryBooksError}</p>
+                  ) : (
+                    <>
+                      <p className="text-[10px] text-gray-400 font-bold mb-2">
+                        {librarySearch.trim()
+                          ? `検索結果：${libraryBooks.filter(book => `${book.title} ${book.author} ${book.code}`.toLocaleLowerCase().includes(librarySearch.trim().toLocaleLowerCase())).length}冊`
+                          : `登録蔵書：${libraryBooks.length}冊`}
+                      </p>
+                      {libraryBooks.filter(book =>
+                        `${book.title} ${book.author} ${book.code}`
+                          .toLocaleLowerCase()
+                          .includes(librarySearch.trim().toLocaleLowerCase())
+                      ).length === 0 ? (
+                        <div className="py-6 text-center">
+                          <BookOpen size={24} className="mx-auto mb-2 text-gray-300" />
+                          <p className="text-xs font-bold text-gray-500">
+                            {librarySearch.trim() ? '一致する蔵書が見つかりません。' : '蔵書はまだ登録されていません。'}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-1">タイトルまたは著者名を変えて検索してください。</p>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                          {libraryBooks
+                            .filter(book =>
+                              `${book.title} ${book.author} ${book.code}`
+                                .toLocaleLowerCase()
+                                .includes(librarySearch.trim().toLocaleLowerCase())
+                            )
+                            .map(book => (
+                              <button
+                                type="button"
+                                key={book.id}
+                                onClick={() => setSelectedLibraryBook(book)}
+                                aria-label={`${book.title}の詳細を開く`}
+                                className="min-w-[112px] max-w-[140px] shrink-0 text-center group rounded-xl p-1 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
+                              >
+                                <div className="h-28 overflow-hidden bg-gradient-to-br from-indigo-50 to-slate-100 border border-indigo-100 rounded-xl mb-1.5 flex items-center justify-center text-indigo-300">
+                                  {book.cover_url ? (
+                                    <img src={book.cover_url} alt={`${book.title}の表紙`} loading="lazy" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center px-2">
+                                      <BookOpen size={24} />
+                                      <span className="text-[9px] font-bold mt-2">BOOK COVER</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <h5 className="text-[10px] font-black line-clamp-3 text-gray-700 group-hover:text-indigo-600">
+                                  {book.title}
+                                </h5>
+                                <p className="text-[9px] text-gray-500 line-clamp-2 mt-1">{book.author}</p>
+                                <p className={`text-[9px] font-bold mt-1 ${book.status === '貸出可能' ? 'text-emerald-600' : 'text-orange-600'}`}>
+                                  {book.status}
+                                </p>
+                                <p className="text-[8px] text-gray-400 mt-0.5">管理番号: {book.code}</p>
+                                <p className="text-[8px] text-indigo-500 font-bold mt-1">タップして詳細</p>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </section>
 
                 <section className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
-                  <h3 className="text-sm font-black text-teal-600 mb-2 flex items-center"><Monitor size={18} className="mr-1.5"/> パソコン自習室 空席状況</h3>
-                  <div className="flex items-end justify-between mb-1.5">
-                    <span className="text-xs font-bold text-gray-500">リアルタイムブース利用率</span>
-                    <span className="text-xl font-black text-gray-800">22 <span className="text-xs font-bold text-gray-400">/ 35席</span></span>
+                  <h3 className="text-sm font-black text-teal-600 mb-2 flex items-center"><Monitor size={18} className="mr-1.5"/> {studyRoomStatus.room_name} 空席状況</h3>
+                  <div className="flex items-end justify-between mb-1.5 gap-3">
+                    <span className="text-xs font-bold text-gray-500">現在の利用状況</span>
+                    <span className="text-xl font-black text-gray-800">{studyRoomStatus.occupied_seats} <span className="text-xs font-bold text-gray-400">/ {studyRoomStatus.total_seats}席 利用中</span></span>
                   </div>
                   <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${(22 / 35) * 100}%` }}></div>
+                    <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${studyRoomStatus.total_seats > 0 ? Math.min(100, (studyRoomStatus.occupied_seats / studyRoomStatus.total_seats) * 100) : 0}%` }}></div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-xs font-black text-emerald-600">空席 {Math.max(0, studyRoomStatus.total_seats - studyRoomStatus.occupied_seats)}席</span>
+                    {studyRoomStatus.updated_at && <span className="text-[9px] text-gray-400">更新: {new Date(studyRoomStatus.updated_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
                   </div>
                 </section>
               </div>
@@ -2059,12 +2304,15 @@ useEffect(() => {
                     <input type="text" placeholder="現在の保管・預け先" value={newLostFinder} onChange={e => setNewLostFinder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
                     <textarea placeholder="その他詳細な特徴があれば記入してください..." value={newLostDescription} onChange={e => setNewLostDescription(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-14 resize-none" />
                   </div>
-                  <button type="submit" className={`w-full py-2.5 text-white font-black text-xs rounded-xl shadow-xs ${themeCls.bg} ${themeCls.bgHover}`}>
-                    掲示板に登録して学校貢献度を獲得
+                  <button type="submit" disabled={lostSubmitting} className={`w-full py-2.5 text-white font-black text-xs rounded-xl shadow-xs disabled:opacity-60 ${themeCls.bg} ${themeCls.bgHover}`}>
+                    {lostSubmitting ? 'Supabaseに保存中...' : '掲示板に登録して学校貢献度を獲得'}
                   </button>
                 </form>
 
                 {/* リスト表示 */}
+                {lostAndFoundError && (
+                  <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] font-bold text-red-600">{lostAndFoundError}</p>
+                )}
                 <div className="space-y-2.5">
                   {lostAndFoundList.map(item => (
                     <div key={item.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
@@ -2085,6 +2333,9 @@ useEffect(() => {
                       <p className="text-xs text-gray-600 leading-relaxed pt-1.5 border-t border-gray-50">{item.description}</p>
                     </div>
                   ))}
+                  {lostAndFoundList.length === 0 && !lostAndFoundError && (
+                    <div className={`${cardBgClass} rounded-xl border p-4 text-center text-xs text-gray-500`}>共有された落とし物はまだありません。</div>
+                  )}
                 </div>
               </div>
             )}
@@ -2568,6 +2819,58 @@ useEffect(() => {
 
       {/* --- アプリケーションモーダルUIコンポーネント群 --- */}
 
+      {/* 図書室の蔵書詳細ポップアップ */}
+      {selectedLibraryBook && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="library-book-modal-title"
+          onClick={() => setSelectedLibraryBook(null)}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        >
+          <div onClick={e => e.stopPropagation()} className="relative w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 p-4">
+              <div>
+                <p className="text-[10px] font-black tracking-wide text-indigo-500">LIBRARY BOOK DETAILS</p>
+                <h3 id="library-book-modal-title" className="mt-1 text-sm font-black text-gray-800">蔵書の詳細</h3>
+              </div>
+              <button type="button" onClick={() => setSelectedLibraryBook(null)} aria-label="閉じる" className="rounded-full bg-gray-100 p-2 text-gray-500 hover:bg-gray-200">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="mx-auto mb-4 h-52 w-36 overflow-hidden rounded-xl border border-gray-100 bg-gradient-to-br from-indigo-50 to-slate-100 shadow-sm flex items-center justify-center text-indigo-300">
+                {selectedLibraryBook.cover_url ? (
+                  <img src={selectedLibraryBook.cover_url} alt={`${selectedLibraryBook.title}の表紙`} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center"><BookOpen size={36} /><span className="mt-2 text-[10px] font-bold">BOOK COVER</span></div>
+                )}
+              </div>
+              <h4 className="text-center text-base font-black leading-relaxed text-gray-800">{selectedLibraryBook.title}</h4>
+              <p className="mt-1 text-center text-xs font-bold text-gray-500">著者：{selectedLibraryBook.author || '未登録'}</p>
+              <div className="mt-5 space-y-2 rounded-2xl bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-gray-400 font-bold">貸出状況</span>
+                  <span className={`font-black ${selectedLibraryBook.status === '貸出可能' ? 'text-emerald-600' : 'text-orange-600'}`}>{selectedLibraryBook.status || '状況未登録'}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3 text-xs">
+                  <span className="shrink-0 text-gray-400 font-bold">管理番号</span>
+                  <span className="break-all text-right font-mono font-bold text-gray-700">{selectedLibraryBook.code}</span>
+                </div>
+                {selectedLibraryBook.created_at && (
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-gray-400 font-bold">蔵書登録日</span>
+                    <span className="font-bold text-gray-700">{new Date(selectedLibraryBook.created_at).toLocaleDateString('ja-JP')}</span>
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-[10px] leading-relaxed text-gray-400">貸出状況や管理番号は、図書室の最新の登録情報です。</p>
+              <button type="button" onClick={() => setSelectedLibraryBook(null)} className={`mt-4 w-full rounded-xl py-3 text-xs font-black text-white ${themeCls.bg} ${themeCls.bgHover}`}>詳細を閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 🪪 デジタル学生証表示ポップアップモーダル */}
       {showIdCardModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/60 backdrop-blur-md animate-in fade-in duration-300">
@@ -2682,6 +2985,206 @@ useEffect(() => {
               この室温ステータスで即時報告
             </button>
           </div>
+        </div>
+      )}
+
+      {/* CampusSync オープニング：データ取得とは独立して再生し、一定時間後に必ず操作画面を表示 */}
+      {showCampusIntro && (
+        <div className="campus-intro" role="status" aria-label="CampusSyncを開いています">
+          <div className="campus-intro__water campus-intro__water--back" aria-hidden="true" />
+          <div className="campus-intro__water campus-intro__water--front" aria-hidden="true" />
+          <div className="campus-intro__night" aria-hidden="true" />
+          <div className="campus-intro__stars" aria-hidden="true" />
+          <div className="campus-intro__stars campus-intro__stars--far" aria-hidden="true" />
+          <div className="campus-intro__meteor" aria-hidden="true" />
+          <div className="campus-intro__brand" aria-hidden="true">
+            <div className="campus-intro__eyebrow">YOUR CAMPUS, CONNECTED</div>
+            <div className="campus-intro__wordmark">Campus<span>Sync</span></div>
+            <div className="campus-intro__tagline">学校生活を、もっとスムーズに。</div>
+          </div>
+          <style jsx global>{`
+            .campus-intro {
+              position: fixed;
+              inset: 0;
+              z-index: 99999;
+              overflow: hidden;
+              isolation: isolate;
+              background: #fff;
+              opacity: 1;
+              pointer-events: auto;
+              animation: campusIntroFade 6.3s ease-in forwards;
+            }
+            .campus-intro__water {
+              position: absolute;
+              left: -10%;
+              width: 120%;
+              height: 116%;
+              bottom: -13%;
+              border-radius: 48% 52% 0 0 / 9% 12% 0 0;
+              transform: translate3d(0, 105%, 0);
+              will-change: transform, border-radius;
+            }
+            .campus-intro__water::before {
+              content: "";
+              position: absolute;
+              left: -3%;
+              top: -5.2vh;
+              width: 106%;
+              height: 10vh;
+              border-radius: 48% 52% 0 0 / 90% 100% 0 0;
+              background: rgba(140, 246, 255, .68);
+              filter: blur(1px);
+              animation: campusIntroWave 1.7s ease-in-out infinite alternate;
+            }
+            .campus-intro__water--back {
+              z-index: 1;
+              opacity: .78;
+              background: linear-gradient(180deg, #70efff 0%, #20c9ec 28%, #078fc8 72%, #086aab 100%);
+              animation: campusIntroRiseBack 3.1s cubic-bezier(.18,.72,.22,1) .12s forwards;
+            }
+            .campus-intro__water--front {
+              z-index: 2;
+              background: linear-gradient(180deg, #9af8ff 0%, #4bdef5 18%, #0aa8db 48%, #087cb7 100%);
+              box-shadow: 0 -18px 70px rgba(60, 229, 255, .28);
+              animation: campusIntroRiseFront 3.05s cubic-bezier(.16,.76,.22,1) .28s forwards;
+            }
+            .campus-intro__night {
+              position: absolute;
+              z-index: 3;
+              inset: 0;
+              opacity: 0;
+              background: radial-gradient(ellipse at 50% 110%, #11284a 0%, #060c1d 52%, #01030b 100%);
+              animation: campusIntroNightfall .9s ease-in-out 2.65s forwards;
+            }
+            .campus-intro__stars {
+              position: absolute;
+              z-index: 4;
+              inset: 0;
+              opacity: 0;
+              background-image:
+                radial-gradient(1.5px 1.5px at 8% 18%, rgba(255,255,255,.95) 98%, transparent),
+                radial-gradient(1px 1px at 18% 62%, rgba(194,231,255,.9) 98%, transparent),
+                radial-gradient(1.4px 1.4px at 31% 26%, rgba(255,255,255,.9) 98%, transparent),
+                radial-gradient(1px 1px at 43% 72%, rgba(176,220,255,.85) 98%, transparent),
+                radial-gradient(1.8px 1.8px at 55% 15%, rgba(255,255,255,.95) 98%, transparent),
+                radial-gradient(1px 1px at 67% 38%, rgba(190,232,255,.9) 98%, transparent),
+                radial-gradient(1.5px 1.5px at 79% 22%, rgba(255,255,255,.9) 98%, transparent),
+                radial-gradient(1px 1px at 92% 55%, rgba(188,222,255,.8) 98%, transparent),
+                radial-gradient(1.3px 1.3px at 13% 86%, rgba(255,255,255,.9) 98%, transparent),
+                radial-gradient(1.2px 1.2px at 37% 49%, rgba(255,255,255,.75) 98%, transparent),
+                radial-gradient(1.6px 1.6px at 73% 81%, rgba(255,255,255,.85) 98%, transparent),
+                radial-gradient(1px 1px at 86% 90%, rgba(193,228,255,.85) 98%, transparent);
+              animation: campusIntroStars .75s ease 3.25s forwards, campusIntroTwinkle 3s ease-in-out 4s infinite alternate;
+            }
+            .campus-intro__stars--far {
+              z-index: 4;
+              transform: scale(1.02);
+              background-image:
+                radial-gradient(1px 1px at 23% 11%, #8bdfff 98%, transparent),
+                radial-gradient(1px 1px at 47% 34%, #fff 98%, transparent),
+                radial-gradient(1px 1px at 62% 61%, #8bdfff 98%, transparent),
+                radial-gradient(1px 1px at 95% 13%, #fff 98%, transparent),
+                radial-gradient(1px 1px at 4% 42%, #fff 98%, transparent),
+                radial-gradient(1px 1px at 51% 90%, #a8dfff 98%, transparent);
+              animation-delay: 3.55s, 4.2s;
+            }
+            .campus-intro__meteor {
+              position: absolute;
+              z-index: 6;
+              top: 16%;
+              left: 82%;
+              width: clamp(130px, 25vw, 290px);
+              height: 2px;
+              border-radius: 999px;
+              opacity: 0;
+              transform-origin: right center;
+              background: linear-gradient(90deg, transparent 0%, rgba(90,192,255,.2) 30%, rgba(191,235,255,.95) 82%, #fff 100%);
+              filter: drop-shadow(0 0 5px rgba(109,210,255,.95)) drop-shadow(0 0 15px rgba(72,157,255,.7));
+              animation: campusIntroMeteor 1.05s cubic-bezier(.18,.55,.4,1) 4.05s forwards;
+            }
+            .campus-intro__brand {
+              position: absolute;
+              z-index: 5;
+              top: 43%;
+              left: 0;
+              width: 100%;
+              padding: 0 20px;
+              color: #fff;
+              text-align: center;
+              opacity: 0;
+              transform: translateY(12px) scale(.98);
+              text-shadow: 0 2px 24px rgba(91,180,255,.2);
+              animation: campusIntroBrand 2.15s ease 3.4s forwards;
+            }
+            .campus-intro__eyebrow {
+              margin-bottom: 12px;
+              color: #9fdcff;
+              font-size: 10px;
+              font-weight: 800;
+              letter-spacing: .34em;
+            }
+            .campus-intro__wordmark {
+              font-size: clamp(42px, 8vw, 70px);
+              font-weight: 900;
+              line-height: 1;
+              letter-spacing: -.06em;
+            }
+            .campus-intro__wordmark span {
+              color: #63dfff;
+            }
+            .campus-intro__tagline {
+              margin-top: 17px;
+              color: rgba(231,244,255,.88);
+              font-size: clamp(12px, 2vw, 15px);
+              font-weight: 600;
+              letter-spacing: .12em;
+            }
+            @keyframes campusIntroFade {
+              0%, 86% { opacity: 1; visibility: visible; }
+              100% { opacity: 0; visibility: hidden; pointer-events: none; }
+            }
+            @keyframes campusIntroRiseBack {
+              0% { transform: translate3d(0,105%,0); border-radius: 48% 52% 0 0 / 9% 12% 0 0; }
+              60% { border-radius: 43% 57% 0 0 / 13% 8% 0 0; }
+              100% { transform: translate3d(0,0,0); border-radius: 51% 49% 0 0 / 8% 12% 0 0; }
+            }
+            @keyframes campusIntroRiseFront {
+              0% { transform: translate3d(0,105%,0); border-radius: 48% 52% 0 0 / 9% 12% 0 0; }
+              46% { border-radius: 54% 46% 0 0 / 7% 14% 0 0; }
+              72% { border-radius: 44% 56% 0 0 / 12% 7% 0 0; }
+              100% { transform: translate3d(0,0,0); border-radius: 50% 50% 0 0 / 8% 11% 0 0; }
+            }
+            @keyframes campusIntroWave {
+              from { transform: translateX(-3%) translateY(5px) scaleX(1); }
+              to { transform: translateX(3%) translateY(-4px) scaleX(1.04); }
+            }
+            @keyframes campusIntroNightfall {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes campusIntroStars {
+              from { opacity: 0; }
+              to { opacity: .95; }
+            }
+            @keyframes campusIntroTwinkle {
+              from { filter: brightness(.8); }
+              to { filter: brightness(1.35); }
+            }
+            @keyframes campusIntroMeteor {
+              0% { opacity: 0; transform: translate3d(0,0,0) rotate(135deg) scaleX(.35); }
+              14% { opacity: 1; }
+              76% { opacity: 1; }
+              100% { opacity: 0; transform: translate3d(-62vw,58vh,0) rotate(135deg) scaleX(1); }
+            }
+            @keyframes campusIntroBrand {
+              0% { opacity: 0; transform: translateY(12px) scale(.98); }
+              18%, 68% { opacity: 1; transform: translateY(0) scale(1); }
+              100% { opacity: 0; transform: translateY(-6px) scale(1.01); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .campus-intro { animation: none; }
+            }
+          `}</style>
         </div>
       )}
 
