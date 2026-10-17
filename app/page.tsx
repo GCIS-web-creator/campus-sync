@@ -3020,33 +3020,61 @@ Supabaseの設定を確認してください。
               width: 120%;
               height: 116%;
               bottom: -13%;
-              border-radius: 48% 52% 0 0 / 9% 12% 0 0;
+              border-radius: 0;
+              background: transparent;
               transform: translate3d(0, 105%, 0);
-              will-change: transform, border-radius;
+              will-change: transform;
             }
+            /* 波の輪郭は山型の div ではなく、繰り返しタイルの SVG マスクで作る */
             .campus-intro__water::before {
               content: "";
               position: absolute;
-              left: -3%;
-              top: -5.2vh;
-              width: 106%;
-              height: 10vh;
-              border-radius: 48% 52% 0 0 / 90% 100% 0 0;
-              background: rgba(140, 246, 255, .68);
-              filter: blur(1px);
-              animation: campusIntroWave 1.7s ease-in-out infinite alternate;
+              z-index: 2;
+              left: 0;
+              top: -1.2vh;
+              width: 100%;
+              height: 9vh;
+              background: #9af8ff;
+              -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
+              mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
+              -webkit-mask-size: 360px 100%;
+              mask-size: 360px 100%;
+              -webkit-mask-repeat: repeat-x;
+              mask-repeat: repeat-x;
+              filter: drop-shadow(0 -5px 12px rgba(120, 244, 255, .42));
+              animation: campusIntroSurfaceFront 3.4s linear infinite;
+              will-change: -webkit-mask-position, mask-position;
+            }
+            .campus-intro__water::after {
+              content: "";
+              position: absolute;
+              z-index: 1;
+              left: 0;
+              right: 0;
+              top: 5.4vh;
+              bottom: 0;
+              background: linear-gradient(180deg, #9af8ff 0%, #4bdef5 18%, #0aa8db 48%, #087cb7 100%);
             }
             .campus-intro__water--back {
               z-index: 1;
-              opacity: .78;
-              background: linear-gradient(180deg, #70efff 0%, #20c9ec 28%, #078fc8 72%, #086aab 100%);
+              opacity: .82;
               animation: campusIntroRiseBack 3.1s cubic-bezier(.18,.72,.22,1) .12s forwards;
+            }
+            .campus-intro__water--back::before {
+              background: #70efff;
+              filter: drop-shadow(0 -3px 10px rgba(95, 225, 255, .28));
+              animation: campusIntroSurfaceBack 5.8s linear infinite;
+            }
+            .campus-intro__water--back::after {
+              background: linear-gradient(180deg, #70efff 0%, #20c9ec 28%, #078fc8 72%, #086aab 100%);
             }
             .campus-intro__water--front {
               z-index: 2;
-              background: linear-gradient(180deg, #9af8ff 0%, #4bdef5 18%, #0aa8db 48%, #087cb7 100%);
               box-shadow: 0 -18px 70px rgba(60, 229, 255, .28);
               animation: campusIntroRiseFront 3.05s cubic-bezier(.16,.76,.22,1) .28s forwards;
+            }
+            .campus-intro__water--front::before {
+              animation: campusIntroSurfaceFront 3.4s linear infinite reverse;
             }
             .campus-intro__night {
               position: absolute;
@@ -3144,19 +3172,25 @@ Supabaseの設定を確認してください。
               100% { opacity: 0; visibility: hidden; pointer-events: none; }
             }
             @keyframes campusIntroRiseBack {
-              0% { transform: translate3d(0,105%,0); border-radius: 48% 52% 0 0 / 9% 12% 0 0; }
-              60% { border-radius: 43% 57% 0 0 / 13% 8% 0 0; }
-              100% { transform: translate3d(0,0,0); border-radius: 51% 49% 0 0 / 8% 12% 0 0; }
+              0% { transform: translate3d(0,105%,0); }
+              68% { transform: translate3d(0,-1.5%,0); }
+              82% { transform: translate3d(0,1%,0); }
+              100% { transform: translate3d(0,0,0); }
             }
             @keyframes campusIntroRiseFront {
-              0% { transform: translate3d(0,105%,0); border-radius: 48% 52% 0 0 / 9% 12% 0 0; }
-              46% { border-radius: 54% 46% 0 0 / 7% 14% 0 0; }
-              72% { border-radius: 44% 56% 0 0 / 12% 7% 0 0; }
-              100% { transform: translate3d(0,0,0); border-radius: 50% 50% 0 0 / 8% 11% 0 0; }
+              0% { transform: translate3d(0,105%,0); }
+              52% { transform: translate3d(0,-2.2%,0); }
+              70% { transform: translate3d(0,1.4%,0); }
+              84% { transform: translate3d(0,-.7%,0); }
+              100% { transform: translate3d(0,0,0); }
             }
-            @keyframes campusIntroWave {
-              from { transform: translateX(-3%) translateY(5px) scaleX(1); }
-              to { transform: translateX(3%) translateY(-4px) scaleX(1.04); }
+            @keyframes campusIntroSurfaceBack {
+              from { -webkit-mask-position: 0 0; mask-position: 0 0; }
+              to { -webkit-mask-position: 360px 0; mask-position: 360px 0; }
+            }
+            @keyframes campusIntroSurfaceFront {
+              from { -webkit-mask-position: 0 0; mask-position: 0 0; }
+              to { -webkit-mask-position: 360px 0; mask-position: 360px 0; }
             }
             @keyframes campusIntroNightfall {
               from { opacity: 0; }
