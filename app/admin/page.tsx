@@ -7,7 +7,7 @@ import {
   Thermometer, Check, ClipboardList, Plus, Trash2, 
   UserCheck, AlertCircle, Send, Search, Utensils,
   BookOpen, Clock, Ban, CheckCircle2, ShieldAlert,
-  BellRing, CalendarDays, Save, RefreshCw, Monitor
+  BellRing, CalendarDays, Save, RefreshCw, Monitor, History
 } from 'lucide-react';
 
 // === モックデータ（学生側のアプリデータと対になるもの） ===
@@ -98,6 +98,47 @@ type LibraryBook = {
   created_at?: string;
 };
 
+const LINE_NOTICE_TEMPLATES = [
+  {
+    id: 'cafeteria',
+    label: '学食の混雑',
+    title: '学食の混雑について',
+    message: '現在、学食が混雑しています。時間に余裕をもって利用するなど、混雑緩和にご協力ください。',
+  },
+  {
+    id: 'bus',
+    label: 'バスの遅延',
+    title: 'バス運行のお知らせ',
+    message: 'バスの運行に遅れが発生している可能性があります。最新の運行情報を確認し、時間に余裕をもって行動してください。',
+  },
+  {
+    id: 'lost',
+    label: '落とし物',
+    title: '落とし物のお知らせ',
+    message: '学校内で落とし物が届けられています。心当たりのある方は、学校の窓口へお問い合わせください。',
+  },
+  {
+    id: 'event',
+    label: '行事・学校からのお知らせ',
+    title: '学校からのお知らせ',
+    message: '学校からのお知らせです。内容を確認してください。',
+  },
+  {
+    id: 'urgent',
+    label: '重要なお知らせ',
+    title: '重要なお知らせ',
+    message: '【配信前に編集してください】重要なお知らせの内容を入力してください。',
+  },
+] as const;
+
+type LineBroadcastHistoryRow = {
+  id: string;
+  title: string;
+  message: string;
+  status: string;
+  sent_at: string;
+};
+
 const uploadLibraryCoverImage = async (file: File): Promise<string> => {
   const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
@@ -142,6 +183,13 @@ export default function CampusSyncAdmin() {
   const [lineBroadcastPassword, setLineBroadcastPassword] = useState('');
   const [lineBroadcasting, setLineBroadcasting] = useState(false);
   const [lineBroadcastMessage, setLineBroadcastMessage] = useState('');
+  const [lineNoticeTemplate, setLineNoticeTemplate] = useState('custom');
+  const [lineNoticeTitle, setLineNoticeTitle] = useState('');
+  const [lineNoticeText, setLineNoticeText] = useState('');
+  const [lineBroadcastHistory, setLineBroadcastHistory] = useState<LineBroadcastHistoryRow[]>([]);
+  const [lineHistoryLoading, setLineHistoryLoading] = useState(true);
+  const [lineHistoryMessage, setLineHistoryMessage] = useState('');
+  const [lineHistoryRefreshKey, setLineHistoryRefreshKey] = useState(0);
 
   // Supabase共有の蔵書管理
   const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -154,6 +202,32 @@ export default function CampusSyncAdmin() {
   const [bookRegistering, setBookRegistering] = useState(false);
   const [updatingCoverBookId, setUpdatingCoverBookId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHistory = async () => {
+      setLineHistoryLoading(true);
+      const { data, error } = await supabase
+        .from('line_broadcast_history')
+        .select('id, title, message, status, sent_at')
+        .order('sent_at', { ascending: false })
+        .limit(20);
+
+      if (cancelled) return;
+      if (error) {
+        console.error('LINE配信履歴の取得に失敗:', error);
+        setLineBroadcastHistory([]);
+        setLineHistoryMessage('配信履歴を読み込めません。SQLを実行したか確認してください。');
+      } else {
+        setLineBroadcastHistory((data || []) as LineBroadcastHistoryRow[]);
+        setLineHistoryMessage('');
+      }
+      setLineHistoryLoading(false);
+    };
+
+    void loadHistory();
+    return () => { cancelled = true; };
+  }, [lineHistoryRefreshKey]);
 
   useEffect(() => {
     if (!newBookCover) {
@@ -320,16 +394,44 @@ export default function CampusSyncAdmin() {
     setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
   };
 
-  // LINE公式アカウントの友だち全員へ学食混雑のお知らせを配信
-  const handleSendCafeteriaLineNotice = async () => {
+  // テンプレートをフォームに読み込む（読み込んだ後も自由に編集できます）
+  const applyLineNoticeTemplate = (templateId: string) => {
+    setLineNoticeTemplate(templateId);
+    const template = LINE_NOTICE_TEMPLATES.find(item => item.id === templateId);
+    if (template) {
+      setLineNoticeTitle(template.title);
+      setLineNoticeText(template.message);
+    } else {
+      setLineNoticeTitle('');
+      setLineNoticeText('');
+    }
+    setLineBroadcastMessage('');
+  };
+
+  // 自由入力したお知らせをLINE公式アカウントの友だち全員へ配信
+  const handleSendLineNotice = async () => {
     if (lineBroadcasting) return;
     if (!lineBroadcastPassword.trim()) {
       setLineBroadcastMessage('配信認証コードを入力してください。');
       return;
     }
+    if (!lineNoticeTitle.trim()) {
+      setLineBroadcastMessage('お知らせのタイトルを入力してください。');
+      return;
+    }
+    if (!lineNoticeText.trim()) {
+      setLineBroadcastMessage('LINEで送る文章を入力してください。');
+      return;
+    }
+
+    const lineMessageLength = Array.from(`【${lineNoticeTitle.trim()}】\n\n${lineNoticeText.trim()}`).length;
+    if (lineMessageLength > 5000) {
+      setLineBroadcastMessage('タイトルを含む送信文章は5,000文字以内にしてください。');
+      return;
+    }
 
     const confirmed = window.confirm(
-      'LINE公式アカウントを友だち追加している全員に「学食が混んでいます」というお知らせを配信します。よろしいですか？'
+      `次の内容をLINE公式アカウントの友だち全員に配信します。\n\nタイトル：${lineNoticeTitle.trim()}\n\n${lineNoticeText.trim()}\n\n本当に配信しますか？`
     );
     if (!confirmed) return;
 
@@ -339,7 +441,11 @@ export default function CampusSyncAdmin() {
       const response = await fetch('/api/line-broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: lineBroadcastPassword }),
+        body: JSON.stringify({
+          password: lineBroadcastPassword,
+          title: lineNoticeTitle.trim(),
+          message: lineNoticeText.trim(),
+        }),
         cache: 'no-store',
       });
       const result = await response.json().catch(() => null);
@@ -347,8 +453,12 @@ export default function CampusSyncAdmin() {
         setLineBroadcastMessage(result?.message || `LINE配信に失敗しました（HTTP ${response.status}）。`);
         return;
       }
+
       setLineBroadcastMessage(result.message || (result.success ? 'LINE配信が完了しました。' : 'LINE配信に失敗しました。'));
-      if (result.success) setLineBroadcastPassword('');
+      if (result.success) {
+        setLineBroadcastPassword('');
+        setLineHistoryRefreshKey(key => key + 1);
+      }
     } catch (error) {
       console.error('LINEお知らせ配信エラー:', error);
       setLineBroadcastMessage('LINE配信に失敗しました。環境変数とLINE Developersの設定を確認してください。');
@@ -674,36 +784,130 @@ export default function CampusSyncAdmin() {
                 </div>
               </div>
 
-              {/* 混雑状況モニター */}
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
-                <h3 className="text-base font-bold text-slate-300 mb-4 flex items-center gap-2">
-                  <ShieldAlert className="text-yellow-400" size={20} /> クイックお知らせ・パトロール
-                </h3>
-                <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
-                  <p className="text-xs text-slate-400 font-bold">現在の混雑ピーク時間です。学食・売店に注意喚起の全体チャイムを鳴らしたり、お知らせを送ることができます。</p>
-                  <label className="block text-xs font-bold text-slate-400">
-                    配信認証コード
-                    <input
-                      type="password"
-                      autoComplete="current-password"
-                      value={lineBroadcastPassword}
-                      onChange={e => { setLineBroadcastPassword(e.target.value); setLineBroadcastMessage(''); }}
-                      placeholder="Admin配信用の認証コード"
-                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-500 placeholder:text-slate-600"
-                    />
-                  </label>
-                  <button
-                    onClick={handleSendCafeteriaLineNotice}
-                    disabled={lineBroadcasting}
-                    className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-600/10"
-                  >
-                    <BellRing size={14} /> {lineBroadcasting ? 'LINE配信中...' : '「学食が混んでいます」LINE通知を配信'}
-                  </button>
-                  {lineBroadcastMessage && (
-                    <p role="status" className={`rounded-lg border p-3 text-xs ${lineBroadcastMessage.includes('配信しました') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
-                      {lineBroadcastMessage}
-                    </p>
-                  )}
+              {/* LINEお知らせ作成・配信・履歴 */}
+              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5">
+                <div>
+                  <h3 className="text-base font-bold text-slate-300 mb-2 flex items-center gap-2">
+                    <ShieldAlert className="text-yellow-400" size={20} /> クイックお知らせ・パトロール
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    自由な文章やテンプレートからLINEお知らせを作成できます。配信前に内容を確認し、友だち全員へ送信します。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                    <h4 className="text-sm font-black text-white flex items-center gap-2"><FilePlus size={16} className="text-blue-400" /> お知らせを作成</h4>
+                    <label className="block text-xs font-bold text-slate-400">
+                      テンプレート
+                      <select
+                        value={lineNoticeTemplate}
+                        onChange={e => applyLineNoticeTemplate(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500"
+                      >
+                        <option value="custom">自由入力（テンプレートなし）</option>
+                        {LINE_NOTICE_TEMPLATES.map(template => (
+                          <option key={template.id} value={template.id}>{template.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => applyLineNoticeTemplate('cafeteria')}
+                      className="text-xs font-bold text-yellow-300 hover:text-yellow-200 underline underline-offset-4"
+                    >
+                      「学食が混んでいます」テンプレートを使う
+                    </button>
+                    <label className="block text-xs font-bold text-slate-400">
+                      お知らせのタイトル
+                      <input
+                        value={lineNoticeTitle}
+                        onChange={e => { setLineNoticeTitle(e.target.value); setLineNoticeTemplate('custom'); setLineBroadcastMessage(''); }}
+                        maxLength={100}
+                        placeholder="例：明日のバス運行について"
+                        className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 placeholder:text-slate-600"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-400">
+                      LINEで送る文章
+                      <textarea
+                        value={lineNoticeText}
+                        onChange={e => { setLineNoticeText(e.target.value); setLineNoticeTemplate('custom'); setLineBroadcastMessage(''); }}
+                        maxLength={4900}
+                        rows={6}
+                        placeholder="ここにLINEで送りたい内容を入力してください。"
+                        className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 placeholder:text-slate-600"
+                      />
+                      <span className="mt-1 block text-right text-[11px] text-slate-500">本文 {Array.from(lineNoticeText).length.toLocaleString()} / 4,900文字（タイトルを含めて5,000文字以内）</span>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-400">
+                      配信認証コード
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={lineBroadcastPassword}
+                        onChange={e => { setLineBroadcastPassword(e.target.value); setLineBroadcastMessage(''); }}
+                        placeholder="VercelのADMIN_BROADCAST_PASSWORDの値"
+                        className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-500 placeholder:text-slate-600"
+                      />
+                    </label>
+                    <button
+                      onClick={handleSendLineNotice}
+                      disabled={lineBroadcasting || !lineNoticeTitle.trim() || !lineNoticeText.trim()}
+                      className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-600/10"
+                    >
+                      <Send size={15} /> {lineBroadcasting ? 'LINE配信中...' : '内容を確認してLINE配信'}
+                    </button>
+                    {lineBroadcastMessage && (
+                      <p role="status" className={`rounded-lg border p-3 text-xs ${lineBroadcastMessage.includes('配信しました') || lineBroadcastMessage.includes('配信が完了') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
+                        {lineBroadcastMessage}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                      <h4 className="text-sm font-black text-white flex items-center gap-2"><Monitor size={16} className="text-green-400" /> LINEメッセージのプレビュー</h4>
+                      <div className="rounded-xl bg-slate-800 p-3">
+                        <div className="flex items-center gap-2 text-xs text-slate-300 mb-3">
+                          <div className="h-7 w-7 rounded-full bg-green-600 flex items-center justify-center"><BellRing size={14} /></div>
+                          CampusSync 公式アカウント
+                        </div>
+                        <div className="max-w-full rounded-2xl rounded-tl-sm bg-slate-100 p-4 text-slate-900 shadow">
+                          <p className="font-black text-sm mb-2 break-words">{lineNoticeTitle || 'お知らせのタイトル'}</p>
+                          <p className="text-sm whitespace-pre-wrap break-words">{lineNoticeText || 'ここに送信する文章が表示されます。'}</p>
+                        </div>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-500">プレビューは目安です。実際の見え方はLINEアプリや端末によって異なる場合があります。</p>
+                    </div>
+
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-black text-white flex items-center gap-2"><History size={16} className="text-blue-400" /> 最近の配信履歴</h4>
+                        <button type="button" onClick={() => setLineHistoryRefreshKey(key => key + 1)} className="text-xs font-bold text-blue-300 hover:text-blue-200 flex items-center gap-1"><RefreshCw size={12} /> 更新</button>
+                      </div>
+                      {lineHistoryLoading ? (
+                        <p className="text-xs text-slate-500">履歴を読み込み中...</p>
+                      ) : lineHistoryMessage ? (
+                        <p className="text-xs text-amber-300">{lineHistoryMessage}</p>
+                      ) : lineBroadcastHistory.length === 0 ? (
+                        <p className="text-xs text-slate-500">まだ配信履歴はありません。SQLを実行し、最初のお知らせを配信するとここに表示されます。</p>
+                      ) : (
+                        <div className="space-y-2 max-h-[430px] overflow-y-auto pr-1">
+                          {lineBroadcastHistory.map(item => (
+                            <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs font-bold text-slate-200 break-words">{item.title}</p>
+                                <span className="shrink-0 text-[10px] text-emerald-300">配信済み</span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap break-words">{item.message}</p>
+                              <p className="mt-2 text-[10px] text-slate-600">{item.sent_at ? new Date(item.sent_at).toLocaleString('ja-JP') : '日時不明'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
