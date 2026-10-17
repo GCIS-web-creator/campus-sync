@@ -190,6 +190,12 @@ export default function CampusSyncAdmin() {
   const [menuSaving, setMenuSaving] = useState(false);
   const [menuMessage, setMenuMessage] = useState('');
 
+  // 学食おすすめ告知（Supabaseで生徒サイトと共有）
+  const [cafeteriaAnnouncementText, setCafeteriaAnnouncementText] = useState('');
+  const [cafeteriaAnnouncementSaving, setCafeteriaAnnouncementSaving] = useState(false);
+  const [cafeteriaAnnouncementMessage, setCafeteriaAnnouncementMessage] = useState('');
+  const [cafeteriaAnnouncementPublished, setCafeteriaAnnouncementPublished] = useState(false);
+
   // キャリアセンター自習室の座席状況（生徒用サイトとSupabaseで共有）
   const [studyRoomOccupiedSeats, setStudyRoomOccupiedSeats] = useState(22);
   const [studyRoomTotalSeats, setStudyRoomTotalSeats] = useState(35);
@@ -220,6 +226,29 @@ export default function CampusSyncAdmin() {
   const [bookRegistering, setBookRegistering] = useState(false);
   const [updatingCoverBookId, setUpdatingCoverBookId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCafeteriaAnnouncement = async () => {
+      const { data, error } = await supabase
+        .from('cafeteria_announcements')
+        .select('id, message, show_popup, show_banner, updated_at')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        console.error('学食おすすめのお知らせ取得に失敗:', error);
+        setCafeteriaAnnouncementMessage('お知らせ設定を読み込めません。先にSQLを実行してください。');
+      } else if (data) {
+        setCafeteriaAnnouncementText(data.message || '');
+        setCafeteriaAnnouncementPublished(Boolean(data.show_banner || data.show_popup));
+        setCafeteriaAnnouncementMessage('');
+      }
+    };
+    void loadCafeteriaAnnouncement();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,6 +444,76 @@ export default function CampusSyncAdmin() {
     }
 
     setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
+  };
+
+  // おすすめ告知を保存し、ポップアップと学食タブのバナーを同時に有効化する
+  const handlePublishCafeteriaAnnouncement = async () => {
+    const message = cafeteriaAnnouncementText.trim();
+    if (!message) {
+      setCafeteriaAnnouncementMessage('おすすめのお知らせ内容を入力してください。');
+      return;
+    }
+    if (message.length > 500) {
+      setCafeteriaAnnouncementMessage('お知らせは500文字以内で入力してください。');
+      return;
+    }
+
+    setCafeteriaAnnouncementSaving(true);
+    setCafeteriaAnnouncementMessage('');
+    try {
+      const { error } = await supabase
+        .from('cafeteria_announcements')
+        .upsert({
+          id: 1,
+          message,
+          show_popup: true,
+          show_banner: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+      if (error) {
+        console.error('学食おすすめのお知らせ保存に失敗:', error);
+        setCafeteriaAnnouncementMessage(`保存に失敗しました: ${error.message}（SQL・RLS設定を確認してください）`);
+        return;
+      }
+      setCafeteriaAnnouncementText(message);
+      setCafeteriaAnnouncementPublished(true);
+      setCafeteriaAnnouncementMessage('掲載しました。生徒サイトのポップアップと学食タブのバナーに反映されます。');
+    } catch (error) {
+      console.error('学食おすすめのお知らせ保存中にエラー:', error);
+      setCafeteriaAnnouncementMessage(`保存に失敗しました: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+    } finally {
+      setCafeteriaAnnouncementSaving(false);
+    }
+  };
+
+  // 現在のお知らせ表示を停止する
+  const handleUnpublishCafeteriaAnnouncement = async () => {
+    setCafeteriaAnnouncementSaving(true);
+    setCafeteriaAnnouncementMessage('');
+    try {
+      const { error } = await supabase
+        .from('cafeteria_announcements')
+        .upsert({
+          id: 1,
+          message: cafeteriaAnnouncementText.trim(),
+          show_popup: false,
+          show_banner: false,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      if (error) {
+        console.error('学食おすすめのお知らせ停止に失敗:', error);
+        setCafeteriaAnnouncementMessage(`掲載停止に失敗しました: ${error.message}`);
+        return;
+      }
+      setCafeteriaAnnouncementPublished(false);
+      setCafeteriaAnnouncementMessage('生徒サイトでのポップアップとバナー掲載を停止しました。');
+    } catch (error) {
+      console.error('学食おすすめのお知らせ停止中にエラー:', error);
+      setCafeteriaAnnouncementMessage(`掲載停止に失敗しました: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+    } finally {
+      setCafeteriaAnnouncementSaving(false);
+    }
   };
 
   // テンプレートをフォームに読み込む（読み込んだ後も自由に編集できます）
@@ -1121,17 +1220,50 @@ export default function CampusSyncAdmin() {
                 </div>
               </div>
 
-              {/* 生徒向け「今週のおすすめ」変更 */}
+              {/* 生徒向け「今日・明日のおすすめ」告知：Supabase保存 */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4">
-                <h3 className="text-sm font-bold text-slate-400">学食からのお知らせ配信</h3>
+                <h3 className="text-sm font-bold text-slate-200">学食からのお知らせ配信</h3>
+                <p className="text-xs leading-relaxed text-slate-400">入力した内容をSupabaseに保存し、生徒サイトのポップアップと学食タブのバナーに反映します。</p>
                 <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1">今日・明日のおすすめポップアップ</label>
-                    <input type="text" placeholder="例: 明日は大人気の『創価カツカレー』が100円引き！" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-bold text-white outline-none" />
+                    <label htmlFor="cafeteria-announcement-text" className="text-xs text-slate-300 font-bold block mb-1">今日・明日のおすすめポップアップ</label>
+                    <textarea
+                      id="cafeteria-announcement-text"
+                      value={cafeteriaAnnouncementText}
+                      onChange={event => setCafeteriaAnnouncementText(event.target.value)}
+                      maxLength={500}
+                      rows={3}
+                      placeholder="例：明日は人気のカレーが登場します！ぜひ学食をご利用ください。"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm font-bold text-white outline-none focus:border-blue-500 resize-y"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+                      <span>生徒サイトでポップアップとバナーに表示</span>
+                      <span>{cafeteriaAnnouncementText.length}/500</span>
+                    </div>
                   </div>
-                  <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all">
-                    学食タブにバナー掲載
+                  <button
+                    type="button"
+                    onClick={handlePublishCafeteriaAnnouncement}
+                    disabled={cafeteriaAnnouncementSaving}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all"
+                  >
+                    {cafeteriaAnnouncementSaving ? '保存中...' : '学食タブにバナー掲載'}
                   </button>
+                  {cafeteriaAnnouncementPublished && (
+                    <button
+                      type="button"
+                      onClick={handleUnpublishCafeteriaAnnouncement}
+                      disabled={cafeteriaAnnouncementSaving}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold text-xs rounded-xl transition-all"
+                    >
+                      掲載を停止する
+                    </button>
+                  )}
+                  {cafeteriaAnnouncementMessage && (
+                    <p role="status" className={`text-xs leading-relaxed ${cafeteriaAnnouncementMessage.includes('失敗') || cafeteriaAnnouncementMessage.includes('入力') || cafeteriaAnnouncementMessage.includes('確認') ? 'text-rose-300' : 'text-emerald-300'}`}>
+                      {cafeteriaAnnouncementMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
