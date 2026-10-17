@@ -3050,7 +3050,7 @@ Supabaseの設定を確認してください。
               transform: translate3d(0, 105%, 0);
               will-change: transform;
             }
-            /* 波の輪郭は山型の div ではなく、繰り返しタイルの SVG マスクで作る */
+            /* 波の輪郭はSVGマスクで作る。preserveAspectRatio=none でマスクタイル内を全面に伸ばし、透明な隙間が出ないようにする */
             .campus-intro__water::before {
               content: "";
               position: absolute;
@@ -3060,8 +3060,8 @@ Supabaseの設定を確認してください。
               width: 100%;
               height: 9vh;
               background: #9af8ff;
-              -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
-              mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
+              -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140' preserveAspectRatio='none'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
+              mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140' preserveAspectRatio='none'%3E%3Cpath fill='white' d='M0 48 C40 48 40 12 80 12 C120 12 120 84 160 84 C200 84 200 48 240 48 C280 48 280 12 320 12 C360 12 360 84 400 84 C440 84 440 48 480 48 L480 140 L0 140 Z'/%3E%3C/svg%3E");
               -webkit-mask-size: 360px 100%;
               mask-size: 360px 100%;
               -webkit-mask-repeat: repeat-x;
