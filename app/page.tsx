@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { 
   Home, Utensils, BookOpen, Settings, Bell, CheckCircle, 
   Clock, FileText, Monitor, Wind, ThermometerSun, 
@@ -99,12 +100,25 @@ type ThemeKey = keyof typeof THEMES;
 // --- 📋 初期モックデータ群の超拡充 ---
 
 const INITIAL_TODOS = [
-  { id: 1, title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false },
-  { id: 2, title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false },
-  { id: 3, title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false },
-  { id: 4, title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false },
-  { id: 5, title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false },
+  { id: '1', title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false },
+  { id: '2', title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false },
+  { id: '3', title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false },
+  { id: '4', title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false },
+  { id: '5', title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false },
 ];
+
+const getTodoPresentation = (type: string) => {
+  switch (type) {
+    case 'paper':
+      return { color: 'bg-red-100 text-red-700', icon: FileText };
+    case 'classroom':
+      return { color: 'bg-orange-100 text-orange-700', icon: Monitor };
+    case 'other':
+      return { color: 'bg-blue-100 text-blue-700', icon: Info };
+    default:
+      return { color: 'bg-gray-100 text-gray-700', icon: FileText };
+  }
+};
 
 const INITIAL_ROOMS = [
   { id: 1, name: '1-A教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
@@ -227,8 +241,236 @@ const MOCK_TIMETABLE_DATA = {
   }
 };
 
-// --- 🚌 新機能：スクールバスダイヤ情報 ---
-const MOCK_BUS_STATIONS = [
+// --- 🚃 鷹の台駅：発車案内（ユーザー提供の2026年10月3日時刻表） ---
+const TAKANODAI_TIMETABLE = {
+  kokubunji: {
+    id: 'kokubunji',
+    name: '国分寺方面',
+    destination: '国分寺行き',
+    trains: [
+    { time: '05:10', service: '各駅停車国分寺行き' },
+    { time: '05:31', service: '各駅停車国分寺行き' },
+    { time: '05:47', service: '各駅停車国分寺行き' },
+    { time: '06:04', service: '各駅停車国分寺行き' },
+    { time: '06:19', service: '各駅停車国分寺行き' },
+    { time: '06:34', service: '各駅停車国分寺行き' },
+    { time: '06:48', service: '各駅停車国分寺行き' },
+    { time: '07:02', service: '各駅停車国分寺行き' },
+    { time: '07:12', service: '各駅停車国分寺行き' },
+    { time: '07:22', service: '各駅停車国分寺行き' },
+    { time: '07:32', service: '各駅停車国分寺行き' },
+    { time: '07:42', service: '各駅停車国分寺行き' },
+    { time: '07:51', service: '各駅停車国分寺行き' },
+    { time: '08:02', service: '各駅停車国分寺行き' },
+    { time: '08:12', service: '各駅停車国分寺行き' },
+    { time: '08:22', service: '各駅停車国分寺行き' },
+    { time: '08:32', service: '各駅停車国分寺行き' },
+    { time: '08:43', service: '各駅停車国分寺行き' },
+    { time: '08:52', service: '各駅停車国分寺行き' },
+    { time: '09:02', service: '各駅停車国分寺行き' },
+    { time: '09:11', service: '各駅停車国分寺行き' },
+    { time: '09:21', service: '各駅停車国分寺行き' },
+    { time: '09:31', service: '各駅停車国分寺行き' },
+    { time: '09:42', service: '各駅停車国分寺行き' },
+    { time: '09:51', service: '各駅停車国分寺行き' },
+    { time: '10:01', service: '各駅停車国分寺行き' },
+    { time: '10:12', service: '各駅停車国分寺行き' },
+    { time: '10:21', service: '各駅停車国分寺行き' },
+    { time: '10:32', service: '各駅停車国分寺行き' },
+    { time: '10:42', service: '各駅停車国分寺行き' },
+    { time: '10:53', service: '各駅停車国分寺行き' },
+    { time: '11:03', service: '各駅停車国分寺行き' },
+    { time: '11:13', service: '各駅停車国分寺行き' },
+    { time: '11:23', service: '各駅停車国分寺行き' },
+    { time: '11:33', service: '各駅停車国分寺行き' },
+    { time: '11:43', service: '各駅停車国分寺行き' },
+    { time: '11:53', service: '各駅停車国分寺行き' },
+    { time: '12:03', service: '各駅停車国分寺行き' },
+    { time: '12:13', service: '各駅停車国分寺行き' },
+    { time: '12:23', service: '各駅停車国分寺行き' },
+    { time: '12:33', service: '各駅停車国分寺行き' },
+    { time: '12:43', service: '各駅停車国分寺行き' },
+    { time: '12:53', service: '各駅停車国分寺行き' },
+    { time: '13:03', service: '各駅停車国分寺行き' },
+    { time: '13:13', service: '各駅停車国分寺行き' },
+    { time: '13:23', service: '各駅停車国分寺行き' },
+    { time: '13:33', service: '各駅停車国分寺行き' },
+    { time: '13:43', service: '各駅停車国分寺行き' },
+    { time: '13:53', service: '各駅停車国分寺行き' },
+    { time: '14:03', service: '各駅停車国分寺行き' },
+    { time: '14:13', service: '各駅停車国分寺行き' },
+    { time: '14:23', service: '各駅停車国分寺行き' },
+    { time: '14:33', service: '各駅停車国分寺行き' },
+    { time: '14:43', service: '各駅停車国分寺行き' },
+    { time: '14:53', service: '各駅停車国分寺行き' },
+    { time: '15:03', service: '各駅停車国分寺行き' },
+    { time: '15:13', service: '各駅停車国分寺行き' },
+    { time: '15:23', service: '各駅停車国分寺行き' },
+    { time: '15:33', service: '各駅停車国分寺行き' },
+    { time: '15:43', service: '各駅停車国分寺行き' },
+    { time: '15:53', service: '各駅停車国分寺行き' },
+    { time: '16:03', service: '各駅停車国分寺行き' },
+    { time: '16:13', service: '各駅停車国分寺行き' },
+    { time: '16:23', service: '各駅停車国分寺行き' },
+    { time: '16:33', service: '各駅停車国分寺行き' },
+    { time: '16:43', service: '各駅停車国分寺行き' },
+    { time: '16:53', service: '各駅停車国分寺行き' },
+    { time: '17:03', service: '各駅停車国分寺行き' },
+    { time: '17:13', service: '各駅停車国分寺行き' },
+    { time: '17:23', service: '各駅停車国分寺行き' },
+    { time: '17:34', service: '各駅停車国分寺行き' },
+    { time: '17:43', service: '各駅停車国分寺行き' },
+    { time: '17:53', service: '各駅停車国分寺行き' },
+    { time: '18:03', service: '各駅停車国分寺行き' },
+    { time: '18:13', service: '各駅停車国分寺行き' },
+    { time: '18:23', service: '各駅停車国分寺行き' },
+    { time: '18:33', service: '各駅停車国分寺行き' },
+    { time: '18:43', service: '各駅停車国分寺行き' },
+    { time: '18:53', service: '各駅停車国分寺行き' },
+    { time: '19:03', service: '各駅停車国分寺行き' },
+    { time: '19:13', service: '各駅停車国分寺行き' },
+    { time: '19:23', service: '各駅停車国分寺行き' },
+    { time: '19:33', service: '各駅停車国分寺行き' },
+    { time: '19:43', service: '各駅停車国分寺行き' },
+    { time: '19:53', service: '各駅停車国分寺行き' },
+    { time: '20:03', service: '各駅停車国分寺行き' },
+    { time: '20:13', service: '各駅停車国分寺行き' },
+    { time: '20:23', service: '各駅停車国分寺行き' },
+    { time: '20:33', service: '各駅停車国分寺行き' },
+    { time: '20:43', service: '各駅停車国分寺行き' },
+    { time: '20:53', service: '各駅停車国分寺行き' },
+    { time: '21:09', service: '各駅停車国分寺行き' },
+    { time: '21:24', service: '各駅停車国分寺行き' },
+    { time: '21:39', service: '各駅停車国分寺行き' },
+    { time: '21:54', service: '各駅停車国分寺行き' },
+    { time: '22:09', service: '各駅停車国分寺行き' },
+    { time: '22:24', service: '各駅停車国分寺行き' },
+    { time: '22:39', service: '各駅停車国分寺行き' },
+    { time: '22:54', service: '各駅停車国分寺行き' },
+    { time: '23:11', service: '各駅停車国分寺行き' },
+    { time: '23:32', service: '各駅停車国分寺行き' },
+    { time: '23:54', service: '各駅停車国分寺行き' },
+  ]
+  },
+  higashimurayama: {
+    id: 'higashimurayama',
+    name: '東村山方面',
+    destination: '東村山行き',
+    trains: [
+    { time: '05:25', service: '各駅停車東村山行き' },
+    { time: '05:47', service: '各駅停車東村山行き' },
+    { time: '06:04', service: '各駅停車東村山行き' },
+    { time: '06:19', service: '各駅停車東村山行き' },
+    { time: '06:34', service: '各駅停車東村山行き' },
+    { time: '06:48', service: '各駅停車東村山行き' },
+    { time: '07:07', service: '各駅停車東村山行き' },
+    { time: '07:16', service: '各駅停車東村山行き' },
+    { time: '07:26', service: '各駅停車東村山行き' },
+    { time: '07:36', service: '各駅停車東村山行き' },
+    { time: '07:46', service: '各駅停車東村山行き' },
+    { time: '07:56', service: '各駅停車東村山行き' },
+    { time: '08:06', service: '各駅停車東村山行き' },
+    { time: '08:16', service: '各駅停車東村山行き' },
+    { time: '08:26', service: '各駅停車東村山行き' },
+    { time: '08:37', service: '各駅停車東村山行き' },
+    { time: '08:47', service: '各駅停車東村山行き' },
+    { time: '08:57', service: '各駅停車東村山行き' },
+    { time: '09:06', service: '各駅停車東村山行き' },
+    { time: '09:16', service: '各駅停車東村山行き' },
+    { time: '09:26', service: '各駅停車東村山行き' },
+    { time: '09:36', service: '各駅停車東村山行き' },
+    { time: '09:46', service: '各駅停車東村山行き' },
+    { time: '09:56', service: '各駅停車東村山行き' },
+    { time: '10:06', service: '各駅停車東村山行き' },
+    { time: '10:16', service: '各駅停車東村山行き' },
+    { time: '10:26', service: '各駅停車東村山行き' },
+    { time: '10:37', service: '各駅停車東村山行き' },
+    { time: '10:47', service: '各駅停車東村山行き' },
+    { time: '10:58', service: '各駅停車東村山行き' },
+    { time: '11:08', service: '各駅停車東村山行き' },
+    { time: '11:18', service: '各駅停車東村山行き' },
+    { time: '11:28', service: '各駅停車東村山行き' },
+    { time: '11:38', service: '各駅停車東村山行き' },
+    { time: '11:48', service: '各駅停車東村山行き' },
+    { time: '11:58', service: '各駅停車東村山行き' },
+    { time: '12:08', service: '各駅停車東村山行き' },
+    { time: '12:18', service: '各駅停車東村山行き' },
+    { time: '12:28', service: '各駅停車東村山行き' },
+    { time: '12:38', service: '各駅停車東村山行き' },
+    { time: '12:48', service: '各駅停車東村山行き' },
+    { time: '12:58', service: '各駅停車東村山行き' },
+    { time: '13:08', service: '各駅停車東村山行き' },
+    { time: '13:18', service: '各駅停車東村山行き' },
+    { time: '13:28', service: '各駅停車東村山行き' },
+    { time: '13:38', service: '各駅停車東村山行き' },
+    { time: '13:48', service: '各駅停車東村山行き' },
+    { time: '13:58', service: '各駅停車東村山行き' },
+    { time: '14:08', service: '各駅停車東村山行き' },
+    { time: '14:18', service: '各駅停車東村山行き' },
+    { time: '14:28', service: '各駅停車東村山行き' },
+    { time: '14:38', service: '各駅停車東村山行き' },
+    { time: '14:48', service: '各駅停車東村山行き' },
+    { time: '14:58', service: '各駅停車東村山行き' },
+    { time: '15:08', service: '各駅停車東村山行き' },
+    { time: '15:18', service: '各駅停車東村山行き' },
+    { time: '15:28', service: '各駅停車東村山行き' },
+    { time: '15:38', service: '各駅停車東村山行き' },
+    { time: '15:48', service: '各駅停車東村山行き' },
+    { time: '15:58', service: '各駅停車東村山行き' },
+    { time: '16:08', service: '各駅停車東村山行き' },
+    { time: '16:18', service: '各駅停車東村山行き' },
+    { time: '16:28', service: '各駅停車東村山行き' },
+    { time: '16:38', service: '各駅停車東村山行き' },
+    { time: '16:48', service: '各駅停車東村山行き' },
+    { time: '16:58', service: '各駅停車東村山行き' },
+    { time: '17:08', service: '各駅停車東村山行き' },
+    { time: '17:18', service: '各駅停車東村山行き' },
+    { time: '17:28', service: '各駅停車東村山行き' },
+    { time: '17:38', service: '各駅停車東村山行き' },
+    { time: '17:48', service: '各駅停車東村山行き' },
+    { time: '17:58', service: '各駅停車東村山行き' },
+    { time: '18:08', service: '各駅停車東村山行き' },
+    { time: '18:18', service: '各駅停車東村山行き' },
+    { time: '18:28', service: '各駅停車東村山行き' },
+    { time: '18:38', service: '各駅停車東村山行き' },
+    { time: '18:48', service: '各駅停車東村山行き' },
+    { time: '18:58', service: '各駅停車東村山行き' },
+    { time: '19:08', service: '各駅停車東村山行き' },
+    { time: '19:17', service: '各駅停車東村山行き' },
+    { time: '19:28', service: '各駅停車東村山行き' },
+    { time: '19:38', service: '各駅停車東村山行き' },
+    { time: '19:48', service: '各駅停車東村山行き' },
+    { time: '19:58', service: '各駅停車東村山行き' },
+    { time: '20:08', service: '各駅停車東村山行き' },
+    { time: '20:18', service: '各駅停車東村山行き' },
+    { time: '20:28', service: '各駅停車東村山行き' },
+    { time: '20:38', service: '各駅停車東村山行き' },
+    { time: '20:48', service: '各駅停車東村山行き' },
+    { time: '20:58', service: '各駅停車東村山行き' },
+    { time: '21:09', service: '各駅停車東村山行き' },
+    { time: '21:24', service: '各駅停車東村山行き' },
+    { time: '21:39', service: '各駅停車東村山行き' },
+    { time: '21:54', service: '各駅停車東村山行き' },
+    { time: '22:09', service: '各駅停車東村山行き' },
+    { time: '22:24', service: '各駅停車東村山行き' },
+    { time: '22:39', service: '各駅停車東村山行き' },
+    { time: '22:54', service: '各駅停車東村山行き' },
+    { time: '23:11', service: '各駅停車東村山行き' },
+    { time: '23:27', service: '各駅停車東村山行き' },
+    { time: '23:46', service: '各駅停車東村山行き' },
+    { time: '00:07', service: '各駅停車東村山行き' },
+  ]
+  }
+};
+
+// --- 🚌 状況報告用：既存のスクールバス停定義 ---
+// 発車案内は鷹の台駅の電車時刻表に変更したが、
+// 「状況報告」機能は従来のスクールバス仕様を維持する。
+const MOCK_BUS_STATIONS: {
+  id: string;
+  name: string;
+  departures: string[];
+}[] = [
   { id: 'hachioji', name: '八王子駅直行便', departures: ['15:45', '16:00', '16:20', '16:40', '17:00', '17:30', '18:00', '18:30'] },
   { id: 'haijima', name: '拝島駅巡回便', departures: ['15:50', '16:15', '16:35', '16:55', '17:15', '17:45', '18:15', '18:45'] },
   { id: 'akitsu', name: '新秋津駅シャトル', departures: ['16:05', '16:30', '17:00', '17:30', '18:10'] },
@@ -241,12 +483,38 @@ const INITIAL_CLUB_NOTES = [
   { id: 3, clubName: '生徒会執行部', title: '文化祭パンフレット校正確認', date: '2日前', content: '各クラスの企画紹介文の最終校正データが届いています。担当委員は本日17時までに生徒会室に集まり、チェックを完了させてください。', author: '執行部書記 より' },
 ];
 
+type CafeteriaReview = {
+  id: string | number;
+  menuId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  date: string;
+};
+
 // 学食堂メニューの口コミ初期値
-const INITIAL_CAFETERIA_REVIEWS = [
+const INITIAL_CAFETERIA_REVIEWS: CafeteriaReview[] = [
   { id: 1, menuId: 'soka', userName: '2年スキッパー', rating: 5, comment: '今日の創価ランチのチキン南蛮、タルタルソースが濃厚で最高に美味しかった！ボリュームも満点。', date: '今日 12:40' },
   { id: 2, menuId: 'noodles', userName: 'ラーメン大好き3回生', rating: 4, comment: '情熱ラーメンは安定の醤油ベース。トッピングのチャーシューがいつもより少し厚くて嬉しかった！', date: '今日 12:15' },
   { id: 3, menuId: 'snack', userName: '部活終わりの胃袋', rating: 5, comment: 'ポテトと唐揚げのセットは、昼休みだけでなく放課後の部活前の小腹満たしにも神。売り切れるのが早いのが玉にキズ。', date: '昨日' },
 ];
+
+// 同じブラウザ・同じ学籍番号では同じ投票IDを使い、何度押しても投票行を増やさない
+const getOrCreateVoteId = (studentId: string): string => {
+  if (typeof window === 'undefined') return '';
+
+  const key = `campus-sync-voter-id:${studentId || 'anonymous'}`;
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+
+  const newId =
+    typeof window.crypto?.randomUUID === 'function'
+      ? window.crypto.randomUUID()
+      : `vote-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  window.localStorage.setItem(key, newId);
+  return newId;
+};
 
 export default function CampusSyncApp() {
   const [activeTab, setActiveTab] = useState('home');
@@ -285,9 +553,13 @@ export default function CampusSyncApp() {
   // タイムテーブル用状態
   const [selectedWeekType, setSelectedWeekType] = useState<'A' | 'B'>('A');
   const [selectedDay, setSelectedDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
+  const [timetableData, setTimetableData] = useState(MOCK_TIMETABLE_DATA);
+  const [menuItems, setMenuItems] = useState(MENU_ITEMS);
 
   // バス用状態
   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
+  const [selectedTrainDirection, setSelectedTrainDirection] = useState<'kokubunji' | 'higashimurayama'>('kokubunji');
+  const [trainTimetable, setTrainTimetable] = useState(TAKANODAI_TIMETABLE);
   const [busCongestionVote, setBusCongestionVote] = useState<Record<string, string>>({ hachioji: '普通', haijima: '空いている', akitsu: '混雑' });
   const [busDelayMinutes, setBusDelayMinutes] = useState<Record<string, number>>({ hachioji: 0, haijima: 5, akitsu: 0 });
 
@@ -298,7 +570,7 @@ export default function CampusSyncApp() {
   const [newClubContent, setNewClubContent] = useState('');
 
   // 学食レビュー用状態
-  const [cafeteriaReviews, setCafeteriaReviews] = useState(INITIAL_CAFETERIA_REVIEWS);
+  const [cafeteriaReviews, setCafeteriaReviews] = useState<CafeteriaReview[]>(INITIAL_CAFETERIA_REVIEWS);
   const [selectedMenuForReview, setSelectedMenuForReview] = useState<string>('soka');
   const [newReviewRating, setNewReviewRating] = useState<number>(5);
   const [newReviewComment, setNewReviewComment] = useState('');
@@ -307,6 +579,7 @@ export default function CampusSyncApp() {
   // 学食投票関係
   const [crowdVotes, setCrowdVotes] = useState({ empty: 24, normal: 85, crowded: 42 });
   const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
+  const [isVoting, setIsVoting] = useState(false);
 
   const [menuVotes, setMenuVotes] = useState<Record<string, { empty: number, normal: number, crowded: number }>>({
     snack: { empty: 8, normal: 22, crowded: 14 },
@@ -328,6 +601,459 @@ export default function CampusSyncApp() {
   const [newLostLocation, setNewLostLocation] = useState('');
   const [newLostDescription, setNewLostDescription] = useState('');
   const [newLostFinder, setNewLostFinder] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [scoreSaving, setScoreSaving] = useState(false);
+  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+
+// Supabaseから落とし物・教室状況データを取得
+useEffect(() => {
+  const fetchSharedData = async () => {
+    let fetchStep = '投票IDの準備';
+    try {
+      const currentVoterId = getOrCreateVoteId(studentId.trim());
+      fetchStep = '落とし物データ取得（lost_and_found）';
+      const { data: lostData, error: lostError } = await supabase
+      .from('lost_and_found')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (lostError) {
+      console.error('落とし物データの取得に失敗:', lostError);
+    } else if (lostData) {
+      setLostAndFoundList(lostData);
+    }
+
+    fetchStep = '教室状況取得（room_status）';
+    const { data: roomData, error: roomError } = await supabase
+      .from('room_status')
+      .select('*');
+
+    if (roomError) {
+      console.error('教室状況データの取得に失敗:', roomError);
+      return;
+    }
+
+    if (roomData) {
+      setRooms(prevRooms =>
+        prevRooms.map(room => {
+          const sharedRoom = roomData.find(item => String(item.room_id) === String(room.id));
+          if (!sharedRoom) return room;
+
+          let color = 'text-green-500';
+          let bg = 'bg-green-50';
+          let icon = ThermometerSnowflake;
+
+          if (sharedRoom.status === '寒い' || sharedRoom.status === 'やや寒い') {
+            color = 'text-cyan-500';
+            bg = 'bg-cyan-50';
+            icon = Wind;
+          } else if (sharedRoom.status === '暑い' || sharedRoom.status === '激暑') {
+            color = 'text-red-500';
+            bg = 'bg-red-50';
+            icon = ThermometerSun;
+          }
+
+          return {
+            ...room,
+            name: sharedRoom.room_name,
+            status: sharedRoom.status,
+            temp: sharedRoom.temp,
+            icon,
+            color,
+            bg,
+          };
+        })
+      );
+    }
+
+    fetchStep = '学食全体投票取得（cafeteria_votes）';
+    const { data: cafeteriaVoteData, error: cafeteriaVoteError } = await supabase
+      .from('cafeteria_votes')
+      .select('status, voter_id')
+      .eq('scope_key', 'overall');
+
+    if (cafeteriaVoteError) {
+      console.error('学食混雑投票データの取得に失敗:', cafeteriaVoteError);
+    } else if (cafeteriaVoteData) {
+      const counts = cafeteriaVoteData.reduce(
+        (acc, vote) => {
+          if (vote.status === 'empty') acc.empty += 1;
+          if (vote.status === 'normal') acc.normal += 1;
+          if (vote.status === 'crowded') acc.crowded += 1;
+          return acc;
+        },
+        { empty: 0, normal: 0, crowded: 0 }
+      );
+      setCrowdVotes(counts);
+      const myOverallVote = cafeteriaVoteData.find(
+        vote => vote.voter_id === currentVoterId
+      );
+      setUserVote(
+        myOverallVote?.status === 'empty' ||
+        myOverallVote?.status === 'normal' ||
+        myOverallVote?.status === 'crowded'
+          ? myOverallVote.status
+          : null
+      );
+    }
+
+    fetchStep = '学食レビュー取得（cafeteria_reviews）';
+    const { data: reviewData, error: reviewError } = await supabase
+      .from('cafeteria_reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (reviewError) {
+      console.error('学食レビューの取得に失敗:', reviewError);
+    } else if (reviewData) {
+      setCafeteriaReviews(
+        reviewData.map(review => ({
+          id: review.id,
+          menuId: review.menu_id,
+          userName: review.user_name || '匿名の創価生',
+          rating: review.rating,
+          comment: review.comment,
+          date: new Date(review.created_at).toLocaleString('ja-JP', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }))
+      );
+    }
+
+    fetchStep = 'バス状況取得（bus_status）';
+    const { data: busData, error: busError } = await supabase
+      .from('bus_status')
+      .select('*');
+
+    if (busError) {
+      console.error('バス状況データの取得に失敗:', busError);
+    } else if (busData) {
+      const nextCongestion: Record<string, string> = {};
+      const nextDelay: Record<string, number> = {};
+
+      busData.forEach(row => {
+        nextCongestion[row.station_id] = row.congestion_status;
+        nextDelay[row.station_id] = Number(row.delay_minutes) || 0;
+      });
+
+      if (Object.keys(nextCongestion).length > 0) {
+        setBusCongestionVote(prev => ({ ...prev, ...nextCongestion }));
+      }
+      if (Object.keys(nextDelay).length > 0) {
+        setBusDelayMinutes(prev => ({ ...prev, ...nextDelay }));
+      }
+    }
+
+    fetchStep = '部活ノート取得（club_notes）';
+    const { data: clubData, error: clubError } = await supabase
+      .from('club_notes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (clubError) {
+      console.error('部活・委員会ノートの取得に失敗:', clubError);
+    } else if (clubData) {
+      setClubNotes(
+        clubData.map(note => ({
+          id: note.id,
+          clubName: note.club_name,
+          title: note.title,
+          date: new Date(note.created_at).toLocaleString('ja-JP', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          content: note.content,
+          author: note.author || '匿名の投稿者',
+        }))
+      );
+    }
+
+    fetchStep = '学食メニュー取得（cafeteria_menu）';
+    const { data: menuData, error: menuError } = await supabase
+      .from('cafeteria_menu')
+      .select('*')
+      .eq('is_active', true)
+      .order('id', { ascending: true });
+
+    const activeMenuItems = (menuData && menuData.length > 0)
+      ? menuData.map(item => ({
+          id: item.id,
+          name: item.name,
+          calorie: item.calorie,
+          allergy: item.allergy,
+        }))
+      : MENU_ITEMS;
+
+    if (menuError) {
+      console.error('学食メニューの取得に失敗:', menuError);
+    } else if (menuData && menuData.length > 0) {
+      setMenuItems(activeMenuItems);
+    }
+
+    fetchStep = 'メニュー別投票取得（cafeteria_votes）';
+    const { data: menuVoteData, error: menuVoteError } = await supabase
+      .from('cafeteria_votes')
+      .select('menu_id, status, voter_id, scope_key')
+      .not('menu_id', 'is', null);
+
+    if (menuVoteError) {
+      console.error('メニュー別混雑投票の取得に失敗:', menuVoteError);
+    } else if (menuVoteData) {
+      const counts: Record<string, { empty: number, normal: number, crowded: number }> = {};
+      activeMenuItems.forEach(item => {
+        counts[item.id] = { empty: 0, normal: 0, crowded: 0 };
+      });
+
+      const myMenuVotes: Record<string, 'empty' | 'normal' | 'crowded' | null> = {};
+      activeMenuItems.forEach(item => {
+        myMenuVotes[item.id] = null;
+      });
+
+      menuVoteData.forEach(vote => {
+        if (!vote.menu_id || !counts[vote.menu_id]) return;
+        if (vote.status === 'empty') counts[vote.menu_id].empty += 1;
+        if (vote.status === 'normal') counts[vote.menu_id].normal += 1;
+        if (vote.status === 'crowded') counts[vote.menu_id].crowded += 1;
+
+        if (
+          vote.voter_id === currentVoterId &&
+          (vote.status === 'empty' || vote.status === 'normal' || vote.status === 'crowded')
+        ) {
+          myMenuVotes[vote.menu_id] = vote.status;
+        }
+      });
+
+      setMenuVotes(counts);
+      setUserMenuVotes(myMenuVotes);
+    }
+
+    fetchStep = '売切れ情報取得（cafeteria_sold_out）';
+    const { data: soldOutData, error: soldOutError } = await supabase
+      .from('cafeteria_sold_out')
+      .select('menu_id, is_sold_out');
+
+    if (soldOutError) {
+      console.error('売り切れ情報の取得に失敗:', soldOutError);
+    } else if (soldOutData) {
+      const nextSoldOut: Record<string, boolean> = {
+        snack: false,
+        soka: false,
+        noodles: false,
+        curry: false,
+        healthy: false,
+      };
+
+      soldOutData.forEach(row => {
+        if (row.menu_id in nextSoldOut) {
+          nextSoldOut[row.menu_id] = Boolean(row.is_sold_out);
+        }
+      });
+
+      setSoldOutItems(nextSoldOut);
+    }
+
+    fetchStep = '学校通知取得（notifications）';
+    const { data: notificationData, error: notificationError } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (notificationError) {
+      console.error('学校通知の取得に失敗:', notificationError);
+    } else if (notificationData) {
+      setNotifications(
+        notificationData.map(note => ({
+          id: note.id,
+          title: note.title,
+          time: new Date(note.created_at).toLocaleString('ja-JP', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          // 既読管理は後で生徒ごとに分離する。現段階では新着扱い。
+          isRead: false,
+        }))
+      );
+    }
+
+    fetchStep = '時間割取得（timetable）';
+    const { data: timetableRows, error: timetableError } = await supabase
+      .from('timetable')
+      .select('*')
+      .order('week_type', { ascending: true })
+      .order('day_of_week', { ascending: true })
+      .order('period', { ascending: true });
+    fetchStep = '鷹の台駅時刻表取得（takanodai_timetable）';
+    const { data: trainRows, error: trainError } = await supabase
+      .from('takanodai_timetable')
+      .select('*')
+      .order('direction', { ascending: true })
+      .order('departure_time', { ascending: true });
+
+    if (trainError) {
+      console.error('鷹の台駅の時刻表取得に失敗:', trainError);
+    } else if (trainRows && trainRows.length > 0) {
+      const nextTrainTimetable = {
+        kokubunji: {
+          ...TAKANODAI_TIMETABLE.kokubunji,
+          trains: trainRows
+            .filter(row => row.direction === 'kokubunji')
+            .map(row => ({ time: row.departure_time, service: row.service })),
+        },
+        higashimurayama: {
+          ...TAKANODAI_TIMETABLE.higashimurayama,
+          trains: trainRows
+            .filter(row => row.direction === 'higashimurayama')
+            .map(row => ({ time: row.departure_time, service: row.service })),
+        },
+      };
+
+      setTrainTimetable(nextTrainTimetable);
+    }
+
+
+    const initialStudentId = studentId.trim();
+    if (/^\d{6}$/.test(initialStudentId)) {
+      fetchStep = 'プロフィール取得（profiles）';
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('student_id, student_name, user_class')
+        .eq('student_id', initialStudentId)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('プロフィールの取得に失敗:', profileError);
+      } else if (profileData) {
+        setStudentName(profileData.student_name);
+        setUserClass(profileData.user_class);
+      }
+    }
+
+    if (/^\d{6}$/.test(initialStudentId)) {
+      fetchStep = '貢献度取得（contribution_scores）';
+      const { data: scoreData, error: scoreError } = await supabase
+        .from('contribution_scores')
+        .select('score')
+        .eq('student_id', initialStudentId)
+        .maybeSingle();
+
+      if (scoreError) {
+        console.error('貢献度ポイントの取得に失敗:', scoreError);
+      } else if (scoreData) {
+        setScore(scoreData.score);
+      } else {
+        const { data: newScore, error: createScoreError } = await supabase
+          .from('contribution_scores')
+          .insert({ student_id: initialStudentId, score: 65 })
+          .select('score')
+          .single();
+
+        if (createScoreError) {
+          console.error('貢献度ポイントの初期登録に失敗:', createScoreError);
+        } else if (newScore) {
+          setScore(newScore.score);
+        }
+      }
+    }
+
+    if (/^\d{6}$/.test(initialStudentId)) {
+      fetchStep = '課題取得（todos）';
+      const { data: todoRows, error: todoError } = await supabase
+        .from('todos')
+        .select('*')
+        .eq('student_id', initialStudentId)
+        .order('created_at', { ascending: true });
+
+      if (todoError) {
+        console.error('課題・提出物の取得に失敗:', todoError);
+      } else if (todoRows && todoRows.length > 0) {
+        setTodos(
+          todoRows.map(row => ({
+            id: row.id,
+            title: row.title,
+            source: row.source,
+            type: row.type,
+            due: row.due,
+            details: row.details,
+            completed: row.completed,
+            ...getTodoPresentation(row.type),
+          }))
+        );
+      } else {
+        // 新しい生徒には現在のデモ課題を個人用としてコピー
+        const initialRows = INITIAL_TODOS.map(todo => ({
+          student_id: initialStudentId,
+          title: todo.title,
+          source: todo.source,
+          type: todo.type,
+          due: todo.due,
+          details: todo.details,
+          completed: false,
+        }));
+
+        const { data: createdTodos, error: createTodoError } = await supabase
+          .from('todos')
+          .insert(initialRows)
+          .select();
+
+        if (createTodoError) {
+          console.error('初期課題の登録に失敗:', createTodoError);
+        } else if (createdTodos) {
+          setTodos(
+            createdTodos.map(row => ({
+              id: row.id,
+              title: row.title,
+              source: row.source,
+              type: row.type,
+              due: row.due,
+              details: row.details,
+              completed: row.completed,
+              ...getTodoPresentation(row.type),
+            }))
+          );
+        }
+      }
+    }
+
+
+    if (timetableError) {
+      console.error('時間割の取得に失敗:', timetableError);
+    } else if (timetableRows && timetableRows.length > 0) {
+      const nextTimetable = {
+        A: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
+        B: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
+      } as typeof MOCK_TIMETABLE_DATA;
+
+      timetableRows.forEach(row => {
+        const weekKey = row.week_type as 'A' | 'B';
+        const dayKey = row.day_of_week as 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri';
+        nextTimetable[weekKey][dayKey].push({
+          period: row.period,
+          subject: row.subject,
+          teacher: row.teacher,
+          room: row.room,
+          materials: row.materials,
+        });
+      });
+
+      setTimetableData(nextTimetable);
+    }
+    } catch (unexpectedError) {
+      console.error('Supabase共有データ取得中に例外が発生しました:', {
+        step: fetchStep,
+        error: unexpectedError,
+      });
+    }
+  };
+
+  fetchSharedData();
+}, []);
 
   // 学籍番号に応じた自動期生・自動所属判別ロジックの強化
   useEffect(() => {
@@ -343,10 +1069,9 @@ export default function CampusSyncApp() {
   }, [studentId]);
 
   // 全体混雑パーセント計算
-  const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded + (userVote ? 1 : 0);
-  const getPercent = (val: number, key: string) => {
-    const adjustedVal = val + (userVote === key ? 1 : 0);
-    return Math.round((adjustedVal / totalVotes) * 100) || 0;
+  const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded;
+  const getPercent = (val: number) => {
+    return Math.round((val / totalVotes) * 100) || 0;
   };
 
   const getCohortName = (id: string) => {
@@ -361,49 +1086,208 @@ export default function CampusSyncApp() {
   };
 
   // ハンドラー各種
-  const handleVote = (type: 'empty' | 'normal' | 'crowded') => {
-    if (userVote !== type) {
-      setUserVote(type);
-      setScore(prev => Math.min(prev + 5, 100));
-    } else {
-      setUserVote(null);
-      setScore(prev => Math.max(prev - 5, 0));
+  const handleVote = async (type: 'empty' | 'normal' | 'crowded') => {
+    if (isVoting || userVote === type) return;
+
+    const voterId = getOrCreateVoteId(studentId.trim());
+    if (!voterId) return;
+
+    setIsVoting(true);
+
+    const { data: previousVote, error: previousVoteError } = await supabase
+      .from('cafeteria_votes')
+      .select('status')
+      .eq('scope_key', 'overall')
+      .eq('voter_id', voterId)
+      .maybeSingle();
+
+    if (previousVoteError) {
+      console.error('自分の学食投票の確認に失敗:', previousVoteError);
+      setIsVoting(false);
+      alert('現在の投票を確認できませんでした。');
+      return;
     }
+
+    const { error: saveError } = await supabase
+      .from('cafeteria_votes')
+      .upsert(
+        {
+          menu_id: null,
+          scope_key: 'overall',
+          voter_id: voterId,
+          status: type,
+        },
+        { onConflict: 'scope_key,voter_id' }
+      );
+
+    if (saveError) {
+      console.error('学食混雑投票の保存に失敗:', saveError);
+      setIsVoting(false);
+      alert('投票の保存に失敗しました。SupabaseのSQL修正を先に実行してください。');
+      return;
+    }
+
+    const { data: allVotes, error: countError } = await supabase
+      .from('cafeteria_votes')
+      .select('status')
+      .eq('scope_key', 'overall');
+
+    if (countError) {
+      console.error('学食混雑投票の再集計に失敗:', countError);
+    } else if (allVotes) {
+      const counts = allVotes.reduce(
+        (acc, vote) => {
+          if (vote.status === 'empty') acc.empty += 1;
+          if (vote.status === 'normal') acc.normal += 1;
+          if (vote.status === 'crowded') acc.crowded += 1;
+          return acc;
+        },
+        { empty: 0, normal: 0, crowded: 0 }
+      );
+      setCrowdVotes(counts);
+    }
+
+    setUserVote(type);
+
+    // 初回投票のみ加点。選択肢を変更してもポイントを増やさない。
+    if (!previousVote) {
+      void updateContribution(5, '食堂全体の混雑状況を報告');
+    }
+
+    setIsVoting(false);
   };
 
-  const handleMenuVote = (menuId: string, type: 'empty' | 'normal' | 'crowded') => {
+  const handleMenuVote = async (menuId: string, type: 'empty' | 'normal' | 'crowded') => {
     if (soldOutItems[menuId]) return;
-    const currentVote = userMenuVotes[menuId];
-    setUserMenuVotes(prev => ({ ...prev, [menuId]: currentVote === type ? null : type }));
 
-    if (currentVote !== type && !currentVote) {
-      setScore(prev => Math.min(prev + 5, 100));
-    } else if (currentVote === type) {
-      setScore(prev => Math.max(prev - 5, 0));
+    const voterId = getOrCreateVoteId(studentId.trim());
+    if (!voterId) return;
+
+    const { data: previousVote, error: previousVoteError } = await supabase
+      .from('cafeteria_votes')
+      .select('status')
+      .eq('scope_key', menuId)
+      .eq('voter_id', voterId)
+      .maybeSingle();
+
+    if (previousVoteError) {
+      console.error('メニュー別投票の確認に失敗:', previousVoteError);
+      alert('現在のメニュー投票を確認できませんでした。');
+      return;
+    }
+
+    if (previousVote?.status === type) return;
+
+    const { error: saveError } = await supabase
+      .from('cafeteria_votes')
+      .upsert(
+        {
+          menu_id: menuId,
+          scope_key: menuId,
+          voter_id: voterId,
+          status: type,
+        },
+        { onConflict: 'scope_key,voter_id' }
+      );
+
+    if (saveError) {
+      console.error('メニュー別混雑投票の保存に失敗:', saveError);
+      alert('メニュー別混雑投票の保存に失敗しました。SupabaseのSQL修正を先に実行してください。');
+      return;
+    }
+
+    const { data: allMenuVotes, error: countError } = await supabase
+      .from('cafeteria_votes')
+      .select('status')
+      .eq('scope_key', menuId);
+
+    if (countError) {
+      console.error('メニュー別投票の再集計に失敗:', countError);
+    } else if (allMenuVotes) {
+      const counts = allMenuVotes.reduce(
+        (acc, vote) => {
+          if (vote.status === 'empty') acc.empty += 1;
+          if (vote.status === 'normal') acc.normal += 1;
+          if (vote.status === 'crowded') acc.crowded += 1;
+          return acc;
+        },
+        { empty: 0, normal: 0, crowded: 0 }
+      );
+      setMenuVotes(prev => ({ ...prev, [menuId]: counts }));
+    }
+
+    setUserMenuVotes(prev => ({ ...prev, [menuId]: type }));
+
+    if (!previousVote) {
+      void updateContribution(5, '学食メニューの混雑状況を報告');
     }
   };
 
-  const toggleSoldOut = (menuId: string) => {
+  const toggleSoldOut = async (menuId: string) => {
     const wasSoldOut = soldOutItems[menuId];
-    setSoldOutItems(prev => ({ ...prev, [menuId]: !wasSoldOut }));
-    if (!wasSoldOut) {
-      setScore(prev => Math.min(prev + 10, 100));
-      alert(`「${MENU_ITEMS.find(i => i.id === menuId)?.name}」の売り切れ報告を受理しました。貢献度+10pt！🎉`);
+    const nextSoldOut = !wasSoldOut;
+
+    const { error } = await supabase
+      .from('cafeteria_sold_out')
+      .upsert(
+        {
+          menu_id: menuId,
+          is_sold_out: nextSoldOut,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'menu_id' }
+      );
+
+    if (error) {
+      console.error('売り切れ情報の保存に失敗:', error);
+      alert('売り切れ情報の保存に失敗しました。');
+      return;
+    }
+
+    setSoldOutItems(prev => ({ ...prev, [menuId]: nextSoldOut }));
+
+    if (nextSoldOut) {
+      void updateContribution(10, '学食メニューの売り切れを報告');
+      alert(`「${menuItems.find(i => i.id === menuId)?.name}」の売り切れ報告を共有しました。貢献度+10pt！🎉`);
     } else {
-      setScore(prev => Math.max(prev - 10, 0));
+      void updateContribution(-10, '学食メニューの売り切れ報告を取り消し');
+      alert(`「${menuItems.find(i => i.id === menuId)?.name}」を販売中に戻しました。`);
     }
   };
 
-  const toggleTodoComplete = (todoId: number, e: React.MouseEvent) => {
+  const toggleTodoComplete = async (todoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setTodos(prev => prev.map(todo => {
-      if (todo.id === todoId) {
-        const nextState = !todo.completed;
-        setScore(p => nextState ? Math.min(p + 10, 100) : Math.max(p - 10, 0));
-        return { ...todo, completed: nextState };
-      }
-      return todo;
-    }));
+
+    const targetTodo = todos.find(todo => todo.id === todoId);
+    if (!targetTodo) return;
+
+    const nextState = !targetTodo.completed;
+
+    const { error } = await supabase
+      .from('todos')
+      .update({
+        completed: nextState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', todoId)
+      .eq('student_id', studentId.trim());
+
+    if (error) {
+      console.error('課題の完了状態の保存に失敗:', error);
+      alert('課題の状態保存に失敗しました。');
+      return;
+    }
+
+    setTodos(prev => prev.map(todo =>
+      todo.id === todoId
+        ? { ...todo, completed: nextState }
+        : todo
+    ));
+
+    void updateContribution(
+      nextState ? 10 : -10,
+      nextState ? '提出物を完了' : '提出物の完了を取り消し'
+    );
   };
 
   const handleAddLostItem = (e: React.FormEvent) => {
@@ -421,88 +1305,219 @@ export default function CampusSyncApp() {
       finder: newLostFinder || 'その場付近にあります'
     };
     setLostAndFoundList([newItem, ...lostAndFoundList]);
-    setScore(prev => Math.min(prev + 12, 100));
+    void updateContribution(12, '落とし物情報を共有');
     setNewLostTitle(''); setNewLostLocation(''); setNewLostDescription(''); setNewLostFinder('');
     alert("落とし物情報を共有しました！貢献度+12pt！🎁");
   };
 
-  const submitAcReport = () => {
-    setRooms(prev => prev.map(room => {
-      if (room.id === selectedRoomId) {
-        let nextTemp = room.temp;
-        let color = room.color;
-        let bg = room.bg;
-        let icon = room.icon;
+  const submitAcReport = async () => {
+    const selectedRoom = rooms.find(room => room.id === selectedRoomId);
+    if (!selectedRoom) return;
 
-        if (selectedStatus === '寒い') {
-          nextTemp = (parseInt(room.temp) - 1) + '℃';
-          color = 'text-cyan-500'; bg = 'bg-cyan-50'; icon = Wind;
-        } else if (selectedStatus === '暑い') {
-          nextTemp = (parseInt(room.temp) + 1) + '℃';
-          color = 'text-red-500'; bg = 'bg-red-50'; icon = ThermometerSun;
-        } else {
-          nextTemp = '25℃';
-          color = 'text-green-500'; bg = 'bg-green-50'; icon = ThermometerSnowflake;
-        }
-        return { ...room, status: selectedStatus, temp: nextTemp, icon, color, bg };
-      }
-      return room;
-    }));
+    let nextTemp = selectedRoom.temp;
+    let color = selectedRoom.color;
+    let bg = selectedRoom.bg;
+    let icon = selectedRoom.icon;
+
+    if (selectedStatus === '寒い') {
+      nextTemp = (parseInt(selectedRoom.temp) - 1) + '℃';
+      color = 'text-cyan-500';
+      bg = 'bg-cyan-50';
+      icon = Wind;
+    } else if (selectedStatus === '暑い') {
+      nextTemp = (parseInt(selectedRoom.temp) + 1) + '℃';
+      color = 'text-red-500';
+      bg = 'bg-red-50';
+      icon = ThermometerSun;
+    } else {
+      nextTemp = '25℃';
+      color = 'text-green-500';
+      bg = 'bg-green-50';
+      icon = ThermometerSnowflake;
+    }
+
+    const { error } = await supabase
+      .from('room_status')
+      .upsert(
+        {
+          room_id: String(selectedRoom.id),
+          room_name: selectedRoom.name,
+          status: selectedStatus,
+          temp: nextTemp,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'room_id' }
+      );
+
+    if (error) {
+      console.error('教室状況の更新に失敗:', error);
+      alert('教室状況の更新に失敗しました。Supabaseの設定を確認してください。');
+      return;
+    }
+
+    setRooms(prev => prev.map(room =>
+      room.id === selectedRoomId
+        ? { ...room, status: selectedStatus, temp: nextTemp, icon, color, bg }
+        : room
+    ));
     setShowTempModal(false);
-    setScore(prev => Math.min(prev + 10, 100));
+    void updateContribution(10, '教室のエアコン状況を報告');
     alert("エアコン状況のリアルタイム報告ありがとうございます！貢献度+10pt！🔥");
   };
 
   // --- 新機能用ハンドラー群 ---
-  const handleVoteBusCongestion = (status: string) => {
+  const handleVoteBusCongestion = async (status: string) => {
+    const station = MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation);
+    if (!station) return;
+
+    const { error } = await supabase
+      .from('bus_status')
+      .upsert(
+        {
+          station_id: selectedBusStation,
+          station_name: station.name,
+          congestion_status: status,
+          delay_minutes: busDelayMinutes[selectedBusStation] ?? 0,
+        },
+        { onConflict: 'station_id' }
+      );
+
+    if (error) {
+      console.error('バス混雑状況の保存に失敗:', error);
+      alert('バス混雑状況の保存に失敗しました。');
+      return;
+    }
+
     setBusCongestionVote(prev => ({ ...prev, [selectedBusStation]: status }));
-    setScore(prev => Math.min(prev + 5, 100));
-    alert(`バス混雑状況の報告ありがとうございます！`);
+    void updateContribution(5, 'バスの混雑状況を報告');
+    alert(`バス混雑状況を共有しました！`);
   };
 
-  const handleReportBusDelay = (minutes: number) => {
+  const handleReportBusDelay = async (minutes: number) => {
+    const station = MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation);
+    if (!station) return;
+
+    const { error } = await supabase
+      .from('bus_status')
+      .upsert(
+        {
+          station_id: selectedBusStation,
+          station_name: station.name,
+          congestion_status: busCongestionVote[selectedBusStation] ?? '普通',
+          delay_minutes: minutes,
+        },
+        { onConflict: 'station_id' }
+      );
+
+    if (error) {
+      console.error('バス遅延情報の保存に失敗:', error);
+      alert('バス遅延情報の保存に失敗しました。');
+      return;
+    }
+
     setBusDelayMinutes(prev => ({ ...prev, [selectedBusStation]: minutes }));
-    setScore(prev => Math.min(prev + 10, 100));
-    alert(`バスの遅延情報を共有しました。周囲の生徒に通知されます！(+10pt)`);
+    void updateContribution(10, 'バスの遅延情報を報告');
+    alert(`バスの遅延情報を共有しました。周囲の生徒に反映されます！(+10pt)`);
   };
 
-  const handleAddClubNote = (e: React.FormEvent) => {
+  const handleAddClubNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClubName || !newClubTitle || !newClubContent) {
+    if (!newClubName.trim() || !newClubTitle.trim() || !newClubContent.trim()) {
       alert("すべての項目を入力してください。");
       return;
     }
-    const newNote = {
-      id: Date.now(),
-      clubName: newClubName,
-      title: newClubTitle,
-      date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      content: newClubContent,
-      author: studentName + ' より'
+
+    const noteToInsert = {
+      club_name: newClubName.trim(),
+      title: newClubTitle.trim(),
+      content: newClubContent.trim(),
+      author: studentName.trim() ? `${studentName.trim()} より` : '匿名の投稿者',
     };
-    setClubNotes([newNote, ...clubNotes]);
-    setScore(prev => Math.min(prev + 15, 100));
-    setNewClubName(''); setNewClubTitle(''); setNewClubContent('');
+
+    const { data, error } = await supabase
+      .from('club_notes')
+      .insert(noteToInsert)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('部活・委員会ノートの保存に失敗:', error);
+      alert('部活・委員会ノートの保存に失敗しました。');
+      return;
+    }
+
+    if (data) {
+      const newNote = {
+        id: data.id,
+        clubName: data.club_name,
+        title: data.title,
+        date: new Date(data.created_at).toLocaleString('ja-JP', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        content: data.content,
+        author: data.author || '匿名の投稿者',
+      };
+
+      setClubNotes(prev => [newNote, ...prev]);
+    }
+
+    void updateContribution(15, '部活・委員会ノートを投稿');
+    setNewClubName('');
+    setNewClubTitle('');
+    setNewClubContent('');
     alert("部活動・委員会連絡ノートに新規書き込みを行いました！貢献度+15pt！🏸");
   };
 
-  const handleAddReview = (e: React.FormEvent) => {
+  const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newReviewComment) {
+    if (!newReviewComment.trim()) {
       alert("コメントを入力してください。");
       return;
     }
-    const newReview = {
-      id: Date.now(),
-      menuId: selectedMenuForReview,
-      userName: newReviewUser.trim() || '匿名の創価生',
+
+    const reviewToInsert = {
+      menu_id: selectedMenuForReview,
+      user_name: newReviewUser.trim() || '匿名の創価生',
       rating: newReviewRating,
-      comment: newReviewComment,
-      date: '今日 ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      comment: newReviewComment.trim(),
     };
-    setCafeteriaReviews([newReview, ...cafeteriaReviews]);
-    setScore(prev => Math.min(prev + 8, 100));
-    setNewReviewComment(''); setNewReviewUser('');
+
+    const { data, error } = await supabase
+      .from('cafeteria_reviews')
+      .insert(reviewToInsert)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('学食レビューの保存に失敗:', error);
+      alert('レビューの保存に失敗しました。もう一度お試しください。');
+      return;
+    }
+
+    if (data) {
+      const newReview: CafeteriaReview = {
+        id: data.id,
+        menuId: data.menu_id,
+        userName: data.user_name || '匿名の創価生',
+        rating: data.rating,
+        comment: data.comment,
+        date: new Date(data.created_at).toLocaleString('ja-JP', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      };
+
+      setCafeteriaReviews(prev => [newReview, ...prev]);
+    }
+
+    void updateContribution(8, '学食レビューを投稿');
+    setNewReviewComment('');
+    setNewReviewUser('');
     alert("学食レビューを投稿しました！役立つ情報をありがとう！(+8pt)🍲");
   };
 
@@ -512,6 +1527,102 @@ export default function CampusSyncApp() {
 
   const toggleNotificationDay = (dayKey: string) => {
     setAllowedNotificationDays(prev => prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]);
+  };
+
+  const handleSaveProfile = async () => {
+    const cleanStudentId = studentId.trim();
+    const cleanStudentName = studentName.trim();
+
+    if (!/^\d{6}$/.test(cleanStudentId)) {
+      alert('学籍番号は6桁の数字で入力してください。');
+      return;
+    }
+
+    if (!cleanStudentName) {
+      alert('氏名を入力してください。');
+      return;
+    }
+
+    setProfileSaving(true);
+
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({
+        student_id: cleanStudentId,
+        student_name: cleanStudentName,
+        user_class: userClass,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'student_id' });
+
+    setProfileSaving(false);
+
+    if (error) {
+      console.error('プロフィールの保存に失敗:', error);
+      alert('プロフィールの保存に失敗しました。');
+      return;
+    }
+
+    setStudentName(cleanStudentName);
+    alert('プロフィールを保存しました！');
+  };
+
+  const updateContribution = async (delta: number, reason: string) => {
+    const cleanStudentId = studentId.trim();
+
+    if (!/^\d{6}$/.test(cleanStudentId)) {
+      setScore(prev => Math.max(0, Math.min(prev + delta, 100)));
+      return;
+    }
+
+    setScoreSaving(true);
+
+    const { data: current, error: fetchError } = await supabase
+      .from('contribution_scores')
+      .select('score')
+      .eq('student_id', cleanStudentId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('貢献度ポイントの取得に失敗:', fetchError);
+      setScoreSaving(false);
+      return;
+    }
+
+    const currentScore = current?.score ?? 65;
+    const nextScore = Math.max(0, Math.min(currentScore + delta, 100));
+
+    const { error: scoreError } = await supabase
+      .from('contribution_scores')
+      .upsert(
+        {
+          student_id: cleanStudentId,
+          score: nextScore,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'student_id' }
+      );
+
+    if (scoreError) {
+      console.error('貢献度ポイントの保存に失敗:', scoreError);
+      setScoreSaving(false);
+      return;
+    }
+
+    const { error: historyError } = await supabase
+      .from('contribution_history')
+      .insert({
+        student_id: cleanStudentId,
+        delta,
+        reason,
+        score_after: nextScore,
+      });
+
+    if (historyError) {
+      console.error('貢献度履歴の保存に失敗:', historyError);
+    }
+
+    setScore(nextScore);
+    setScoreSaving(false);
   };
 
   // --- タブ別メインコンテンツレンダリング ---
@@ -692,7 +1803,7 @@ export default function CampusSyncApp() {
 
             {/* 時間割リスト表示 */}
             <div className="space-y-2">
-              {MOCK_TIMETABLE_DATA[selectedWeekType][selectedDay].map((slot) => (
+              {timetableData[selectedWeekType][selectedDay].map((slot) => (
                 <div key={slot.period} className={`${cardBgClass} p-4 rounded-2xl border shadow-sm flex items-center gap-4`}>
                   <div className={`w-9 h-9 rounded-xl ${themeCls.lightBg} flex flex-col items-center justify-center font-black ${themeCls.text} text-sm flex-shrink-0`}>
                     {slot.period}
@@ -752,30 +1863,30 @@ export default function CampusSyncApp() {
                 </div>
                 
                 <div className="space-y-3.5 mb-6">
-                  <VoteBar label="空いていて快適" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty, 'empty')} color="bg-green-500" />
-                  <VoteBar label="通常の混み具合" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal, 'normal')} color="bg-orange-400" />
-                  <VoteBar label="大変混雑している" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded, 'crowded')} color="bg-red-500" />
+                  <VoteBar label="空いていて快適" count={crowdVotes.empty} type="empty" userVote={userVote} percent={getPercent(crowdVotes.empty)} color="bg-green-500" />
+                  <VoteBar label="通常の混み具合" count={crowdVotes.normal} type="normal" userVote={userVote} percent={getPercent(crowdVotes.normal)} color="bg-orange-400" />
+                  <VoteBar label="大変混雑している" count={crowdVotes.crowded} type="crowded" userVote={userVote} percent={getPercent(crowdVotes.crowded)} color="bg-red-500" />
                 </div>
 
                 <p className="text-center text-xs font-black text-gray-500 mb-2.5">現在の混雑シチュエーションをワンタップ報告</p>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => handleVote('empty')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>空き</button>
-                  <button onClick={() => handleVote('normal')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>普通</button>
-                  <button onClick={() => handleVote('crowded')} className={`py-2.5 text-xs font-black rounded-xl border transition-all ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>激混み</button>
+                  <button disabled={isVoting} onClick={() => handleVote('empty')} className={`py-2.5 text-xs font-black rounded-xl border transition-all disabled:opacity-50 ${userVote === 'empty' ? 'border-green-500 bg-green-50 text-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>空き</button>
+                  <button disabled={isVoting} onClick={() => handleVote('normal')} className={`py-2.5 text-xs font-black rounded-xl border transition-all disabled:opacity-50 ${userVote === 'normal' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>普通</button>
+                  <button disabled={isVoting} onClick={() => handleVote('crowded')} className={`py-2.5 text-xs font-black rounded-xl border transition-all disabled:opacity-50 ${userVote === 'crowded' ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>激混み</button>
                 </div>
               </section>
             )}
 
             {cafeteriaSubTab === 'menu' && (
               <div className="space-y-3">
-                {MENU_ITEMS.map(item => {
+                {menuItems.map(item => {
                   const isSoldOut = soldOutItems[item.id];
                   const votes = menuVotes[item.id];
                   const userVoteItem = userMenuVotes[item.id];
-                  const total = votes.empty + votes.normal + votes.crowded + (userVoteItem ? 1 : 0);
-                  const getMenuPercent = (val: number, key: string) => {
-                    if (isSoldOut) return 0;
-                    return Math.round(((val + (userVoteItem === key ? 1 : 0)) / total) * 100) || 0;
+                  const total = votes.empty + votes.normal + votes.crowded;
+                  const getMenuPercent = (val: number, _key: string) => {
+                    if (isSoldOut || total === 0) return 0;
+                    return Math.round((val / total) * 100) || 0;
                   };
 
                   return (
@@ -837,7 +1948,7 @@ export default function CampusSyncApp() {
                       onChange={e => setSelectedMenuForReview(e.target.value)}
                       className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none"
                     >
-                      {MENU_ITEMS.map(m => <option key={m.id} value={m.id}>{m.name.split('（')[0]}</option>)}
+                      {menuItems.map(m => <option key={m.id} value={m.id}>{m.name.split('（')[0]}</option>)}
                     </select>
                     <div className="flex items-center justify-around bg-gray-50 border border-gray-200 rounded-xl px-2">
                       {[1, 2, 3, 4, 5].map(num => (
@@ -984,104 +2095,148 @@ export default function CampusSyncApp() {
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
-              <h2 className={`text-xl font-black ${activeTextClass}`}>スクールバス運行情報</h2>
+              <h2 className={`text-xl font-black ${activeTextClass}`}>鷹の台駅 発車案内</h2>
               <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1 text-xs font-bold">
                 <button onClick={() => setBusSubTab('countdown')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'countdown' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>発車案内</button>
                 <button onClick={() => setBusSubTab('report')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'report' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>状況報告</button>
               </div>
             </div>
 
-            {/* 発車案内ステーション選択 */}
-            <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl">
-              {MOCK_BUS_STATIONS.map(station => (
-                <button
-                  key={station.id}
-                  onClick={() => setSelectedBusStation(station.id)}
-                  className={`py-2 text-xs font-black rounded-lg transition-all text-center ${
-                    selectedBusStation === station.id ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'
-                  }`}
-                >
-                  {station.name.split('駅')[0]}駅便
-                </button>
-              ))}
-            </div>
-
             {busSubTab === 'countdown' ? (
-              <div className="space-y-3">
-                {/* メイン運行ステータス表示カード */}
-                <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-3.5`}>
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-base font-black text-gray-800">
-                      {MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation)?.name}
-                    </h3>
-                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-black">
-                      遅延: {busDelayMinutes[selectedBusStation]} 分
-                    </span>
-                  </div>
+              (() => {
+                const direction = trainTimetable[selectedTrainDirection];
+                const now = new Date();
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                const parsed = direction.trains.map(train => ({
+                  ...train,
+                  minutes: Number(train.time.slice(0, 2)) * 60 + Number(train.time.slice(3))
+                }));
+                const nextIndex = parsed.findIndex(train => train.minutes >= nowMinutes);
+                const effectiveIndex = nextIndex >= 0 ? nextIndex : 0;
+                const nextTrain = parsed[effectiveIndex];
+                const rawDiff = nextIndex >= 0
+                  ? nextTrain.minutes - nowMinutes
+                  : (24 * 60 - nowMinutes) + nextTrain.minutes;
+                const hoursUntil = Math.floor(rawDiff / 60);
+                const minsUntil = rawDiff % 60;
+                const countdownText = rawDiff <= 0
+                  ? 'まもなく発車'
+                  : `あと ${hoursUntil > 0 ? `${hoursUntil}時間 ` : ''}${minsUntil}分で発車`;
+                const laterTrains = [
+                  direction.trains[(effectiveIndex + 1) % direction.trains.length]?.time,
+                  direction.trains[(effectiveIndex + 2) % direction.trains.length]?.time
+                ];
 
-                  <div className="bg-gray-50 rounded-2xl p-4 text-center border">
-                    <span className="text-xs font-bold text-gray-400 block mb-0.5">次発バス発車時刻</span>
-                    <span className="text-3xl font-black text-gray-900 tracking-wide">16:20</span>
-                    <span className="text-xs font-black text-amber-600 block mt-1">🕒 およそ あと 12 分で発車</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold">
-                    <div className="bg-gray-50 p-2 rounded-xl border">
-                      <span className="text-gray-400 text-[10px] block">生徒報告の混雑度</span>
-                      <span className="text-gray-700 font-black">{busCongestionVote[selectedBusStation]}</span>
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl">
+                      {(Object.values(trainTimetable) as Array<typeof TAKANODAI_TIMETABLE[keyof typeof TAKANODAI_TIMETABLE]>).map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => setSelectedTrainDirection(item.id as 'kokubunji' | 'higashimurayama')}
+                          className={`py-2.5 text-xs font-black rounded-lg transition-all ${
+                            selectedTrainDirection === item.id
+                              ? `${themeCls.bg} text-white shadow-sm`
+                              : 'text-gray-600 hover:bg-gray-200/50'
+                          }`}
+                        >
+                          {item.name}
+                        </button>
+                      ))}
                     </div>
-                    <div className="bg-gray-50 p-2 rounded-xl border">
-                      <span className="text-gray-400 text-[10px] block">後発予定便</span>
-                      <span className="text-gray-700 font-black">16:40 / 17:00</span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* 時刻表リスト一覧 */}
-                <div className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
-                  <h4 className="text-xs font-black text-gray-400 mb-2.5">本日の全出発ダイヤ一覧</h4>
-                  <div className="grid grid-cols-4 gap-2">
-                    {MOCK_BUS_STATIONS.find(s => s.id === selectedBusStation)?.departures.map(t => (
-                      <div key={t} className="bg-gray-50 py-1.5 rounded-lg text-center border text-xs font-mono font-bold text-gray-700">
-                        {t}
+                    <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-3.5`}>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="text-base font-black text-gray-800">鷹の台駅</h3>
+                          <p className="text-[11px] text-gray-500 font-bold mt-0.5">{direction.destination}</p>
+                        </div>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-black">
+                          {nextTrain.service}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* 生徒同士の運行・混雑状況報告機能 */
-              <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-4 animate-in fade-in duration-200`}>
-                <h3 className="text-sm font-black flex items-center gap-1.5 text-amber-600"><AlertTriangle size={17}/> スクールバス運行のリアルタイム共有報告</h3>
-                <p className="text-xs text-gray-500 font-medium">現在バス停やロータリーに並んでいる創価生は、後輩や同級生のために現在の生の情報を提供してください。</p>
-                
-                <div className="space-y-3 pt-2">
-                  <div>
-                    <label className="text-xs font-black text-gray-400 block mb-1.5">① 現在の並び列・混雑ボリューム</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['ガラ空き', '普通', '大行列・満員'].map(status => (
-                        <button key={status} type="button" onClick={() => handleVoteBusCongestion(status)} className="py-2 text-xs font-bold border rounded-xl hover:bg-gray-50 transition-colors">
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
-                  <div className="pt-2">
-                    <label className="text-xs font-black text-gray-400 block mb-1.5">② 道路渋滞等による想定遅延報告</label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {[0, 5, 10, 20].map(mins => (
-                        <button key={mins} type="button" onClick={() => handleReportBusDelay(mins)} className="py-2 text-xs font-mono font-bold border rounded-xl hover:bg-gray-50 transition-colors">
-                          {mins === 0 ? 'オンタイム' : `+${mins}分遅れ`}
-                        </button>
-                      ))}
+                      <div className="bg-gray-50 rounded-2xl p-4 text-center border">
+                        <span className="text-xs font-bold text-gray-400 block mb-0.5">次発電車</span>
+                        <span className="text-3xl font-black text-gray-900 tracking-wide">{nextTrain.time}</span>
+                        <span className="text-xs font-black text-blue-600 block mt-1">🚃 {countdownText}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold">
+                        <div className="bg-gray-50 p-2 rounded-xl border">
+                          <span className="text-gray-400 text-[10px] block">行き先</span>
+                          <span className="text-gray-700 font-black">{direction.destination}</span>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded-xl border">
+                          <span className="text-gray-400 text-[10px] block">次々発</span>
+                          <span className="text-gray-700 font-black">{laterTrains.filter(Boolean).join(' / ')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`${cardBgClass} rounded-2xl p-4 border shadow-sm`}>
+                      <h4 className="text-xs font-black text-gray-400 mb-2.5">鷹の台駅 本日の全発車時刻</h4>
+                      <div className="grid grid-cols-4 gap-2">
+                        {direction.trains.map(train => (
+                          <div key={train.time} className="bg-gray-50 py-1.5 rounded-lg text-center border text-xs font-mono font-bold text-gray-700">
+                            {train.time}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <>
+                {/* 状況報告は従来のスクールバス機能をそのまま維持 */}
+                <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl">
+                  {MOCK_BUS_STATIONS.map(station => (
+                    <button
+                      key={station.id}
+                      onClick={() => setSelectedBusStation(station.id)}
+                      className={`py-2 text-xs font-black rounded-lg transition-all text-center ${
+                        selectedBusStation === station.id ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600'
+                      }`}
+                    >
+                      {station.name.split('駅')[0]}駅便
+                    </button>
+                  ))}
+                </div>
+
+                <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-4 animate-in fade-in duration-200`}>
+                  <h3 className="text-sm font-black flex items-center gap-1.5 text-amber-600"><AlertTriangle size={17}/> スクールバス運行のリアルタイム共有報告</h3>
+                  <p className="text-xs text-gray-500 font-medium">現在バス停やロータリーに並んでいる創価生は、後輩や同級生のために現在の生の情報を提供してください。</p>
+
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <label className="text-xs font-black text-gray-400 block mb-1.5">① 現在の並び列・混雑ボリューム</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['ガラ空き', '普通', '大行列・満員'].map(status => (
+                          <button key={status} type="button" onClick={() => handleVoteBusCongestion(status)} className="py-2 text-xs font-bold border rounded-xl hover:bg-gray-50 transition-colors">
+                            {status}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="text-xs font-black text-gray-400 block mb-1.5">② 道路渋滞等による想定遅延報告</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[0, 5, 10, 20].map(mins => (
+                          <button key={mins} type="button" onClick={() => handleReportBusDelay(mins)} className="py-2 text-xs font-mono font-bold border rounded-xl hover:bg-gray-50 transition-colors">
+                            {mins === 0 ? 'オンタイム' : `+${mins}分遅れ`}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         );
+
 
       case 'club':
         return (
@@ -1130,7 +2285,7 @@ export default function CampusSyncApp() {
         return (
           <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <h2 className={`text-xl font-black ${activeTextClass} px-1`}>学園総合通知</h2>
-            {MOCK_NOTIFICATIONS.map(note => (
+            {notifications.map(note => (
               <div key={note.id} className={`p-4 rounded-2xl border ${note.isRead ? 'bg-transparent border-gray-200' : 'bg-white border-blue-200 shadow-sm'} flex gap-3.5 items-start`}>
                 <div className="mt-1">
                   {note.isRead ? (
@@ -1183,6 +2338,18 @@ export default function CampusSyncApp() {
                     <Lock size={13} className="absolute left-3 top-2.5 text-gray-400" />
                   </div>
                 </div>
+
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={profileSaving || studentId.trim().length !== 6 || !studentName.trim()}
+                  className={`w-full py-2.5 rounded-xl font-black text-xs border transition-colors ${
+                    !profileSaving && studentId.trim().length === 6 && studentName.trim()
+                      ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {profileSaving ? 'プロフィールを保存中...' : 'プロフィールをSupabaseに保存'}
+                </button>
 
                 <button
                   onClick={() => setShowIdCardModal(true)}
@@ -1532,7 +2699,7 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
         <span className="text-gray-700 flex items-center gap-1 font-black">
           {label} {isVoted && <Check size={12} className="text-blue-500 font-black"/>}
         </span>
-        <span className="text-gray-400 font-bold">{count + (isVoted ? 1 : 0)}人 <span className="text-gray-300">({percent}%)</span></span>
+        <span className="text-gray-400 font-bold">{count}人 <span className="text-gray-300">({percent}%)</span></span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${percent}%` }}></div>

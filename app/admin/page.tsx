@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { 
   LayoutDashboard, Megaphone, FilePlus, Package, 
   Thermometer, Check, ClipboardList, Plus, Trash2, 
   UserCheck, AlertCircle, Send, Search, Utensils,
   BookOpen, Clock, Ban, CheckCircle2, ShieldAlert,
-  BellRing
+  BellRing, CalendarDays, Save, RefreshCw
 } from 'lucide-react';
 
 // === モックデータ（学生側のアプリデータと対になるもの） ===
@@ -33,6 +34,60 @@ const INITIAL_LOST_REPORTS = [
   { id: 3, title: '赤い筆箱', location: '3F廊下', finder: '事務室で直接回収', status: 'returned', date: '3日前' }, // 返却完了
 ];
 
+
+const MENU_CATEGORIES = [
+  { key: 'soka_lunch', label: '創価ランチ' },
+  { key: 'healthy_lunch', label: 'ヘルシーランチ' },
+  { key: 'snack_lunch', label: 'スナックランチ' },
+  { key: 'curry', label: 'カレー' },
+  { key: 'noodles', label: '麺類' },
+] as const;
+
+type MenuCategoryKey = typeof MENU_CATEGORIES[number]['key'];
+
+type DailyMenuRow = {
+  service_date: string;
+  soka_lunch: string;
+  healthy_lunch: string;
+  snack_lunch: string;
+  curry: string;
+  noodles: string;
+  is_closed: boolean;
+  note: string;
+};
+
+const getNextMonthValue = (): string => {
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const createEmptyMonthRows = (monthValue: string): DailyMenuRow[] => {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthValue);
+  if (!match) return [];
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  return Array.from({ length: daysInMonth }, (_, index) => ({
+    service_date: `${year}-${String(month).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`,
+    soka_lunch: '',
+    healthy_lunch: '',
+    snack_lunch: '',
+    curry: '',
+    noodles: '',
+    is_closed: false,
+    note: '',
+  }));
+};
+
+const getJapaneseWeekday = (dateValue: string): string => {
+  const day = new Date(`${dateValue}T00:00:00`).getDay();
+  return ['日', '月', '火', '水', '木', '金', '土'][day];
+};
+
 // 4. 図書室の管理（貸出遅れ・蔵書登録）
 const INITIAL_LIBRARY_OVERDUES = [
   { id: 1, title: 'ハリー・ポッターと賢者の石', borrower: '2年C組 鈴木一郎', overDays: 5, notified: false },
@@ -48,12 +103,121 @@ export default function CampusSyncAdmin() {
   const [lostItems, setLostItems] = useState(INITIAL_LOST_REPORTS);
   const [overdues, setOverdues] = useState(INITIAL_LIBRARY_OVERDUES);
 
+  // 月間献立表（デフォルトは翌月）
+  const [selectedMenuMonth, setSelectedMenuMonth] = useState(getNextMonthValue);
+  const [dailyMenuRows, setDailyMenuRows] = useState<DailyMenuRow[]>([]);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [menuSaving, setMenuSaving] = useState(false);
+  const [menuMessage, setMenuMessage] = useState('');
+
+
   // 蔵書管理用
   const [books, setBooks] = useState([
     { id: 1, title: '沈黙の春', author: 'レイチェル・カーソン', code: '978-4102176016', status: '貸出可能' }
   ]);
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
+
+  // 指定月の献立データをSupabaseから読み込む
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMonthMenus = async () => {
+      setMenuLoading(true);
+      setMenuMessage('');
+      setDailyMenuRows(createEmptyMonthRows(selectedMenuMonth));
+
+      const [yearText, monthText] = selectedMenuMonth.split('-');
+      const year = Number(yearText);
+      const month = Number(monthText);
+      const lastDay = new Date(year, month, 0).getDate();
+      const startDate = `${selectedMenuMonth}-01`;
+      const endDate = `${selectedMenuMonth}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('cafeteria_daily_menus')
+        .select('*')
+        .gte('service_date', startDate)
+        .lte('service_date', endDate)
+        .order('service_date', { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error('月間献立の取得に失敗:', error);
+        setMenuMessage('献立データを取得できませんでした。SQLで cafeteria_daily_menus テーブルを作成したか確認してください。');
+        setMenuLoading(false);
+        return;
+      }
+
+      const rows = createEmptyMonthRows(selectedMenuMonth);
+      const savedByDate = new Map<string, any>((data ?? []).map((row: any) => [String(row.service_date), row] as [string, any]));
+
+      setDailyMenuRows(rows.map(blankRow => {
+        const saved = savedByDate.get(blankRow.service_date) as any | undefined;
+        if (!saved) return blankRow;
+
+        return {
+          ...blankRow,
+          soka_lunch: saved.soka_lunch ?? '',
+          healthy_lunch: saved.healthy_lunch ?? '',
+          snack_lunch: saved.snack_lunch ?? '',
+          curry: saved.curry ?? '',
+          noodles: saved.noodles ?? '',
+          is_closed: Boolean(saved.is_closed),
+          note: saved.note ?? '',
+        };
+      }));
+
+      setMenuLoading(false);
+    };
+
+    void loadMonthMenus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMenuMonth]);
+
+  const updateDailyMenuRow = (
+    serviceDate: string,
+    patch: Partial<DailyMenuRow>
+  ) => {
+    setDailyMenuRows(prev => prev.map(row =>
+      row.service_date === serviceDate ? { ...row, ...patch } : row
+    ));
+    setMenuMessage('');
+  };
+
+  // 選択月の献立をまとめてSupabaseへ保存
+  const handleSaveMonthlyMenus = async () => {
+    if (!selectedMenuMonth || dailyMenuRows.length === 0) {
+      setMenuMessage('保存する月を選択してください。');
+      return;
+    }
+
+    setMenuSaving(true);
+    setMenuMessage('');
+
+    const rowsToSave = dailyMenuRows.map(row => ({
+      ...row,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase
+      .from('cafeteria_daily_menus')
+      .upsert(rowsToSave, { onConflict: 'service_date' });
+
+    setMenuSaving(false);
+
+    if (error) {
+      console.error('月間献立の保存に失敗:', error);
+      setMenuMessage(`保存に失敗しました: ${error.message}`);
+      return;
+    }
+
+    setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
+  };
 
   // --- 介入アクション1: エアコンの設定温度変更（解決処理） ---
   const handleResolveAC = (id: number) => {
@@ -132,6 +296,9 @@ export default function CampusSyncAdmin() {
           <nav className="space-y-1">
             <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <LayoutDashboard size={18} /> ダッシュボード概要
+            </button>
+            <button onClick={() => setActiveTab('menu-calendar')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <CalendarDays size={18} /> 月間献立表の管理
             </button>
             <button onClick={() => setActiveTab('cafeteria')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'cafeteria' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <Utensils size={18} /> 学食・売切情報の操作
@@ -212,6 +379,154 @@ export default function CampusSyncAdmin() {
                     <BellRing size={14} /> 「学食が混んでいます」お知らせ通知を配信
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= 月間献立表（次月分を入力して一括保存） ================= */}
+        {activeTab === 'menu-calendar' && (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-2xl font-black flex items-center gap-2">
+                  <CalendarDays className="text-blue-400" size={25} /> 月間献立表の管理
+                </h2>
+                <p className="text-sm text-slate-400 mt-2">
+                  写真の献立表と同じように、日付ごとに5種類のメニューを入力できます。翌月が最初に表示されます。
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="text-xs font-bold text-slate-400">
+                  対象年月
+                  <input
+                    type="month"
+                    value={selectedMenuMonth}
+                    onChange={e => setSelectedMenuMonth(e.target.value)}
+                    className="block mt-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-blue-500"
+                  />
+                </label>
+                <button
+                  onClick={() => setSelectedMenuMonth(getNextMonthValue())}
+                  className="px-3 py-2.5 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-800 flex items-center gap-2"
+                >
+                  <RefreshCw size={14} /> 翌月を選択
+                </button>
+                <button
+                  onClick={handleSaveMonthlyMenus}
+                  disabled={menuLoading || menuSaving || dailyMenuRows.length === 0}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-black flex items-center gap-2"
+                >
+                  <Save size={15} /> {menuSaving ? '保存中...' : 'この月の献立を一括保存'}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-xs text-blue-200 leading-relaxed">
+              入力した献立は日付単位でSupabaseに保存されます。営業がない日は「営業なし」をチェックしてください。入力途中の内容を残すには、一括保存を押してください。
+            </div>
+
+            {menuMessage && (
+              <div className={`rounded-xl border p-3 text-sm ${menuMessage.includes('失敗') || menuMessage.includes('できません') ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+                {menuMessage}
+              </div>
+            )}
+
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-800">
+                <div>
+                  <h3 className="font-black text-white">{selectedMenuMonth.replace('-', '年')}月の献立</h3>
+                  <p className="text-[11px] text-slate-500 mt-1">日付を選ぶ必要はありません。1日から月末までの行が自動で用意されます。</p>
+                </div>
+                <span className="text-xs font-bold text-slate-400">
+                  {menuLoading ? '読み込み中...' : `${dailyMenuRows.length}日分`}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-[1320px] w-full border-collapse text-left">
+                  <thead className="bg-slate-900 sticky top-0">
+                    <tr className="text-[11px] text-slate-400">
+                      <th className="px-3 py-3 border-b border-slate-800 w-28">日付</th>
+                      <th className="px-3 py-3 border-b border-slate-800 w-16">曜日</th>
+                      {MENU_CATEGORIES.map(category => (
+                        <th key={category.key} className="px-3 py-3 border-b border-slate-800 min-w-52">{category.label}</th>
+                      ))}
+                      <th className="px-3 py-3 border-b border-slate-800 w-28">営業</th>
+                      <th className="px-3 py-3 border-b border-slate-800 min-w-48">特記事項</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyMenuRows.map(row => {
+                      const weekday = getJapaneseWeekday(row.service_date);
+
+                      return (
+                        <tr key={row.service_date} className={`border-b border-slate-800/80 ${row.is_closed ? 'bg-slate-900/80' : 'hover:bg-slate-900/50'}`}>
+                          <td className="px-3 py-3 text-xs font-bold text-slate-200 whitespace-nowrap">
+                            {Number(row.service_date.slice(-2))}日
+                          </td>
+                          <td className={`px-3 py-3 text-sm font-black ${weekday === '日' ? 'text-red-400' : weekday === '土' ? 'text-sky-400' : 'text-slate-300'}`}>
+                            {weekday}
+                          </td>
+
+                          {row.is_closed ? (
+                            <td colSpan={5} className="px-3 py-2">
+                              <div className="rounded-lg bg-slate-800 border border-slate-700 px-4 py-3 text-center text-sm font-black text-slate-400">
+                                営業はありません
+                              </div>
+                            </td>
+                          ) : (
+                            MENU_CATEGORIES.map(category => (
+                              <td key={category.key} className="px-2 py-2">
+                                <input
+                                  type="text"
+                                  value={row[category.key]}
+                                  onChange={e => updateDailyMenuRow(row.service_date, { [category.key]: e.target.value } as Partial<DailyMenuRow>)}
+                                  placeholder="献立を入力..."
+                                  aria-label={`${row.service_date} ${category.label}`}
+                                  className="w-full min-w-48 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                                />
+                              </td>
+                            ))
+                          )}
+
+                          <td className="px-3 py-2">
+                            <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-300 whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={row.is_closed}
+                                onChange={e => updateDailyMenuRow(row.service_date, { is_closed: e.target.checked })}
+                                className="h-4 w-4 accent-blue-500"
+                              />
+                              営業なし
+                            </label>
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={row.note}
+                              onChange={e => updateDailyMenuRow(row.service_date, { note: e.target.value })}
+                              placeholder="例：学校行事"
+                              aria-label={`${row.service_date} 特記事項`}
+                              className="w-full min-w-44 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-5 py-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] text-slate-500">※ 行を編集しただけでは保存されません。最後に「この月の献立を一括保存」を押してください。</p>
+                <button
+                  onClick={handleSaveMonthlyMenus}
+                  disabled={menuLoading || menuSaving || dailyMenuRows.length === 0}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-black flex items-center gap-2"
+                >
+                  <Save size={15} /> {menuSaving ? '保存中...' : 'この月の献立を一括保存'}
+                </button>
               </div>
             </div>
           </div>
