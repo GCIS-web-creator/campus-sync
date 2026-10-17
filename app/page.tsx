@@ -740,14 +740,21 @@ export default function CampusSyncApp() {
     setAuthBusy(true);
     setAuthMessage('');
     try {
+      // 現在開いているサイトのURLを明示することで、認証メールが
+      // Supabaseの古い Site URL（localhost など）へ戻るのを防ぐ。
+      // Supabase Dashboard の URL Configuration にこのURLを許可リスト登録すること。
+      const emailRedirectTo = new URL('/', window.location.origin).toString();
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true },
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo,
+        },
       });
       if (error) throw error;
       setLoginEmail(email);
       setAuthStep('otp');
-      setAuthMessage('学校メールに確認コードを送信しました。メールに届いた6桁コードを入力してください。');
+      setAuthMessage('学校メールにログイン確認コードを送信しました。日本語メールに記載された6桁コードを入力してください。');
     } catch (error) {
       const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
       setAuthMessage(`確認コードを送信できませんでした: ${message}`);
