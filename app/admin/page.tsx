@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { broadcastCafeteriaCrowdNotice } from './actions';
 import { 
   LayoutDashboard, Megaphone, FilePlus, Package, 
   Thermometer, Check, ClipboardList, Plus, Trash2, 
@@ -337,8 +336,18 @@ export default function CampusSyncAdmin() {
     setLineBroadcasting(true);
     setLineBroadcastMessage('');
     try {
-      const result = await broadcastCafeteriaCrowdNotice(lineBroadcastPassword);
-      setLineBroadcastMessage(result.message);
+      const response = await fetch('/api/line-broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: lineBroadcastPassword }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result) {
+        setLineBroadcastMessage(result?.message || `LINE配信に失敗しました（HTTP ${response.status}）。`);
+        return;
+      }
+      setLineBroadcastMessage(result.message || (result.success ? 'LINE配信が完了しました。' : 'LINE配信に失敗しました。'));
       if (result.success) setLineBroadcastPassword('');
     } catch (error) {
       console.error('LINEお知らせ配信エラー:', error);
