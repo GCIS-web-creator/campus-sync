@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { broadcastCafeteriaCrowdNotice } from './actions';
 import { 
   LayoutDashboard, Megaphone, FilePlus, Package, 
   Thermometer, Check, ClipboardList, Plus, Trash2, 
   UserCheck, AlertCircle, Send, Search, Utensils,
   BookOpen, Clock, Ban, CheckCircle2, ShieldAlert,
-  BellRing, CalendarDays, Save, RefreshCw
+  BellRing, CalendarDays, Save, RefreshCw, Monitor
 } from 'lucide-react';
 
 // === モックデータ（学生側のアプリデータと対になるもの） ===
@@ -88,6 +89,27 @@ const getJapaneseWeekday = (dateValue: string): string => {
   return ['日', '月', '火', '水', '木', '金', '土'][day];
 };
 
+type LibraryBook = {
+  id: string;
+  title: string;
+  author: string;
+  code: string;
+  status: string;
+  cover_url?: string | null;
+  created_at?: string;
+};
+
+const uploadLibraryCoverImage = async (file: File): Promise<string> => {
+  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+  const { error } = await supabase.storage
+    .from('library-covers')
+    .upload(path, file, { cacheControl: '3600', contentType: file.type, upsert: false });
+
+  if (error) throw new Error(error.message);
+  return supabase.storage.from('library-covers').getPublicUrl(path).data.publicUrl;
+};
+
 // 4. 図書室の管理（貸出遅れ・蔵書登録）
 const INITIAL_LIBRARY_OVERDUES = [
   { id: 1, title: 'ハリー・ポッターと賢者の石', borrower: '2年C組 鈴木一郎', overDays: 5, notified: false },
@@ -110,13 +132,93 @@ export default function CampusSyncAdmin() {
   const [menuSaving, setMenuSaving] = useState(false);
   const [menuMessage, setMenuMessage] = useState('');
 
+  // キャリアセンター自習室の座席状況（生徒用サイトとSupabaseで共有）
+  const [studyRoomOccupiedSeats, setStudyRoomOccupiedSeats] = useState(22);
+  const [studyRoomTotalSeats, setStudyRoomTotalSeats] = useState(35);
+  const [studyRoomLoading, setStudyRoomLoading] = useState(true);
+  const [studyRoomSaving, setStudyRoomSaving] = useState(false);
+  const [studyRoomMessage, setStudyRoomMessage] = useState('');
 
-  // 蔵書管理用
-  const [books, setBooks] = useState([
-    { id: 1, title: '沈黙の春', author: 'レイチェル・カーソン', code: '978-4102176016', status: '貸出可能' }
-  ]);
+  // LINE公式アカウントへの全体配信（配信パスコードはサーバー側で検証）
+  const [lineBroadcastPassword, setLineBroadcastPassword] = useState('');
+  const [lineBroadcasting, setLineBroadcasting] = useState(false);
+  const [lineBroadcastMessage, setLineBroadcastMessage] = useState('');
+
+  // Supabase共有の蔵書管理
+  const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [booksLoading, setBooksLoading] = useState(true);
+  const [booksMessage, setBooksMessage] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
+  const [newBookCover, setNewBookCover] = useState<File | null>(null);
+  const [newBookCoverPreview, setNewBookCoverPreview] = useState('');
+  const [bookRegistering, setBookRegistering] = useState(false);
+  const [updatingCoverBookId, setUpdatingCoverBookId] = useState<string | null>(null);
+  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!newBookCover) {
+      setNewBookCoverPreview('');
+      return;
+    }
+    const previewUrl = URL.createObjectURL(newBookCover);
+    setNewBookCoverPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [newBookCover]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadStudyRoomStatus = async () => {
+      setStudyRoomLoading(true);
+      const { data, error } = await supabase
+        .from('study_room_status')
+        .select('room_key, room_name, occupied_seats, total_seats, updated_at')
+        .eq('room_key', 'career_center')
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        console.error('キャリアセンター自習室の状況取得に失敗:', error);
+        setStudyRoomMessage('設定を取得できません。study_room_status テーブルを作成するSQLを実行してください。');
+      } else if (data) {
+        setStudyRoomOccupiedSeats(Number(data.occupied_seats));
+        setStudyRoomTotalSeats(Number(data.total_seats));
+        setStudyRoomMessage('');
+      }
+      setStudyRoomLoading(false);
+    };
+
+    void loadStudyRoomStatus();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBooks = async () => {
+      setBooksLoading(true);
+      const { data, error } = await supabase
+        .from('library_books')
+        .select('id, title, author, code, status, cover_url, created_at')
+        .order('created_at', { ascending: false });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error('蔵書一覧の取得に失敗:', error);
+        setBooksMessage('蔵書を取得できません。library_books テーブルとRLSを確認してください。');
+      } else {
+        setBooks(data ?? []);
+        setBooksMessage('');
+      }
+      setBooksLoading(false);
+    };
+
+    void loadBooks();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 指定月の献立データをSupabaseから読み込む
   useEffect(() => {
@@ -219,6 +321,33 @@ export default function CampusSyncAdmin() {
     setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
   };
 
+  // LINE公式アカウントの友だち全員へ学食混雑のお知らせを配信
+  const handleSendCafeteriaLineNotice = async () => {
+    if (lineBroadcasting) return;
+    if (!lineBroadcastPassword.trim()) {
+      setLineBroadcastMessage('配信認証コードを入力してください。');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'LINE公式アカウントを友だち追加している全員に「学食が混んでいます」というお知らせを配信します。よろしいですか？'
+    );
+    if (!confirmed) return;
+
+    setLineBroadcasting(true);
+    setLineBroadcastMessage('');
+    try {
+      const result = await broadcastCafeteriaCrowdNotice(lineBroadcastPassword);
+      setLineBroadcastMessage(result.message);
+      if (result.success) setLineBroadcastPassword('');
+    } catch (error) {
+      console.error('LINEお知らせ配信エラー:', error);
+      setLineBroadcastMessage('LINE配信に失敗しました。環境変数とLINE Developersの設定を確認してください。');
+    } finally {
+      setLineBroadcasting(false);
+    }
+  };
+
   // --- 介入アクション1: エアコンの設定温度変更（解決処理） ---
   const handleResolveAC = (id: number) => {
     setAcReports(prev => prev.map(item => 
@@ -265,21 +394,186 @@ export default function CampusSyncAdmin() {
     alert('対象の生徒のスマートフォンへ、プッシュ催促通知を送信しました！');
   };
 
-  // 新規書籍の追加
-  const handleAddBook = (e: React.FormEvent) => {
+  // 新規書籍をSupabaseに登録し、選択された表紙画像も共有ストレージに保存する
+  const handleAddBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBookTitle || !newBookAuthor) return;
-    const newBook = {
-      id: Date.now(),
-      title: newBookTitle,
-      author: newBookAuthor,
-      code: `978-${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-      status: '貸出可能'
-    };
-    setBooks([newBook, ...books]);
-    setNewBookTitle('');
-    setNewBookAuthor('');
-    alert('新しい本を蔵書データベースに登録しました！生徒アプリから検索可能になります。');
+
+    const title = newBookTitle.trim();
+    const author = newBookAuthor.trim();
+    if (!title || !author) {
+      setBooksMessage('本のタイトルと著者 / 発行所を入力してください。');
+      return;
+    }
+    if (newBookCover && (!['image/jpeg', 'image/png', 'image/webp'].includes(newBookCover.type) || newBookCover.size > 5 * 1024 * 1024)) {
+      setBooksMessage('画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。');
+      return;
+    }
+
+    setBooksMessage('');
+    setBookRegistering(true);
+    try {
+      let coverUrl: string | null = null;
+      if (newBookCover) coverUrl = await uploadLibraryCoverImage(newBookCover);
+
+      const newBook = {
+        title,
+        author,
+        code: `LIB-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        status: '貸出可能',
+        cover_url: coverUrl,
+      };
+
+      const { data, error } = await supabase
+        .from('library_books')
+        .insert(newBook)
+        .select('id, title, author, code, status, cover_url, created_at')
+        .single();
+
+      if (error) {
+        console.error('蔵書の登録に失敗:', error);
+        setBooksMessage(
+          error.code === '23505'
+            ? '同じタイトル・著者の本が既に登録されています。'
+            : `登録に失敗しました: ${error.message}`
+        );
+        return;
+      }
+
+      setBooks(prev => [data, ...prev]);
+      setNewBookTitle('');
+      setNewBookAuthor('');
+      setNewBookCover(null);
+      setBooksMessage(`「${data.title}」を蔵書に登録しました。${coverUrl ? '表紙画像も保存しました。' : ''} 生徒用アプリにも表示されます。`);
+    } catch (unexpectedError) {
+      console.error('蔵書画像のアップロードに失敗:', unexpectedError);
+      setBooksMessage(`登録に失敗しました。画像ストレージの設定を確認してください: ${unexpectedError instanceof Error ? unexpectedError.message : '不明なエラー'}`);
+    } finally {
+      setBookRegistering(false);
+    }
+  };
+
+  // 既に登録済みの蔵書にも、後から表紙画像を設定・変更できる
+  const handleUpdateBookCover = async (book: LibraryBook, file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setBooksMessage('画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。');
+      return;
+    }
+
+    setBooksMessage('');
+    setUpdatingCoverBookId(book.id);
+    try {
+      const coverUrl = await uploadLibraryCoverImage(file);
+      const { data, error } = await supabase
+        .from('library_books')
+        .update({ cover_url: coverUrl })
+        .eq('id', book.id)
+        .select('id, title, author, code, status, cover_url, created_at')
+        .single();
+
+      if (error) throw new Error(error.message);
+      setBooks(prev => prev.map(item => item.id === book.id ? data : item));
+      setBooksMessage(`「${book.title}」の表紙画像を更新しました。`);
+    } catch (unexpectedError) {
+      console.error('蔵書表紙の更新に失敗:', unexpectedError);
+      setBooksMessage(`表紙画像の更新に失敗しました: ${unexpectedError instanceof Error ? unexpectedError.message : '不明なエラー'}`);
+    } finally {
+      setUpdatingCoverBookId(null);
+    }
+  };
+
+  // 蔵書をSupabaseから削除し、登録されている表紙画像も削除する
+  const handleDeleteBook = async (book: LibraryBook) => {
+    if (deletingBookId) return;
+    const confirmed = window.confirm(`「${book.title}」を蔵書から削除しますか？\nこの操作は取り消せません。`);
+    if (!confirmed) return;
+
+    setDeletingBookId(book.id);
+    setBooksMessage('');
+    try {
+      const { data, error } = await supabase
+        .from('library_books')
+        .delete()
+        .eq('id', book.id)
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('削除できませんでした。SupabaseのDELETEポリシーを確認してください。');
+
+      // DBの削除が成功したら、Adminの一覧からも即時に取り除く
+      setBooks(prev => prev.filter(item => item.id !== book.id));
+
+      // public URLからStorage内のファイルパスを取り出す
+      let storagePath: string | null = null;
+      if (book.cover_url) {
+        try {
+          const parsedUrl = new URL(book.cover_url);
+          const marker = '/storage/v1/object/public/library-covers/';
+          const markerIndex = parsedUrl.pathname.indexOf(marker);
+          if (markerIndex >= 0) {
+            storagePath = decodeURIComponent(parsedUrl.pathname.slice(markerIndex + marker.length));
+          }
+        } catch {
+          // 古い形式などでURLを解析できない場合は、蔵書削除を優先する
+        }
+      }
+
+      if (storagePath) {
+        const { error: imageError } = await supabase.storage.from('library-covers').remove([storagePath]);
+        if (imageError) {
+          console.error('蔵書の表紙画像削除に失敗:', imageError);
+          setBooksMessage(`「${book.title}」は削除しましたが、表紙画像を削除できませんでした。StorageのDELETEポリシーを確認してください。`);
+        } else {
+          setBooksMessage(`「${book.title}」を蔵書から削除しました。`);
+        }
+      } else {
+        setBooksMessage(`「${book.title}」を蔵書から削除しました。`);
+      }
+    } catch (unexpectedError) {
+      console.error('蔵書の削除に失敗:', unexpectedError);
+      setBooksMessage(`蔵書の削除に失敗しました: ${unexpectedError instanceof Error ? unexpectedError.message : '不明なエラー'}`);
+    } finally {
+      setDeletingBookId(null);
+    }
+  };
+
+  const handleSaveStudyRoomStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (studyRoomSaving) return;
+
+    const occupied = Number(studyRoomOccupiedSeats);
+    const total = Number(studyRoomTotalSeats);
+    if (!Number.isInteger(occupied) || !Number.isInteger(total) || total < 1 || occupied < 0 || occupied > total) {
+      setStudyRoomMessage('利用中の席数は0以上、総座席数以下にしてください。総座席数は1以上にしてください。');
+      return;
+    }
+
+    setStudyRoomSaving(true);
+    setStudyRoomMessage('');
+    try {
+      const { data, error } = await supabase
+        .from('study_room_status')
+        .upsert({
+          room_key: 'career_center',
+          room_name: 'キャリアセンター自習室',
+          occupied_seats: occupied,
+          total_seats: total,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'room_key' })
+        .select('room_key, room_name, occupied_seats, total_seats, updated_at')
+        .single();
+
+      if (error) throw error;
+      setStudyRoomOccupiedSeats(Number(data.occupied_seats));
+      setStudyRoomTotalSeats(Number(data.total_seats));
+      setStudyRoomMessage('保存しました。生徒用サイトにも反映されます。');
+    } catch (unexpectedError) {
+      console.error('自習室の座席状況保存に失敗:', unexpectedError);
+      const detail = unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError);
+      setStudyRoomMessage(`保存に失敗しました: ${detail}`);
+    } finally {
+      setStudyRoomSaving(false);
+    }
   };
 
   return (
@@ -305,6 +599,9 @@ export default function CampusSyncAdmin() {
             </button>
             <button onClick={() => setActiveTab('lost')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'lost' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <Package size={18} /> 落とし物「承認」管理
+            </button>
+            <button onClick={() => setActiveTab('study-room')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'study-room' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <Monitor size={18} /> キャリアセンター自習室
             </button>
             <button onClick={() => setActiveTab('library')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BookOpen size={18} /> 図書貸出＆書籍登録
@@ -375,9 +672,29 @@ export default function CampusSyncAdmin() {
                 </h3>
                 <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
                   <p className="text-xs text-slate-400 font-bold">現在の混雑ピーク時間です。学食・売店に注意喚起の全体チャイムを鳴らしたり、お知らせを送ることができます。</p>
-                  <button className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-600/10">
-                    <BellRing size={14} /> 「学食が混んでいます」お知らせ通知を配信
+                  <label className="block text-xs font-bold text-slate-400">
+                    配信認証コード
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={lineBroadcastPassword}
+                      onChange={e => { setLineBroadcastPassword(e.target.value); setLineBroadcastMessage(''); }}
+                      placeholder="Admin配信用の認証コード"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-500 placeholder:text-slate-600"
+                    />
+                  </label>
+                  <button
+                    onClick={handleSendCafeteriaLineNotice}
+                    disabled={lineBroadcasting}
+                    className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-600/10"
+                  >
+                    <BellRing size={14} /> {lineBroadcasting ? 'LINE配信中...' : '「学食が混んでいます」LINE通知を配信'}
                   </button>
+                  {lineBroadcastMessage && (
+                    <p role="status" className={`rounded-lg border p-3 text-xs ${lineBroadcastMessage.includes('配信しました') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
+                      {lineBroadcastMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -627,6 +944,55 @@ export default function CampusSyncAdmin() {
           </div>
         )}
 
+        {/* ================= キャリアセンター自習室の座席管理 ================= */}
+        {activeTab === 'study-room' && (
+          <div className="max-w-3xl space-y-6">
+            <div>
+              <h2 className="text-2xl font-black">キャリアセンター自習室の空席管理</h2>
+              <p className="mt-1 text-sm text-slate-400">利用中の席数と総座席数を更新すると、生徒用アプリの空席状況に反映されます。</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-500/10 text-teal-300"><Monitor size={24} /></div>
+                <div>
+                  <h3 className="text-base font-black">キャリアセンター自習室</h3>
+                  <p className="text-xs text-slate-400">座席の利用状況</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveStudyRoomStatus} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="study-room-occupied" className="mb-1.5 block text-xs font-bold text-slate-300">利用中の席数</label>
+                    <input id="study-room-occupied" type="number" min={0} max={studyRoomTotalSeats} step={1} required value={studyRoomOccupiedSeats} onChange={e => setStudyRoomOccupiedSeats(Number(e.target.value))} className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-black text-white outline-none focus:border-teal-500" />
+                  </div>
+                  <div>
+                    <label htmlFor="study-room-total" className="mb-1.5 block text-xs font-bold text-slate-300">総座席数</label>
+                    <input id="study-room-total" type="number" min={1} step={1} required value={studyRoomTotalSeats} onChange={e => setStudyRoomTotalSeats(Number(e.target.value))} className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-black text-white outline-none focus:border-teal-500" />
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-slate-900 p-4">
+                  <div className="mb-2 flex items-end justify-between gap-3">
+                    <span className="text-xs font-bold text-slate-400">生徒用サイトでの表示プレビュー</span>
+                    <span className="text-lg font-black text-white">空席 {Math.max(0, studyRoomTotalSeats - studyRoomOccupiedSeats)}席</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full rounded-full bg-teal-400 transition-all" style={{ width: `${studyRoomTotalSeats > 0 ? Math.min(100, Math.max(0, (studyRoomOccupiedSeats / studyRoomTotalSeats) * 100)) : 0}%` }} />
+                  </div>
+                  <p className="mt-2 text-right text-[10px] text-slate-500">利用中 {studyRoomOccupiedSeats} / {studyRoomTotalSeats}席</p>
+                </div>
+
+                {studyRoomMessage && <p role="status" className={`text-xs font-bold ${studyRoomMessage.includes('失敗') || studyRoomMessage.includes('できません') || studyRoomMessage.includes('してください') ? 'text-amber-300' : 'text-emerald-300'}`}>{studyRoomMessage}</p>}
+                <button type="submit" disabled={studyRoomSaving || studyRoomLoading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-xs font-black text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  <Save size={15} /> {studyRoomLoading ? '設定を読み込み中...' : studyRoomSaving ? '保存中...' : '空席状況を保存して生徒サイトに反映'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* ================= タブ4: 図書貸出＆書籍登録 ================= */}
         {activeTab === 'library' && (
           <div className="space-y-6">
@@ -677,18 +1043,85 @@ export default function CampusSyncAdmin() {
                     <label className="text-xs text-slate-400 font-bold block mb-1">著者 / 発行所</label>
                     <input type="text" required value={newBookAuthor} onChange={e => setNewBookAuthor(e.target.value)} placeholder="例: 中室牧子" className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs font-bold text-white outline-none focus:border-blue-500" />
                   </div>
-                  <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
-                    <Plus size={14} /> 図書室の蔵書としてデータベースに登録
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">表紙画像（任意・5MB以下）</label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={e => {
+                        const file = e.target.files?.[0] ?? null;
+                        if (!file) { setNewBookCover(null); return; }
+                        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                          setBooksMessage('画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。');
+                          e.currentTarget.value = '';
+                          return;
+                        }
+                        setBooksMessage('');
+                        setNewBookCover(file);
+                      }}
+                      className="w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-200"
+                    />
+                    {newBookCoverPreview && (
+                      <div className="mt-3 flex items-center gap-3">
+                        <img src={newBookCoverPreview} alt="選択した表紙のプレビュー" className="h-20 w-16 rounded-lg border border-slate-700 object-cover" />
+                        <p className="text-[10px] text-slate-400">この画像が生徒用アプリの蔵書一覧に表示されます。</p>
+                      </div>
+                    )}
+                  </div>
+                  <button type="submit" disabled={bookRegistering} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
+                    <Plus size={14} /> {bookRegistering ? '登録中...' : '図書室の蔵書としてデータベースに登録'}
                   </button>
                 </form>
 
                 <div className="border-t border-slate-800 pt-4">
-                  <h4 className="text-xs font-bold text-slate-400 mb-2">最近登録された本</h4>
-                  <div className="space-y-1.5">
-                    {books.map(b => (
-                      <div key={b.id} className="p-2 bg-slate-900 rounded-lg text-xs flex justify-between">
-                        <span>『{b.title}』({b.author})</span>
-                        <span className="text-[10px] text-blue-400">{b.status}</span>
+                  <h4 className="text-xs font-bold text-slate-400 mb-2">登録済みの本（削除・表紙変更）</h4>
+                  {booksMessage && (
+                    <p className={`text-xs mb-2 ${booksMessage.includes('失敗') || booksMessage.includes('できません') || booksMessage.includes('既に') || booksMessage.includes('削除しましたが') ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {booksMessage}
+                    </p>
+                  )}
+                  <div className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
+                    {booksLoading ? (
+                      <p className="text-xs text-slate-500">蔵書を読み込み中...</p>
+                    ) : books.length === 0 ? (
+                      <p className="text-xs text-slate-500">登録された本はありません。</p>
+                    ) : books.map(b => (
+                      <div key={b.id} className="p-2 bg-slate-900 rounded-lg text-xs flex items-center gap-3">
+                        {b.cover_url ? (
+                          <img src={b.cover_url} alt={`${b.title}の表紙`} className="h-12 w-9 shrink-0 rounded object-cover bg-slate-800" />
+                        ) : (
+                          <div className="h-12 w-9 shrink-0 rounded bg-slate-800 flex items-center justify-center"><BookOpen size={15} className="text-slate-500" /></div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words font-bold">『{b.title}』</p>
+                          <p className="text-[10px] text-slate-500 break-words">{b.author} · {b.status}</p>
+                        </div>
+                        <div className="shrink-0 flex flex-col gap-1">
+                          <label className="cursor-pointer rounded-lg border border-slate-700 px-2 py-1.5 text-center text-[10px] font-bold text-blue-300 hover:bg-slate-800">
+                            {updatingCoverBookId === b.id ? '更新中...' : b.cover_url ? '表紙変更' : '表紙追加'}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              disabled={updatingCoverBookId === b.id || deletingBookId !== null}
+                              className="hidden"
+                              onChange={e => {
+                                const file = e.currentTarget.files?.[0];
+                                e.currentTarget.value = '';
+                                if (file) void handleUpdateBookCover(b, file);
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteBook(b)}
+                            disabled={deletingBookId !== null || updatingCoverBookId === b.id}
+                            className="rounded-lg border border-red-900/80 px-2 py-1.5 text-[10px] font-bold text-red-300 hover:bg-red-950 disabled:opacity-50"
+                          >
+                            <span className="inline-flex items-center justify-center gap-1">
+                              <Trash2 size={11} /> {deletingBookId === b.id ? '削除中...' : '削除'}
+                            </span>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
