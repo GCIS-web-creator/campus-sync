@@ -1483,8 +1483,7 @@ useEffect(() => {
           location,
           description,
           finder,
-          // 既存テーブルに date 列がある環境でも登録できるよう日付を送る
-          date: new Date().toISOString().slice(0, 10),
+          // 日時はSupabaseの created_at default now() に任せる
         })
         .select('*')
         .single();
