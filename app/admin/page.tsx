@@ -750,7 +750,7 @@ export default function CampusSyncAdmin() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               {/* エアコン不満リアルタイムアラート */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
                 <h3 className="text-base font-bold text-slate-300 mb-4 flex items-center gap-2">
@@ -795,7 +795,7 @@ export default function CampusSyncAdmin() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 gap-5">
                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
                     <h4 className="text-sm font-black text-white flex items-center gap-2"><FilePlus size={16} className="text-blue-400" /> お知らせを作成</h4>
                     <label className="block text-xs font-bold text-slate-400">
