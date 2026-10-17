@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, Utensils, BookOpen, Settings, Bell, CheckCircle, 
   Clock, FileText, Monitor, Wind, ThermometerSun, 
@@ -547,14 +548,6 @@ type StudyRoomStatus = {
   updated_at?: string;
 };
 
-type CafeteriaAnnouncement = {
-  id: number;
-  message: string;
-  show_popup: boolean;
-  show_banner: boolean;
-  updated_at?: string;
-};
-
 const formatLostItemDate = (value?: string | null): string => {
   if (!value) return '日時不明';
   const date = new Date(value);
@@ -635,6 +628,11 @@ export default function CampusSyncApp() {
   const [studentId, setStudentId] = useState('581234');
   const [studentName, setStudentName] = useState('創価 太郎');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
+  const [studentCardToken, setStudentCardToken] = useState('');
+  const [showCardScanner, setShowCardScanner] = useState(false);
+  const [cardScanDone, setCardScanDone] = useState(false);
+  const [cardScanStatus, setCardScanStatus] = useState('カメラを準備しています…');
+  const [scannedStudent, setScannedStudent] = useState<{ student_name: string; user_class: string } | null>(null);
   const [userClass, setUserClass] = useState('1-1'); // 1-1〜3-8から選択
 
   // --- ⏰ おせっかい通知リマインダー設定 ---
@@ -659,8 +657,6 @@ export default function CampusSyncApp() {
   const [selectedDay, setSelectedDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
   const [timetableData, setTimetableData] = useState(MOCK_TIMETABLE_DATA);
   const [menuItems, setMenuItems] = useState(MENU_ITEMS);
-  const [cafeteriaAnnouncement, setCafeteriaAnnouncement] = useState<CafeteriaAnnouncement | null>(null);
-  const [cafeteriaAnnouncementPopupOpen, setCafeteriaAnnouncementPopupOpen] = useState(false);
 
   // バス用状態
   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
@@ -792,38 +788,6 @@ useEffect(() => {
   void loadStudyRoomStatus();
   return () => { cancelled = true; };
 }, []);
-
-// Adminで公開した学食おすすめ告知をSupabaseから取得
-useEffect(() => {
-  let cancelled = false;
-  const loadCafeteriaAnnouncement = async () => {
-    const { data, error } = await supabase
-      .from('cafeteria_announcements')
-      .select('id, message, show_popup, show_banner, updated_at')
-      .eq('id', 1)
-      .maybeSingle();
-
-    if (cancelled) return;
-    if (error) {
-      console.error('学食のお知らせを取得できません:', error);
-      return;
-    }
-    if (data && String(data.message || '').trim()) {
-      setCafeteriaAnnouncement(data as CafeteriaAnnouncement);
-    } else {
-      setCafeteriaAnnouncement(null);
-    }
-  };
-  void loadCafeteriaAnnouncement();
-  return () => { cancelled = true; };
-}, []);
-
-// イントロ終了後に、Adminが有効にしたおすすめポップアップを1回表示する
-useEffect(() => {
-  if (!showCampusIntro && cafeteriaAnnouncement?.show_popup && cafeteriaAnnouncement.message?.trim()) {
-    setCafeteriaAnnouncementPopupOpen(true);
-  }
-}, [showCampusIntro, cafeteriaAnnouncement]);
 
 // Supabaseから落とし物・教室状況データを取得
 useEffect(() => {
@@ -1146,7 +1110,7 @@ useEffect(() => {
       fetchStep = 'プロフィール取得（profiles）';
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('student_id, student_name, user_class')
+        .select('student_id, student_name, user_class, card_token')
         .eq('student_id', initialStudentId)
         .maybeSingle();
 
@@ -1155,6 +1119,7 @@ useEffect(() => {
       } else if (profileData) {
         setStudentName(profileData.student_name);
         setUserClass(normalizeSchoolClass(profileData.user_class));
+        setStudentCardToken(profileData.card_token ?? '');
       }
     }
 
@@ -1771,42 +1736,137 @@ Supabaseの設定を確認してください。
     setAllowedNotificationDays(prev => prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]);
   };
 
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = async (): Promise<boolean> => {
     const cleanStudentId = studentId.trim();
     const cleanStudentName = studentName.trim();
 
     if (!/^\d{6}$/.test(cleanStudentId)) {
       alert('学籍番号は6桁の数字で入力してください。');
-      return;
+      return false;
     }
 
     if (!cleanStudentName) {
       alert('氏名を入力してください。');
-      return;
+      return false;
     }
 
     setProfileSaving(true);
+    try {
+      // 既存プロフィールのトークンを優先し、初回のみ安全なランダムトークンを発行する
+      let cardTokenToSave = studentCardToken;
+      if (!cardTokenToSave) {
+        const { data: existingProfile, error: lookupError } = await supabase
+          .from('profiles')
+          .select('card_token')
+          .eq('student_id', cleanStudentId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        cardTokenToSave = existingProfile?.card_token || window.crypto.randomUUID();
+      }
 
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
-        student_id: cleanStudentId,
-        student_name: cleanStudentName,
-        user_class: userClass,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'student_id' });
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          student_id: cleanStudentId,
+          student_name: cleanStudentName,
+          user_class: userClass,
+          card_token: cardTokenToSave,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'student_id' });
 
-    setProfileSaving(false);
-
-    if (error) {
+      if (error) throw error;
+      setStudentName(cleanStudentName);
+      setStudentCardToken(cardTokenToSave);
+      alert('プロフィールを保存しました！QR学生証を発行できます。');
+      return true;
+    } catch (error) {
       console.error('プロフィールの保存に失敗:', error);
-      alert('プロフィールの保存に失敗しました。');
-      return;
+      const message = error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: unknown }).message)
+        : '不明なエラー';
+      alert(`プロフィールの保存に失敗しました: ${message}\nSupabaseで student card 用SQLを実行済みか確認してください。`);
+      return false;
+    } finally {
+      setProfileSaving(false);
     }
-
-    setStudentName(cleanStudentName);
-    alert('プロフィールを保存しました！');
   };
+
+  const handleActivateStudentCard = async () => {
+    // プロフィールを保存してからカードを表示する。未保存の名前・クラスでQRを発行しない。
+    const saved = await handleSaveProfile();
+    if (saved) setShowIdCardModal(true);
+  };
+
+  useEffect(() => {
+    if (!showCardScanner || cardScanDone) return;
+    let cancelled = false;
+    let alreadyDecoded = false;
+    let scanner: any = null;
+
+    const startScanner = async () => {
+      setCardScanStatus('カメラを準備しています…');
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+        const element = document.getElementById('campus-sync-qr-reader');
+        if (!element) throw new Error('カメラ表示領域がありません。');
+        scanner = new Html5Qrcode('campus-sync-qr-reader', { verbose: false });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 230, height: 230 }, aspectRatio: 1 },
+          async (decodedText: string) => {
+            if (cancelled || alreadyDecoded) return;
+            alreadyDecoded = true;
+            setCardScanDone(true);
+            setCardScanStatus('QRコードを照合しています…');
+            try {
+              const match = /^CAMPUSSYNC-STUDENT:([0-9a-f-]{36})$/i.exec(decodedText.trim());
+              if (!match) {
+                setScannedStudent(null);
+                setCardScanStatus('CampusSyncの学生証QRコードではありません。');
+                return;
+              }
+              const { data, error } = await supabase.rpc('verify_student_card', { p_token: match[1] });
+              if (error) throw error;
+              const found = Array.isArray(data) ? data[0] : data;
+              if (!found) {
+                setScannedStudent(null);
+                setCardScanStatus('この学生証は登録されていないか、無効です。');
+                return;
+              }
+              setScannedStudent({ student_name: found.student_name, user_class: normalizeSchoolClass(found.user_class) });
+              setCardScanStatus('学生証を確認しました。');
+            } catch (error) {
+              console.error('学生証QRの照合に失敗:', error);
+              const message = error && typeof error === 'object' && 'message' in error
+                ? String((error as { message: unknown }).message)
+                : '不明なエラー';
+              setScannedStudent(null);
+              setCardScanStatus(`照合に失敗しました: ${message}`);
+            }
+          },
+          () => undefined
+        );
+        if (!cancelled) setCardScanStatus('学生証のQRコードを枠内に合わせてください。');
+      } catch (error) {
+        console.error('QRカメラの起動に失敗:', error);
+        if (!cancelled) {
+          setCardScanDone(true);
+          setCardScanStatus('カメラを起動できません。スマホのカメラ使用を許可し、HTTPSで開いてください。');
+        }
+      }
+    };
+
+    void startScanner();
+    return () => {
+      cancelled = true;
+      if (scanner) {
+        scanner.stop().catch(() => undefined).finally(() => {
+          try { scanner.clear(); } catch { /* scanner is already cleared */ }
+        });
+      }
+    };
+  }, [showCardScanner, cardScanDone]);
 
   const updateContribution = async (delta: number, reason: string) => {
     const cleanStudentId = studentId.trim();
@@ -2073,22 +2133,6 @@ Supabaseの設定を確認してください。
       case 'cafeteria':
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
-            {cafeteriaAnnouncement?.show_banner && cafeteriaAnnouncement.message?.trim() && (
-              <section className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                    <Utensils size={20} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-black tracking-wider text-amber-700">学食からのお知らせ</p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm font-bold leading-relaxed text-gray-800">{cafeteriaAnnouncement.message}</p>
-                    {cafeteriaAnnouncement.updated_at && (
-                      <p className="mt-2 text-[10px] font-medium text-gray-500">更新：{new Date(cafeteriaAnnouncement.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
             {/* サブタブ切り替え */}
             <div className="flex bg-gray-100 p-1 rounded-2xl">
               <button 
@@ -2667,7 +2711,7 @@ Supabaseの設定を確認してください。
                 <div>
                   <label className="text-[10px] font-black text-gray-400 block mb-1">6桁学籍番号</label>
                   <div className="relative">
-                    <input type="text" maxLength={6} value={studentId} onChange={e => setStudentId(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono font-black outline-none" />
+                    <input type="text" inputMode="numeric" autoComplete="off" maxLength={6} value={studentId} onChange={e => { setStudentId(e.target.value.replace(/\D/g, '').slice(0, 6)); setStudentCardToken(''); }} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono font-black outline-none" />
                     <Lock size={13} className="absolute left-3 top-2.5 text-gray-400" />
                   </div>
                 </div>
@@ -2685,13 +2729,20 @@ Supabaseの設定を確認してください。
                 </button>
 
                 <button
-                  onClick={() => setShowIdCardModal(true)}
-                  disabled={studentId.trim().length !== 6}
+                  onClick={handleActivateStudentCard}
+                  disabled={profileSaving || !/^\d{6}$/.test(studentId.trim()) || !studentName.trim()}
                   className={`w-full py-3 mt-1 rounded-xl text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 ${
-                    studentId.trim().length === 6 ? `${themeCls.bg} ${themeCls.bgHover}` : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    /^\d{6}$/.test(studentId.trim()) && studentName.trim() ? `${themeCls.bg} ${themeCls.bgHover}` : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <QrCode size={15} /> デジタル生徒身分証アクティベート 🪪
+                  <QrCode size={15} /> デジタル生徒身分証を保存して表示 🪪
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); setShowCardScanner(true); }}
+                  className="w-full py-2.5 rounded-xl font-black text-xs border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2"
+                >
+                  <QrCode size={14} /> スマホカメラで学生証QRを読み取る
                 </button>
               </div>
             </div>
@@ -2901,31 +2952,6 @@ Supabaseの設定を確認してください。
 
       {/* --- アプリケーションモーダルUIコンポーネント群 --- */}
 
-      {/* Adminで公開された学食おすすめポップアップ */}
-      {cafeteriaAnnouncementPopupOpen && cafeteriaAnnouncement?.show_popup && cafeteriaAnnouncement.message?.trim() && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="cafeteria-announcement-title"
-          onClick={() => setCafeteriaAnnouncementPopupOpen(false)}
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
-        >
-          <div onClick={event => event.stopPropagation()} className="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="bg-gradient-to-r from-amber-400 to-orange-500 p-5 text-white">
-              <div className="flex items-center gap-2 text-xs font-black tracking-wider"><Utensils size={17} /> CAFETERIA NEWS</div>
-              <h2 id="cafeteria-announcement-title" className="mt-2 text-xl font-black">今日・明日の学食おすすめ</h2>
-            </div>
-            <div className="p-5">
-              <p className="whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-gray-700">{cafeteriaAnnouncement.message}</p>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setCafeteriaAnnouncementPopupOpen(false)} className="rounded-xl border border-gray-200 px-3 py-3 text-xs font-black text-gray-600 hover:bg-gray-50">あとで見る</button>
-                <button type="button" onClick={() => { setActiveTab('cafeteria'); setCafeteriaAnnouncementPopupOpen(false); }} className="rounded-xl bg-orange-500 px-3 py-3 text-xs font-black text-white hover:bg-orange-600">学食を見る</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 図書室の蔵書詳細ポップアップ */}
       {selectedLibraryBook && (
         <div
@@ -2978,6 +3004,36 @@ Supabaseの設定を確認してください。
         </div>
       )}
 
+      {/* 📷 スマホカメラで別の学生証QRを読み取ってSupabaseで照合 */}
+      {showCardScanner && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-md">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-gray-900">学生証QRを読み取る</h3>
+                <p className="text-xs text-gray-500 mt-1">カメラでQRコードを枠内に合わせてください。</p>
+              </div>
+              <button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-gray-100 text-gray-600" aria-label="閉じる"><X size={18} /></button>
+            </div>
+            {!cardScanDone && <div id="campus-sync-qr-reader" className="w-full overflow-hidden rounded-2xl" />}
+            <p className="text-sm font-bold text-gray-700">{cardScanStatus}</p>
+            {scannedStudent && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+                <p className="text-xs font-black text-emerald-700">有効な登録プロフィール</p>
+                <p className="text-lg font-black text-gray-900">{scannedStudent.student_name}</p>
+                <p className="text-sm font-bold text-gray-600">所属クラス：{scannedStudent.user_class}組</p>
+              </div>
+            )}
+            {cardScanDone && (
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); setCardScanDone(false); }} className="flex-1 rounded-xl bg-blue-600 text-white py-3 text-sm font-black">もう一度読み取る</button>
+                <button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="flex-1 rounded-xl bg-gray-100 text-gray-800 py-3 text-sm font-black">閉じる</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 🪪 デジタル学生証表示ポップアップモーダル */}
       {showIdCardModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/60 backdrop-blur-md animate-in fade-in duration-300">
@@ -3021,14 +3077,22 @@ Supabaseの設定を確認してください。
                 </div>
               </div>
 
-              {/* タッチ決済用模擬バーコードストリップ */}
-              <div className="bg-white rounded-xl p-3.5 flex flex-col items-center gap-1.5">
-                <div className="w-full h-9 flex justify-between items-center px-1">
-                  {[2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 2, 3, 2, 1, 4, 2, 3, 1].map((w, idx) => (
-                    <div key={idx} className="bg-black h-full" style={{ width: `${w * 1.3}px` }} />
-                  ))}
-                </div>
-                <p className="text-[9px] font-mono font-black text-gray-400 tracking-widest">*{studentId}*</p>
+              {/* ランダムトークンを格納した実際に読み取れるQRコード */}
+              <div className="bg-white rounded-xl p-4 flex flex-col items-center gap-2">
+                {studentCardToken ? (
+                  <QRCodeSVG
+                    value={`CAMPUSSYNC-STUDENT:${studentCardToken}`}
+                    size={188}
+                    level="M"
+                    includeMargin
+                    bgColor="#FFFFFF"
+                    fgColor="#0F172A"
+                    title="CampusSync デジタル学生証QRコード"
+                  />
+                ) : (
+                  <p className="text-xs text-red-600 font-bold text-center">プロフィールを保存するとQRコードが発行されます。</p>
+                )}
+                <p className="text-[9px] font-bold text-gray-500 text-center">読み取りにはCampusSyncのQR確認機能を使用してください。</p>
               </div>
             </div>
           </div>
