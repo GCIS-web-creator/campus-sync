@@ -88,6 +88,24 @@ const getJapaneseWeekday = (dateValue: string): string => {
   return ['日', '月', '火', '水', '木', '金', '土'][day];
 };
 
+// Supabase/PostgRESTのエラーは通常のErrorインスタンスとは限らないため、
+// message/code/details/hintを読み取って管理画面に表示します。
+const formatErrorDetails = (error: unknown): string => {
+  if (error && typeof error === 'object') {
+    const value = error as Record<string, unknown>;
+    const parts = [
+      typeof value.message === 'string' && value.message.trim() ? value.message.trim() : '',
+      typeof value.code === 'string' && value.code.trim() ? `コード: ${value.code.trim()}` : '',
+      typeof value.details === 'string' && value.details.trim() ? `詳細: ${value.details.trim()}` : '',
+      typeof value.hint === 'string' && value.hint.trim() ? `ヒント: ${value.hint.trim()}` : '',
+    ].filter(Boolean);
+    if (parts.length) return parts.join(' / ');
+    try { return JSON.stringify(error); } catch { return '詳細を読み取れないエラー'; }
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
+};
+
 type LibraryBook = {
   id: string;
   title: string;
@@ -251,8 +269,13 @@ export default function CampusSyncAdmin() {
 
       if (cancelled) return;
       if (error) {
-        console.error('キャリアセンター自習室の状況取得に失敗:', error);
-        setStudyRoomMessage('設定を取得できません。study_room_status テーブルを作成するSQLを実行してください。');
+        console.error('キャリアセンター自習室の状況取得に失敗:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        setStudyRoomMessage(`設定の読み込みに失敗しました: ${formatErrorDetails(error)}`);
       } else if (data) {
         setStudyRoomOccupiedSeats(Number(data.occupied_seats));
         setStudyRoomTotalSeats(Number(data.total_seats));
@@ -688,7 +711,7 @@ export default function CampusSyncAdmin() {
       setStudyRoomMessage('保存しました。生徒用サイトにも反映されます。');
     } catch (unexpectedError) {
       console.error('自習室の座席状況保存に失敗:', unexpectedError);
-      const detail = unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError);
+      const detail = formatErrorDetails(unexpectedError);
       setStudyRoomMessage(`保存に失敗しました: ${detail}`);
     } finally {
       setStudyRoomSaving(false);
