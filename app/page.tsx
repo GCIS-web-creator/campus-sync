@@ -569,19 +569,37 @@ const normalizeLostAndFoundRow = (row: any): LostAndFoundItem => ({
 
 type CafeteriaReview = {
   id: string | number;
-  menuId: string;
+  serviceDate: string;
+  menuCategory: string;
+  menuName: string;
   userName: string;
   rating: number;
   comment: string;
   date: string;
 };
 
-// 学食堂メニューの口コミ初期値
-const INITIAL_CAFETERIA_REVIEWS: CafeteriaReview[] = [
-  { id: 1, menuId: 'soka', userName: '2年スキッパー', rating: 5, comment: '今日の創価ランチのチキン南蛮、タルタルソースが濃厚で最高に美味しかった！ボリュームも満点。', date: '今日 12:40' },
-  { id: 2, menuId: 'noodles', userName: 'ラーメン大好き3回生', rating: 4, comment: '情熱ラーメンは安定の醤油ベース。トッピングのチャーシューがいつもより少し厚くて嬉しかった！', date: '今日 12:15' },
-  { id: 3, menuId: 'snack', userName: '部活終わりの胃袋', rating: 5, comment: 'ポテトと唐揚げのセットは、昼休みだけでなく放課後の部活前の小腹満たしにも神。売り切れるのが早いのが玉にキズ。', date: '昨日' },
-];
+type DailyReviewMenuOption = {
+  id: string;
+  serviceDate: string;
+  categoryKey: string;
+  categoryLabel: string;
+  name: string;
+};
+
+const DAILY_REVIEW_MENU_CATEGORIES = [
+  { key: 'soka_lunch', label: '創価ランチ' },
+  { key: 'healthy_lunch', label: 'ヘルシーランチ' },
+  { key: 'snack_lunch', label: 'スナックランチ' },
+  { key: 'curry', label: 'カレー' },
+  { key: 'noodles', label: '麺類' },
+] as const;
+
+const formatMenuServiceDate = (dateValue: string): string => {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+};
+
+// 口コミ対象はAdminの月間献立表（cafeteria_daily_menus）から取得します。架空の初期口コミは表示しません。
 
 // 同じブラウザ・同じ学籍番号では同じ投票IDを使い、何度押しても投票行を増やさない
 const getOrCreateVoteId = (studentId: string): string => {
@@ -665,9 +683,13 @@ export default function CampusSyncApp() {
   const [newClubTitle, setNewClubTitle] = useState('');
   const [newClubContent, setNewClubContent] = useState('');
 
-  // 学食レビュー用状態
-  const [cafeteriaReviews, setCafeteriaReviews] = useState<CafeteriaReview[]>(INITIAL_CAFETERIA_REVIEWS);
-  const [selectedMenuForReview, setSelectedMenuForReview] = useState<string>('soka');
+  // 学食レビュー用状態。口コミ対象はAdminの月間献立表から取得する実メニューのみ。
+  const [cafeteriaReviews, setCafeteriaReviews] = useState<CafeteriaReview[]>([]);
+  const [cafeteriaReviewsMessage, setCafeteriaReviewsMessage] = useState('');
+  const [dailyReviewMenuOptions, setDailyReviewMenuOptions] = useState<DailyReviewMenuOption[]>([]);
+  const [dailyReviewMenusLoading, setDailyReviewMenusLoading] = useState(true);
+  const [dailyReviewMenusMessage, setDailyReviewMenusMessage] = useState('');
+  const [selectedMenuForReview, setSelectedMenuForReview] = useState<string>('');
   const [newReviewRating, setNewReviewRating] = useState<number>(5);
   const [newReviewComment, setNewReviewComment] = useState('');
   const [newReviewUser, setNewReviewUser] = useState('');
@@ -783,6 +805,75 @@ useEffect(() => {
   return () => { cancelled = true; };
 }, []);
 
+// Adminの月間献立表から、実際に登録されたメニューだけを口コミ対象として読み込む。
+useEffect(() => {
+  let cancelled = false;
+
+  const loadDailyReviewMenus = async () => {
+    setDailyReviewMenusLoading(true);
+    setDailyReviewMenusMessage('');
+
+    const now = new Date();
+    const asDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const startDate = asDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    // 今月・翌月・翌々月の献立を対象にする。
+    const endDate = asDate(new Date(now.getFullYear(), now.getMonth() + 3, 0));
+    const today = asDate(now);
+
+    const { data, error } = await supabase
+      .from('cafeteria_daily_menus')
+      .select('service_date, soka_lunch, healthy_lunch, snack_lunch, curry, noodles, is_closed')
+      .gte('service_date', startDate)
+      .lte('service_date', endDate)
+      .order('service_date', { ascending: true });
+
+    if (cancelled) return;
+
+    if (error) {
+      console.error('Admin月間献立の口コミ候補取得に失敗:', error);
+      setDailyReviewMenuOptions([]);
+      setDailyReviewMenusMessage('献立を読み込めません。Adminの月間献立表とSupabaseの設定を確認してください。');
+      setDailyReviewMenusLoading(false);
+      return;
+    }
+
+    const options: DailyReviewMenuOption[] = [];
+    for (const row of data ?? []) {
+      if (row.is_closed) continue;
+      for (const category of DAILY_REVIEW_MENU_CATEGORIES) {
+        const raw = (row as Record<string, unknown>)[category.key];
+        const name = typeof raw === 'string' ? raw.trim() : '';
+        if (!name || /^(休業|営業はありません|なし|未定)$/u.test(name)) continue;
+        const serviceDate = String(row.service_date);
+        options.push({
+          id: `${serviceDate}:${category.key}`,
+          serviceDate,
+          categoryKey: category.key,
+          categoryLabel: category.label,
+          name,
+        });
+      }
+    }
+
+    options.sort((a, b) => {
+      const aPast = a.serviceDate < today;
+      const bPast = b.serviceDate < today;
+      if (aPast !== bPast) return aPast ? 1 : -1;
+      return aPast
+        ? b.serviceDate.localeCompare(a.serviceDate)
+        : a.serviceDate.localeCompare(b.serviceDate);
+    });
+
+    setDailyReviewMenuOptions(options);
+    setSelectedMenuForReview(previous => options.some(item => item.id === previous) ? previous : (options[0]?.id ?? ''));
+    setDailyReviewMenusMessage(options.length ? '' : 'Adminの月間献立表に口コミ対象のメニューがありません。Adminでメニューを入力し「この月の献立を一括保存」してください。');
+    setDailyReviewMenusLoading(false);
+  };
+
+  void loadDailyReviewMenus();
+  return () => { cancelled = true; };
+}, []);
+
 // Supabaseから落とし物・教室状況データを取得
 useEffect(() => {
   const fetchSharedData = async () => {
@@ -878,21 +969,26 @@ useEffect(() => {
       );
     }
 
-    fetchStep = '学食レビュー取得（cafeteria_reviews）';
+    fetchStep = '実献立に紐づく学食レビュー取得（cafeteria_daily_menu_reviews）';
     const { data: reviewData, error: reviewError } = await supabase
-      .from('cafeteria_reviews')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from('cafeteria_daily_menu_reviews')
+      .select('id, service_date, menu_category, menu_name, user_name, rating, comment, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (reviewError) {
       console.error('学食レビューの取得に失敗:', reviewError);
+      setCafeteriaReviews([]);
+      setCafeteriaReviewsMessage('口コミを読み込めません。Supabaseで setup_cafeteria_daily_menu_reviews.sql を実行してください。');
     } else if (reviewData) {
       setCafeteriaReviews(
         reviewData.map(review => ({
           id: review.id,
-          menuId: review.menu_id,
-          userName: review.user_name || '匿名の創価生',
-          rating: review.rating,
+          serviceDate: String(review.service_date),
+          menuCategory: review.menu_category,
+          menuName: review.menu_name,
+          userName: review.user_name || '匿名の生徒',
+          rating: Number(review.rating),
           comment: review.comment,
           date: new Date(review.created_at).toLocaleString('ja-JP', {
             month: 'numeric',
@@ -902,6 +998,7 @@ useEffect(() => {
           }),
         }))
       );
+      setCafeteriaReviewsMessage('');
     }
 
     fetchStep = 'バス状況取得（bus_status）';
@@ -1674,35 +1771,45 @@ Supabaseの設定を確認してください。
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReviewComment.trim()) {
-      alert("コメントを入力してください。");
+      alert('コメントを入力してください。');
+      return;
+    }
+
+    const selectedMenu = dailyReviewMenuOptions.find(item => item.id === selectedMenuForReview);
+    if (!selectedMenu) {
+      alert('口コミ対象のメニューがありません。Adminで月間献立を登録・保存してください。');
       return;
     }
 
     const reviewToInsert = {
-      menu_id: selectedMenuForReview,
-      user_name: newReviewUser.trim() || '匿名の創価生',
+      service_date: selectedMenu.serviceDate,
+      menu_category: selectedMenu.categoryKey,
+      menu_name: selectedMenu.name,
+      user_name: newReviewUser.trim() || '匿名の生徒',
       rating: newReviewRating,
       comment: newReviewComment.trim(),
     };
 
     const { data, error } = await supabase
-      .from('cafeteria_reviews')
+      .from('cafeteria_daily_menu_reviews')
       .insert(reviewToInsert)
-      .select('*')
+      .select('id, service_date, menu_category, menu_name, user_name, rating, comment, created_at')
       .single();
 
     if (error) {
       console.error('学食レビューの保存に失敗:', error);
-      alert('レビューの保存に失敗しました。もう一度お試しください。');
+      alert(`口コミの保存に失敗しました: ${error.message}`);
       return;
     }
 
     if (data) {
       const newReview: CafeteriaReview = {
         id: data.id,
-        menuId: data.menu_id,
-        userName: data.user_name || '匿名の創価生',
-        rating: data.rating,
+        serviceDate: String(data.service_date),
+        menuCategory: data.menu_category,
+        menuName: data.menu_name,
+        userName: data.user_name || '匿名の生徒',
+        rating: Number(data.rating),
         comment: data.comment,
         date: new Date(data.created_at).toLocaleString('ja-JP', {
           month: 'numeric',
@@ -1713,12 +1820,13 @@ Supabaseの設定を確認してください。
       };
 
       setCafeteriaReviews(prev => [newReview, ...prev]);
+      setCafeteriaReviewsMessage('');
     }
 
     void updateContribution(8, '学食レビューを投稿');
     setNewReviewComment('');
     setNewReviewUser('');
-    alert("学食レビューを投稿しました！役立つ情報をありがとう！(+8pt)🍲");
+    alert('学食レビューを投稿しました！役立つ情報をありがとう！(+8pt)🍲');
   };
 
   const toggleReminderTime = (timeKey: string) => {
@@ -2139,16 +2247,33 @@ Supabaseの設定を確認してください。
 
             {cafeteriaSubTab === 'reviews' && (
               <div className="space-y-4 animate-in fade-in duration-200">
-                {/* 新規口コミ投稿フォーム */}
+                {dailyReviewMenusMessage && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                    {dailyReviewMenusMessage}
+                  </div>
+                )}
+                {cafeteriaReviewsMessage && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    {cafeteriaReviewsMessage}
+                  </div>
+                )}
+                {/* 新規口コミ投稿フォーム：Adminが保存した実際の献立だけを選択 */}
                 <form onSubmit={handleAddReview} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
                   <h4 className="text-xs font-black flex items-center gap-1"><Plus size={15}/> メニューの口コミを投稿</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={selectedMenuForReview}
                       onChange={e => setSelectedMenuForReview(e.target.value)}
-                      className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none"
+                      disabled={dailyReviewMenusLoading || dailyReviewMenuOptions.length === 0}
+                      className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none disabled:opacity-60"
                     >
-                      {menuItems.map(m => <option key={m.id} value={m.id}>{m.name.split('（')[0]}</option>)}
+                      {dailyReviewMenusLoading && <option value="">献立を読み込み中...</option>}
+                      {!dailyReviewMenusLoading && dailyReviewMenuOptions.length === 0 && <option value="">口コミ対象メニューなし</option>}
+                      {dailyReviewMenuOptions.map(menu => (
+                        <option key={menu.id} value={menu.id}>
+                          {formatMenuServiceDate(menu.serviceDate)} ・{menu.categoryLabel}：{menu.name}
+                        </option>
+                      ))}
                     </select>
                     <div className="flex items-center justify-around bg-gray-50 border border-gray-200 rounded-xl px-2">
                       {[1, 2, 3, 4, 5].map(num => (
@@ -2171,20 +2296,25 @@ Supabaseの設定を確認してください。
                       className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-16 resize-none"
                     />
                   </div>
-                  <button type="submit" className={`w-full py-2.5 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover}`}>
+                  <button type="submit" disabled={dailyReviewMenusLoading || dailyReviewMenuOptions.length === 0} className={`w-full py-2.5 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     レビューを送信して貢献度ポイント獲得
                   </button>
                 </form>
 
                 {/* 口コミタイムライン */}
                 <div className="space-y-2">
+                  {!cafeteriaReviewsMessage && cafeteriaReviews.length === 0 && (
+                    <div className={`${cardBgClass} rounded-2xl p-4 border text-xs ${subTextClass}`}>
+                      まだ口コミはありません。Adminで登録された献立への最初の口コミを投稿してみましょう。
+                    </div>
+                  )}
                   {cafeteriaReviews.map(rev => (
                     <div key={rev.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-1.5`}>
                       <div className="flex justify-between items-center">
                         <span className={`text-xs font-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md`}>
-                          {MENU_ITEMS.find(m => m.id === rev.menuId)?.name.split('（')[0]}
+                          {rev.menuName}
                         </span>
-                        <span className={`text-[10px] ${subTextClass}`}>{rev.date}</span>
+                        <span className={`text-[10px] ${subTextClass}`}>{formatMenuServiceDate(rev.serviceDate)} ・投稿 {rev.date}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="flex">
