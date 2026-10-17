@@ -8,10 +8,43 @@ import {
   ThermometerSnowflake, Search, Info, Users, Check, X, Plus, 
   ChevronRight, AlertTriangle, Sparkles, Star, MapPin, 
   QrCode, User, Palette, BellRing, Lock, Sparkle,
-  Calendar, Bus, MessageSquare, Award, Heart, ThumbsUp,
+  Calendar, Train, MessageSquare, Award, Heart, ThumbsUp,
   ChevronLeft, BookOpenCheck, ShieldAlert, GraduationCap,
   Volume2, Coffee, Moon, Sun, HelpCircle
 } from 'lucide-react';
+
+// 学校固有のクラス選択肢（1-1〜1-8、2-1〜2-8、3-1〜3-8）
+const SCHOOL_CLASS_OPTIONS = Array.from({ length: 3 }, (_, gradeIndex) =>
+  Array.from({ length: 8 }, (_, classIndex) => `${gradeIndex + 1}-${classIndex + 1}`)
+).flat();
+
+function normalizeSchoolClass(value: string | null | undefined): string {
+  if (value && SCHOOL_CLASS_OPTIONS.includes(value)) return value;
+  // 以前の「1-A」形式で保存されたプロフィールを、新しいクラス表記に変換する
+  const legacyMatch = value?.match(/^([1-3])[- ]([A-H])$/i);
+  if (legacyMatch) {
+    const classNumber = legacyMatch[2].toUpperCase().charCodeAt(0) - 64;
+    return `${legacyMatch[1]}-${classNumber}`;
+  }
+  return '1-1';
+}
+
+function getSchoolRoomDisplay(room: string, className: string): string {
+  const roomName = (room || '').trim();
+  if (/化学実験室/.test(roomName)) return '化学実験室';
+  if (/生物実験室|生物室/.test(roomName)) return '生物実験室';
+  if (/家庭科室|被服室|調理室/.test(roomName)) return '家庭科室';
+  if (/Call教室|LL教室/.test(roomName)) return 'Call教室';
+  if (/PC教室|情報処理室/.test(roomName)) return 'PC教室';
+  if (/図書館|図書室/.test(roomName)) return '図書館';
+  if (/グローバルステーション|大教室/.test(roomName)) return 'グローバルステーション';
+  if (/ミーティングルーム2/.test(roomName)) return 'ミーティングルーム2';
+  if (/ミーティングルーム1/.test(roomName)) return 'ミーティングルーム1';
+  if (/栄冠ホール/.test(roomName)) return '栄冠ホール';
+  if (/グローリーホール|第一体育館|グラウンド/.test(roomName)) return 'グローリーホール';
+  // 「各教室」や、学校に存在しない旧サンプル教室名は所属クラスの教室として表示
+  return `${normalizeSchoolClass(className)}教室`;
+}
 
 // --- 🎨 テーマカラー別の Tailwind クラス定義（バリエーション拡張） ---
 const THEMES = {
@@ -121,19 +154,23 @@ const getTodoPresentation = (type: string) => {
 };
 
 const INITIAL_ROOMS = [
-  { id: 1, name: '1-A教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 2, name: '1-B教室', status: '快適', temp: '26℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 3, name: '2-A教室', status: 'やや寒い', temp: '23℃', icon: Wind, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-  { id: 4, name: '3-C教室', status: '激暑', temp: '30℃', icon: ThermometerSun, color: 'text-red-500', bg: 'bg-red-50' },
-  { id: 5, name: '図書室', status: 'やや寒い', temp: '24℃', icon: Wind, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-  { id: 6, name: '食堂', status: '快適', temp: '26℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 7, name: '自習室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 101, name: '栄冠ホール', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 102, name: '化学実験室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 103, name: '生物実験室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 104, name: 'グローリーホール', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 105, name: 'ミーティングルーム1', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 106, name: 'ミーティングルーム2', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 107, name: '図書館', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 108, name: 'グローバルステーション', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 109, name: 'Call教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 110, name: 'PC教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 111, name: '家庭科室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
 ];
 
 const MOCK_NOTIFICATIONS = [
   { id: 1, title: '明日の体育はグラウンドです（熱中症対策を万全に）', time: '10分前', isRead: false },
   { id: 2, title: '図書室の新着おすすめ本が入荷しました！', time: '1時間前', isRead: false },
-  { id: 3, title: '【重要】週末の部活動のスクールバスダイヤ運行について', time: '昨日', isRead: true },
+  { id: 3, title: '【重要】鷹の台駅の電車発車時刻について', time: '昨日', isRead: true },
   { id: 4, title: '食堂の期間限定「栄光フェス丼」メニュー開始のお知らせ', time: '昨日', isRead: true },
   { id: 5, title: '定期考査の範囲表がClassroomにアップロードされました', time: '3日前', isRead: true },
 ];
@@ -463,9 +500,7 @@ const TAKANODAI_TIMETABLE = {
   }
 };
 
-// --- 🚌 状況報告用：既存のスクールバス停定義 ---
-// 発車案内は鷹の台駅の電車時刻表に変更したが、
-// 「状況報告」機能は従来のスクールバス仕様を維持する。
+// 旧バス状況報告の互換データ（現在の生徒画面では表示せず、電車発車案内を使用）
 const MOCK_BUS_STATIONS: {
   id: string;
   name: string;
@@ -592,7 +627,7 @@ export default function CampusSyncApp() {
   const [studentId, setStudentId] = useState('581234');
   const [studentName, setStudentName] = useState('創価 太郎');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
-  const [userClass, setUserClass] = useState('1-A'); // 自動または手動割り当てクラス
+  const [userClass, setUserClass] = useState('1-1'); // 1-1〜3-8から選択
 
   // --- ⏰ おせっかい通知リマインダー設定 ---
   const [remindersEnabled, setRemindersEnabled] = useState(true);
@@ -602,14 +637,14 @@ export default function CampusSyncApp() {
   // --- 各種動的ステート管理 ---
   const [todos, setTodos] = useState(INITIAL_TODOS);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
-  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(1);
-  const [selectedRoomId, setSelectedRoomId] = useState<number>(1);
+  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(101);
+  const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
   const [selectedStatus, setSelectedStatus] = useState<string>('快適');
 
   // サブタブ管理
   const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
-  const [busSubTab, setBusSubTab] = useState<'countdown' | 'report'>('countdown');
+  const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
   // タイムテーブル用状態
   const [selectedWeekType, setSelectedWeekType] = useState<'A' | 'B'>('A');
@@ -1077,7 +1112,7 @@ useEffect(() => {
         console.error('プロフィールの取得に失敗:', profileError);
       } else if (profileData) {
         setStudentName(profileData.student_name);
-        setUserClass(profileData.user_class);
+        setUserClass(normalizeSchoolClass(profileData.user_class));
       }
     }
 
@@ -1201,18 +1236,7 @@ useEffect(() => {
   fetchSharedData();
 }, []);
 
-  // 学籍番号に応じた自動期生・自動所属判別ロジックの強化
-  useEffect(() => {
-    const cleanId = studentId.trim();
-    if (cleanId.length === 6) {
-      const cohortDigits = cleanId.substring(0, 2);
-      const classDigit = cleanId.substring(2, 3);
-      if (/^\d+$/.test(cohortDigits) && /^\d+$/.test(classDigit)) {
-        const parsedClass = `${classDigit}-A`; // 模擬的な自動クラス割り当て
-        setUserClass(parsedClass);
-      }
-    }
-  }, [studentId]);
+  // クラスはプロフィール設定で1-1〜3-8から選択して保存します。
 
   // 全体混雑パーセント計算
   const totalVotes = crowdVotes.empty + crowdVotes.normal + crowdVotes.crowded;
@@ -1844,8 +1868,8 @@ Supabaseの設定を確認してください。
                 <span className="text-xs font-black block">時間割</span>
               </div>
               <div onClick={() => setActiveTab('bus')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
-                <Bus className="mx-auto mb-1.5 text-amber-500" size={22} />
-                <span className="text-xs font-black block">スクールバス</span>
+                <Train className="mx-auto mb-1.5 text-amber-500" size={22} />
+                <span className="text-xs font-black block">電車発車案内</span>
               </div>
               <div onClick={() => setActiveTab('club')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
                 <MessageSquare className="mx-auto mb-1.5 text-purple-500" size={22} />
@@ -1991,7 +2015,7 @@ Supabaseの設定を確認してください。
                       <span className={`text-[11px] font-bold ${subTextClass}`}>{slot.teacher}</span>
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-gray-500 font-medium">
-                      <span className="flex items-center gap-0.5"><MapPin size={12} /> {slot.room}</span>
+                      <span className="flex items-center gap-0.5"><MapPin size={12} /> {getSchoolRoomDisplay(slot.room, userClass)}</span>
                       <span className="flex items-center gap-0.5"><BookOpenCheck size={12} /> 持参: {slot.materials}</span>
                     </div>
                   </div>
@@ -2347,10 +2371,7 @@ Supabaseの設定を確認してください。
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
               <h2 className={`text-xl font-black ${activeTextClass}`}>鷹の台駅 発車案内</h2>
-              <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1 text-xs font-bold">
-                <button onClick={() => setBusSubTab('countdown')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'countdown' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>発車案内</button>
-                <button onClick={() => setBusSubTab('report')} className={`px-3 py-1.5 rounded-lg transition-all ${busSubTab === 'report' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>状況報告</button>
-              </div>
+              <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">電車時刻表</span>
             </div>
 
             {busSubTab === 'countdown' ? (
@@ -2440,7 +2461,7 @@ Supabaseの設定を確認してください。
               })()
             ) : (
               <>
-                {/* 状況報告は従来のスクールバス機能をそのまま維持 */}
+                {/* 電車発車案内のみ表示。旧バス状況報告は画面から外しています。 */}
                 <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl">
                   {MOCK_BUS_STATIONS.map(station => (
                     <button
@@ -2456,8 +2477,8 @@ Supabaseの設定を確認してください。
                 </div>
 
                 <div className={`${cardBgClass} rounded-2xl p-5 border shadow-sm space-y-4 animate-in fade-in duration-200`}>
-                  <h3 className="text-sm font-black flex items-center gap-1.5 text-amber-600"><AlertTriangle size={17}/> スクールバス運行のリアルタイム共有報告</h3>
-                  <p className="text-xs text-gray-500 font-medium">現在バス停やロータリーに並んでいる創価生は、後輩や同級生のために現在の生の情報を提供してください。</p>
+                  <h3 className="text-sm font-black flex items-center gap-1.5 text-amber-600"><AlertTriangle size={17}/> 旧交通状況のリアルタイム共有報告</h3>
+                  <p className="text-xs text-gray-500 font-medium">現在この機能は停止中です。電車の発車案内は上の時刻表を確認してください。</p>
 
                   <div className="space-y-3 pt-2">
                     <div>
@@ -2567,7 +2588,7 @@ Supabaseの設定を確認してください。
                 </div>
                 <div>
                   <h3 className="text-xs font-black">生徒個人ログイン認証連携</h3>
-                  <p className="text-[10px] text-gray-400 font-medium">学籍番号に基づいて期生が自動パースされます</p>
+                  <p className="text-[10px] text-gray-400 font-medium">所属クラスは1-1〜3-8から選択して保存できます</p>
                 </div>
               </div>
 
@@ -2578,8 +2599,12 @@ Supabaseの設定を確認してください。
                     <input type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black outline-none" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 block mb-1">割り当てクラス</label>
-                    <input type="text" value={userClass} readOnly className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black text-gray-500 cursor-not-allowed outline-none" />
+                    <label className="text-[10px] font-black text-gray-400 block mb-1">所属クラス</label>
+                    <select value={userClass} onChange={e => setUserClass(normalizeSchoolClass(e.target.value))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black outline-none focus:ring-2 focus:ring-blue-500/20">
+                      {SCHOOL_CLASS_OPTIONS.map(classOption => (
+                        <option key={classOption} value={classOption}>{classOption}組</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div>
@@ -2777,7 +2802,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
               <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
-              <SidebarItem icon={<Bus size={18} />} label="スクールバス" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+              <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
               <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
               <SidebarItem icon={<Bell size={18} />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
               <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
@@ -2812,7 +2837,7 @@ Supabaseの設定を確認してください。
           <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
           <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-          <NavItem icon={<Bus size={20} />} label="バス" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+          <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
           <NavItem icon={<Settings size={20} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
         </nav>
       </div>

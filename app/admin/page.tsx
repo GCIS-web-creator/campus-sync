@@ -107,9 +107,9 @@ const LINE_NOTICE_TEMPLATES = [
   },
   {
     id: 'bus',
-    label: 'バスの遅延',
-    title: 'バス運行のお知らせ',
-    message: 'バスの運行に遅れが発生している可能性があります。最新の運行情報を確認し、時間に余裕をもって行動してください。',
+    label: '電車の遅延・運行情報',
+    title: '電車の遅延・運行情報',
+    message: '電車の運行に遅れが発生している可能性があります。利用する路線の最新の運行情報を確認し、時間に余裕をもって行動してください。',
   },
   {
     id: 'lost',
@@ -824,7 +824,7 @@ export default function CampusSyncAdmin() {
                         value={lineNoticeTitle}
                         onChange={e => { setLineNoticeTitle(e.target.value); setLineNoticeTemplate('custom'); setLineBroadcastMessage(''); }}
                         maxLength={100}
-                        placeholder="例：明日のバス運行について"
+                        placeholder="例：明日の電車運行について"
                         className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 placeholder:text-slate-600"
                       />
                     </label>
