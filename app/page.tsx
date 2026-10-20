@@ -713,11 +713,6 @@ export default function CampusSyncApp() {
 
     // PCの通常ブラウザーとホーム画面に追加したアプリ（PWA）の両方で表示する。
     // prefers-reduced-motion が有効な端末ではアニメーションを省略する。
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) {
-      setShowCampusIntro(false);
-      return;
-    }
 
     // このページが開かれた後、認証完了時に1回だけ表示する。
     // Strict Modeのeffect再実行時は開始時刻を維持し、終了タイマーだけ再設定する。
