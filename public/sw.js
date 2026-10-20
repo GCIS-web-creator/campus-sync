@@ -22,6 +22,8 @@ self.addEventListener('push', (event) => {
       icon: '/favicon.ico',
       tag: payload.tag || 'campussync-notification',
       data: { url: payload.url || '/' },
+      // 無音を強制せず、通知音はOS・ブラウザーの標準設定に任せる。
+      silent: false,
       renotify: true,
     })
   );
