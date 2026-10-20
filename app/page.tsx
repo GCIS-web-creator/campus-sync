@@ -37,6 +37,23 @@ const getStudentIdFromSchoolEmail = (email: string | null | undefined): string =
   return SCHOOL_EMAIL_PATTERN.test(normalized) ? normalized.split('@')[0] : '';
 };
 
+
+function toLocalDateTimeInput(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const output = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) output[i] = rawData.charCodeAt(i);
+  return output;
+}
+
 function getSchoolRoomDisplay(room: string, className: string): string {
   const roomName = (room || '').trim();
   if (/化学実験室/.test(roomName)) return '化学実験室';
@@ -141,11 +158,11 @@ type ThemeKey = keyof typeof THEMES;
 // --- 📋 初期モックデータ群の超拡充 ---
 
 const INITIAL_TODOS = [
-  { id: '1', title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false },
-  { id: '2', title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false },
-  { id: '3', title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false },
-  { id: '4', title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false },
-  { id: '5', title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false },
+  { id: '1', title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false, due_at: null },
+  { id: '2', title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false, due_at: null },
+  { id: '3', title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false, due_at: null },
+  { id: '4', title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false, due_at: null },
+  { id: '5', title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false, due_at: null },
 ];
 
 const getTodoPresentation = (type: string) => {
@@ -731,6 +748,46 @@ export default function CampusSyncApp() {
     return () => { cancelled = true; };
   }, [authUser]);
 
+  // 既にこのブラウザーで通知登録済みなら、設定画面に状態を表示する。
+  useEffect(() => {
+    if (!authUser || !studentId || typeof window === 'undefined') {
+      setPushReady(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+          if (!cancelled) setPushStatus('このブラウザーはWeb Push通知に対応していません。');
+          return;
+        }
+        const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (!subscription || Notification.permission !== 'granted') {
+          if (!cancelled) setPushReady(false);
+          return;
+        }
+        const { data: row, error } = await supabase
+          .from('push_subscriptions')
+          .select('endpoint')
+          .eq('user_id', authUser.id)
+          .eq('endpoint', subscription.endpoint)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          console.warn('通知登録状態の確認に失敗:', error.message);
+          setPushReady(false);
+          return;
+        }
+        setPushReady(Boolean(row));
+        if (row) setPushStatus('この端末のプッシュ通知は有効です。');
+      } catch (error) {
+        if (!cancelled) console.warn('通知登録状態の確認に失敗:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authUser, studentId]);
+
   const requestSchoolEmailCode = async () => {
     const email = loginEmail.trim().toLowerCase();
     if (!SCHOOL_EMAIL_PATTERN.test(email)) {
@@ -812,9 +869,13 @@ export default function CampusSyncApp() {
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']);
   const [allowedNotificationDays, setAllowedNotificationDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const [pushReady, setPushReady] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushStatus, setPushStatus] = useState('');
+  const [todoDueAtInput, setTodoDueAtInput] = useState('');
 
   // --- 各種動的ステート管理 ---
-  const [todos, setTodos] = useState(INITIAL_TODOS);
+  const [todos, setTodos] = useState<any[]>(INITIAL_TODOS);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [favoriteRoomId, setFavoriteRoomId] = useState<number>(101);
   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
@@ -1343,6 +1404,7 @@ useEffect(() => {
             source: row.source,
             type: row.type,
             due: row.due,
+            due_at: row.due_at || null,
             details: row.details,
             completed: row.completed,
             ...getTodoPresentation(row.type),
@@ -1356,6 +1418,7 @@ useEffect(() => {
           source: todo.source,
           type: todo.type,
           due: todo.due,
+          due_at: todo.due_at || null,
           details: todo.details,
           completed: false,
         }));
@@ -1375,6 +1438,7 @@ useEffect(() => {
               source: row.source,
               type: row.type,
               due: row.due,
+              due_at: row.due_at || null,
               details: row.details,
               completed: row.completed,
               ...getTodoPresentation(row.type),
@@ -1903,12 +1967,150 @@ Supabaseの設定を確認してください。
     alert("学食レビューを投稿しました！役立つ情報をありがとう！(+8pt)🍲");
   };
 
+  const savePushReminderPreferences = async (
+    enabled: boolean = remindersEnabled,
+    times: string[] = reminderTimes,
+    days: string[] = allowedNotificationDays,
+  ) => {
+    if (!authUser || !/^\d{6}$/.test(studentId)) throw new Error('学校メールでログインしてください。');
+    const { error } = await supabase.from('push_reminder_preferences').upsert({
+      user_id: authUser.id,
+      student_id: studentId,
+      reminders_enabled: enabled,
+      reminder_times: times,
+      allowed_days: days,
+      timezone: 'Asia/Tokyo',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    if (error) throw error;
+  };
+
+  const enablePushNotifications = async () => {
+    if (!authUser || !/^\d{6}$/.test(studentId)) {
+      setPushStatus('通知を設定する前に学校メールでログインしてください。');
+      return;
+    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      setPushStatus('このブラウザーはプッシュ通知に対応していません。Chrome / Edge / Safariの最新版で試してください。');
+      return;
+    }
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicKey) {
+      setPushStatus('NEXT_PUBLIC_VAPID_PUBLIC_KEY が未設定です。セットアップ手順を確認してください。');
+      return;
+    }
+    setPushBusy(true);
+    setPushStatus('この端末の通知を設定しています…');
+    try {
+      const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('ブラウザーの通知を許可してください。ブラウザー設定でブロックされている場合はサイト設定も確認してください。');
+
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+        });
+      }
+      const subscriptionJson = subscription.toJSON();
+      const { error: subscriptionError } = await supabase.from('push_subscriptions').upsert({
+        endpoint: subscription.endpoint,
+        user_id: authUser.id,
+        student_id: studentId,
+        subscription: subscriptionJson,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'endpoint' });
+      if (subscriptionError) throw subscriptionError;
+      await savePushReminderPreferences(remindersEnabled, reminderTimes, allowedNotificationDays);
+      setPushReady(true);
+      setPushStatus('通知を有効にしました。この端末で「テスト通知を送る」を押して確認してください。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setPushStatus(`通知設定に失敗しました: ${message}`);
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const sendTestPushNotification = async () => {
+    if (!authUser) {
+      setPushStatus('学校メールでログインしてください。');
+      return;
+    }
+    setPushBusy(true);
+    setPushStatus('テスト通知を送信しています…');
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('ログインセッションがありません。再ログインしてください。');
+      const response = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || `通知送信に失敗しました（HTTP ${response.status}）。`);
+      setPushReady(true);
+      setPushStatus('テスト通知を送信しました。端末の通知領域を確認してください。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setPushStatus(`テスト通知に失敗しました: ${message}`);
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const toggleRemindersEnabled = () => {
+    const next = !remindersEnabled;
+    setRemindersEnabled(next);
+    if (pushReady) void savePushReminderPreferences(next, reminderTimes, allowedNotificationDays)
+      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
+  };
+
   const toggleReminderTime = (timeKey: string) => {
-    setReminderTimes(prev => prev.includes(timeKey) ? prev.filter(t => t !== timeKey) : [...prev, timeKey]);
+    const next = reminderTimes.includes(timeKey)
+      ? reminderTimes.filter(t => t !== timeKey)
+      : [...reminderTimes, timeKey];
+    setReminderTimes(next);
+    if (pushReady) void savePushReminderPreferences(remindersEnabled, next, allowedNotificationDays)
+      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
   };
 
   const toggleNotificationDay = (dayKey: string) => {
-    setAllowedNotificationDays(prev => prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]);
+    const next = allowedNotificationDays.includes(dayKey)
+      ? allowedNotificationDays.filter(d => d !== dayKey)
+      : [...allowedNotificationDays, dayKey];
+    setAllowedNotificationDays(next);
+    if (pushReady) void savePushReminderPreferences(remindersEnabled, reminderTimes, next)
+      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
+  };
+
+  const saveTodoDeadline = async () => {
+    if (!selectedTodo || !studentId) return;
+    const dueAt = todoDueAtInput ? new Date(todoDueAtInput) : null;
+    if (dueAt && Number.isNaN(dueAt.getTime())) {
+      alert('期限の日付と時刻を確認してください。');
+      return;
+    }
+    const dueAtIso = dueAt ? dueAt.toISOString() : null;
+    const { error } = await supabase.from('todos').update({
+      due_at: dueAtIso,
+      updated_at: new Date().toISOString(),
+    }).eq('id', selectedTodo.id).eq('student_id', studentId);
+    if (error) {
+      console.error('課題期限の保存に失敗:', error);
+      alert(`課題期限を保存できませんでした: ${error.message}`);
+      return;
+    }
+    setTodos(prev => prev.map(todo => todo.id === selectedTodo.id ? { ...todo, due_at: dueAtIso } : todo));
+    setSelectedTodo((prev: any) => prev ? { ...prev, due_at: dueAtIso } : prev);
+    alert(dueAtIso ? '提出期限を保存しました。自動リマインダーの対象になります。' : '提出期限を解除しました。自動リマインダーの対象外になります。');
   };
 
   const handleSaveProfile = async (): Promise<boolean> => {
@@ -2284,7 +2486,7 @@ Supabaseの設定を確認してください。
                 {todos.map(todo => (
                   <div 
                     key={todo.id} 
-                    onClick={() => setSelectedTodo(todo)}
+                    onClick={() => { setSelectedTodo(todo); setTodoDueAtInput(toLocalDateTimeInput(todo.due_at)); }}
                     className={`w-full p-4 rounded-2xl shadow-sm border flex items-center gap-3 text-left hover:shadow-md transition-all cursor-pointer ${
                       todo.completed 
                         ? 'bg-green-50/40 border-green-200/50 opacity-60' 
@@ -3100,7 +3302,7 @@ Supabaseの設定を確認してください。
                   </div>
                 </div>
                 <button
-                  onClick={() => setRemindersEnabled(!remindersEnabled)}
+                  onClick={toggleRemindersEnabled}
                   className={`w-10 h-6 rounded-full p-0.5 transition-colors ${remindersEnabled ? themeCls.bg : 'bg-gray-200'}`}
                 >
                   <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-xs ${remindersEnabled ? 'translate-x-4' : 'translate-x-0'}`}></div>
@@ -3157,6 +3359,23 @@ Supabaseの設定を確認してください。
                         );
                       })}
                     </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 space-y-2.5">
+                    <div>
+                      <h4 className="text-[11px] font-black text-gray-700">スマホ・PCへのプッシュ通知</h4>
+                      <p className="text-[10px] text-gray-500 leading-relaxed mt-1">ブラウザーを閉じていても通知を受け取れるよう、この端末の通知を許可します。HTTPSとブラウザーの通知許可が必要です。</p>
+                    </div>
+                    {pushStatus && <p role="status" className="text-[10px] leading-relaxed font-bold text-blue-700 bg-blue-50 rounded-xl p-2.5">{pushStatus}</p>}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => void enablePushNotifications()} disabled={pushBusy} className={`rounded-xl px-3 py-2.5 text-[10px] font-black text-white ${themeCls.bg} ${themeCls.bgHover} disabled:opacity-50`}>
+                        {pushBusy ? '設定中…' : pushReady ? 'この端末の通知を再設定' : 'この端末の通知を有効化'}
+                      </button>
+                      <button type="button" onClick={() => void sendTestPushNotification()} disabled={!pushReady || pushBusy} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-[10px] font-black text-gray-700 disabled:opacity-40">
+                        テスト通知を送る
+                      </button>
+                    </div>
+                    {!authUser && <p className="text-[10px] text-amber-700">通知を設定するには学校メールでログインしてください。</p>}
                   </div>
                 </div>
               )}
@@ -3464,7 +3683,7 @@ Supabaseの設定を確認してください。
             <div className={`p-4 ${selectedTodo.color.split(' ')[0]} bg-opacity-40 flex items-start gap-3`}>
               <div className="p-2.5 bg-white/60 rounded-xl"><selectedTodo.icon size={22} className={selectedTodo.color.split(' ')[1]} /></div>
               <div className="flex-1">
-                <span className="text-[10px] font-black bg-white/80 px-2 py-0.5 rounded-md mb-1 inline-block text-gray-700">{selectedTodo.due}</span>
+                <span className="text-[10px] font-black bg-white/80 px-2 py-0.5 rounded-md mb-1 inline-block text-gray-700">{selectedTodo.due_at ? new Date(selectedTodo.due_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : selectedTodo.due}</span>
                 <h3 className="text-xs font-black text-gray-900 leading-normal">{selectedTodo.title}</h3>
               </div>
             </div>
@@ -3472,6 +3691,12 @@ Supabaseの設定を確認してください。
               <div>
                 <h4 className="text-[10px] font-black text-gray-400 mb-1">タスク詳細及び指示事項</h4>
                 <p className="text-xs text-gray-600 leading-relaxed font-medium">{selectedTodo.details}</p>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="todo-real-deadline" className="text-[10px] font-black text-gray-500 block">実際の提出期限（日付・時刻）</label>
+                <input id="todo-real-deadline" type="datetime-local" value={todoDueAtInput} onChange={e => setTodoDueAtInput(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2.5 text-xs font-bold text-gray-800" />
+                <p className="text-[10px] leading-relaxed text-gray-400">自動通知には具体的な日付と時刻が必要です。「明日まで」などの表示だけでは送信時刻を判定できません。空欄にすると自動通知の対象外になります。</p>
+                <button type="button" onClick={() => void saveTodoDeadline()} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl">提出期限を保存</button>
               </div>
               <button onClick={() => setSelectedTodo(null)} className="w-full py-2.5 bg-gray-100 text-gray-700 text-xs font-black rounded-xl hover:bg-gray-200">
                 詳細確認を閉じる
