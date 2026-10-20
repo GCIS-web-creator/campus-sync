@@ -1,0 +1,77 @@
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+
+-import React, { useState, useEffect } from 'react';
++import React, { useState, useEffect, useRef } from 'react';
+ import { supabase } from '@/lib/supabase';
+ import { QRCodeSVG } from 'qrcode.react';
+ import {
+@@ -627,8 +627,10 @@
+ };
+
+ export default function CampusSyncApp() {
+-  // オープニング演出はメール認証後に再生する。
++  // オープニング演出は、このページを開いた後の認証完了時に1回だけ再生する。
++  // 認証ユーザーのオブジェクト更新やタブ切替では再生し直さない。
+   const [showCampusIntro, setShowCampusIntro] = useState(false);
++  const introStartedAtRef = useRef<number | null>(null);
+
+   const [activeTab, setActiveTab] = useState('home');
+   const [selectedTodo, setSelectedTodo] = useState<any>(null);
+@@ -709,37 +711,30 @@
+       return;
+     }
+
+-    // ホーム画面に追加したアプリ（PWA）として起動した時だけ表示する。
+-    // 同じ起動セッション中は、画面遷移や再描画で再表示しない。
+-    const isStandalone = Boolean(
+-      window.matchMedia?.('(display-mode: standalone)').matches ||
+-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+-    );
+-    if (!isStandalone) {
+-      setShowCampusIntro(false);
+-      return;
+-    }
+-
+-    const introSessionKey = 'campussync-intro-shown-this-launch';
+-    try {
+-      if (window.sessionStorage.getItem(introSessionKey) === '1') {
+-        setShowCampusIntro(false);
+-        return;
+-      }
+-      window.sessionStorage.setItem(introSessionKey, '1');
+-    } catch {
+-      // ストレージを使えない環境では、画面切替時にイントロを繰り返さないよう表示しない。
+-      setShowCampusIntro(false);
+-      return;
+-    }
+-
++    // PCの通常ブラウザーとホーム画面に追加したアプリ（PWA）の両方で表示する。
++    // prefers-reduced-motion が有効な端末ではアニメーションを省略する。
+     const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+     if (prefersReducedMotion) {
+       setShowCampusIntro(false);
+       return;
+     }
++
++    // このページが開かれた後、認証完了時に1回だけ表示する。
++    // Strict Modeのeffect再実行時は開始時刻を維持し、終了タイマーだけ再設定する。
++    const durationMs = 6300;
++    const now = Date.now();
++    if (introStartedAtRef.current === null) {
++      introStartedAtRef.current = now;
++    }
++    const elapsedMs = now - introStartedAtRef.current;
++    const remainingMs = durationMs - elapsedMs;
++    if (remainingMs <= 0) {
++      setShowCampusIntro(false);
++      return;
++    }
++
+     setShowCampusIntro(true);
+-    const introTimer = window.setTimeout(() => setShowCampusIntro(false), 6300);
++    const introTimer = window.setTimeout(() => setShowCampusIntro(false), remainingMs);
+     return () => window.clearTimeout(introTimer);
+   }, [authUser]);

@@ -1,0 +1,145 @@
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -190,6 +190,7 @@
+   { id: 109, name: 'Call教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+   { id: 110, name: 'PC教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+   { id: 111, name: '家庭科室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
++  { id: 112, name: '普通教室（1-1）', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+ ];
+
+ const MOCK_NOTIFICATIONS = [
+@@ -703,10 +704,35 @@
+   }, []);
+
+   useEffect(() => {
+-    if (!authUser) {
++    if (!authUser || typeof window === 'undefined') {
+       setShowCampusIntro(false);
+       return;
+     }
++
++    // ホーム画面に追加したアプリ（PWA）として起動した時だけ表示する。
++    // 同じ起動セッション中は、画面遷移や再描画で再表示しない。
++    const isStandalone = Boolean(
++      window.matchMedia?.('(display-mode: standalone)').matches ||
++      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
++    );
++    if (!isStandalone) {
++      setShowCampusIntro(false);
++      return;
++    }
++
++    const introSessionKey = 'campussync-intro-shown-this-launch';
++    try {
++      if (window.sessionStorage.getItem(introSessionKey) === '1') {
++        setShowCampusIntro(false);
++        return;
++      }
++      window.sessionStorage.setItem(introSessionKey, '1');
++    } catch {
++      // ストレージを使えない環境では、画面切替時にイントロを繰り返さないよう表示しない。
++      setShowCampusIntro(false);
++      return;
++    }
++
+     const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+     if (prefersReducedMotion) {
+       setShowCampusIntro(false);
+@@ -877,7 +903,7 @@
+   // --- 各種動的ステート管理 ---
+   const [todos, setTodos] = useState<any[]>(INITIAL_TODOS);
+   const [rooms, setRooms] = useState(INITIAL_ROOMS);
+-  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(101);
++  const [favoriteRoomId, setFavoriteRoomId] = useState<number>(112);
+   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
+   const [selectedStatus, setSelectedStatus] = useState<string>('快適');
+
+@@ -896,6 +922,7 @@
+   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
+   const [selectedTrainDirection, setSelectedTrainDirection] = useState<'kokubunji' | 'higashimurayama'>('kokubunji');
+   const [trainTimetable, setTrainTimetable] = useState(TAKANODAI_TIMETABLE);
++  const [trainClockNow, setTrainClockNow] = useState<number>(() => Date.now());
+   const [busCongestionVote, setBusCongestionVote] = useState<Record<string, string>>({ hachioji: '普通', haijima: '空いている', akitsu: '混雑' });
+   const [busDelayMinutes, setBusDelayMinutes] = useState<Record<string, number>>({ hachioji: 0, haijima: 5, akitsu: 0 });
+
+@@ -954,6 +981,22 @@
+     total_seats: 35,
+   });
+
++
++// ホーム表示用の普通教室は、プロフィールから取得した在籍クラスに合わせる。
++useEffect(() => {
++  setRooms(prevRooms => prevRooms.map(room =>
++    room.id === 112 ? { ...room, name: `普通教室（${userClass}）` } : room
++  ));
++  setFavoriteRoomId(112);
++}, [userClass]);
++
++// 発車カウントダウンはバス・電車画面を開いている間だけ秒単位で更新する。
++useEffect(() => {
++  if (activeTab !== 'bus') return;
++  setTrainClockNow(Date.now());
++  const intervalId = window.setInterval(() => setTrainClockNow(Date.now()), 1000);
++  return () => window.clearInterval(intervalId);
++}, [activeTab]);
+
+ // Adminと共有する図書室蔵書を読み込む
+ useEffect(() => {
+@@ -2977,23 +3020,28 @@
+             {busSubTab === 'countdown' ? (
+               (() => {
+                 const direction = trainTimetable[selectedTrainDirection];
+-                const now = new Date();
+-                const nowMinutes = now.getHours() * 60 + now.getMinutes();
++                const now = new Date(trainClockNow);
++                const nowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+                 const parsed = direction.trains.map(train => ({
+                   ...train,
+-                  minutes: Number(train.time.slice(0, 2)) * 60 + Number(train.time.slice(3))
++                  seconds: Number(train.time.slice(0, 2)) * 3600 + Number(train.time.slice(3)) * 60
+                 }));
+-                const nextIndex = parsed.findIndex(train => train.minutes >= nowMinutes);
++                const nextIndex = parsed.findIndex(train => train.seconds >= nowSeconds);
+                 const effectiveIndex = nextIndex >= 0 ? nextIndex : 0;
+                 const nextTrain = parsed[effectiveIndex];
+                 const rawDiff = nextIndex >= 0
+-                  ? nextTrain.minutes - nowMinutes
+-                  : (24 * 60 - nowMinutes) + nextTrain.minutes;
+-                const hoursUntil = Math.floor(rawDiff / 60);
+-                const minsUntil = rawDiff % 60;
++                  ? nextTrain.seconds - nowSeconds
++                  : (24 * 3600 - nowSeconds) + nextTrain.seconds;
++                const hoursUntil = Math.floor(rawDiff / 3600);
++                const minsUntil = Math.floor((rawDiff % 3600) / 60);
++                const secondsUntil = rawDiff % 60;
++                const countdownParts: string[] = [];
++                if (hoursUntil > 0) countdownParts.push(`${hoursUntil}時間`);
++                if (minsUntil > 0 || hoursUntil > 0) countdownParts.push(`${minsUntil}分`);
++                countdownParts.push(`${secondsUntil}秒`);
+                 const countdownText = rawDiff <= 0
+                   ? 'まもなく発車'
+-                  : `あと ${hoursUntil > 0 ? `${hoursUntil}時間 ` : ''}${minsUntil}分で発車`;
++                  : `あと ${countdownParts.join(' ')}で発車`;
+                 const laterTrains = [
+                   direction.trains[(effectiveIndex + 1) % direction.trains.length]?.time,
+                   direction.trains[(effectiveIndex + 2) % direction.trains.length]?.time
+@@ -3396,7 +3444,7 @@
+                     }`}
+                   >
+                     <Star size={11} fill={favoriteRoomId === r.id ? 'currentColor' : 'none'} />
+-                    {r.name.replace('教室', '')}
++                    {r.id === 112 ? r.name : r.name.replace('教室', '')}
+                   </button>
+                 ))}
+               </div>
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -22,6 +22,8 @@
+       icon: '/favicon.ico',
+       tag: payload.tag || 'campussync-notification',
+       data: { url: payload.url || '/' },
++      // 無音を強制せず、通知音はOS・ブラウザーの標準設定に任せる。
++      silent: false,
+       renotify: true,
+     })
+   );
