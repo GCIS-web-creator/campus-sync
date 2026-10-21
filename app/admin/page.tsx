@@ -116,6 +116,28 @@ type LibraryBook = {
   created_at?: string;
 };
 
+
+type CampusAssignment = {
+  id: string;
+  title: string;
+  details: string;
+  source: string;
+  type: string;
+  due_at: string | null;
+  due?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  classroom_course_id?: string | null;
+  classroom_coursework_id?: string | null;
+};
+
+const toAdminDateTimeInput = (value: string | null | undefined): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+
 const LINE_NOTICE_TEMPLATES = [
   {
     id: 'cafeteria',
@@ -182,6 +204,19 @@ export default function CampusSyncAdmin() {
   const [menuItems, setMenuItems] = useState(INITIAL_CAFETERIA_MENU);
   const [lostItems, setLostItems] = useState(INITIAL_LOST_REPORTS);
   const [overdues, setOverdues] = useState(INITIAL_LIBRARY_OVERDUES);
+
+
+  // 学生全員に共有する課題・提出期限
+  const [assignmentRows, setAssignmentRows] = useState<CampusAssignment[]>([]);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState('');
+  const [adminApiPassword, setAdminApiPassword] = useState('');
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [assignmentTitle, setAssignmentTitle] = useState('');
+  const [assignmentDetails, setAssignmentDetails] = useState('');
+  const [assignmentType, setAssignmentType] = useState('paper');
+  const [assignmentDueAt, setAssignmentDueAt] = useState('');
 
   // 月間献立表（デフォルトは翌月）
   const [selectedMenuMonth, setSelectedMenuMonth] = useState(getNextMonthValue);
@@ -817,6 +852,123 @@ export default function CampusSyncAdmin() {
     }
   };
 
+  const loadAssignments = async () => {
+    if (!adminApiPassword.trim()) {
+      setAssignmentMessage('管理用パスワードを入力してください。');
+      return;
+    }
+    setAssignmentLoading(true);
+    setAssignmentMessage('');
+    try {
+      const response = await fetch('/api/admin/assignments', {
+        method: 'GET',
+        headers: { 'x-admin-password': adminApiPassword },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || `読み込みに失敗しました（HTTP ${response.status}）。`);
+      setAssignmentRows(Array.isArray(result.assignments) ? result.assignments : []);
+      setAssignmentMessage('課題一覧を読み込みました。');
+    } catch (error) {
+      console.error('共通課題の読み込みに失敗:', error);
+      setAssignmentMessage(error instanceof Error ? error.message : '課題一覧を読み込めませんでした。');
+    } finally {
+      setAssignmentLoading(false);
+    }
+  };
+
+  const resetAssignmentForm = () => {
+    setEditingAssignmentId(null);
+    setAssignmentTitle('');
+    setAssignmentDetails('');
+    setAssignmentType('paper');
+    setAssignmentDueAt('');
+  };
+
+  const editAssignment = (row: CampusAssignment) => {
+    setEditingAssignmentId(row.id);
+    setAssignmentTitle(row.title || '');
+    setAssignmentDetails(row.details || '');
+    setAssignmentType(row.type || 'paper');
+    setAssignmentDueAt(toAdminDateTimeInput(row.due_at));
+    setAssignmentMessage('編集中です。変更後に「保存」を押してください。');
+  };
+
+  const saveAssignment = async () => {
+    if (!adminApiPassword.trim()) {
+      setAssignmentMessage('管理用パスワードを入力してください。');
+      return;
+    }
+    if (!assignmentTitle.trim()) {
+      setAssignmentMessage('課題名を入力してください。');
+      return;
+    }
+    if (assignmentTitle.trim().length > 200 || assignmentDetails.length > 5000) {
+      setAssignmentMessage('課題名は200文字以内、詳細は5000文字以内にしてください。');
+      return;
+    }
+    let dueAtISO: string | null = null;
+    if (assignmentDueAt) {
+      const parsedDueAt = new Date(assignmentDueAt);
+      if (Number.isNaN(parsedDueAt.getTime())) {
+        setAssignmentMessage('提出期限の日付と時刻を確認してください。');
+        return;
+      }
+      dueAtISO = parsedDueAt.toISOString();
+    }
+    setAssignmentSaving(true);
+    setAssignmentMessage('');
+    try {
+      const payload = {
+        title: assignmentTitle.trim(),
+        details: assignmentDetails.trim(),
+        type: assignmentType,
+        source: 'Admin／先生',
+        due_at: dueAtISO,
+        due: dueAtISO ? '期限あり' : '期限未設定',
+        is_active: true,
+      };
+      const response = await fetch('/api/admin/assignments', {
+        method: editingAssignmentId ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify(editingAssignmentId ? { ...payload, id: editingAssignmentId } : payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || `保存に失敗しました（HTTP ${response.status}）。`);
+      setAssignmentMessage(editingAssignmentId ? '課題を更新しました。学生側にも反映されます。' : '課題を追加しました。学生側にも反映されます。');
+      resetAssignmentForm();
+      await loadAssignments();
+    } catch (error) {
+      console.error('共通課題の保存に失敗:', error);
+      setAssignmentMessage(error instanceof Error ? error.message : '課題を保存できませんでした。');
+    } finally {
+      setAssignmentSaving(false);
+    }
+  };
+
+  const deleteAssignment = async (row: CampusAssignment) => {
+    if (!adminApiPassword.trim()) {
+      setAssignmentMessage('管理用パスワードを入力してください。');
+      return;
+    }
+    if (!window.confirm(`「${row.title}」を学生側の一覧から削除しますか？`)) return;
+    try {
+      const response = await fetch('/api/admin/assignments', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ id: row.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || `削除に失敗しました（HTTP ${response.status}）。`);
+      setAssignmentRows(prev => prev.filter(item => item.id !== row.id));
+      if (editingAssignmentId === row.id) resetAssignmentForm();
+      setAssignmentMessage('課題を削除しました。');
+    } catch (error) {
+      console.error('共通課題の削除に失敗:', error);
+      setAssignmentMessage(error instanceof Error ? error.message : '課題を削除できませんでした。');
+    }
+  };
+
   return (
     <div className="flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
       
@@ -831,6 +983,9 @@ export default function CampusSyncAdmin() {
           <nav className="space-y-1">
             <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <LayoutDashboard size={18} /> ダッシュボード概要
+            </button>
+            <button onClick={() => setActiveTab('assignments')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <ClipboardList size={18} /> 課題・提出期限管理
             </button>
             <button onClick={() => setActiveTab('menu-calendar')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /> 月間献立表の管理
@@ -1032,6 +1187,77 @@ export default function CampusSyncAdmin() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= 課題・提出期限管理 ================= */}
+        {activeTab === 'assignments' && (
+          <div className="max-w-5xl space-y-6">
+            <div>
+              <h2 className="text-2xl font-black flex items-center gap-2"><ClipboardList className="text-blue-400" /> 課題・提出期限管理</h2>
+              <p className="mt-2 text-sm text-slate-400">ここで登録した課題名・指示事項・提出期限は、生徒用CampusSyncの「マイ提出物・連絡リマインダー」に共通表示されます。生徒側では期限を変更できません。</p>
+            </div>
+
+            <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-4 space-y-2">
+              <h3 className="text-sm font-black text-amber-200">管理用パスワード</h3>
+              <p className="text-xs leading-relaxed text-amber-100/80">サーバーの環境変数 CAMPUS_SYNC_ADMIN_PASSWORD に設定した値を入力してください。これはコードに直接書かず、Vercelの環境変数で管理します。</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input type="password" autoComplete="current-password" value={adminApiPassword} onChange={e => setAdminApiPassword(e.target.value)} placeholder="管理用パスワード" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                <button type="button" onClick={() => void loadAssignments()} disabled={assignmentLoading} className="rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-black hover:bg-slate-600 disabled:opacity-50">{assignmentLoading ? '読み込み中…' : '課題一覧を読み込む'}</button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 space-y-4">
+              <h3 className="text-base font-black">{editingAssignmentId ? '課題を編集' : '新しい課題を登録'}</h3>
+              <label className="block text-xs font-bold text-slate-400">課題名
+                <input value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} maxLength={200} placeholder="例：数学演習プリント P20-21" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+              </label>
+              <label className="block text-xs font-bold text-slate-400">タスク詳細及び指示事項
+                <textarea value={assignmentDetails} onChange={e => setAssignmentDetails(e.target.value)} maxLength={5000} rows={4} placeholder="提出内容、提出方法、回収時の注意など" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="block text-xs font-bold text-slate-400">課題の種類
+                  <select value={assignmentType} onChange={e => setAssignmentType(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                    <option value="paper">紙プリント・ノート</option>
+                    <option value="classroom">Google Classroom</option>
+                    <option value="other">連絡・アンケートなど</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-bold text-slate-400">実際の提出期限（日付・時刻）
+                  <input type="datetime-local" value={assignmentDueAt} onChange={e => setAssignmentDueAt(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                </label>
+              </div>
+              <p className="text-xs text-slate-500">時刻まで設定すると、自動リマインダーの期限として使えます。期限が決まっていない場合は空欄のまま保存できます。</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void saveAssignment()} disabled={assignmentSaving} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:opacity-50">{assignmentSaving ? '保存中…' : editingAssignmentId ? '変更を保存' : '学生全員に課題を公開'}</button>
+                {editingAssignmentId && <button type="button" onClick={resetAssignmentForm} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-800">編集をキャンセル</button>}
+              </div>
+              {assignmentMessage && <p role="status" className={`rounded-xl border p-3 text-xs ${assignmentMessage.includes('失敗') || assignmentMessage.includes('入力') || assignmentMessage.includes('設定') || assignmentMessage.includes('必要') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>{assignmentMessage}</p>}
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <h3 className="text-base font-black">登録済みの共通課題</h3>
+                <button type="button" onClick={() => void loadAssignments()} disabled={assignmentLoading} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">再読み込み</button>
+              </div>
+              {assignmentLoading ? <p className="text-sm text-slate-500">読み込み中…</p> : assignmentRows.length === 0 ? <p className="text-sm text-slate-500">課題がありません。管理用パスワードを入力して「課題一覧を読み込む」を押してください。</p> : (
+                <div className="space-y-2">
+                  {assignmentRows.map(row => (
+                    <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2"><p className="font-black text-white">{row.title}</p><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300">{row.source || 'Admin／先生'}</span></div>
+                        <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap">{row.details || '詳細なし'}</p>
+                        <p className="mt-2 text-xs font-bold text-blue-300">{row.due_at ? new Date(row.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button type="button" onClick={() => editAssignment(row)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800">編集</button>
+                        <button type="button" onClick={() => void deleteAssignment(row)} className="rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-950/50">削除</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
