@@ -889,6 +889,11 @@ export default function CampusSyncApp() {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushStatus, setPushStatus] = useState('');
   const [todoDueAtInput, setTodoDueAtInput] = useState('');
+  const [showAddTodoModal, setShowAddTodoModal] = useState(false);
+  const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [newTodoDetails, setNewTodoDetails] = useState('');
+  const [newTodoDueAt, setNewTodoDueAt] = useState('');
+  const [isAddingTodo, setIsAddingTodo] = useState(false);
 
   // --- 各種動的ステート管理 ---
   const [todos, setTodos] = useState<any[]>([]);
@@ -1792,6 +1797,94 @@ useEffect(() => {
     }
   };
 
+  const handleAddPersonalTodo = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!authUser) {
+      alert('先にログインしてください。');
+      return;
+    }
+
+    const currentStudentId = studentId.trim();
+    const title = newTodoTitle.trim();
+
+    if (!/^\d{6}$/.test(currentStudentId)) {
+      alert('学籍番号を確認して、ログインし直してください。');
+      return;
+    }
+
+    if (!title) {
+      alert('課題名を入力してください。');
+      return;
+    }
+
+    setIsAddingTodo(true);
+
+    try {
+      const dueAtIso = newTodoDueAt
+        ? new Date(newTodoDueAt).toISOString()
+        : null;
+
+      const dueLabel = dueAtIso
+        ? new Date(dueAtIso).toLocaleString('ja-JP', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '期限未設定';
+
+      const { data: createdRow, error } = await supabase
+        .from('todos')
+        .insert({
+          student_id: currentStudentId,
+          title,
+          details: newTodoDetails.trim(),
+          source: '自分で追加',
+          type: 'other',
+          due: dueLabel,
+          due_at: dueAtIso,
+          completed: false,
+        })
+        .select('*')
+        .single();
+
+      if (error || !createdRow) {
+        console.error('個人用課題の登録に失敗:', error);
+        alert(
+          '課題を保存できませんでした。Supabaseのテーブル設定やRLSポリシーを確認してください。'
+        );
+        return;
+      }
+
+      setTodos((prev) => [
+        ...prev,
+        {
+          id: createdRow.id,
+          title: createdRow.title,
+          source: createdRow.source,
+          type: createdRow.type,
+          due: createdRow.due,
+          due_at: createdRow.due_at || null,
+          details: createdRow.details,
+          completed: createdRow.completed,
+          ...getTodoPresentation(createdRow.type),
+        },
+      ]);
+
+      setNewTodoTitle('');
+      setNewTodoDetails('');
+      setNewTodoDueAt('');
+      setShowAddTodoModal(false);
+      alert('自分の課題を追加しました。');
+    } catch (error) {
+      console.error('個人用課題の登録中に例外が発生:', error);
+      alert('課題の登録中にエラーが発生しました。');
+    } finally {
+      setIsAddingTodo(false);
+    }
+  };
+
   const toggleTodoComplete = async (todoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -2327,17 +2420,45 @@ Supabaseの設定を確認してください。
     setLoginHandoffBusy(true);
     setLoginHandoffMessage('別の端末用QRを発行しています…');
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error('ログインセッションが見つかりません。再ログインしてください。');
-      const response = await fetch('/api/student-login-handoff', {
+      const postCreate = (token: string) => fetch('/api/student-login-handoff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'create' }),
         cache: 'no-store',
       });
-      const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.success) throw new Error(result?.message || `QR発行に失敗しました（HTTP ${response.status}）。`);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      let accessToken = sessionData.session?.access_token || '';
+
+      if (!accessToken) {
+        const { data: refreshedSession } = await supabase.auth.refreshSession();
+        accessToken = refreshedSession.session?.access_token || '';
+      }
+
+      if (!accessToken) {
+        throw new Error('ログインセッションが見つかりません。再ログインしてください。');
+      }
+
+      let response = await postCreate(accessToken);
+      let result = await response.json().catch(() => null);
+
+      // 認証に失敗した場合、セッションを更新して一度だけ再試行する。
+      if (response.status === 401) {
+        const { data: refreshedSession } = await supabase.auth.refreshSession();
+        const refreshedToken = refreshedSession.session?.access_token;
+
+        if (refreshedToken && refreshedToken !== accessToken) {
+          response = await postCreate(refreshedToken);
+          result = await response.json().catch(() => null);
+        }
+      }
+
+      if (!response.ok || !result?.success) {
+        const message = response.status === 401
+          ? 'ログインセッションをサーバーで確認できません。ページを再読み込みして再ログインしてください。'
+          : (result?.message || `QR発行に失敗しました（HTTP ${response.status}）。`);
+        throw new Error(message);
+      }
       setLoginHandoffId(result.id);
       setLoginHandoffSecret(result.secret);
       setLoginHandoffExpiresAt(result.expires_at);
@@ -2431,6 +2552,30 @@ Supabaseの設定を確認してください。
     let cancelled = false;
     let alreadyDecoded = false;
     let scanner: any = null;
+    let scannerStopped = false;
+    let scannerStopPromise: Promise<void> | null = null;
+
+    const stopScanner = async () => {
+      if (!scanner || scannerStopped) return;
+      if (scannerStopPromise) {
+        await scannerStopPromise;
+        return;
+      }
+      scannerStopPromise = (async () => {
+        try {
+          await scanner.stop();
+        } catch {
+          // すでに停止済みの場合は無視
+        } finally {
+          scannerStopped = true;
+        }
+      })();
+      try {
+        await scannerStopPromise;
+      } finally {
+        scannerStopPromise = null;
+      }
+    };
 
     const startScanner = async () => {
       setCardScanStatus('カメラを準備しています…');
@@ -2448,7 +2593,7 @@ Supabaseの設定を確認してください。
             alreadyDecoded = true;
             setCardScanDone(false);
             setCardScanStatus('ログイン要求を送信しています…');
-            try { if (scanner) await scanner.stop(); } catch { /* 読取直後にカメラを停止 */ }
+            await stopScanner();
             try {
               const match = /^CAMPUSSYNC-LOGIN:([0-9a-f-]{36}):([A-Za-z0-9_-]{32,})$/i.exec(decodedText.trim());
               if (!match) {
@@ -2524,7 +2669,7 @@ Supabaseの設定を確認してください。
     return () => {
       cancelled = true;
       if (scanner) {
-        scanner.stop().catch(() => undefined).finally(() => {
+        void stopScanner().finally(() => {
           try { scanner.clear(); } catch { /* scanner is already cleared */ }
         });
       }
@@ -2646,6 +2791,15 @@ Supabaseの設定を確認してください。
               <h3 className={`text-[17px] font-black mb-3 flex items-center ${activeTextClass}`}>
                 <Clock size={20} className={`mr-2 ${themeCls.text}`}/> マイ提出物・連絡リマインダー
               </h3>
+              <div className="flex justify-end mb-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTodoModal(true)}
+                  className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+                >
+                  <Plus size={16} /> 自分の課題を追加
+                </button>
+              </div>
               <div className="space-y-2.5">
                 {visibleTodos.map(todo => (
                   <div 
@@ -3846,6 +4000,109 @@ Supabaseの設定を確認してください。
       )}
 
       {/* 提出物詳細ビューポップアップモーダル */}
+      {showAddTodoModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            if (!isAddingTodo) setShowAddTodoModal(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-personal-todo-title"
+            className="w-full max-w-lg rounded-2xl bg-white p-5 text-gray-900 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 id="add-personal-todo-title" className="text-lg font-black">
+                自分の課題を追加
+              </h3>
+              <button
+                type="button"
+                disabled={isAddingTodo}
+                onClick={() => setShowAddTodoModal(false)}
+                className="rounded-lg px-3 py-1 text-xl text-gray-500 hover:bg-gray-100"
+                aria-label="閉じる"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="mb-4 text-xs leading-relaxed text-gray-500">
+              ここで追加した課題は自分用です。先生が登録した共通課題には影響しません。
+            </p>
+
+            <form onSubmit={handleAddPersonalTodo} className="space-y-4">
+              <div>
+                <label htmlFor="personal-todo-title" className="mb-1.5 block text-sm font-bold">
+                  課題名 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="personal-todo-title"
+                  type="text"
+                  required
+                  maxLength={150}
+                  value={newTodoTitle}
+                  onChange={(e) => setNewTodoTitle(e.target.value)}
+                  placeholder="例：英語の単語を復習する"
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="personal-todo-details" className="mb-1.5 block text-sm font-bold">
+                  タスク詳細及び指示事項
+                </label>
+                <textarea
+                  id="personal-todo-details"
+                  rows={3}
+                  maxLength={2000}
+                  value={newTodoDetails}
+                  onChange={(e) => setNewTodoDetails(e.target.value)}
+                  placeholder="やること、準備するものなど"
+                  className="w-full resize-y rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="personal-todo-due" className="mb-1.5 block text-sm font-bold">
+                  提出期限（日付・時刻）
+                </label>
+                <input
+                  id="personal-todo-due"
+                  type="datetime-local"
+                  value={newTodoDueAt}
+                  onChange={(e) => setNewTodoDueAt(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">
+                  期限が決まっていなければ空欄で登録できます。
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isAddingTodo}
+                  onClick={() => setShowAddTodoModal(false)}
+                  className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingTodo || !newTodoTitle.trim()}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isAddingTodo ? '保存中...' : '課題を保存'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {selectedTodo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl">
