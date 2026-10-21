@@ -25,7 +25,24 @@ async function getBearerUser(request: NextRequest) {
   if (!match) return null;
   const userClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data, error } = await userClient.auth.getUser(match[1]);
-  if (error || !data.user || !SCHOOL_EMAIL.test(data.user.email || '')) return null;
+  if (error || !data.user) {
+    console.error('[student-login-handoff] Bearer token rejected', {
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      message: error?.message ?? 'ユーザー情報が取得できませんでした。',
+    });
+    return null;
+  }
+
+  const email = String(data.user.email || '').trim().toLowerCase();
+  if (!SCHOOL_EMAIL.test(email)) {
+    console.error('[student-login-handoff] School email format rejected', {
+      domain: email.includes('@') ? email.split('@').pop() : '(missing)',
+      localPartLength: email.split('@')[0]?.length ?? 0,
+    });
+    return null;
+  }
+
   return { user: data.user, admin: getAdminClient() };
 }
 

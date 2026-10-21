@@ -2628,9 +2628,25 @@ Supabaseの設定を確認してください。
                   const redemption = await postHandoff('redeem');
                   const { data: verified, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: redemption.token_hash, type: 'magiclink' });
                   if (verifyError) throw verifyError;
-                  const user = verified.user ?? verified.session?.user;
+
+                  // ユーザー情報だけでなく、実際のログインセッションを確認する。
+                  const verifiedSession = verified.session;
+                  if (!verifiedSession?.access_token || !verifiedSession.refresh_token || !verifiedSession.user) {
+                    throw new Error('ログインセッションを取得できませんでした。新しいQRでやり直してください。');
+                  }
+
+                  const { data: savedSession, error: saveSessionError } = await supabase.auth.setSession({
+                    access_token: verifiedSession.access_token,
+                    refresh_token: verifiedSession.refresh_token,
+                  });
+                  if (saveSessionError) throw saveSessionError;
+
+                  const session = savedSession.session;
+                  const user = session?.user ?? null;
                   const derivedStudentId = getStudentIdFromSchoolEmail(user?.email);
-                  if (!user || !derivedStudentId) throw new Error('ログイン後の学校メールを確認できませんでした。');
+                  if (!session?.access_token || !session.refresh_token || !user || !derivedStudentId) {
+                    throw new Error('ログインセッションまたは学校メールを確認できませんでした。新しいQRでやり直してください。');
+                  }
                   setAuthUser(user);
                   setStudentId(derivedStudentId);
                   setAuthMessage('別の端末からログインしました。');
