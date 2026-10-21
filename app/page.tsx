@@ -1455,7 +1455,7 @@ useEffect(() => {
 // 認証完了後に本人の課題を読み込む。
 // 共有データ取得用effectとは分け、ログイン前に実行されて終わる問題を防ぐ。
 useEffect(() => {
-  if (!authUser || !/^\\d{6}$/.test(studentId.trim())) {
+if (!authUser || !/^\d{6}$/.test(studentId.trim())) {
     setTodos([]);
     return;
   }
