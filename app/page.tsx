@@ -892,6 +892,9 @@ export default function CampusSyncApp() {
 
   // --- 各種動的ステート管理 ---
   const [todos, setTodos] = useState<any[]>([]);
+  const [adminAssignedTodos, setAdminAssignedTodos] = useState<any[]>([]);
+  const sharedAssignmentTitles = new Set(adminAssignedTodos.map(todo => String(todo.title || '').trim().toLocaleLowerCase()));
+  const visibleTodos = [...todos.filter(todo => !sharedAssignmentTitles.has(String(todo.title || '').trim().toLocaleLowerCase())), ...adminAssignedTodos];
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [favoriteRoomId, setFavoriteRoomId] = useState<number>(112);
   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
@@ -1455,7 +1458,7 @@ useEffect(() => {
 // 認証完了後に本人の課題を読み込む。
 // 共有データ取得用effectとは分け、ログイン前に実行されて終わる問題を防ぐ。
 useEffect(() => {
-if (!authUser || !/^\d{6}$/.test(studentId.trim())) {
+  if (!authUser || !/^\d{6}$/.test(studentId.trim())) {
     setTodos([]);
     return;
   }
@@ -1535,6 +1538,70 @@ if (!authUser || !/^\d{6}$/.test(studentId.trim())) {
   void loadStudentTodos();
   return () => { cancelled = true; };
 }, [authUser, studentId]);
+
+// Adminが登録した全員共通の課題と、自分の完了状態を読み込む。
+useEffect(() => {
+  const currentStudentId = getStudentIdFromSchoolEmail(authUser?.email);
+  if (!authUser || !currentStudentId) {
+    setAdminAssignedTodos([]);
+    return;
+  }
+
+  let cancelled = false;
+  const loadAdminAssignments = async () => {
+    const { data: assignmentRows, error: assignmentsError } = await supabase
+      .from('assignments')
+      .select('id, title, details, source, type, due, due_at, is_active, created_at, classroom_course_id, classroom_coursework_id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (cancelled) return;
+    if (assignmentsError) {
+      // テーブル作成前でも従来の個人用課題は表示し続ける。
+      console.error('Admin共通課題の取得に失敗:', assignmentsError);
+      setAdminAssignedTodos([]);
+      return;
+    }
+
+    const { data: completionRows, error: completionError } = await supabase
+      .from('assignment_completions')
+      .select('assignment_id, completed')
+      .eq('student_id', currentStudentId);
+
+    if (cancelled) return;
+    if (completionError) {
+      console.error('共通課題の完了状態取得に失敗:', completionError);
+    }
+    const completionByAssignmentId = new Map<string, boolean>(
+      (completionRows || []).map((row: any) => [String(row.assignment_id), Boolean(row.completed)])
+    );
+
+    setAdminAssignedTodos((assignmentRows || []).map((row: any) => {
+      const dueAt = row.due_at || null;
+      const dueLabel = dueAt
+        ? new Date(dueAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : (row.due || '期限未設定');
+      return {
+        id: `assignment:${row.id}`,
+        assignmentId: row.id,
+        isAdminAssigned: true,
+        title: row.title,
+        source: row.source || 'Admin／先生',
+        type: row.type || 'other',
+        due: dueLabel,
+        due_at: dueAt,
+        details: row.details || '',
+        completed: completionByAssignmentId.get(String(row.id)) || false,
+        classroom_course_id: row.classroom_course_id || null,
+        classroom_coursework_id: row.classroom_coursework_id || null,
+        ...getTodoPresentation(row.type || 'other'),
+      };
+    }));
+  };
+
+  void loadAdminAssignments();
+  return () => { cancelled = true; };
+}, [authUser]);
 
   // クラスはプロフィール設定で1-1〜3-8から選択して保存します。
 
@@ -1728,8 +1795,33 @@ if (!authUser || !/^\d{6}$/.test(studentId.trim())) {
   const toggleTodoComplete = async (todoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
-    const targetTodo = todos.find(todo => todo.id === todoId);
+    const targetTodo = visibleTodos.find(todo => todo.id === todoId);
     if (!targetTodo) return;
+
+    if (targetTodo.isAdminAssigned) {
+      const currentStudentId = getStudentIdFromSchoolEmail(authUser?.email);
+      if (!currentStudentId) {
+        alert('学校メールでログインしてください。');
+        return;
+      }
+      const nextState = !targetTodo.completed;
+      const { error: completionSaveError } = await supabase
+        .from('assignment_completions')
+        .upsert({
+          student_id: currentStudentId,
+          assignment_id: targetTodo.assignmentId,
+          completed: nextState,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'student_id,assignment_id' });
+      if (completionSaveError) {
+        console.error('共通課題の完了状態保存に失敗:', completionSaveError);
+        alert('課題の状態を保存できませんでした。SQLとRLS設定を確認してください。');
+        return;
+      }
+      setAdminAssignedTodos(prev => prev.map(todo => todo.id === todoId ? { ...todo, completed: nextState } : todo));
+      void updateContribution(nextState ? 10 : -10, nextState ? '提出物を完了' : '提出物の完了を取り消し');
+      return;
+    }
 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(todoId)) {
       console.error('課題IDがDBのUUID形式ではありません。課題の再読み込みが必要です:', todoId);
@@ -2157,6 +2249,10 @@ Supabaseの設定を確認してください。
 
   const saveTodoDeadline = async () => {
     if (!selectedTodo || !studentId) return;
+    if (selectedTodo.isAdminAssigned) {
+      alert('この課題の提出期限はAdmin／先生が管理しています。変更が必要な場合は先生に確認してください。');
+      return;
+    }
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(selectedTodo.id))) {
       alert('課題データを正しく読み込めていません。ページを再読み込みしてください。');
       return;
@@ -2551,7 +2647,7 @@ Supabaseの設定を確認してください。
                 <Clock size={20} className={`mr-2 ${themeCls.text}`}/> マイ提出物・連絡リマインダー
               </h3>
               <div className="space-y-2.5">
-                {todos.map(todo => (
+                {visibleTodos.map(todo => (
                   <div 
                     key={todo.id} 
                     onClick={() => { setSelectedTodo(todo); setTodoDueAtInput(toLocalDateTimeInput(todo.due_at)); }}
@@ -3765,12 +3861,20 @@ Supabaseの設定を確認してください。
                 <h4 className="text-[10px] font-black text-gray-400 mb-1">タスク詳細及び指示事項</h4>
                 <p className="text-xs text-gray-600 leading-relaxed font-medium">{selectedTodo.details}</p>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="todo-real-deadline" className="text-[10px] font-black text-gray-500 block">実際の提出期限（日付・時刻）</label>
-                <input id="todo-real-deadline" type="datetime-local" value={todoDueAtInput} onChange={e => setTodoDueAtInput(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2.5 text-xs font-bold text-gray-800" />
-                <p className="text-[10px] leading-relaxed text-gray-400">自動通知には具体的な日付と時刻が必要です。「明日まで」などの表示だけでは送信時刻を判定できません。空欄にすると自動通知の対象外になります。</p>
-                <button type="button" onClick={() => void saveTodoDeadline()} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl">提出期限を保存</button>
-              </div>
+              {selectedTodo.isAdminAssigned ? (
+                <div className="space-y-1 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                  <h4 className="text-[10px] font-black text-blue-700">提出期限はAdmin／先生が管理</h4>
+                  <p className="text-xs leading-relaxed text-blue-700">この課題の期限は管理者が設定しています。期限の変更が必要な場合は先生に確認してください。</p>
+                  {selectedTodo.classroom_coursework_id && <p className="text-[10px] text-blue-600">Google Classroom連携課題</p>}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor="todo-real-deadline" className="text-[10px] font-black text-gray-500 block">実際の提出期限（日付・時刻）</label>
+                  <input id="todo-real-deadline" type="datetime-local" value={todoDueAtInput} onChange={e => setTodoDueAtInput(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 p-2.5 text-xs font-bold text-gray-800" />
+                  <p className="text-[10px] leading-relaxed text-gray-400">自分で追加した個人用課題の期限を設定できます。共通課題の期限はAdmin／先生が管理します。</p>
+                  <button type="button" onClick={() => void saveTodoDeadline()} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl">提出期限を保存</button>
+                </div>
+              )}
               <button onClick={() => setSelectedTodo(null)} className="w-full py-2.5 bg-gray-100 text-gray-700 text-xs font-black rounded-xl hover:bg-gray-200">
                 詳細確認を閉じる
               </button>
