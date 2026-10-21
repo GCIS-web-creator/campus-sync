@@ -891,7 +891,7 @@ export default function CampusSyncApp() {
   const [todoDueAtInput, setTodoDueAtInput] = useState('');
 
   // --- 各種動的ステート管理 ---
-  const [todos, setTodos] = useState<any[]>(INITIAL_TODOS);
+  const [todos, setTodos] = useState<any[]>([]);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [favoriteRoomId, setFavoriteRoomId] = useState<number>(112);
   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
@@ -1419,69 +1419,6 @@ useEffect(() => {
       }
     }
 
-    if (/^\d{6}$/.test(initialStudentId)) {
-      fetchStep = '課題取得（todos）';
-      const { data: todoRows, error: todoError } = await supabase
-        .from('todos')
-        .select('*')
-        .eq('student_id', initialStudentId)
-        .order('created_at', { ascending: true });
-
-      if (todoError) {
-        console.error('課題・提出物の取得に失敗:', todoError);
-      } else if (todoRows && todoRows.length > 0) {
-        setTodos(
-          todoRows.map(row => ({
-            id: row.id,
-            title: row.title,
-            source: row.source,
-            type: row.type,
-            due: row.due,
-            due_at: row.due_at || null,
-            details: row.details,
-            completed: row.completed,
-            ...getTodoPresentation(row.type),
-          }))
-        );
-      } else {
-        // 新しい生徒には現在のデモ課題を個人用としてコピー
-        const initialRows = INITIAL_TODOS.map(todo => ({
-          student_id: initialStudentId,
-          title: todo.title,
-          source: todo.source,
-          type: todo.type,
-          due: todo.due,
-          due_at: todo.due_at || null,
-          details: todo.details,
-          completed: false,
-        }));
-
-        const { data: createdTodos, error: createTodoError } = await supabase
-          .from('todos')
-          .insert(initialRows)
-          .select();
-
-        if (createTodoError) {
-          console.error('初期課題の登録に失敗:', createTodoError);
-        } else if (createdTodos) {
-          setTodos(
-            createdTodos.map(row => ({
-              id: row.id,
-              title: row.title,
-              source: row.source,
-              type: row.type,
-              due: row.due,
-              due_at: row.due_at || null,
-              details: row.details,
-              completed: row.completed,
-              ...getTodoPresentation(row.type),
-            }))
-          );
-        }
-      }
-    }
-
-
     if (timetableError) {
       console.error('時間割の取得に失敗:', timetableError);
     } else if (timetableRows && timetableRows.length > 0) {
@@ -1514,6 +1451,90 @@ useEffect(() => {
 
   fetchSharedData();
 }, []);
+
+// 認証完了後に本人の課題を読み込む。
+// 共有データ取得用effectとは分け、ログイン前に実行されて終わる問題を防ぐ。
+useEffect(() => {
+  if (!authUser || !/^\\d{6}$/.test(studentId.trim())) {
+    setTodos([]);
+    return;
+  }
+
+  let cancelled = false;
+  const loadStudentTodos = async () => {
+    const currentStudentId = studentId.trim();
+    setTodos([]);
+
+    const { data: todoRows, error: todoError } = await supabase
+      .from('todos')
+      .select('*')
+      .eq('student_id', currentStudentId)
+      .order('created_at', { ascending: true });
+
+    if (cancelled) return;
+
+    if (todoError) {
+      console.error('課題・提出物の取得に失敗:', todoError);
+      setTodos([]);
+      return;
+    }
+
+    if (todoRows && todoRows.length > 0) {
+      setTodos(todoRows.map(row => ({
+        id: row.id,
+        title: row.title,
+        source: row.source,
+        type: row.type,
+        due: row.due,
+        due_at: row.due_at || null,
+        details: row.details,
+        completed: row.completed,
+        ...getTodoPresentation(row.type),
+      })));
+      return;
+    }
+
+    // 新しい生徒には現在のデモ課題を個人用として登録する。
+    const initialRows = INITIAL_TODOS.map(todo => ({
+      student_id: currentStudentId,
+      title: todo.title,
+      source: todo.source,
+      type: todo.type,
+      due: todo.due,
+      due_at: todo.due_at || null,
+      details: todo.details,
+      completed: false,
+    }));
+
+    const { data: createdTodos, error: createTodoError } = await supabase
+      .from('todos')
+      .insert(initialRows)
+      .select();
+
+    if (cancelled) return;
+
+    if (createTodoError) {
+      console.error('初期課題の登録に失敗:', createTodoError);
+      setTodos([]);
+      return;
+    }
+
+    setTodos((createdTodos || []).map(row => ({
+      id: row.id,
+      title: row.title,
+      source: row.source,
+      type: row.type,
+      due: row.due,
+      due_at: row.due_at || null,
+      details: row.details,
+      completed: row.completed,
+      ...getTodoPresentation(row.type),
+    })));
+  };
+
+  void loadStudentTodos();
+  return () => { cancelled = true; };
+}, [authUser, studentId]);
 
   // クラスはプロフィール設定で1-1〜3-8から選択して保存します。
 
@@ -1709,6 +1730,16 @@ useEffect(() => {
 
     const targetTodo = todos.find(todo => todo.id === todoId);
     if (!targetTodo) return;
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(todoId)) {
+      console.error('課題IDがDBのUUID形式ではありません。課題の再読み込みが必要です:', todoId);
+      alert('課題データを正しく読み込めていません。ページを再読み込みしてください。');
+      return;
+    }
+    if (!/^\d{6}$/.test(studentId.trim())) {
+      alert('学籍番号を確認できません。いったんログインし直してください。');
+      return;
+    }
 
     const nextState = !targetTodo.completed;
 
@@ -2126,6 +2157,10 @@ Supabaseの設定を確認してください。
 
   const saveTodoDeadline = async () => {
     if (!selectedTodo || !studentId) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(selectedTodo.id))) {
+      alert('課題データを正しく読み込めていません。ページを再読み込みしてください。');
+      return;
+    }
     const dueAt = todoDueAtInput ? new Date(todoDueAtInput) : null;
     if (dueAt && Number.isNaN(dueAt.getTime())) {
       alert('期限の日付と時刻を確認してください。');
