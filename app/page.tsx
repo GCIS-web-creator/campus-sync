@@ -2309,10 +2309,18 @@ Supabaseの設定を確認してください。
       if (sessionError) throw sessionError;
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('ログインセッションがありません。再ログインしてください。');
+      if (!('serviceWorker' in navigator)) {
+        throw new Error('このブラウザーはプッシュ通知に対応していません。');
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const currentSubscription = await registration.pushManager.getSubscription();
+      if (!currentSubscription?.endpoint) {
+        throw new Error('この端末の通知登録がありません。「この端末の通知を有効化」を先に押してください。');
+      }
       const response = await fetch('/api/push/test', {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ endpoint: currentSubscription.endpoint }),
         cache: 'no-store',
       });
       const result = await response.json().catch(() => null);
@@ -3817,9 +3825,9 @@ Supabaseの設定を確認してください。
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
         <div className="p-5 flex flex-col h-full justify-between">
           <div>
-            <h1 className="text-xl font-black text-gray-800 tracking-tight mb-6">
-              Campus<span className={themeCls.text}>Sync</span>
-            </h1>
+            <div className="mb-6 min-w-0 max-w-full">
+              <CampusSyncLogo variant="wordmark" height={30} theme="light" />
+            </div>
             <nav className="space-y-1">
               <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
               <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
@@ -3842,22 +3850,22 @@ Supabaseの設定を確認してください。
         
         {/* モバイル用トップナビヘッダー */}
         <header className="md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
-          <h1 className="text-lg font-black text-gray-800 tracking-tight">
-            Campus<span className={themeCls.text}>Sync</span>
-          </h1>
+          <div className="min-w-0 max-w-[68%] shrink">
+            <CampusSyncLogo variant="wordmark" height={23} theme="light" />
+          </div>
           <div className={`text-xs font-black px-2.5 py-1 rounded-full ${themeCls.lightBg} ${themeCls.text}`}>
             ★ {score} pt
           </div>
         </header>
 
         {/* スクロールコンテンツコンテナ */}
-        <main className="flex-1 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
+        <main className="flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
+          {renderContent()}
           {authUser && activeTab === 'home' ? (
-            <div className="mb-4">
+            <div className="mt-4 pb-2">
               <ContributionRankWidget points={Number(score ?? 0)} />
             </div>
           ) : null}
-          {renderContent()}
         </main>
 
         {/* モバイルスマートフォンスクリーン用ボトムナビゲーションバー */}
@@ -4469,7 +4477,7 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
 function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any }) {
   return (
     <button onClick={onClick} className="flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0">
-      <div className={`transition-all ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
+      <div className={`flex h-5 w-5 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
         {icon}
       </div>
       <span className={`text-[9px] font-black transition-colors ${isActive ? themeCls.text : 'text-gray-400'}`}>
@@ -4482,8 +4490,8 @@ function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.Rea
 function SidebarItem({ icon, label, isActive, onClick, badge, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number, themeCls: any }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
-      <div className="flex-shrink-0">
-{icon}</div>
+      <div className="flex shrink-0 items-center [&_svg]:block [&_svg]:shrink-0">
+      {icon}</div>
       <span className="truncate">{label}</span>
       {badge && <span className="ml-auto bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>

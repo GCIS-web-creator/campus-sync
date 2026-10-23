@@ -2,6 +2,7 @@
 
 
 import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
+import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -979,41 +980,47 @@ export default function CampusSyncAdmin() {
     <div className="flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
       
       {/* 🚀 サイドバーナビゲーション */}
-      <aside className="w-64 bg-slate-950 border-r border-slate-800 p-6 flex flex-col justify-between">
+      <aside className="w-16 shrink-0 bg-slate-950 border-r border-slate-800 p-2 md:w-64 md:p-6 flex flex-col justify-between">
         <div>
-          <div className="mb-8">
-            <h1 className="text-xl font-black tracking-wider text-blue-400">CampusSync <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">教職員用</span></h1>
-            <p className="text-[10px] text-slate-500 font-mono mt-1">Soka High School Admin</p>
+          <div className="mb-8 flex min-w-0 flex-col items-center gap-2 md:items-start">
+            <div className="hidden max-w-full items-center gap-2 md:flex">
+              <CampusSyncLogo variant="wordmark" height={28} theme="dark" />
+              <span className="shrink-0 text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">教職員用</span>
+            </div>
+            <div className="md:hidden">
+              <CampusSyncLogo variant="mark" height={28} theme="dark" />
+            </div>
+            <p className="hidden text-[10px] text-slate-500 font-mono mt-1 md:block">Soka High School Admin</p>
           </div>
           
           <nav className="space-y-1">
-            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <LayoutDashboard size={18} /> ダッシュボード概要
+            <button aria-label="ダッシュボード概要" title="ダッシュボード概要" onClick={() => setActiveTab('dashboard')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <LayoutDashboard size={18} /><span className="sr-only md:not-sr-only">ダッシュボード概要</span>
             </button>
-            <button onClick={() => setActiveTab('assignments')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <ClipboardList size={18} /> 課題・提出期限管理
+            <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
             </button>
-            <button onClick={() => setActiveTab('menu-calendar')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /> 月間献立表の管理
+            <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
             </button>
-            <button onClick={() => setActiveTab('cafeteria')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'cafeteria' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Utensils size={18} /> 学食・売切情報の操作
+            <button aria-label="学食・売切情報の操作" title="学食・売切情報の操作" onClick={() => setActiveTab('cafeteria')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'cafeteria' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <Utensils size={18} /><span className="sr-only md:not-sr-only">学食・売切情報の操作</span>
             </button>
-            <button onClick={() => setActiveTab('lost')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'lost' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Package size={18} /> 落とし物「承認」管理
+            <button aria-label="落とし物「承認」管理" title="落とし物「承認」管理" onClick={() => setActiveTab('lost')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'lost' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <Package size={18} /><span className="sr-only md:not-sr-only">落とし物「承認」管理</span>
             </button>
-            <button onClick={() => setActiveTab('study-room')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'study-room' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Monitor size={18} /> キャリアセンター自習室
+            <button aria-label="キャリアセンター自習室" title="キャリアセンター自習室" onClick={() => setActiveTab('study-room')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'study-room' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <Monitor size={18} /><span className="sr-only md:not-sr-only">キャリアセンター自習室</span>
             </button>
-            <button onClick={() => setActiveTab('library')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <BookOpen size={18} /> 図書貸出＆書籍登録
+            <button aria-label="図書貸出＆書籍登録" title="図書貸出＆書籍登録" onClick={() => setActiveTab('library')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <BookOpen size={18} /><span className="sr-only md:not-sr-only">図書貸出＆書籍登録</span>
             </button>
           </nav>
         </div>
         
-        <div className="border-t border-slate-800 pt-4 flex items-center gap-3">
+        <div className="border-t border-slate-800 pt-4 flex flex-col items-center gap-1 md:flex-row md:gap-3">
           <div className="w-9 h-9 bg-slate-800 rounded-full flex items-center justify-center font-bold text-sm text-blue-400">校</div>
-          <div>
+          <div className="hidden md:block">
             <p className="text-xs font-bold">校務部 事務室窓口</p>
             <p className="text-[10px] text-slate-500">ログイン中</p>
           </div>
@@ -1021,7 +1028,7 @@ export default function CampusSyncAdmin() {
       </aside>
 
       {/* 🚀 メインコンテンツ */}
-      <main className="flex-1 bg-slate-900 p-8 overflow-y-auto">
+      <main className="min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
         {/* ================= タブ1: ダッシュボード（リアルタイム不満・アラート） ================= */}
         {activeTab === 'dashboard' && (
@@ -1033,6 +1040,9 @@ export default function CampusSyncAdmin() {
               </div>
             </div>
             
+            <div className="mb-4 min-w-0">
+              <ContributionRankAdminGuide />
+            </div>
             <div className="grid grid-cols-1 gap-6">
               {/* エアコン不満リアルタイムアラート */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
@@ -1357,7 +1367,6 @@ export default function CampusSyncAdmin() {
                           {row.is_closed ? (
                             <td colSpan={5} className="px-3 py-2">
                               <div className="rounded-lg bg-slate-800 border border-slate-700 px-4 py-3 text-center text-sm font-black text-slate-400">
-      <ContributionRankAdminGuide />
 
                                 営業はありません
                               </div>

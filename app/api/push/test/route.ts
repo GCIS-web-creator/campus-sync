@@ -18,6 +18,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: 'ログインし直してから試してください。' }, { status: 401 });
     }
 
+    const body = await request.json().catch(() => null) as { endpoint?: unknown } | null;
+    const requestedEndpoint = typeof body?.endpoint === 'string' ? body.endpoint.trim() : '';
+    if (!requestedEndpoint) {
+      return NextResponse.json({ success: false, message: 'この端末の通知登録先が指定されていません。' }, { status: 400 });
+    }
+    let parsedEndpoint: URL;
+    try {
+      parsedEndpoint = new URL(requestedEndpoint);
+    } catch {
+      return NextResponse.json({ success: false, message: '通知登録先の形式が正しくありません。' }, { status: 400 });
+    }
+    if (parsedEndpoint.protocol !== 'https:') {
+      return NextResponse.json({ success: false, message: '通知登録先はHTTPSである必要があります。' }, { status: 400 });
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -44,7 +59,8 @@ export async function POST(request: Request) {
     const { data: rows, error: subscriptionError } = await supabase
       .from('push_subscriptions')
       .select('endpoint, subscription')
-      .eq('user_id', userData.user.id);
+      .eq('user_id', userData.user.id)
+      .eq('endpoint', requestedEndpoint);
 
     if (subscriptionError) {
       return NextResponse.json({ success: false, message: `通知登録を読み取れません: ${subscriptionError.message}` }, { status: 500 });

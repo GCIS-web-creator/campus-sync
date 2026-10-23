@@ -44,7 +44,7 @@ export function getContributionRank(points: number): ContributionRank {
 }
 
 function RankImage({ rank, size = 42 }: { rank: ContributionRank; size?: number }) {
-  return <Image src={`/rank-icons/${rank.id}.svg`} width={size} height={size} alt={`${rank.name}の剣ランクアイコン`} unoptimized className="shrink-0 object-contain" />;
+  return <Image src={`/rank-icons/${rank.id}.svg`} width={size} height={size} alt={`${rank.name}の剣ランクアイコン`} unoptimized className="block max-w-full shrink-0 object-contain" />;
 }
 
 export function ContributionRankBadge({ points, compact = false }: { points: number; compact?: boolean }) {
@@ -64,9 +64,9 @@ function RankGrid({ points, showStatus = true }: { points: number; showStatus?: 
 }
 
 export function ContributionRankWidget({ points }: { points: number }) {
-  return <div className="fixed bottom-24 right-3 z-[70] w-[min(24rem,calc(100vw-1.5rem))]"><details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"><summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-2 [&::-webkit-details-marker]:hidden"><ContributionRankBadge points={points} compact /><span className="pr-2 text-xs font-semibold text-slate-600 group-open:hidden dark:text-slate-300">剣ランク図鑑 ▴</span><span className="hidden pr-2 text-xs font-semibold text-slate-600 group-open:inline dark:text-slate-300">閉じる ▾</span></summary><div className="max-h-[65vh] overflow-y-auto border-t border-slate-200 p-3 dark:border-slate-700"><RankGrid points={points} /></div></details></div>;
+  return <div className="mt-4 w-full min-w-0 max-w-full"><details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"><summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-2 [&::-webkit-details-marker]:hidden"><ContributionRankBadge points={points} compact /><span className="pr-2 text-xs font-semibold text-slate-600 group-open:hidden dark:text-slate-300">剣ランク図鑑 ▴</span><span className="hidden pr-2 text-xs font-semibold text-slate-600 group-open:inline dark:text-slate-300">閉じる ▾</span></summary><div className="max-h-[65vh] overflow-y-auto border-t border-slate-200 p-3 dark:border-slate-700"><RankGrid points={points} /></div></details></div>;
 }
 
 export function ContributionRankAdminGuide() {
-  return <div className="fixed bottom-4 right-4 z-[60] w-[min(26rem,calc(100vw-2rem))]"><details className="group overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/95 text-white shadow-xl backdrop-blur"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 [&::-webkit-details-marker]:hidden"><span className="flex items-center gap-2 text-sm font-bold"><RankImage rank={CONTRIBUTION_RANKS[14]} size={32} />貢献度剣ランク一覧（15段階）</span><span className="text-xs text-slate-300">開く ▴</span></summary><div className="max-h-[65vh] overflow-y-auto border-t border-slate-700 p-3"><RankGrid points={0} showStatus={false} /></div></details></div>;
+  return <div className="w-full min-w-0 max-w-3xl"><details className="group overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/95 text-white shadow-xl backdrop-blur"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 [&::-webkit-details-marker]:hidden"><span className="flex items-center gap-2 text-sm font-bold"><RankImage rank={CONTRIBUTION_RANKS[14]} size={32} />貢献度剣ランク一覧（15段階）</span><span className="text-xs text-slate-300">開く ▴</span></summary><div className="max-h-[65vh] overflow-y-auto border-t border-slate-700 p-3"><RankGrid points={0} showStatus={false} /></div></details></div>;
 }
