@@ -1,5 +1,6 @@
 'use client';
 
+import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -3772,7 +3773,7 @@ Supabaseの設定を確認してください。
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-5">
-          <div className="text-center space-y-2"><div className="mx-auto h-14 w-14 rounded-2xl bg-cyan-400/15 border border-cyan-300/30 flex items-center justify-center"><GraduationCap size={28} className="text-cyan-200" /></div><h1 className="text-3xl font-black tracking-tight">Campus<span className="text-cyan-300">Sync</span></h1><p className="text-sm text-slate-300">学校メールで安全にログイン</p></div>
+          <div className="text-center space-y-2"><div className="mx-auto h-14 w-14 rounded-2xl bg-cyan-400/15 border border-cyan-300/30 flex items-center justify-center"><CampusSyncLogo variant="mark" height={28} className="text-cyan-200" /></div><h1 className="text-3xl font-black tracking-tight">Campus<span className="text-cyan-300">Sync</span></h1><p className="text-sm text-slate-300">学校メールで安全にログイン</p></div>
           <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl space-y-4">
             {authStep === 'email' ? (
               <>
