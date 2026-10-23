@@ -1,14 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  supabase } from '@/lib/supabase';
 import { 
-  LayoutDashboard, Megaphone, FilePlus, Package, 
-  Thermometer, Check, ClipboardList, Plus, Trash2, 
-  UserCheck, AlertCircle, Send, Search, Utensils,
-  BookOpen, Clock, Ban, CheckCircle2, ShieldAlert,
-  BellRing, CalendarDays, Save, RefreshCw, Monitor, History
+  LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
+  Check, ClipboardList, Plus, Trash2, UserCheck,
+  AlertCircle, Send, Search, Utensils, Clock,
+  BellRing, Save, RefreshCw, History
 } from 'lucide-react';
+import {
+  LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
+  OfficeDeskIcon as ShieldAlert, MenuCalendarIcon as CalendarDays, StudyRoomIcon as Monitor
+} from '@/components/CampusIcons';
 
 // === モックデータ（学生側のアプリデータと対になるもの） ===
 

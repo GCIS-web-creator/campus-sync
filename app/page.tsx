@@ -1,18 +1,24 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  supabase } from '@/lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  Home, Utensils, BookOpen, Settings, Bell, CheckCircle, 
-  Clock, FileText, Monitor, Wind, ThermometerSun, 
-  ThermometerSnowflake, Search, Info, Users, Check, X, Plus, 
-  ChevronRight, AlertTriangle, Sparkles, Star, MapPin, 
-  QrCode, User, Palette, BellRing, Lock, Sparkle,
-  Calendar, Train, MessageSquare, Award, Heart, ThumbsUp,
-  ChevronLeft, BookOpenCheck, ShieldAlert, GraduationCap,
+  Home, CheckCircle, Clock, Monitor, Wind,
+  ThermometerSun, Info, Users, Check, X,
+  Plus, ChevronRight, AlertTriangle, Sparkles, Star,
+  MapPin, User, Palette, BellRing, Sparkle,
+  Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
   Volume2, Coffee, Moon, Sun, HelpCircle
 } from 'lucide-react';
+import {
+  CafeteriaIcon as Utensils, CampusIcon as BookOpen, SettingsIcon as Settings,
+  NotificationIcon as Bell, HomeworkIcon as FileText, AirconIcon as ThermometerSnowflake,
+  LostFoundIcon as Search, QrLoginIcon as QrCode, SchoolMailIcon as Lock,
+  TimetableIcon as Calendar, TrainIcon as Train, ClubNoteIcon as MessageSquare,
+  ContributionIcon as Award, CampussyncLogoIcon as GraduationCap
+} from '@/components/CampusIcons';
 
 // 学校固有のクラス選択肢（1-1〜1-8、2-1〜2-8、3-1〜3-8）
 const SCHOOL_CLASS_OPTIONS = Array.from({ length: 3 }, (_, gradeIndex) =>
@@ -900,7 +906,10 @@ export default function CampusSyncApp() {
   const [adminAssignedTodos, setAdminAssignedTodos] = useState<any[]>([]);
   const sharedAssignmentTitles = new Set(adminAssignedTodos.map(todo => String(todo.title || '').trim().toLocaleLowerCase()));
   const visibleTodos = [...todos.filter(todo => !sharedAssignmentTitles.has(String(todo.title || '').trim().toLocaleLowerCase())), ...adminAssignedTodos];
-  const [rooms, setRooms] = useState(INITIAL_ROOMS);
+  type RoomWithFlexibleIcon = Omit<(typeof INITIAL_ROOMS)[number], 'icon'> & {
+    icon: React.ElementType;
+  };
+  const [rooms, setRooms] = useState<RoomWithFlexibleIcon[]>(INITIAL_ROOMS);
   const [favoriteRoomId, setFavoriteRoomId] = useState<number>(112);
   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
   const [selectedStatus, setSelectedStatus] = useState<string>('快適');
@@ -1106,7 +1115,7 @@ useEffect(() => {
 
           let color = 'text-green-500';
           let bg = 'bg-green-50';
-          let icon = ThermometerSnowflake;
+          let icon: React.ElementType = ThermometerSnowflake;
 
           if (sharedRoom.status === '寒い' || sharedRoom.status === 'やや寒い') {
             color = 'text-cyan-500';
@@ -2012,7 +2021,7 @@ Supabaseの設定を確認してください。
     let nextTemp = selectedRoom.temp;
     let color = selectedRoom.color;
     let bg = selectedRoom.bg;
-    let icon = selectedRoom.icon;
+    let icon: React.ElementType = selectedRoom.icon;
 
     if (selectedStatus === '寒い') {
       nextTemp = (parseInt(selectedRoom.temp) - 1) + '℃';
