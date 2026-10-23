@@ -688,7 +688,7 @@ export default function CampusSyncApp() {
       if (error) console.error('ログイン状態の取得に失敗:', error);
       const user = data.session?.user ?? null;
       if (user && !getStudentIdFromSchoolEmail(user.email)) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         acceptSessionUser(null);
       } else {
         acceptSessionUser(user);
@@ -869,7 +869,7 @@ export default function CampusSyncApp() {
   };
 
   const signOutStudent = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     setAuthUser(null);
     setStudentId('');
     setStudentName('');
