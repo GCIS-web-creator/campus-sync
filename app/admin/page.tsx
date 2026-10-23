@@ -1,5 +1,7 @@
 'use client';
 
+
+import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -1355,6 +1357,8 @@ export default function CampusSyncAdmin() {
                           {row.is_closed ? (
                             <td colSpan={5} className="px-3 py-2">
                               <div className="rounded-lg bg-slate-800 border border-slate-700 px-4 py-3 text-center text-sm font-black text-slate-400">
+      <ContributionRankAdminGuide />
+
                                 営業はありません
                               </div>
                             </td>

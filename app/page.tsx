@@ -1,5 +1,7 @@
 'use client';
 
+
+import { ContributionRankWidget } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -3850,6 +3852,11 @@ Supabaseの設定を確認してください。
 
         {/* スクロールコンテンツコンテナ */}
         <main className="flex-1 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
+          {authUser && activeTab === 'home' ? (
+            <div className="mb-4">
+              <ContributionRankWidget points={Number(score ?? 0)} />
+            </div>
+          ) : null}
           {renderContent()}
         </main>
 
@@ -4475,7 +4482,8 @@ function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.Rea
 function SidebarItem({ icon, label, isActive, onClick, badge, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number, themeCls: any }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="flex-shrink-0">
+{icon}</div>
       <span className="truncate">{label}</span>
       {badge && <span className="ml-auto bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>
