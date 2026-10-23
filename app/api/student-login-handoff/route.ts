@@ -20,21 +20,43 @@ function getAdminClient() {
 }
 
 async function getBearerUser(request: NextRequest) {
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) throw new Error('SupabaseのURLまたは公開キーが設定されていません。');
-  const match = /^Bearer\s+(.+)$/i.exec(request.headers.get('authorization') || '');
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error('SupabaseのURLまたは公開キーが設定されていません。');
+  }
+
+  const match = /^Bearer\s+(.+)$/i.exec(
+    request.headers.get('authorization') || ''
+  );
   if (!match) return null;
-  const userClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
-  const { data, error } = await userClient.auth.getUser(match[1]);
-  if (error || !data.user) {
+
+  const token = match[1].trim();
+  if (!token) return null;
+
+  // サーバー側のローカルセッションに依存せず、Supabase AuthでJWTを検証する。
+  const response = await fetch(
+    `${SUPABASE_URL.replace(/\/+$/, '')}/auth/v1/user`,
+    {
+      method: 'GET',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    }
+  );
+
+  const user = await response.json().catch(() => null);
+
+  if (!response.ok || !user?.id) {
     console.error('[student-login-handoff] Bearer token rejected', {
-      status: error?.status ?? null,
-      code: error?.code ?? null,
-      message: error?.message ?? 'ユーザー情報が取得できませんでした。',
+      status: response.status,
+      code: user?.code ?? user?.error_code ?? null,
+      message: user?.message ?? user?.msg ?? 'Supabaseユーザー確認に失敗しました。',
     });
     return null;
   }
 
-  const email = String(data.user.email || '').trim().toLowerCase();
+  const email = String(user.email || '').trim().toLowerCase();
   if (!SCHOOL_EMAIL.test(email)) {
     console.error('[student-login-handoff] School email format rejected', {
       domain: email.includes('@') ? email.split('@').pop() : '(missing)',
@@ -43,7 +65,7 @@ async function getBearerUser(request: NextRequest) {
     return null;
   }
 
-  return { user: data.user, admin: getAdminClient() };
+  return { user, admin: getAdminClient() };
 }
 
 const hashSecret = (secret: string) => createHash('sha256').update(secret, 'utf8').digest('hex');
