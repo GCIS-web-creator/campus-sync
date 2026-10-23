@@ -16,6 +16,7 @@ import {
   Volume2, Coffee, Moon, Sun, HelpCircle
 } from 'lucide-react';
 import {
+  AnimatedAsset,
   ScoreRankBadge,
   EmptyStateIllustration,
   CrowdStatusIcon,
@@ -661,7 +662,30 @@ export default function CampusSyncApp() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
-  const [score, setScore] = useState(65); // 学校貢献度初期スコア
+  const [score, setScore] = useState(65); // 本日の貢献度（0〜100）
+  const [lifetimeContributionPoints, setLifetimeContributionPoints] = useState(0);
+  const [contributionToast, setContributionToast] = useState<{ points: number; reason: string } | null>(null);
+  const contributionToastTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (contributionToastTimer.current !== null) {
+        window.clearTimeout(contributionToastTimer.current);
+      }
+    };
+  }, []);
+
+  const showContributionToast = (points: number, reason: string) => {
+    if (points <= 0) return;
+    setContributionToast({ points, reason });
+    if (contributionToastTimer.current !== null) {
+      window.clearTimeout(contributionToastTimer.current);
+    }
+    contributionToastTimer.current = window.setTimeout(() => {
+      setContributionToast(null);
+      contributionToastTimer.current = null;
+    }, 2800);
+  };
 
   // --- 🎨 テーマカラー＆モード管理 ---
   const [theme, setTheme] = useState<ThemeKey>('blue');
@@ -1008,6 +1032,54 @@ export default function CampusSyncApp() {
     total_seats: 35,
   });
 
+
+// 剣ランク用：本人の貢献履歴を合計して累計ポイントを復元する。
+useEffect(() => {
+  const currentStudentId = String(studentId || '').trim();
+
+  if (!authUser || !/^\d{6}$/.test(currentStudentId)) {
+    setLifetimeContributionPoints(0);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadLifetimeContribution = async () => {
+    let offset = 0;
+    let total = 0;
+    const pageSize = 1000;
+
+    while (!cancelled) {
+      const { data, error } = await supabase
+        .from('contribution_history')
+        .select('delta')
+        .eq('student_id', currentStudentId)
+        .order('created_at', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        console.error('累計貢献度履歴の取得に失敗:', error);
+        return;
+      }
+
+      const rows = data ?? [];
+      total += rows.reduce((sum, row) => sum + (Number(row.delta) || 0), 0);
+
+      if (rows.length < pageSize) break;
+      offset += rows.length;
+    }
+
+    if (!cancelled) {
+      setLifetimeContributionPoints(Math.max(0, total));
+    }
+  };
+
+  void loadLifetimeContribution();
+
+  return () => {
+    cancelled = true;
+  };
+}, [authUser?.id, studentId]);
 
 // ホーム表示用の普通教室は、プロフィールから取得した在籍クラスに合わせる。
 useEffect(() => {
@@ -2734,6 +2806,7 @@ Supabaseの設定を確認してください。
 
     if (!/^\d{6}$/.test(cleanStudentId)) {
       setScore(prev => Math.max(0, Math.min(prev + delta, 100)));
+      showContributionToast(delta, reason);
       return;
     }
 
@@ -2782,8 +2855,11 @@ Supabaseの設定を確認してください。
 
     if (historyError) {
       console.error('貢献度履歴の保存に失敗:', historyError);
+    } else {
+      setLifetimeContributionPoints(prev => Math.max(0, prev + delta));
     }
 
+    showContributionToast(delta, reason);
     setScore(nextScore);
     setScoreSaving(false);
   };
@@ -2900,7 +2976,7 @@ Supabaseの設定を確認してください。
             <section>
               <div className="flex justify-between items-center mb-3">
                 <h3 className={`text-[17px] font-black flex items-center ${activeTextClass}`}>
-                  <Wind size={20} className="mr-2 text-teal-500"/> リアルタイム教室エアコン状況
+                  <AnimatedAsset name="aircon-wind" className="mr-2 h-8 w-8" /> リアルタイム教室エアコン状況
                 </h3>
                 <button 
                   onClick={() => setShowTempModal(true)}
@@ -2977,7 +3053,9 @@ Supabaseの設定を確認してください。
 
             {/* 時間割リスト表示 */}
             <div className="space-y-2">
-              {timetableData[selectedWeekType][selectedDay].map((slot) => (
+              {timetableData[selectedWeekType][selectedDay].length === 0 ? (
+                <EmptyStateIllustration kind="empty-no-class" caption="選択した曜日の授業はありません。" />
+              ) : timetableData[selectedWeekType][selectedDay].map((slot) => (
                 <div key={slot.period} className={`${cardBgClass} p-4 rounded-2xl border shadow-sm flex items-center gap-4`}>
                   <div className={`w-9 h-9 rounded-xl ${themeCls.lightBg} flex flex-col items-center justify-center font-black ${themeCls.text} text-sm flex-shrink-0`}>
                     {slot.period}
@@ -3031,7 +3109,7 @@ Supabaseの設定を確認してください。
               <section className={`${cardBgClass} rounded-2xl p-5 shadow-sm border`}>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-base font-black flex items-center">
-                    <Users size={20} className="mr-2 text-orange-500"/> 現在の食堂全体の混雑状況
+                    <AnimatedAsset name="cafeteria-steam" className="mr-2 h-8 w-8" /> 現在の食堂全体の混雑状況
                   </h3>
                   <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">リアルタイム集計</span>
                 </div>
@@ -3213,7 +3291,7 @@ Supabaseの設定を確認してください。
                   {libraryBooksLoading ? (
                     <p className="py-5 text-center text-xs text-gray-400">蔵書を読み込み中...</p>
                   ) : libraryBooksError ? (
-                    <p className="py-5 text-center text-xs text-red-500">{libraryBooksError}</p>
+                    <EmptyStateIllustration kind="error-offline" caption={libraryBooksError} className="py-2" />
                   ) : (
                     <>
                       <p className="text-[10px] text-gray-400 font-bold mb-2">
@@ -3226,13 +3304,13 @@ Supabaseの設定を確認してください。
                           .toLocaleLowerCase()
                           .includes(librarySearch.trim().toLocaleLowerCase())
                       ).length === 0 ? (
-                        <div className="py-6 text-center">
-                          <BookOpen size={24} className="mx-auto mb-2 text-gray-300" />
-                          <p className="text-xs font-bold text-gray-500">
-                            {librarySearch.trim() ? '一致する蔵書が見つかりません。' : '蔵書はまだ登録されていません。'}
-                          </p>
-                          <p className="text-[10px] text-gray-400 mt-1">タイトルまたは著者名を変えて検索してください。</p>
-                        </div>
+                        <EmptyStateIllustration
+                          kind="empty-library-search"
+                          caption={librarySearch.trim()
+                            ? '一致する蔵書が見つかりません。検索語を変えてください。'
+                            : '蔵書はまだ登録されていません。'}
+                          className="py-2"
+                        />
                       ) : (
                         <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                           {libraryBooks
@@ -3295,7 +3373,7 @@ Supabaseの設定を確認してください。
               <div className="space-y-4 animate-in fade-in duration-200">
                 {/* 落とし物新規報告 */}
                 <form onSubmit={handleAddLostItem} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
-                  <h4 className="text-xs font-black flex items-center gap-1 text-amber-600"><Plus size={16} /> 落とし物発見の共有報告</h4>
+                  <h4 className="text-xs font-black flex items-center gap-2 text-amber-600"><AnimatedAsset name="lost-found-search" className="h-8 w-8" /> 落とし物発見の共有報告</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <input type="text" placeholder="品名・特徴 (例: 赤いペンケース)" value={newLostTitle} onChange={e => setNewLostTitle(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
                     <input type="text" placeholder="拾った場所" value={newLostLocation} onChange={e => setNewLostLocation(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none" />
@@ -3309,7 +3387,7 @@ Supabaseの設定を確認してください。
 
                 {/* リスト表示 */}
                 {lostAndFoundError && (
-                  <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] font-bold text-red-600">{lostAndFoundError}</p>
+                  <div role="alert" className="rounded-xl border border-red-200 bg-red-50"><EmptyStateIllustration kind="error-offline" caption={lostAndFoundError} className="py-2" /></div>
                 )}
                 <div className="space-y-2.5">
                   {lostAndFoundList.length === 0 && <EmptyStateIllustration kind="empty-lost-found" caption="共有された落とし物はまだありません。" />}
@@ -3345,7 +3423,7 @@ Supabaseの設定を確認してください。
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
-              <h2 className={`text-xl font-black ${activeTextClass}`}>鷹の台駅 発車案内</h2>
+              <h2 className={`text-xl font-black ${activeTextClass} flex items-center gap-2`}><AnimatedAsset name="train-move" className="h-9 w-12" /> 鷹の台駅 発車案内</h2>
               <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">電車時刻表</span>
             </div>
 
@@ -3830,7 +3908,7 @@ Supabaseの設定を確認してください。
         {showCardScanner && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
             <div className="w-full max-w-sm rounded-3xl bg-white text-slate-900 p-5 shadow-2xl space-y-4">
-              <div className="flex justify-between items-center gap-3"><div><h3 className="font-black text-base">ログインQRを読み取る</h3><p className="text-xs text-slate-500 mt-1">QRを表示した端末で承認してもらいます。</p></div><button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-slate-100"><X size={18} /></button></div>
+              <div className="flex justify-between items-center gap-3"><div><h3 className="font-black text-base flex items-center gap-2"><AnimatedAsset name="qr-scan" className="h-9 w-9" />ログインQRを読み取る</h3><p className="text-xs text-slate-500 mt-1">QRを表示した端末で承認してもらいます。</p></div><button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-slate-100"><X size={18} /></button></div>
               {!cardScanDone && <div id="campus-sync-qr-reader" className="w-full overflow-hidden rounded-2xl" />}
               <p className="text-sm font-bold">{cardScanStatus}</p>
               {cardScanDone && <button type="button" onClick={() => { setCardScanDone(false); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl bg-cyan-600 text-white py-3 text-sm font-black">もう一度読み取る</button>}
@@ -3884,9 +3962,22 @@ Supabaseの設定を確認してください。
         {/* スクロールコンテンツコンテナ */}
         <main className="flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
           {renderContent()}
+          {contributionToast && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="fixed bottom-24 right-4 z-[95] flex w-80 max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-amber-200 bg-white/95 p-3 text-slate-900 shadow-xl backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-200"
+            >
+              <AnimatedAsset name="trophy-shine" className="h-12 w-12" />
+              <div className="min-w-0">
+                <p className="text-sm font-black">学校貢献度 +{contributionToast.points} pt</p>
+                <p className="text-xs text-slate-600">{contributionToast.reason}</p>
+              </div>
+            </div>
+          )}
           {authUser && activeTab === 'home' ? (
             <div className="mt-4 pb-2">
-              <ContributionRankWidget points={Number(score ?? 0)} />
+              <ContributionRankWidget points={Number(lifetimeContributionPoints ?? 0)} />
             </div>
           ) : null}
         </main>
@@ -3961,7 +4052,7 @@ Supabaseの設定を確認してください。
           <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-gray-900">別端末ログインQRを読み取る</h3>
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2"><AnimatedAsset name="qr-scan" className="h-9 w-9" />別端末ログインQRを読み取る</h3>
                 <p className="text-xs text-gray-500 mt-1">QRを表示した端末で承認するとログインできます。</p>
               </div>
               <button type="button" onClick={() => { setShowCardScanner(false); setCardScanDone(false); }} className="p-2 rounded-full bg-gray-100 text-gray-600" aria-label="閉じる"><X size={18} /></button>
