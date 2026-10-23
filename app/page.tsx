@@ -16,11 +16,28 @@ import {
   Volume2, Coffee, Moon, Sun, HelpCircle
 } from 'lucide-react';
 import {
-  CafeteriaIcon as Utensils, CampusIcon as BookOpen, SettingsIcon as Settings,
-  NotificationIcon as Bell, HomeworkIcon as FileText, AirconIcon as ThermometerSnowflake,
-  LostFoundIcon as Search, QrLoginIcon as QrCode, SchoolMailIcon as Lock,
-  TimetableIcon as Calendar, TrainIcon as Train, ClubNoteIcon as MessageSquare,
-  ContributionIcon as Award, CampussyncLogoIcon as GraduationCap
+  ScoreRankBadge,
+  EmptyStateIllustration,
+  CrowdStatusIcon,
+  AirconColdIcon,
+  AirconComfortableIcon,
+  AirconHotIcon,
+} from '@/components/CampusAssetWidgets';
+import {
+  CafeteriaIcon as Utensils,
+  CampusIcon as BookOpen,
+  SettingsIcon as Settings,
+  NotificationIcon as Bell,
+  HomeworkIcon as FileText,
+  AirconIcon as ThermometerSnowflake,
+  LostFoundIcon as Search,
+  QrLoginIcon as QrCode,
+  SchoolMailIcon as Lock,
+  TimetableIcon as Calendar,
+  TrainIcon as Train,
+  ClubNoteIcon as MessageSquare,
+  ContributionIcon as Award,
+  CampussyncLogoIcon as GraduationCap,
 } from '@/components/CampusIcons';
 
 // 学校固有のクラス選択肢（1-1〜1-8、2-1〜2-8、3-1〜3-8）
@@ -1123,11 +1140,11 @@ useEffect(() => {
           if (sharedRoom.status === '寒い' || sharedRoom.status === 'やや寒い') {
             color = 'text-cyan-500';
             bg = 'bg-cyan-50';
-            icon = Wind;
+            icon = AirconColdIcon;
           } else if (sharedRoom.status === '暑い' || sharedRoom.status === '激暑') {
             color = 'text-red-500';
             bg = 'bg-red-50';
-            icon = ThermometerSun;
+            icon = AirconHotIcon;
           }
 
           return {
@@ -2030,17 +2047,17 @@ Supabaseの設定を確認してください。
       nextTemp = (parseInt(selectedRoom.temp) - 1) + '℃';
       color = 'text-cyan-500';
       bg = 'bg-cyan-50';
-      icon = Wind;
+      icon = AirconColdIcon;
     } else if (selectedStatus === '暑い') {
       nextTemp = (parseInt(selectedRoom.temp) + 1) + '℃';
       color = 'text-red-500';
       bg = 'bg-red-50';
-      icon = ThermometerSun;
+      icon = AirconHotIcon;
     } else {
       nextTemp = '25℃';
       color = 'text-green-500';
       bg = 'bg-green-50';
-      icon = ThermometerSnowflake;
+      icon = AirconComfortableIcon;
     }
 
     const { error } = await supabase
@@ -2794,6 +2811,7 @@ Supabaseの設定を確認してください。
                   </div>
                   <h2 className="text-xs font-semibold text-white/80 mb-0.5">本日のリアルタイム学校貢献度</h2>
                   <p className="text-4xl font-black tracking-tight">{score} <span className="text-base font-medium text-white/70">/ 100 pt</span></p>
+                <ScoreRankBadge points={Number(score ?? 0)} />
                 </div>
                 <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm flex flex-col items-center gap-0.5">
                   <Sparkles size={22} className="text-yellow-200 animate-bounce" />
@@ -2837,7 +2855,8 @@ Supabaseの設定を確認してください。
                 </button>
               </div>
               <div className="space-y-2.5">
-                {visibleTodos.map(todo => (
+                {visibleTodos.length === 0 && <EmptyStateIllustration kind="empty-todo-done" caption="課題はすべて完了！おつかれさま" />}
+          {visibleTodos.map(todo => (
                   <div 
                     key={todo.id} 
                     onClick={() => { setSelectedTodo(todo); setTodoDueAtInput(toLocalDateTimeInput(todo.due_at)); }}
@@ -3133,7 +3152,8 @@ Supabaseの設定を確認してください。
 
                 {/* 口コミタイムライン */}
                 <div className="space-y-2">
-                  {cafeteriaReviews.map(rev => (
+                  {cafeteriaReviews.length === 0 && <EmptyStateIllustration kind="empty-reviews" caption="まだ口コミがありません。" />}
+          {cafeteriaReviews.map(rev => (
                     <div key={rev.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-1.5`}>
                       <div className="flex justify-between items-center">
                         <span className={`text-xs font-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md`}>
@@ -3292,7 +3312,8 @@ Supabaseの設定を確認してください。
                   <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] font-bold text-red-600">{lostAndFoundError}</p>
                 )}
                 <div className="space-y-2.5">
-                  {lostAndFoundList.map(item => (
+                  {lostAndFoundList.length === 0 && <EmptyStateIllustration kind="empty-lost-found" caption="共有された落とし物はまだありません。" />}
+          {lostAndFoundList.map(item => (
                     <div key={item.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
                       <div className="flex justify-between items-start">
                         <h5 className="font-black text-sm text-gray-800">{item.title}</h5>
@@ -3489,7 +3510,8 @@ Supabaseの設定を確認してください。
 
             {/* 連絡用タイムライン */}
             <div className="space-y-2.5">
-              {clubNotes.map(note => (
+              {clubNotes.length === 0 && <EmptyStateIllustration kind="empty-club-note" caption="部活・委員会の連絡はまだありません。" />}
+          {clubNotes.map(note => (
                 <div key={note.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
                   <div className="flex justify-between items-start">
                     <div>
@@ -3516,7 +3538,8 @@ Supabaseの設定を確認してください。
         return (
           <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <h2 className={`text-xl font-black ${activeTextClass} px-1`}>学園総合通知</h2>
-            {notifications.map(note => (
+            {notifications.length === 0 && <EmptyStateIllustration kind="empty-notifications" caption="新しい通知はありません。" />}
+          {notifications.map(note => (
               <div key={note.id} className={`p-4 rounded-2xl border ${note.isRead ? 'bg-transparent border-gray-200' : 'bg-white border-blue-200 shadow-sm'} flex gap-3.5 items-start`}>
                 <div className="mt-1">
                   {note.isRead ? (
@@ -3774,7 +3797,7 @@ Supabaseの設定を確認してください。
   if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6">
-        <div className="text-center space-y-3"><div className="mx-auto h-10 w-10 rounded-full border-4 border-cyan-300/30 border-t-cyan-300 animate-spin" /><p className="text-sm font-bold">CampusSyncのログイン状態を確認しています…</p></div>
+        <div className="text-center space-y-3"><img src="/animated/loading-logo.svg" alt="" className="mx-auto h-20 w-16 max-w-full object-contain" /><p className="text-sm font-bold">CampusSyncのログイン状態を確認しています…</p></div>
       </div>
     );
   }
@@ -3835,7 +3858,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
               <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
-              <SidebarItem icon={<Bell size={18} />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
+              <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
               <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
             </nav>
           </div>
@@ -4463,7 +4486,7 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
     <div className="text-xs">
       <div className="flex justify-between font-bold mb-1">
         <span className="text-gray-700 flex items-center gap-1 font-black">
-          {label} {isVoted && <Check size={12} className="text-blue-500 font-black"/>}
+          <CrowdStatusIcon value={type} label={label} />{label} {isVoted && <Check size={12} className="text-blue-500 font-black"/>}
         </span>
         <span className="text-gray-400 font-bold">{count}人 <span className="text-gray-300">({percent}%)</span></span>
       </div>
@@ -4476,7 +4499,7 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
 
 function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0">
+    <button onClick={onClick} className="flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0 [&_svg]:block [&_svg]:shrink-0 [&_img]:block [&_img]:shrink-0">
       <div className={`flex h-5 w-5 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
         {icon}
       </div>
