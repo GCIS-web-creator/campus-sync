@@ -64,8 +64,14 @@ export default function CampusAIChat() {
     setBusy(true);
     let reply: Msg = { id: `ai-${Date.now()}`, role: 'ai', text: 'AIにつながりませんでした。少し待ってからもう一度試してください。' };
     try {
-      const { headers } = await getSessionHeaders();
-      const res = await fetch('/api/campus-ai', { method: 'POST', headers, body: JSON.stringify({ question }) });
+      const { headers, studentId } = await getSessionHeaders();
+      const history = msgs.filter(m => m.id !== 'greeting').slice(-10).map(m => ({
+        role: m.role === 'ai' ? 'assistant' : 'user',
+        content: m.text,
+        ...(m.queueMenuId ? { queueMenuId: m.queueMenuId } : {}),
+        ...(m.quickReplies ? { quickReplies: m.quickReplies } : {}),
+      }));
+      const res = await fetch('/api/campus-ai', { method: 'POST', headers, body: JSON.stringify({ question, history, voterId: getOrCreateVoteId(studentId) }) });
       const data = await res.json().catch(() => null) as {
         answer?: string; error?: string; table?: TablePayload;
         quickReplies?: QuickReply[]; queueMenuId?: string;
