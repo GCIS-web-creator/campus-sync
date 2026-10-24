@@ -39,7 +39,7 @@ const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|ワーク|プ
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
 const isClubQuestion = (q: string) => /部活|部活動|委員会|連絡ノート|吹奏楽部/.test(q);
 const isLibraryQuestion = (q: string) => /蔵書|蔵書検索|図書館.*本|図書室.*本|本ある|本は|本を|著者名|貸出中|借りられる/.test(q);
-const isCareerQuestion = (q: string) => /キャリアセンター|進路室|自習室.*空|座席状況/.test(q);
+const isCareerQuestion = (q: string) => /キャリアセンター|キャリア|進路室|自習室.*空|座席状況|空席|座席|席数/.test(q);
 const isLostQuestion = (q: string) => /落とし物|忘れ物|届けられてる/.test(q);
 const isReviewQuestion = (q: string) => /口コミ|レビュー|感想|評価/.test(q);
 const isContributionQuestion = (q: string) => /貢献度|貢献ポイント|累計ポイント|学校貢献/.test(q);
@@ -48,18 +48,18 @@ const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
 const DEFAULT_ROOMS = [
-  { room_id: '101', room_name: '栄冠ホール', status: '快適', temp: '25℃' },
-  { room_id: '102', room_name: '化学実験室', status: '快適', temp: '24℃' },
-  { room_id: '103', room_name: '生物実験室', status: '快適', temp: '26℃' },
-  { room_id: '104', room_name: 'グローリーホール', status: '快適', temp: '27℃' },
-  { room_id: '105', room_name: 'ミーティングルーム1', status: '快適', temp: '23℃' },
-  { room_id: '106', room_name: 'ミーティングルーム2', status: '快適', temp: '28℃' },
-  { room_id: '107', room_name: '図書館', status: '快適', temp: '24℃' },
-  { room_id: '108', room_name: 'グローバルステーション', status: '快適', temp: '26℃' },
-  { room_id: '109', room_name: 'Call教室', status: '快適', temp: '23℃' },
-  { room_id: '110', room_name: 'PC教室', status: '快適', temp: '27℃' },
-  { room_id: '111', room_name: '家庭科室', status: '快適', temp: '29℃' },
-  { room_id: '112', room_name: '普通教室（1-1）', status: '快適', temp: '30℃' },
+  { room_id: '101', room_name: '栄冠ホール', status: '未取得', temp: null },
+  { room_id: '102', room_name: '化学実験室', status: '未取得', temp: null },
+  { room_id: '103', room_name: '生物実験室', status: '未取得', temp: null },
+  { room_id: '104', room_name: 'グローリーホール', status: '未取得', temp: null },
+  { room_id: '105', room_name: 'ミーティングルーム1', status: '未取得', temp: null },
+  { room_id: '106', room_name: 'ミーティングルーム2', status: '未取得', temp: null },
+  { room_id: '107', room_name: '図書館', status: '未取得', temp: null },
+  { room_id: '108', room_name: 'グローバルステーション', status: '未取得', temp: null },
+  { room_id: '109', room_name: 'Call教室', status: '未取得', temp: null },
+  { room_id: '110', room_name: 'PC教室', status: '未取得', temp: null },
+  { room_id: '111', room_name: '家庭科室', status: '未取得', temp: null },
+  { room_id: '112', room_name: '普通教室（1-1）', status: '未取得', temp: null },
 ];
 // 現在のCampusSync画面にある通知サンプルと同一内容。通知テーブルが導入されたら共通テーブルに置き換える。
 const FALLBACK_MENUS = [
@@ -173,11 +173,11 @@ export async function POST(req: Request) {
     authed && studentId
       ? authed.from('todos').select('title, due, due_at, completed, created_at').eq('student_id', studentId).order('created_at', { ascending: true })
       : Promise.resolve({ data: null, error: null }),
-    db.from('club_notes').select('club_name, title, content, author, created_at').order('created_at', { ascending: false }).limit(8),
+    db.from('club_notes').select('club_name, title, content, author, created_at').order('created_at', { ascending: false }).limit(100),
     db.from('library_books').select('id, title, author, code, status, created_at').order('created_at', { ascending: false }).limit(500),
     db.from('study_room_status').select('room_key, room_name, occupied_seats, total_seats, updated_at').eq('room_key', 'career_center').maybeSingle(),
     db.from('lost_and_found').select('*').order('created_at', { ascending: false }).limit(100),
-    db.from('cafeteria_reviews').select('menu_id, user_name, rating, comment, created_at').order('created_at', { ascending: false }).limit(50),
+    db.from('cafeteria_reviews').select('menu_id, user_name, rating, comment, created_at').order('created_at', { ascending: false }).limit(200),
     db.from('cafeteria_votes').select('menu_id, scope_key, status, voter_id').not('menu_id', 'is', null),
   ]);
 
@@ -219,6 +219,38 @@ export async function POST(req: Request) {
   if (wantsClub && clubRes.error) return NextResponse.json({ answer: '部活ノートを読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsLibrary && booksRes.error) return NextResponse.json({ answer: '蔵書情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsCareer && careerRes.error) return NextResponse.json({ answer: 'キャリアセンターの座席情報を読み込めませんでした。少し待ってからもう一度試してください。' });
+  if (wantsCareer) {
+    const data = careerRes.data as {
+      room_name?: string | null;
+      occupied_seats?: number | null;
+      total_seats?: number | null;
+      updated_at?: string | null;
+    } | null;
+
+    if (
+      !data ||
+      data.occupied_seats == null ||
+      data.total_seats == null ||
+      !Number.isFinite(Number(data.occupied_seats)) ||
+      !Number.isFinite(Number(data.total_seats)) ||
+      Number(data.total_seats) <= 0
+    ) {
+      return NextResponse.json({
+        answer: 'キャリアセンター自習室の座席状況は、まだデータベースに登録されていません。'
+      });
+    }
+
+    const total = Math.floor(Number(data.total_seats));
+    const occupied = Math.min(total, Math.max(0, Math.floor(Number(data.occupied_seats))));
+    const free = total - occupied;
+    const updatedAt = data.updated_at && Number.isFinite(Date.parse(data.updated_at))
+      ? ` 最終更新：${new Date(data.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}。`
+      : '';
+
+    return NextResponse.json({
+      answer: `${data.room_name || 'キャリアセンター自習室'}は${total}席中${occupied}席が使用中で、空席は${free}席です。${updatedAt}`
+    });
+  }
   if (wantsLost && lostRes.error) return NextResponse.json({ answer: '落とし物情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsReviews && reviewsRes.error) return NextResponse.json({ answer: '口コミを読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsContribution && !authed) return NextResponse.json({ answer: '貢献度を確認するには学校アカウントでログインしてください。' });
@@ -228,13 +260,40 @@ export async function POST(req: Request) {
   const liveMenus = ((menuRes.data ?? []) as Menu[]).filter(m => m.is_active !== false);
   // app/page.tsxと同じく、DBに有効メニューがない場合は画面内の初期メニューを使う。
   const allMenus: Menu[] = liveMenus.length ? liveMenus : FALLBACK_MENUS;
+  const menuDataIsLive = liveMenus.length > 0;
   const menuForList = allMenus.slice(0, 5); // v3は5件まで {N1}〜{N5}
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
   const soldNames = allMenus.filter(m => soldIds.has(String(m.id))).map(m => m.name);
 
+  const nextOccurrenceMinute = (time: string, after: number) => {
+    let minute = toMin(time);
+    if (!Number.isFinite(minute)) return Number.POSITIVE_INFINITY;
+    while (minute <= after) minute += 24 * 60;
+    return minute;
+  };
+
+  const referenceTrainMinute = (time: string, around: number) => {
+    let minute = toMin(time);
+    if (!Number.isFinite(minute)) return around;
+    while (minute < around - 12 * 60) minute += 24 * 60;
+    while (minute > around + 12 * 60) minute -= 24 * 60;
+    return minute;
+  };
+
+  const trainThreshold = followupTrainAfter
+    ? Math.max(now, referenceTrainMinute(followupTrainAfter, now))
+    : now;
+
   const cleanTrains = (rows: Array<{ departure_time: string; service: string | null }> | null | undefined) =>
-    (rows ?? []).filter(r => toMin(r.departure_time) > Math.max(now, followupTrainAfter ? toMin(followupTrainAfter) : now)).sort((a, b) => toMin(a.departure_time) - toMin(b.departure_time)).slice(0, 3);
+    (rows ?? [])
+      .map(r => ({
+        ...r,
+        _nextMinute: nextOccurrenceMinute(r.departure_time, trainThreshold),
+      }))
+      .filter(r => Number.isFinite(r._nextMinute) && r._nextMinute > trainThreshold)
+      .sort((a, b) => a._nextMinute - b._nextMinute)
+      .slice(0, 3);
   const kokubunji = cleanTrains(kokubunjiRes.data as Array<{ departure_time: string; service: string | null }> | null);
   const higashimurayama = cleanTrains(eastRes.data as Array<{ departure_time: string; service: string | null }> | null);
   type TaskRow = { id?: string | number; title: string; due: string | null; due_at: string | null; completed?: boolean | null; created_at?: string | null; details?: string | null };
@@ -289,9 +348,13 @@ export async function POST(req: Request) {
     if (row.status === 'crowded') acc.crowded++;
     return acc;
   }, { empty: 0, normal: 0, crowded: 0 });
-  const crowdLabel = voteCounts.crowded > voteCounts.normal && voteCounts.crowded >= voteCounts.empty
-    ? '混んでいる'
-    : voteCounts.empty > voteCounts.normal && voteCounts.empty > voteCounts.crowded ? '空いている' : '普通';
+  const crowdLabel = voteRows.length === 0
+    ? '未集計'
+    : voteCounts.crowded > voteCounts.normal && voteCounts.crowded >= voteCounts.empty
+      ? '混んでいる'
+      : voteCounts.empty > voteCounts.normal && voteCounts.empty > voteCounts.crowded
+        ? '空いている'
+        : '普通';
   const roomList = `教室名　状態　温度\n${rooms.map(r => `${r.room_name}　${r.status}${r.temp ? `　${r.temp}` : ''}`).join('\n')}`;
 
   const clubRows = (clubRes.data ?? []) as Array<{ club_name: string | null; title: string | null; content: string | null; author: string | null; created_at: string | null }>;
@@ -314,11 +377,20 @@ export async function POST(req: Request) {
   const bookRows = (booksRes.data ?? []) as Array<{ id: string | number; title: string | null; author: string | null; code?: string | null; status: string | null }>;
   const quotedBookTerm = /[「『"]([^」』"]+)[」』"]/.exec(question)?.[1]?.trim() ?? '';
   const namedBookTerm = /([一-龥ぁ-んァ-ンA-Za-z0-9]+)(?:と名前がついた|という名前がついた|が名前に入った|という名前の)本/.exec(question)?.[1]?.trim() ?? '';
-  let bookCandidate = quotedBookTerm || namedBookTerm.replace(/^(?:じゃあ|それじゃ|では)?(?:そこにある|そこに|ある)?/, '');
+
+  const cleanBookQuery = (value: string) => value
+    .normalize('NFKC')
+    .replace(/^(?:じゃあ|それじゃ|では)\s*/, '')
+    .replace(/(?:図書館|図書室|蔵書検索|蔵書を検索|蔵書)\s*/g, '')
+    .replace(/(?:本はありますか|本ありますか|はありますか|ありますか|あります|あるのでしょうか|あるでしょうか|でしょうか|を調べてください|を調べて|を検索して|で検索して|教えてください|教えて|調べて|検索して|本あるかな|本ある|本はある|って本ある|ってある|の本ある|本を)$/g, '')
+    .replace(/(?:本|蔵書)$/g, '')
+    .replace(/[?？!！。]+$/g, '')
+    .replace(/^[\s　のがはをにでと]+|[\s　のがはをにでと]+$/g, '')
+    .trim();
+
+  let bookCandidate = quotedBookTerm || namedBookTerm;
   if (!bookCandidate && wantsLibrary) {
-    bookCandidate = question
-      .replace(/じゃあ|それじゃ|そこにある|そこに|図書館|図書室|蔵書検索して|蔵書検索|蔵書を検索|蔵書|本あるかな|本ある|本はある|って本ある|ってある|を検索して|で検索して|で蔵書検索して|の本ある|本を調べて|本を|本|著者も教えて|著者|を|に|って|は|ですか|教えてください|教えて|調べて|検索して|あるかな|ある|かな|です|[?？!！。]/g, '')
-      .trim();
+    bookCandidate = cleanBookQuery(question);
   }
   const bookNeedle = normalize(bookCandidate);
   const bookMatches = bookNeedle
@@ -341,8 +413,7 @@ export async function POST(req: Request) {
   }
 
   // app/page.tsx の初期表示と同じ値をfallbackにする。DB行があればその値で上書き。
-  const career = (careerRes.data as { room_name?: string | null; occupied_seats?: number | null; total_seats?: number | null } | null)
-    ?? { room_name: 'キャリアセンター自習室', occupied_seats: 22, total_seats: 35 };
+  const career = (careerRes.data as { room_name?: string | null; occupied_seats?: number | null; total_seats?: number | null; updated_at?: string | null } | null);
   const lostRows = (lostRes.data ?? []) as Array<Record<string, unknown>>;
   const lostList = lostRows.slice(0, 6).map(r => `${str(r.title ?? r.item_name, '品名未登録')}｜${str(r.location ?? r.found_location, '場所不明')}｜${str(r.description ?? r.details, '詳細なし')}`).join('\n');
   const reviewRows = (reviewsRes.data ?? []) as Array<{ menu_id: string | number | null; user_name: string | null; rating: number | null; comment: string | null; created_at: string | null }>;
@@ -363,20 +434,20 @@ export async function POST(req: Request) {
   slots.CLUB_LIST = clubList || '連絡ノートはまだ登録されていません。';
   slots.BT = bookCandidate || (bookFound ? str(bookFound.title) : '検索した本');
   slots.BRESULT = bookResult;
-  slots.CA = career ? Math.max(0, Number(career.total_seats ?? 0) - Number(career.occupied_seats ?? 0)) : 0;
-  slots.CO = Number(career?.occupied_seats ?? 0);
-  slots.CT = Number(career?.total_seats ?? 0);
+  slots.CA = career && career.total_seats != null && career.occupied_seats != null ? Math.max(0, Number(career.total_seats) - Number(career.occupied_seats)) : '未登録';
+  slots.CO = career?.occupied_seats ?? '未登録';
+  slots.CT = career?.total_seats ?? '未登録';
   slots.LF_LIST = lostList || '現在、落とし物の登録情報はありません。';
   slots.REVIEW_LIST = reviewList || 'まだ口コミは投稿されていません。';
   slots.PTS = Math.max(0, contributionPoints);
   slots.NT_LIST = notificationList || '通知はありません。';
 
-  const addTrainSlots = (rows: Array<{ departure_time: string; service: string | null }>, hPrefix: string, sPrefix: string, mKey: string) => {
+  const addTrainSlots = (rows: Array<{ departure_time: string; service: string | null; _nextMinute?: number }>, hPrefix: string, sPrefix: string, mKey: string) => {
     rows.forEach((r, i) => {
       slots[`${hPrefix}${i + 1}`] = String(r.departure_time).slice(0, 5);
       slots[`${sPrefix}${i + 1}`] = str(r.service, '種別未登録');
     });
-    if (rows[0]) slots[mKey] = Math.max(0, toMin(rows[0].departure_time) - now);
+    if (rows[0]) slots[mKey] = Math.max(0, (rows[0]._nextMinute ?? nextOccurrenceMinute(rows[0].departure_time, now)) - now);
   };
   if (direction === '両方') {
     addTrainSlots(kokubunji, 'H', 'S', 'M1');
@@ -407,7 +478,7 @@ export async function POST(req: Request) {
     if (idx >= 0) {
       targetTask = tasks[idx]; target = '課題'; slots.TJ = targetTask.title; slots.TD = targetTask.due;
       const match = commonSub(question, targetTask.title);
-      if (match.length >= 2) question = question.replace(match, '{TJ}');
+      if (match.length >= 2 && !wantsTask) question = question.replace(match, '{TJ}');
     }
   }
 
@@ -462,7 +533,7 @@ export async function POST(req: Request) {
     sold: soldContext,
     club: clubRows.length ? 'あり' : 'なし',
     books: bookRows.length ? 'あり' : 'なし',
-    career: 'あり',
+    career: careerRes.data ? 'あり' : 'なし',
     lost: lostRows.length ? 'あり' : 'なし',
     reviews: reviewRows.length ? 'あり' : 'なし',
     contribution: authed && studentId ? 'あり' : 'なし',
@@ -498,11 +569,22 @@ export async function POST(req: Request) {
 
   // メニュー一覧もモデルによる省略を避け、実際の有効メニューを表として返す。
   if (wantsMenu && !wantsSold && !targetMenu && /今日|現在|一覧|何がある|メニューは|メニュー教えて/.test(question)) {
-    return NextResponse.json({ answer: '現在登録されている学食メニューです。', table: table(['メニュー', 'カロリー', 'アレルギー', '売り切れ'], allMenus.map(m => [str(m.name), str(m.calorie), str(m.allergy), soldIds.has(String(m.id)) ? '売り切れ' : '販売中'])) });
+    return NextResponse.json({
+      answer: menuDataIsLive
+        ? 'データベースに登録されている学食メニューです。'
+        : 'データベースにメニューがないため、サンプルメニューを表示しています。販売状況は未確認です。',
+      table: table(['メニュー', 'カロリー', 'アレルギー', '販売状況'], allMenus.map(m => [
+        str(m.name),
+        str(m.calorie),
+        str(m.allergy),
+        menuDataIsLive ? (soldIds.has(String(m.id)) ? '売り切れ' : '販売中') : '未確認'
+      ]))
+    });
   }
 
   // 売り切れは直接データから判定し、相反する文をモデルに生成させない。
   if (wantsSold) {
+    if (!menuDataIsLive) return NextResponse.json({ answer: '学食メニューが登録されていないため、売り切れ情報と照合できません。' });
     if (isSoldListQuestion(question) || !targetMenu) {
       const rows = allMenus.filter(m => soldIds.has(String(m.id))).map(m => [m.name, '売り切れ']);
       return NextResponse.json({ answer: rows.length ? '現在売り切れのメニューです。' : '現在、売り切れのメニューはありません。', table: rows.length ? table(['メニュー', '状態'], rows) : undefined });
@@ -513,7 +595,16 @@ export async function POST(req: Request) {
 
   // 学食全体の混雑状況は最新投票から決定論的に返す。
   if (wantsCrowd && !wantsQueue) {
-    return NextResponse.json({ answer: `今の学食の混み具合は「${crowdLabel}」です（投票${voteRows.length}件）。`, table: table(['状況', '投票数'], [['空いている', String(voteCounts.empty)], ['普通', String(voteCounts.normal)], ['混んでいる', String(voteCounts.crowded)]]) });
+    return NextResponse.json({
+      answer: voteRows.length
+        ? `今の学食の混み具合は「${crowdLabel}」です（投票${voteRows.length}件）。`
+        : '学食の混雑状況はまだ投票されていません。',
+      table: table(['状況', '投票数'], [
+        ['空いている', String(voteCounts.empty)],
+        ['普通', String(voteCounts.normal)],
+        ['混んでいる', String(voteCounts.crowded)]
+      ])
+    });
   }
 
   // 行列について「今どうかを尋ねる」のと「長いと報告する」を区別する。
@@ -526,6 +617,7 @@ export async function POST(req: Request) {
   };
   const isQueueReport = !!queueStatusFromText(question) && !explicitQueueQuestion;
   const pendingQueueId = typeof pendingQueuePrompt?.queueMenuId === 'string' ? pendingQueuePrompt.queueMenuId : '';
+  if (wantsQueue && !menuDataIsLive) return NextResponse.json({ answer: '学食メニューが登録されていないため、メニュー別の行列状況を確認できません。' });
   if (wantsQueue && !targetMenu && pendingQueueId && queueStatusFromText(question)) {
     targetMenu = allMenus.find(m => String(m.id) === pendingQueueId);
   }
@@ -558,33 +650,217 @@ export async function POST(req: Request) {
     });
   }
 
-  // 課題はログイン中の生徒の未完了データを直接表示し、AIの誤生成を防ぐ。
+  // 課題はログイン中の生徒の未完了データを直接検索する。
   if (wantsTask) {
-    if (!tasksReadable) return NextResponse.json({ answer: authed ? '課題データを読み込めませんでした。ログイン状態とテーブル権限を確認してください。' : '課題を確認するには学校アカウントでログインしてください。' });
-    if (!tasks.length) return NextResponse.json({ answer: '現在の未完了課題はありません。' });
-    const isNearest = /期限が一番近|一番近い課題|最も近い課題|締切が近い|期限.*近い/.test(question);
-    if (isNearest) {
-      const nextTask = [...tasks].sort((a, b) => a.dueAtMs - b.dueAtMs)[0];
-      return NextResponse.json({ answer: nextTask.dueAtMs === Number.POSITIVE_INFINITY ? `最も近い未完了課題は「${nextTask.title}」ですが、具体的な期限は登録されていません。` : `最も期限が近い未完了課題は「${nextTask.title}」（期限：${nextTask.due}）です。` });
+    if (!tasksReadable) {
+      return NextResponse.json({
+        answer: authed
+          ? '課題データを読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。'
+          : '課題を確認するには学校アカウントでログインしてください。'
+      });
     }
-    return NextResponse.json({ answer: '未完了の課題一覧です。', table: table(['課題', '期限', '詳細'], tasks.map(t => [t.title, t.due, t.details || '—'])) });
+
+    if (!tasks.length) {
+      return NextResponse.json({ answer: '現在の未完了課題はありません。' });
+    }
+
+    const q = question.normalize('NFKC');
+
+    const subjects = [
+      '数学', '英語', '国語', '物理', '化学', '生物',
+      '日本史', '世界史', '地理', '情報', '古典', '現代文'
+    ];
+
+    const subject = subjects.find(name => q.includes(name));
+
+    const subjectTasks = subject
+      ? tasks.filter(t =>
+          normalize(`${t.title} ${t.details}`).includes(normalize(subject))
+        )
+      : tasks;
+
+    if (subject && !subjectTasks.length) {
+      return NextResponse.json({
+        answer: `「${subject}」に関する未完了課題は見つかりませんでした。`
+      });
+    }
+
+    const tokyoDateKey = (date: Date) => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date);
+
+      const part = (type: string) =>
+        parts.find(item => item.type === type)?.value ?? '';
+
+      return `${part('year')}-${part('month')}-${part('day')}`;
+    };
+
+    const isToday = /今日中|今日まで|今日が期限|今日の課題|本日中|本日まで|本日が期限|今日/.test(q);
+    const isNearest = /期限.*近|近い.*課題|締切.*近|一番.*近い|最も近い/.test(q);
+
+    const todayKey = tokyoDateKey(new Date());
+
+    const selectedTasks = isToday
+      ? subjectTasks.filter(t =>
+          Number.isFinite(t.dueAtMs) &&
+          tokyoDateKey(new Date(t.dueAtMs)) === todayKey
+        )
+      : subjectTasks;
+
+    if (isToday && !selectedTasks.length) {
+      return NextResponse.json({
+        answer: subject
+          ? `今日が期限の「${subject}」の未完了課題はありません。`
+          : '今日が期限の未完了課題はありません。'
+      });
+    }
+
+    if (isNearest) {
+      const datedTasks = selectedTasks
+        .filter(t => Number.isFinite(t.dueAtMs))
+        .sort((a, b) => a.dueAtMs - b.dueAtMs);
+
+      if (!datedTasks.length) {
+        return NextResponse.json({
+          answer: '期限が登録されている未完了課題は見つかりませんでした。'
+        });
+      }
+
+      const nextTask = datedTasks[0];
+
+      return NextResponse.json({
+        answer: `最も期限が近い未完了課題は「${nextTask.title}」（期限：${nextTask.due}）です。`
+      });
+    }
+
+    const heading = isToday
+      ? '今日が期限の未完了課題です。'
+      : subject
+        ? `「${subject}」に関する未完了課題です。`
+        : '未完了の課題一覧です。';
+
+    return NextResponse.json({
+      answer: heading,
+      table: table(
+        ['課題', '期限', '詳細'],
+        selectedTasks.map(t => [t.title, t.due, t.details || '—'])
+      )
+    });
   }
 
-  // 低評価だけを指定された場合は、該当する評価だけを返す。高評価で埋め合わせない。
+  // 口コミは指定された評価に応じて直接絞り込む。
   if (wantsReviews) {
     const reviewRowsTyped = reviewRows;
-    const lowOnly = /低評価|低い評価|星[12１２]|★[12１２]|悪い口コミ|低評価だけ/.test(question);
-    const chosen = lowOnly ? reviewRowsTyped.filter(r => r.rating !== null && Number(r.rating) >= 1 && Number(r.rating) <= 2) : reviewRowsTyped;
-    if (!chosen.length) return NextResponse.json({ answer: lowOnly ? '低評価（★1〜2）の口コミは見つかりませんでした。' : '口コミはまだ登録されていません。' });
-    return NextResponse.json({ answer: lowOnly ? '低評価（★1〜2）の口コミです。' : '学食の口コミです。', table: table(['メニュー', '評価', '口コミ', '投稿者', '投稿日時'], chosen.map(r => [menuById.get(String(r.menu_id)) ?? '学食', `★${Number(r.rating) || 0}/5`, str(r.comment, 'コメントなし'), str(r.user_name, '匿名'), r.created_at ? new Date(r.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明'])) });
+    const normalizedRatingQuestion = question.normalize('NFKC');
+
+    const rangeMatch = /(?:星|★)\s*([1-5])\s*(?:〜|～|-|から)\s*([1-5])/.exec(normalizedRatingQuestion);
+    const comparisonMatch = rangeMatch
+      ? null
+      : /(?:星|★)\s*([1-5])\s*(以上|以下|未満|より上|より下|超え|より高い|より低い)/.exec(normalizedRatingQuestion);
+    const singleMatch = rangeMatch || comparisonMatch
+      ? null
+      : /(?:星|★)\s*([1-5])/.exec(normalizedRatingQuestion);
+
+    const lowOnly = /低評価|低い評価|悪い口コミ|低評価だけ/.test(normalizedRatingQuestion)
+      || /(?:星|★)\s*[12](?!\s*(?:以上|以下|未満|より上|より下|超え|より高い|より低い))/.test(normalizedRatingQuestion);
+    const highOnly = /高評価|高い評価|良い口コミ|いい口コミ|好評|おすすめの口コミ|高評価だけ/.test(normalizedRatingQuestion);
+
+    const rangeMin = rangeMatch ? Number(rangeMatch[1]) : 0;
+    const rangeMax = rangeMatch ? Number(rangeMatch[2]) : 0;
+    const comparisonRating = comparisonMatch ? Number(comparisonMatch[1]) : null;
+    const comparisonOperator = comparisonMatch?.[2] ?? '';
+    const requestedRating = singleMatch ? Number(singleMatch[1]) : null;
+
+    const selectedFilter = rangeMatch
+      ? `★${rangeMin}〜${rangeMax}`
+      : comparisonMatch
+        ? `★${comparisonRating}${comparisonOperator}`
+        : requestedRating !== null
+          ? `★${requestedRating}`
+          : lowOnly
+            ? '低評価（★1〜2）'
+            : highOnly
+              ? '高評価（★4〜5）'
+              : '';
+
+    const chosen = reviewRowsTyped.filter(r => {
+      const rating = r.rating === null ? null : Number(r.rating);
+      if (rating === null || !Number.isFinite(rating)) return false;
+
+      if (rangeMatch) {
+        return rating >= rangeMin && rating <= rangeMax;
+      }
+      if (comparisonMatch) {
+        if (comparisonOperator === '以上') return rating >= comparisonRating!;
+        if (comparisonOperator === '以下') return rating <= comparisonRating!;
+        if (comparisonOperator === '未満' || comparisonOperator === 'より下' || comparisonOperator === 'より低い') return rating < comparisonRating!;
+        return rating > comparisonRating!;
+      }
+      if (requestedRating !== null) return rating === requestedRating;
+      if (lowOnly) return rating >= 1 && rating <= 2;
+      if (highOnly) return rating >= 4 && rating <= 5;
+      return true;
+    });
+
+    if (!chosen.length) {
+      return NextResponse.json({
+        answer: selectedFilter
+          ? `${selectedFilter}の口コミは見つかりませんでした。`
+          : '口コミはまだ登録されていません。'
+      });
+    }
+
+    return NextResponse.json({
+      answer: selectedFilter ? `${selectedFilter}の口コミです。` : '学食の口コミです。',
+      table: table(
+        ['メニュー', '評価', '口コミ', '投稿者', '投稿日時'],
+        chosen.map(r => [
+          menuById.get(String(r.menu_id)) ?? '学食',
+          `★${Number(r.rating) || 0}/5`,
+          str(r.comment, 'コメントなし'),
+          str(r.user_name, '匿名'),
+          r.created_at
+            ? new Date(r.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+            : '日時不明'
+        ])
+      )
+    });
   }
 
-  // 部活ノートはテキストを崩さず、一覧表で返す。
+  // 部活ノートは、最新指定なら1件、それ以外は最大5件表示する。
   if (wantsClub) {
-    const askedClub = clubRows.find(r => r.club_name && normalize(question).includes(normalize(r.club_name)))?.club_name;
-    const matchingClubs = askedClub ? clubRows.filter(r => r.club_name === askedClub) : clubRows;
-    if (!matchingClubs.length) return NextResponse.json({ answer: askedClub ? `${askedClub}の連絡ノートは見つかりませんでした。` : '部活・委員会の連絡ノートはまだありません。' });
-    return NextResponse.json({ answer: '部活・委員会の連絡ノートです。', table: table(['部活・委員会', 'タイトル', '投稿日時', '内容'], matchingClubs.map(r => [str(r.club_name, '未登録'), str(r.title, 'タイトルなし'), r.created_at ? new Date(r.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明', str(r.content, '本文なし')])) });
+    const matchingClubs = clubsFiltered;
+    const latestOnly = /最新|一番新しい|いちばん新しい|直近|最近の連絡|最後の連絡/.test(question);
+    const visibleClubs = latestOnly
+      ? matchingClubs.slice(0, 1)
+      : matchingClubs.slice(0, 5);
+
+    if (!visibleClubs.length) {
+      return NextResponse.json({
+        answer: '部活・委員会の連絡ノートはまだありません。'
+      });
+    }
+
+    return NextResponse.json({
+      answer: latestOnly
+        ? '最新の部活・委員会の連絡ノートです。'
+        : '部活・委員会の連絡ノートです。',
+      table: table(
+        ['部活・委員会', 'タイトル', '投稿日時', '内容'],
+        visibleClubs.map(r => [
+          str(r.club_name, '未登録'),
+          str(r.title, 'タイトルなし'),
+          r.created_at
+            ? new Date(r.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+            : '日時不明',
+          str(r.content, '本文なし')
+        ])
+      )
+    });
   }
 
   // 蔵書はタイトル・著者の部分一致を許し、「創価を含む本」なども検索する。
@@ -601,7 +877,13 @@ export async function POST(req: Request) {
     const explicitLostItem = /(?:落とし物|忘れ物)(?:に|で)?(.+?)(?:はある|ありますか|あるか|はどこ|を探|ってある|ある[?？]|ですか)/.exec(question)?.[1] ?? '';
     const cleanedLostItem = explicitLostItem || question
       .replace(/落とし物|忘れ物|登録情報|何が|どこに届けられた|どこに|届けられた|教えて|一覧|ですか|です|あるの|ありますか|あるか|ある|は|に|を|[?？!！。]/g, '');
-    const lostSearch = normalize(cleanedLostItem);
+    const lostSearch = normalize(
+      cleanedLostItem
+        .replace(/(?:の)?(?:落とし物|忘れ物)$/g, '')
+        .replace(/(?:ありますでしょうか|ありますか|あります|あるかな|あるの|あるか|ある)$/g, '')
+        .replace(/(?:の|が|を|は|に|で|と|です)+$/g, '')
+        .trim()
+    );
     const genericLost = !lostSearch || /^(何|一覧|情報|何がある)$/.test(lostSearch);
     const matchingLost = genericLost ? lostRows : lostRows.filter(r => {
       const title = normalize(str(r.title ?? r.item_name, ''));
