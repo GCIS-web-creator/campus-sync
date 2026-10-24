@@ -207,17 +207,17 @@ const getTodoPresentation = (type: string) => {
 
 const INITIAL_ROOMS = [
   { id: 101, name: '栄冠ホール', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 102, name: '化学実験室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 103, name: '生物実験室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 104, name: 'グローリーホール', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 105, name: 'ミーティングルーム1', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 106, name: 'ミーティングルーム2', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 107, name: '図書館', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 108, name: 'グローバルステーション', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 109, name: 'Call教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 110, name: 'PC教室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 111, name: '家庭科室', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
-  { id: 112, name: '普通教室（1-1）', status: '快適', temp: '25℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 102, name: '化学実験室', status: '快適', temp: '24℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 103, name: '生物実験室', status: '快適', temp: '26℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 104, name: 'グローリーホール', status: '快適', temp: '27℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 105, name: 'ミーティングルーム1', status: '快適', temp: '23℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 106, name: 'ミーティングルーム2', status: '快適', temp: '28℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 107, name: '図書館', status: '快適', temp: '24℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 108, name: 'グローバルステーション', status: '快適', temp: '26℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 109, name: 'Call教室', status: '快適', temp: '23℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 110, name: 'PC教室', status: '快適', temp: '27℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 111, name: '家庭科室', status: '快適', temp: '29℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
+  { id: 112, name: '普通教室（1-1）', status: '快適', temp: '30℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
 ];
 
 const MOCK_NOTIFICATIONS = [
@@ -957,6 +957,7 @@ export default function CampusSyncApp() {
   const [favoriteRoomId, setFavoriteRoomId] = useState<number>(112);
   const [selectedRoomId, setSelectedRoomId] = useState<number>(101);
   const [selectedStatus, setSelectedStatus] = useState<string>('快適');
+  const [selectedAcTemp, setSelectedAcTemp] = useState<number>(25);
 
   // サブタブ管理
   const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
@@ -2110,26 +2111,25 @@ Supabaseの設定を確認してください。
     const selectedRoom = rooms.find(room => room.id === selectedRoomId);
     if (!selectedRoom) return;
 
-    let nextTemp = selectedRoom.temp;
-    let color = selectedRoom.color;
-    let bg = selectedRoom.bg;
-    let icon: React.ElementType = selectedRoom.icon;
+    if (!Number.isInteger(selectedAcTemp) || selectedAcTemp < 23 || selectedAcTemp > 30) {
+      alert('エアコンの設定温度は23〜30℃で選択してください。');
+      return;
+    }
+
+    // 体感（寒い／快適／暑い）と、報告されたエアコン設定温度を別々に扱う。
+    const nextTemp = `${selectedAcTemp}℃`;
+    let color = 'text-green-500';
+    let bg = 'bg-green-50';
+    let icon: React.ElementType = AirconComfortableIcon;
 
     if (selectedStatus === '寒い') {
-      nextTemp = (parseInt(selectedRoom.temp) - 1) + '℃';
       color = 'text-cyan-500';
       bg = 'bg-cyan-50';
       icon = AirconColdIcon;
     } else if (selectedStatus === '暑い') {
-      nextTemp = (parseInt(selectedRoom.temp) + 1) + '℃';
       color = 'text-red-500';
       bg = 'bg-red-50';
       icon = AirconHotIcon;
-    } else {
-      nextTemp = '25℃';
-      color = 'text-green-500';
-      bg = 'bg-green-50';
-      icon = AirconComfortableIcon;
     }
 
     const { error } = await supabase
@@ -2157,8 +2157,8 @@ Supabaseの設定を確認してください。
         : room
     ));
     setShowTempModal(false);
-    void updateContribution(10, '教室のエアコン状況を報告');
-    alert("エアコン状況のリアルタイム報告ありがとうございます！貢献度+10pt！🔥");
+    void updateContribution(10, '教室のエアコン設定温度・体感を報告');
+    alert(`報告ありがとうございます！${selectedRoom.name}の設定温度を${nextTemp}、体感を「${selectedStatus}」として保存しました。貢献度+10pt！`);
   };
 
   // --- 新機能用ハンドラー群 ---
@@ -4307,9 +4307,25 @@ Supabaseの設定を確認してください。
             <div className="space-y-3.5 text-xs">
               <div>
                 <label className="font-black text-gray-400 block mb-1">報告対象の場所・教室</label>
-                <select value={selectedRoomId} onChange={e => setSelectedRoomId(Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold outline-none">
+                <select value={selectedRoomId} onChange={e => {
+                  const roomId = Number(e.target.value);
+                  setSelectedRoomId(roomId);
+                  const room = rooms.find(r => r.id === roomId);
+                  const parsedTemp = Number.parseInt(String(room?.temp ?? '25'), 10);
+                  setSelectedAcTemp(Number.isFinite(parsedTemp) ? Math.max(23, Math.min(30, parsedTemp)) : 25);
+                }} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold outline-none">
                   {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
+              </div>
+
+              <div>
+                <label className="font-black text-gray-400 block mb-1.5">エアコンの設定温度（サイトに表示する温度）</label>
+                <select value={selectedAcTemp} onChange={e => setSelectedAcTemp(Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold outline-none">
+                  {Array.from({ length: 8 }, (_, i) => i + 23).map(temp => (
+                    <option key={temp} value={temp}>{temp}℃</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] leading-relaxed text-gray-400">報告した設定温度が、教室一覧とAIの温度表示に反映されます。</p>
               </div>
 
               <div>
@@ -4325,7 +4341,7 @@ Supabaseの設定を確認してください。
             </div>
 
             <button onClick={submitAcReport} className="w-full py-2.5 bg-teal-500 hover:bg-teal-600 text-white font-black text-xs rounded-xl shadow-md shadow-teal-100 transition-colors">
-              この室温ステータスで即時報告
+              設定温度と室内体感を報告
             </button>
           </div>
         </div>

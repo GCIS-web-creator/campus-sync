@@ -49,17 +49,17 @@ const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠
 
 const DEFAULT_ROOMS = [
   { room_id: '101', room_name: '栄冠ホール', status: '快適', temp: '25℃' },
-  { room_id: '102', room_name: '化学実験室', status: '快適', temp: '25℃' },
-  { room_id: '103', room_name: '生物実験室', status: '快適', temp: '25℃' },
-  { room_id: '104', room_name: 'グローリーホール', status: '快適', temp: '25℃' },
-  { room_id: '105', room_name: 'ミーティングルーム1', status: '快適', temp: '25℃' },
-  { room_id: '106', room_name: 'ミーティングルーム2', status: '快適', temp: '25℃' },
-  { room_id: '107', room_name: '図書館', status: '快適', temp: '25℃' },
-  { room_id: '108', room_name: 'グローバルステーション', status: '快適', temp: '25℃' },
-  { room_id: '109', room_name: 'Call教室', status: '快適', temp: '25℃' },
-  { room_id: '110', room_name: 'PC教室', status: '快適', temp: '25℃' },
-  { room_id: '111', room_name: '家庭科室', status: '快適', temp: '25℃' },
-  { room_id: '112', room_name: '普通教室（1-1）', status: '快適', temp: '25℃' },
+  { room_id: '102', room_name: '化学実験室', status: '快適', temp: '24℃' },
+  { room_id: '103', room_name: '生物実験室', status: '快適', temp: '26℃' },
+  { room_id: '104', room_name: 'グローリーホール', status: '快適', temp: '27℃' },
+  { room_id: '105', room_name: 'ミーティングルーム1', status: '快適', temp: '23℃' },
+  { room_id: '106', room_name: 'ミーティングルーム2', status: '快適', temp: '28℃' },
+  { room_id: '107', room_name: '図書館', status: '快適', temp: '24℃' },
+  { room_id: '108', room_name: 'グローバルステーション', status: '快適', temp: '26℃' },
+  { room_id: '109', room_name: 'Call教室', status: '快適', temp: '23℃' },
+  { room_id: '110', room_name: 'PC教室', status: '快適', temp: '27℃' },
+  { room_id: '111', room_name: '家庭科室', status: '快適', temp: '29℃' },
+  { room_id: '112', room_name: '普通教室（1-1）', status: '快適', temp: '30℃' },
 ];
 // 現在のCampusSync画面にある通知サンプルと同一内容。通知テーブルが導入されたら共通テーブルに置き換える。
 const FALLBACK_MENUS = [
