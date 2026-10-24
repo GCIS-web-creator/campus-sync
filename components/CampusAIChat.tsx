@@ -44,6 +44,62 @@ function getOrCreateVoteId(studentId: string): string {
   return newId;
 }
 
+type PageAction =
+  | { type: 'set-theme'; theme: 'blue' | 'pink' | 'purple' | 'emerald' | 'orange' | 'indigo' }
+  | { type: 'set-favorite-room'; room: string }
+  | { type: 'test-push' };
+
+type PageActionResult = { success: boolean; message: string };
+
+function detectPageAction(question: string): PageAction | null {
+  const q = question.normalize('NFKC').replace(/[「」『』"'"]/g, '').trim();
+
+  const favorite = /お気に入り(?:の)?教室を(.+?)(?:に変更|にして|に変えて|に設定|へ変更|に変える)[。！!？?]*$/.exec(q);
+  if (favorite?.[1]?.trim()) {
+    return { type: 'set-favorite-room', room: favorite[1].trim() };
+  }
+
+  if (/テーマカラー|テーマ色|テーマ/.test(q) && /変えて|変更|設定|切り替え|にして/.test(q)) {
+    if (/紫|パープル/.test(q)) return { type: 'set-theme', theme: 'purple' };
+    if (/ピンク/.test(q)) return { type: 'set-theme', theme: 'pink' };
+    if (/青|ブルー/.test(q)) return { type: 'set-theme', theme: 'blue' };
+    if (/緑|グリーン/.test(q)) return { type: 'set-theme', theme: 'emerald' };
+    if (/オレンジ/.test(q)) return { type: 'set-theme', theme: 'orange' };
+    if (/藍色|インディゴ/.test(q)) return { type: 'set-theme', theme: 'indigo' };
+  }
+
+  if (/リマインダー.*テスト通知|テスト通知.*(?:送って|送信|して)|通知.*テストして/.test(q)) {
+    return { type: 'test-push' };
+  }
+
+  return null;
+}
+
+function requestPageAction(action: PageAction): Promise<PageActionResult> {
+  return new Promise(resolve => {
+    let settled = false;
+    let timeoutId: number | undefined;
+
+    const finish = (result: PageActionResult) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      resolve(result);
+    };
+
+    timeoutId = window.setTimeout(() => {
+      finish({
+        success: false,
+        message: '画面側の操作を確認できませんでした。ページを再読み込みして、もう一度試してください。'
+      });
+    }, 5000);
+
+    window.dispatchEvent(new CustomEvent('campus-sync-ai-action', {
+      detail: { action, resolve: finish }
+    }));
+  });
+}
+
 export default function CampusAIChat() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -62,6 +118,28 @@ export default function CampusAIChat() {
     setInput('');
     setMsgs(m => [...m, { id, role: 'user', text: question }]);
     setBusy(true);
+    const pageAction = detectPageAction(question);
+    if (pageAction) {
+      let actionReply: Msg;
+      try {
+        const result = await requestPageAction(pageAction);
+        actionReply = {
+          id: `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          role: 'ai',
+          text: result.message,
+        };
+      } catch {
+        actionReply = {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          text: '画面操作に失敗しました。設定画面から操作を確認してください。',
+        };
+      }
+      setMsgs(m => [...m, actionReply]);
+      setBusy(false);
+      return;
+    }
+
     let reply: Msg = { id: `ai-${Date.now()}`, role: 'ai', text: 'AIにつながりませんでした。少し待ってからもう一度試してください。' };
     try {
       const { headers, studentId } = await getSessionHeaders();

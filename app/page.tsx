@@ -1034,6 +1034,23 @@ export default function CampusSyncApp() {
   });
 
 
+// 保存されたテーマとお気に入り教室を復元する。
+useEffect(() => {
+  try {
+    const savedTheme = window.localStorage.getItem('campus-sync-theme');
+    if (savedTheme && Object.prototype.hasOwnProperty.call(THEMES, savedTheme)) {
+      setTheme(savedTheme as ThemeKey);
+    }
+
+    const savedRoomId = Number(window.localStorage.getItem('campus-sync-favorite-room-id'));
+    if (Number.isInteger(savedRoomId) && INITIAL_ROOMS.some(room => room.id === savedRoomId)) {
+      setFavoriteRoomId(savedRoomId);
+    }
+  } catch {
+    // ストレージが使用できなくても画面は初期設定で動かす。
+  }
+}, []);
+
 // 剣ランク用：本人の貢献履歴を合計して累計ポイントを復元する。
 useEffect(() => {
   const currentStudentId = String(studentId || '').trim();
@@ -1087,7 +1104,6 @@ useEffect(() => {
   setRooms(prevRooms => prevRooms.map(room =>
     room.id === 112 ? { ...room, name: `普通教室（${userClass}）` } : room
   ));
-  setFavoriteRoomId(112);
 }, [userClass]);
 
 // 発車カウントダウンはバス・電車画面を開いている間だけ秒単位で更新する。
@@ -2386,43 +2402,171 @@ Supabaseの設定を確認してください。
     }
   };
 
-  const sendTestPushNotification = async () => {
+  const sendTestPushNotification = async (): Promise<{ success: boolean; message: string }> => {
     if (!authUser) {
-      setPushStatus('学校メールでログインしてください。');
-      return;
+      const message = '学校メールでログインしてください。';
+      setPushStatus(message);
+      return { success: false, message };
     }
+
     setPushBusy(true);
     setPushStatus('テスト通知を送信しています…');
+
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
+
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('ログインセッションがありません。再ログインしてください。');
       if (!('serviceWorker' in navigator)) {
         throw new Error('このブラウザーはプッシュ通知に対応していません。');
       }
+
       const registration = await navigator.serviceWorker.ready;
       const currentSubscription = await registration.pushManager.getSubscription();
       if (!currentSubscription?.endpoint) {
         throw new Error('この端末の通知登録がありません。「この端末の通知を有効化」を先に押してください。');
       }
+
       const response = await fetch('/api/push/test', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ endpoint: currentSubscription.endpoint }),
         cache: 'no-store',
       });
+
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.success) throw new Error(result?.message || `通知送信に失敗しました（HTTP ${response.status}）。`);
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || `通知送信に失敗しました（HTTP ${response.status}）。`);
+      }
+
       setPushReady(true);
-      setPushStatus('テスト通知を送信しました。端末の通知領域を確認してください。');
+      const message = 'テスト通知を送信しました。端末の通知領域を確認してください。';
+      setPushStatus(message);
+      return { success: true, message };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
-      setPushStatus(`テスト通知に失敗しました: ${message}`);
+      const detail = error instanceof Error
+        ? error.message
+        : String((error as any)?.message || '不明なエラー');
+      const message = `テスト通知に失敗しました: ${detail}`;
+      setPushStatus(message);
+      return { success: false, message };
     } finally {
       setPushBusy(false);
     }
   };
+
+  // AIチャットからの画面操作要求を処理する。
+  useEffect(() => {
+    type ActionRequest = {
+      type?: string;
+      theme?: string;
+      room?: string;
+    };
+    type ActionResult = { success: boolean; message: string };
+    type ActionDetail = {
+      action?: ActionRequest;
+      resolve?: (result: ActionResult) => void;
+    };
+
+    const handleAction = (event: Event) => {
+      const detail = (event as CustomEvent<ActionDetail>).detail;
+      if (!detail?.action || typeof detail.resolve !== 'function') return;
+
+      void (async () => {
+        try {
+          const action = detail.action!;
+
+          if (action.type === 'set-theme') {
+            const theme = action.theme;
+            if (!theme || !Object.prototype.hasOwnProperty.call(THEMES, theme)) {
+              detail.resolve!({ success: false, message: '指定されたテーマカラーは対応していません。' });
+              return;
+            }
+
+            setTheme(theme as ThemeKey);
+            window.localStorage.setItem('campus-sync-theme', theme);
+
+            const labels: Record<ThemeKey, string> = {
+              blue: '青',
+              pink: 'ピンク',
+              purple: '紫',
+              emerald: '緑',
+              orange: 'オレンジ',
+              indigo: '藍色',
+            };
+
+            detail.resolve!({
+              success: true,
+              message: `テーマカラーを${labels[theme as ThemeKey]}に変更しました。`,
+            });
+            return;
+          }
+
+          if (action.type === 'set-favorite-room') {
+            const requested = String(action.room ?? '')
+              .normalize('NFKC')
+              .replace(/[\s　]/g, '')
+              .replace(/[（(].*?[）)]/g, '')
+              .replace(/教室$/, '')
+              .toLocaleLowerCase();
+
+            const normalizeRoom = (value: string) => value
+              .normalize('NFKC')
+              .replace(/[\s　]/g, '')
+              .replace(/[（(].*?[）)]/g, '')
+              .replace(/教室$/, '')
+              .toLocaleLowerCase();
+
+            const targetRoom = rooms.find(room => {
+              const name = normalizeRoom(room.name);
+              return name === requested ||
+                (requested.length >= 4 && name.includes(requested));
+            });
+
+            if (!targetRoom) {
+              detail.resolve!({
+                success: false,
+                message: `「${String(action.room ?? '')}」に一致する教室がありません。教室名を確認してください。`,
+              });
+              return;
+            }
+
+            setFavoriteRoomId(targetRoom.id);
+            window.localStorage.setItem('campus-sync-favorite-room-id', String(targetRoom.id));
+
+            detail.resolve!({
+              success: true,
+              message: `お気に入り教室を「${targetRoom.name}」に変更しました。`,
+            });
+            return;
+          }
+
+          if (action.type === 'test-push') {
+            const result = await sendTestPushNotification();
+            detail.resolve!(result);
+            return;
+          }
+
+          detail.resolve!({
+            success: false,
+            message: 'この操作には対応していません。',
+          });
+        } catch (error) {
+          detail.resolve!({
+            success: false,
+            message: `操作に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      })();
+    };
+
+    window.addEventListener('campus-sync-ai-action', handleAction);
+    return () => window.removeEventListener('campus-sync-ai-action', handleAction);
+  }, [rooms, sendTestPushNotification]);
 
   const toggleRemindersEnabled = () => {
     const next = !remindersEnabled;
@@ -3726,7 +3870,10 @@ Supabaseの設定を確認してください。
                   return (
                     <button
                       key={key}
-                      onClick={() => setTheme(key)}
+                      onClick={() => {
+                        setTheme(key);
+                        try { window.localStorage.setItem('campus-sync-theme', key); } catch {}
+                      }}
                       className={`flex flex-col items-center py-2 rounded-xl border transition-all ${isActive ? 'border-gray-800 bg-gray-50' : 'border-gray-100 bg-white'}`}
                     >
                       <span className={`w-5 h-5 rounded-full block mb-1 flex items-center justify-center ${item.bg} text-white`}>
@@ -3848,7 +3995,10 @@ Supabaseの設定を確認してください。
                 {rooms.map(r => (
                   <button
                     key={r.id}
-                    onClick={() => setFavoriteRoomId(r.id)}
+                    onClick={() => {
+                      setFavoriteRoomId(r.id);
+                      try { window.localStorage.setItem('campus-sync-favorite-room-id', String(r.id)); } catch {}
+                    }}
                     className={`text-[11px] px-2.5 py-1.5 rounded-xl border font-black flex items-center gap-1 transition-all ${
                       favoriteRoomId === r.id 
                         ? 'bg-yellow-500 text-white border-yellow-500' 

@@ -35,15 +35,16 @@ function findTarget(q: string, names: string[], minLen = 3): number {
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
-const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|ワーク|プリント|やること/.test(q);
+const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み|提出完了|完了にして|済みにして|終わったことにして/.test(q);
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
 const isClubQuestion = (q: string) => /部活|部活動|委員会|連絡ノート|吹奏楽部/.test(q);
-const isLibraryQuestion = (q: string) => /蔵書|蔵書検索|図書館.*本|図書室.*本|本ある|本は|本を|著者名|貸出中|借りられる/.test(q);
+const isLibraryQuestion = (q: string) => /蔵書|図書館.*本|図書室.*本|本ある|本は|本を|本のタイトル|書籍|著者|作者|ISBN|貸出|貸し出し|借り|所蔵状況/.test(q);
 const isCareerQuestion = (q: string) => /キャリアセンター|キャリア|進路室|自習室.*空|座席状況|空席|座席|席数/.test(q);
 const isLostQuestion = (q: string) => /落とし物|忘れ物|届けられてる/.test(q);
 const isReviewQuestion = (q: string) => /口コミ|レビュー|感想|評価/.test(q);
-const isContributionQuestion = (q: string) => /貢献度|貢献ポイント|累計ポイント|学校貢献/.test(q);
-const isNotificationQuestion = (q: string) => /通知|お知らせ/.test(q);
+const isContributionQuestion = (q: string) => /貢献度|貢献ポイント|累計ポイント|学校貢献|剣ランク|貢献度ランク|ランク|ブロンズ|シルバー|ゴールド|プラチナ|ダイヤモンド/.test(q);
+const isProfileQuestion = (q: string) => /学籍番号|所属クラス|私のクラス|自分のクラス|何年何組|何組ですか|私の名前|自分の名前|名前を教えて/.test(q);
+const isNotificationQuestion = (q: string) => /通知|お知らせ|リマインダー/.test(q);
 const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間/.test(q);
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
@@ -118,6 +119,7 @@ export async function POST(req: Request) {
   const wantsLost = isLostQuestion(question);
   const wantsReviews = isReviewQuestion(question);
   const wantsContribution = isContributionQuestion(question);
+  const wantsProfile = isProfileQuestion(question);
   const wantsNotifications = isNotificationQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
@@ -144,19 +146,65 @@ export async function POST(req: Request) {
   const email = userResult?.data?.user?.email ?? '';
   const studentId = /^([0-9]{6})@tokyo\.soka\.ed\.jp$/i.exec(email)?.[1] ?? '';
   let userClass = '1-1';
-  if (wantsRoom && authed && studentId) {
-    let profile: { user_class?: unknown } | null = null;
+  let profileName = '';
+  let profileClass = '';
+
+  if ((wantsRoom || wantsProfile) && authed && studentId) {
+    let profile: { user_class?: unknown; student_name?: unknown } | null = null;
     try {
-      const profileResult = await authed.from('profiles').select('user_class').eq('student_id', studentId).maybeSingle();
+      const profileResult = await authed
+        .from('profiles')
+        .select('student_name, user_class')
+        .eq('student_id', studentId)
+        .maybeSingle();
+
       if (!profileResult.error) profile = profileResult.data;
     } catch {
       profile = null;
     }
+
+    profileName = String(profile?.student_name ?? '').trim();
     const rawClass = String(profile?.user_class ?? '').trim();
-    if (/^[1-3]-[1-8]$/.test(rawClass)) userClass = rawClass;
-    else {
+
+    if (/^[1-3]-[1-8]$/.test(rawClass)) {
+      userClass = rawClass;
+      profileClass = rawClass;
+    } else {
       const legacyClass = /^([1-3])[- ]([A-H])$/i.exec(rawClass);
-      if (legacyClass) userClass = `${legacyClass[1]}-${legacyClass[2].toUpperCase().charCodeAt(0) - 64}`;
+      if (legacyClass) {
+        userClass = `${legacyClass[1]}-${legacyClass[2].toUpperCase().charCodeAt(0) - 64}`;
+        profileClass = userClass;
+      }
+    }
+  }
+
+  if (wantsProfile) {
+    if (!authed || !studentId) {
+      return NextResponse.json({
+        answer: 'プロフィールを確認するには、学校アカウントでログインしてください。'
+      });
+    }
+
+    if (/学籍番号/.test(question)) {
+      return NextResponse.json({
+        answer: `ログイン中の学校アカウントの学籍番号は${studentId}です。`
+      });
+    }
+
+    if (/名前/.test(question)) {
+      return NextResponse.json({
+        answer: profileName
+          ? `登録されている名前は${profileName}です。`
+          : 'プロフィールに名前が登録されていません。'
+      });
+    }
+
+    if (/所属|クラス|何組/.test(question)) {
+      return NextResponse.json({
+        answer: profileClass
+          ? `登録されている所属クラスは${profileClass}です。`
+          : '所属クラスをプロフィールから取得できませんでした。プロフィール設定を確認してください。'
+      });
     }
   }
 
@@ -171,7 +219,7 @@ export async function POST(req: Request) {
       ? authed.from('assignments').select('id, title, details, due, due_at, created_at').eq('is_active', true).order('created_at', { ascending: false })
       : Promise.resolve({ data: null, error: null }),
     authed && studentId
-      ? authed.from('todos').select('title, due, due_at, completed, created_at').eq('student_id', studentId).order('created_at', { ascending: true })
+      ? authed.from('todos').select('id, title, due, due_at, completed, created_at, details').eq('student_id', studentId).order('created_at', { ascending: true })
       : Promise.resolve({ data: null, error: null }),
     db.from('club_notes').select('club_name, title, content, author, created_at').order('created_at', { ascending: false }).limit(100),
     db.from('library_books').select('id, title, author, code, status, created_at').order('created_at', { ascending: false }).limit(500),
@@ -296,7 +344,7 @@ export async function POST(req: Request) {
       .slice(0, 3);
   const kokubunji = cleanTrains(kokubunjiRes.data as Array<{ departure_time: string; service: string | null }> | null);
   const higashimurayama = cleanTrains(eastRes.data as Array<{ departure_time: string; service: string | null }> | null);
-  type TaskRow = { id?: string | number; title: string; due: string | null; due_at: string | null; completed?: boolean | null; created_at?: string | null; details?: string | null };
+  type TaskRow = { id?: string | number; title: string; due: string | null; due_at: string | null; completed?: boolean | null; created_at?: string | null; details?: string | null; source?: 'personal' | 'assignment' };
   const assignmentRows = (taskRes.data ?? []) as TaskRow[];
   const personalRows = (todoRes.data ?? []) as TaskRow[];
   const completedAssignmentIds = new Set(((completionRes.data ?? []) as Array<{ assignment_id: string | number; completed: boolean | null }>).filter(r => r.completed).map(r => String(r.assignment_id)));
@@ -304,19 +352,109 @@ export async function POST(req: Request) {
   const assignmentTitles = new Set(assignmentRows.map(r => normalize(str(r.title, ''))));
   // 画面のvisibleTodosと同様に重複を除き、完了済みを落として統合する。
   const taskRows: TaskRow[] = [
-    ...personalRows.filter(r => !r.completed && !assignmentTitles.has(normalize(str(r.title, '')))),
-    ...activeAssignments,
+    ...personalRows
+      .filter(r => !r.completed && !assignmentTitles.has(normalize(str(r.title, ''))))
+      .map(r => ({ ...r, source: 'personal' as const })),
+    ...activeAssignments.map(r => ({ ...r, source: 'assignment' as const })),
   ];
   const tasksReadable = !!authed && !taskRes.error && !todoRes.error && !completionRes.error;
-  const tasks = taskRows.map(r => ({
-    id: r.id,
-    title: str(r.title),
-    due: r.due_at
-      ? new Date(r.due_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : str(r.due, '期限未設定'),
-    dueAtMs: r.due_at ? new Date(r.due_at).getTime() : (Number.isFinite(Date.parse(r.due ?? '')) ? Date.parse(r.due ?? '') : Number.POSITIVE_INFINITY),
-    details: str(r.details, ''),
-  })).sort((a, b) => a.dueAtMs - b.dueAtMs);
+  const parseDueText = (dueText: string | null): number => {
+    const raw = String(dueText ?? '').trim().normalize('NFKC');
+    if (!raw) return Number.POSITIVE_INFINITY;
+
+    const direct = Date.parse(raw);
+    if (Number.isFinite(direct)) return direct;
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(nowDate);
+
+    const part = (type: string) => Number(
+      parts.find(item => item.type === type)?.value ?? 0
+    );
+    const year = part('year');
+    const month = part('month');
+    const day = part('day');
+    const todayUtc = Date.UTC(year, month - 1, day);
+    const endOfDay = (daysFromToday: number) =>
+      todayUtc + (daysFromToday + 1) * 24 * 60 * 60 * 1000 - 1;
+
+    if (/本日|今日|当日/.test(raw)) return endOfDay(0);
+    if (/明日|翌日/.test(raw)) return endOfDay(1);
+
+    const weekdayPatterns: Array<{ pattern: RegExp; day: number }> = [
+      { pattern: /日曜/, day: 0 },
+      { pattern: /月曜/, day: 1 },
+      { pattern: /火曜/, day: 2 },
+      { pattern: /水曜/, day: 3 },
+      { pattern: /木曜/, day: 4 },
+      { pattern: /金曜/, day: 5 },
+      { pattern: /土曜/, day: 6 },
+    ];
+    const weekday = weekdayPatterns.find(item => item.pattern.test(raw));
+
+    if (weekday) {
+      const currentDay = new Date(todayUtc).getUTCDay();
+      let delta = (weekday.day - currentDay + 7) % 7;
+
+      if (/来週/.test(raw)) {
+        // 月曜始まりで、来週の指定曜日を求める
+        const currentWeekday = (currentDay + 6) % 7;
+        const targetWeekday = (weekday.day + 6) % 7;
+        delta = targetWeekday - currentWeekday;
+        if (delta <= 0) delta += 7;
+      }
+
+      return endOfDay(delta);
+    }
+
+    const japaneseDate = /(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日/.exec(raw);
+    if (japaneseDate) {
+      const targetYear = Number(japaneseDate[1] || year);
+      const targetMonth = Number(japaneseDate[2]);
+      const targetDay = Number(japaneseDate[3]);
+      const timestamp = Date.UTC(targetYear, targetMonth - 1, targetDay) - 9 * 60 * 60 * 1000;
+      const check = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay));
+      if (
+        check.getUTCFullYear() === targetYear &&
+        check.getUTCMonth() === targetMonth - 1 &&
+        check.getUTCDate() === targetDay
+      ) {
+        return timestamp + 24 * 60 * 60 * 1000 - 1;
+      }
+    }
+
+    return Number.POSITIVE_INFINITY;
+  };
+
+  const tasks = taskRows.map(r => {
+    const parsedDueAt = r.due_at ? Date.parse(r.due_at) : Number.NaN;
+    const dueAtMs = Number.isFinite(parsedDueAt)
+      ? parsedDueAt
+      : parseDueText(r.due);
+
+    return {
+      id: r.id,
+      source: r.source,
+      completed: Boolean(r.completed),
+      title: str(r.title),
+      due: Number.isFinite(parsedDueAt)
+        ? new Date(parsedDueAt).toLocaleString('ja-JP', {
+            timeZone: 'Asia/Tokyo',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : str(r.due, '期限未設定'),
+      dueAtMs,
+      details: str(r.details, ''),
+    };
+  }).sort((a, b) => a.dueAtMs - b.dueAtMs);
+
   const taskList = tasks.slice(0, 3); // 学習テンプレートが対応する一覧スロットはJ1〜J3
 
   type Room = { room_id: string; room_name: string; status: string; temp: string | null; updated_at?: string | null };
@@ -660,6 +798,80 @@ export async function POST(req: Request) {
       });
     }
 
+    const completionCommand = /提出済み|提出完了|完了済み|完了にして|済みにして|終わったことにして/.test(question.normalize('NFKC'));
+
+    if (completionCommand) {
+      if (!authed || !studentId) {
+        return NextResponse.json({
+          answer: '課題の状態を変更するには、学校アカウントでログインしてください。'
+        });
+      }
+
+      const taskQuery = normalize(
+        question.normalize('NFKC')
+          .replace(/提出済みにして|提出完了にして|完了済みにして|提出済み|提出完了|完了済み|完了にして|済みにして|終わったことにして|課題|宿題|提出物|提出して|提出|してください|お願いします/g, '')
+          .replace(/(?:を|の|は|が|に|へ)+/g, '')
+          .trim()
+      );
+
+      const exactTask = tasks.find(t => normalize(t.title) === taskQuery);
+      const partialMatches = tasks.filter(t => {
+        const title = normalize(t.title);
+        return taskQuery.length >= 4 &&
+          (title.includes(taskQuery) || taskQuery.includes(title));
+      });
+
+      const targetTask = exactTask || (partialMatches.length === 1 ? partialMatches[0] : undefined);
+
+      if (!targetTask || !targetTask.id) {
+        return NextResponse.json({
+          answer: '変更する課題を一意に特定できませんでした。課題名を含めて「（課題名）を提出済みにして」と聞いてください。状態は変更していません。'
+        });
+      }
+
+      const updatedAt = new Date().toISOString();
+
+      if (targetTask.source === 'assignment') {
+        const { error } = await authed
+          .from('assignment_completions')
+          .upsert({
+            student_id: studentId,
+            assignment_id: String(targetTask.id),
+            completed: true,
+            updated_at: updatedAt
+          }, { onConflict: 'student_id,assignment_id' });
+
+        if (error) {
+          console.error('共通課題の完了状態保存に失敗:', error);
+          return NextResponse.json({
+            answer: '課題を完了済みにできませんでした。課題テーブルの権限設定を確認してください。'
+          }, { status: 500 });
+        }
+      } else if (targetTask.source === 'personal') {
+        const { data, error } = await authed
+          .from('todos')
+          .update({ completed: true, updated_at: updatedAt })
+          .eq('id', targetTask.id)
+          .eq('student_id', studentId)
+          .select('id')
+          .maybeSingle();
+
+        if (error || !data) {
+          console.error('個人課題の完了状態保存に失敗:', error);
+          return NextResponse.json({
+            answer: '個人課題を完了済みにできませんでした。保存権限と課題データを確認してください。'
+          }, { status: 500 });
+        }
+      } else {
+        return NextResponse.json({
+          answer: 'この課題の保存先を確認できなかったため、状態は変更していません。'
+        });
+      }
+
+      return NextResponse.json({
+        answer: `CampusSync上で「${targetTask.title}」を完了済みにしました。Google Classroomへの提出が必要な場合は、Classroom側でも提出を確認してください。`
+      });
+    }
     if (!tasks.length) {
       return NextResponse.json({ answer: '現在の未完了課題はありません。' });
     }
@@ -874,7 +1086,7 @@ export async function POST(req: Request) {
 
   // 落とし物は、品名や説明が質問に一致するレコードだけを返す。
   if (wantsLost) {
-    const explicitLostItem = /(?:落とし物|忘れ物)(?:に|で)?(.+?)(?:はある|ありますか|あるか|はどこ|を探|ってある|ある[?？]|ですか)/.exec(question)?.[1] ?? '';
+    const explicitLostItem = /(?:落とし物|忘れ物)(?:に|で|の)?(.+?)(?:はある|ありますか|あるか|はどこ|を探|ってある|ある[?？]|ですか)/.exec(question)?.[1]?.trim() ?? /(.+?)(?:の)?(?:落とし物|忘れ物)(?:は|が)?(?:ある|ありますか|あるか|ってある|はどこ|を探|[?？])/.exec(question)?.[1]?.trim() ?? '';
     const cleanedLostItem = explicitLostItem || question
       .replace(/落とし物|忘れ物|登録情報|何が|どこに届けられた|どこに|届けられた|教えて|一覧|ですか|です|あるの|ありますか|あるか|ある|は|に|を|[?？!！。]/g, '');
     const lostSearch = normalize(
@@ -912,7 +1124,39 @@ export async function POST(req: Request) {
   // 貢献度は、電車など他カテゴリの回答へ流れないよう直接返す。
   if (wantsContribution) {
     if (!authed || !studentId) return NextResponse.json({ answer: '貢献度を確認するには学校アカウントでログインしてください。' });
-    return NextResponse.json({ answer: `本日の貢献度は${dailyScore}/100、累計貢献ポイントは${Math.max(0, contributionPoints)}ポイントです。`, table: table(['区分', 'ポイント'], [['本日', `${dailyScore}/100`], ['累計', `${Math.max(0, contributionPoints)}ポイント`]]) });
+    const currentContributionPoints = Math.max(0, contributionPoints);
+    const rankDefinitions = [
+      { name: 'ブロンズ', minPoints: 0 },
+      { name: 'シルバー', minPoints: 100 },
+      { name: 'ゴールド', minPoints: 250 },
+      { name: 'サファイア', minPoints: 500 },
+      { name: 'ダイヤモンド', minPoints: 1000 },
+      { name: 'アメジスト', minPoints: 1500 },
+      { name: 'アクアマリン', minPoints: 2000 },
+      { name: 'シトリン', minPoints: 2500 },
+      { name: 'エメラルド', minPoints: 3000 },
+      { name: 'ペリドット', minPoints: 3500 },
+      { name: 'ローズクォーツ', minPoints: 4000 },
+      { name: 'ルビー', minPoints: 4500 },
+      { name: 'トパーズ', minPoints: 5000 },
+      { name: 'オニキス', minPoints: 6000 },
+      { name: 'レインボー', minPoints: 8000 },
+    ] as const;
+    const contributionRank = [...rankDefinitions]
+      .reverse()
+      .find(rank => currentContributionPoints >= rank.minPoints)?.name ?? 'ブロンズ';
+
+    return NextResponse.json({
+      answer: `現在の貢献度ランクは「${contributionRank}」です。本日の貢献度は${dailyScore}/100、累計貢献ポイントは${currentContributionPoints}ポイントです。`,
+      table: table(
+        ['区分', 'ポイント'],
+        [
+          ['本日', `${dailyScore}/100`],
+          ['累計', `${currentContributionPoints}ポイント`],
+          ['現在のランク', contributionRank],
+        ]
+      )
+    });
   }
 
   if (followupTrainAfter && trainQuestion) {
