@@ -5,6 +5,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type Draft = { title: string; body: string };
+type DraftKind = 'notice' | 'assignment';
 
 function authorized(request: Request): boolean {
   const expected = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
@@ -16,7 +17,17 @@ function authorized(request: Request): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function fallbackDraft(question: string): Draft {
+function fallbackDraft(question: string, kind: DraftKind = 'notice'): Draft {
+  if (kind === 'assignment') {
+    const quoted = /[「『]([^」』]{2,100})[」』]/.exec(question)?.[1];
+    return {
+      title: quoted || '新しい課題（要編集）',
+      body: '【課題の内容】\\n（具体的な指示事項を記入してください）\\n\\n' +
+        '【提出方法】\\n（提出方法を確認して記入してください）\\n\\n' +
+        '【注意事項】\\n（必要な注意事項を記入してください）\\n\\n' +
+        '提出期限と課題の種類を管理画面で確認してください。'
+    };
+  }
   const topics: Array<[RegExp, string]> = [
     [/文化祭/, '文化祭についてのお知らせ'],
     [/休校|臨時休業/, '休校・臨時休業についてのお知らせ'],
@@ -57,7 +68,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const input = await request.json().catch(() => null) as { question?: unknown } | null;
+  const input = await request.json().catch(() => null) as { question?: unknown; kind?: unknown } | null;
   const question = typeof input?.question === 'string'
     ? input.question.trim().slice(0, 1500)
     : '';
@@ -66,7 +77,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: '作成したいお知らせの内容を入力してください。' }, { status: 400 });
   }
 
-  const fallback = fallbackDraft(question);
+  const kind: DraftKind = input?.kind === 'assignment' ? 'assignment' : 'notice';
+  const fallback = fallbackDraft(question, kind);
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -93,8 +105,9 @@ export async function POST(request: Request) {
           {
             role: 'system',
             content:
-              'あなたは高校の管理者向け文章作成アシスタントです。' +
-              '依頼をもとに日本語のお知らせを作成してください。' +
+              (kind === 'assignment'
+                ? 'あなたは高校の管理者向け課題作成アシスタントです。課題名と指示事項を作成してください。'
+                : 'あなたは高校の管理者向け文章作成アシスタントです。お知らせ文を作成してください。') +
               '回答は {"title":"タイトル","body":"本文"} のJSONのみ。' +
               '依頼にない日時・規則・事実・人物名を創作しないでください。' +
               '不明な情報は本文に【日時】などの確認用プレースホルダーを置いてください。' +
