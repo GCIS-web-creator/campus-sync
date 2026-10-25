@@ -303,7 +303,11 @@ export default function AdminCampusAI({
             disabled={!title.trim() || !body.trim()}
             className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white hover:bg-emerald-500 disabled:opacity-50"
           >
-            {kind === 'notice' ? 'LINE配信フォームに反映' : '課      <AdminCampusAIMemory
+            {kind === 'notice' ? 'LINE配信フォームに反映' : '課題登録フォームに反映'}
+          </button>
+        </div>
+      )}
+      <AdminCampusAIMemory
         adminPassword={adminPassword}
         kind={kind}
         question={question}
@@ -312,10 +316,6 @@ export default function AdminCampusAI({
         draftReady={draftReady}
       />
 
-題登録フォームに反映'}
-          </button>
-        </div>
-      )}
       <AdminCampusLocalChat />
 
     </section>
