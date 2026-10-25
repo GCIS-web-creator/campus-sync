@@ -1223,12 +1223,12 @@ export default function CampusSyncAdmin() {
                 setLineBroadcastMessage('');
                 setActiveTab('dashboard');
               }}
-              onUseAssignmentDraft={(title, details) => {
+              onUseAssignmentDraft={(title, details, dueAt) => {
                 setEditingAssignmentId(null);
                 setAssignmentTitle(title);
                 setAssignmentDetails(details);
                 setAssignmentType('paper');
-                setAssignmentDueAt('');
+                setAssignmentDueAt(dueAt ? toAdminDateTimeInput(dueAt) : '');
                 setAssignmentMessage('AIの下書きを反映しました。課題の種類と提出期限を確認してから保存してください。');
                 setActiveTab('assignments');
               }}

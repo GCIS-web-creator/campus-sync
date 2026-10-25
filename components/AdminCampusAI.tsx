@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import AdminCampusLocalChat from './AdminCampusLocalChat';
+import AdminCampusAIMemory from './AdminCampusAIMemory';
 
 type Props = {
   adminPassword: string;
   onAdminPasswordChange: (value: string) => void;
   onUseDraft: (title: string, body: string) => void;
-  onUseAssignmentDraft: (title: string, details: string) => void;
+  onUseAssignmentDraft: (title: string, details: string, dueAt?: string | null) => void;
 };
 
 type DraftResult = {
@@ -14,6 +16,7 @@ type DraftResult = {
   mode?: 'model' | 'template';
   title?: string;
   body?: string;
+  dueAt?: string | null;
   message?: string;
 };
 
@@ -38,6 +41,7 @@ export default function AdminCampusAI({
   const [question, setQuestion] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [dueAt, setDueAt] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
@@ -53,6 +57,7 @@ export default function AdminCampusAI({
     setQuestion('');
     setTitle('');
     setBody('');
+    setDueAt('');
     setDraftReady(false);
     setMode(null);
     setStatus('');
@@ -91,6 +96,7 @@ export default function AdminCampusAI({
 
       setTitle(result.title);
       setBody(result.body);
+      setDueAt(typeof result.dueAt === 'string' ? result.dueAt : '');
       setMode(result.mode || 'template');
       setDraftReady(true);
       setStatus(result.message || '下書きを作成しました。');
@@ -278,20 +284,40 @@ export default function AdminCampusAI({
             />
           </label>
 
+          {kind === 'assignment' && (
+            <p className="rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-300">
+              AIが読み取った提出期限：
+              {dueAt
+                ? new Date(dueAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+                : '読み取れませんでした。課題登録フォームで設定してください。'}
+            </p>
+          )}
+
           <p className="text-xs leading-relaxed text-amber-300">
             これは下書きです。内容を確認してください。ここから自動で公開・送信・保存は行いません。
           </p>
 
           <button
             type="button"
-            onClick={() => kind === 'notice' ? onUseDraft(title.trim(), body.trim()) : onUseAssignmentDraft(title.trim(), body.trim())}
+            onClick={() => kind === 'notice' ? onUseDraft(title.trim(), body.trim()) : onUseAssignmentDraft(title.trim(), body.trim(), dueAt || null)}
             disabled={!title.trim() || !body.trim()}
             className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white hover:bg-emerald-500 disabled:opacity-50"
           >
-            {kind === 'notice' ? 'LINE配信フォームに反映' : '課題登録フォームに反映'}
+            {kind === 'notice' ? 'LINE配信フォームに反映' : '課      <AdminCampusAIMemory
+        adminPassword={adminPassword}
+        kind={kind}
+        question={question}
+        title={title}
+        body={body}
+        draftReady={draftReady}
+      />
+
+題登録フォームに反映'}
           </button>
         </div>
       )}
+      <AdminCampusLocalChat />
+
     </section>
   );
 }
