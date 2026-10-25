@@ -2506,6 +2506,17 @@ Supabaseの設定を確認してください。
             return;
           }
 
+          if (action.type === 'get-favorite-room') {
+            const favoriteRoom = rooms.find(room => room.id === favoriteRoomId);
+            detail.resolve!({
+              success: Boolean(favoriteRoom),
+              message: favoriteRoom
+                ? `現在のお気に入り教室は「${favoriteRoom.name}」です。`
+                : 'お気に入り教室が設定されていません。教室名を指定して変更してください。',
+            });
+            return;
+          }
+
           if (action.type === 'set-favorite-room') {
             const requested = String(action.room ?? '')
               .normalize('NFKC')

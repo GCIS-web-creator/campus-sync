@@ -47,6 +47,7 @@ function getOrCreateVoteId(studentId: string): string {
 type PageAction =
   | { type: 'set-theme'; theme: 'blue' | 'pink' | 'purple' | 'emerald' | 'orange' | 'indigo' }
   | { type: 'set-favorite-room'; room: string }
+  | { type: 'get-favorite-room' }
   | { type: 'test-push' };
 
 type PageActionResult = { success: boolean; message: string };
@@ -54,12 +55,27 @@ type PageActionResult = { success: boolean; message: string };
 function detectPageAction(question: string): PageAction | null {
   const q = question.normalize('NFKC').replace(/[「」『』"'"]/g, '').trim();
 
-  const favorite = /お気に入り(?:の)?教室を(.+?)(?:に変更|にして|に変えて|に設定|へ変更|に変える)[。！!？?]*$/.exec(q);
+  // お気に入りの確認は、変更操作と区別する。
+  if (
+    /お気に入り/.test(q) &&
+    !/(?:変更|変えて|変える|設定|にして|にする|にしたい|に変える|へ変更)/.test(q)
+  ) {
+    return { type: 'get-favorite-room' };
+  }
+
+  // 「お気に入りをCallにしたい」など、教室という単語がない形にも対応。
+  const favorite = /お気に入り(?:の)?(?:教室)?を(.+?)(?:に変更(?:して)?|にして|に変えて|に設定(?:して)?|にする|にしたい|に変える|へ変更|へ設定|に)(?:ください|お願いします)?[。！!？?]*$/.exec(q);
   if (favorite?.[1]?.trim()) {
     return { type: 'set-favorite-room', room: favorite[1].trim() };
   }
 
-  if (/テーマカラー|テーマ色|テーマ/.test(q) && /変えて|変更|設定|切り替え|にして/.test(q)) {
+  // 「テーマカラーを青に」「画面の色を紫に」などに対応。
+  const themeIntent =
+    /テーマカラー|テーマ色|テーマ|画面(?:の)?色|サイト(?:の)?色|画面を|サイトを|デザイン/.test(q);
+  const themeCommand =
+    /(?:変え|変更|設定|切り替え|にして|にする|にしたい|に[。！!？?]*$)/.test(q);
+
+  if (themeIntent && themeCommand) {
     if (/紫|パープル/.test(q)) return { type: 'set-theme', theme: 'purple' };
     if (/ピンク/.test(q)) return { type: 'set-theme', theme: 'pink' };
     if (/青|ブルー/.test(q)) return { type: 'set-theme', theme: 'blue' };
@@ -74,7 +90,6 @@ function detectPageAction(question: string): PageAction | null {
 
   return null;
 }
-
 function requestPageAction(action: PageAction): Promise<PageActionResult> {
   return new Promise(resolve => {
     let settled = false;

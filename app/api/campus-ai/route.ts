@@ -35,7 +35,7 @@ function findTarget(q: string, names: string[], minLen = 3): number {
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
-const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み|提出完了|完了にして|済みにして|終わったことにして/.test(q);
+const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
 const isClubQuestion = (q: string) => /部活|部活動|委員会|連絡ノート|吹奏楽部/.test(q);
 const isLibraryQuestion = (q: string) => /蔵書|図書館.*本|図書室.*本|本ある|本は|本を|本のタイトル|書籍|著者|作者|ISBN|貸出|貸し出し|借り|所蔵状況/.test(q);
@@ -798,7 +798,10 @@ export async function POST(req: Request) {
       });
     }
 
-    const completionCommand = /提出済み|提出完了|完了済み|完了にして|済みにして|終わったことにして/.test(question.normalize('NFKC'));
+
+    const completionText = question.normalize('NFKC').trim();
+    const completionCommand =
+      /(?:提出済み?|提出完了|完了済み?|完了|済み?|終わったこと)(?:にしてください|にして|にする|にしたい|に設定(?:して)?|に変えて|とする|に|を完了にして)(?:ください|お願いします)?[。！!？?]*$/.test(completionText);
 
     if (completionCommand) {
       if (!authed || !studentId) {
@@ -807,25 +810,52 @@ export async function POST(req: Request) {
         });
       }
 
-      const taskQuery = normalize(
-        question.normalize('NFKC')
-          .replace(/提出済みにして|提出完了にして|完了済みにして|提出済み|提出完了|完了済み|完了にして|済みにして|終わったことにして|課題|宿題|提出物|提出して|提出|してください|お願いします/g, '')
-          .replace(/(?:を|の|は|が|に|へ)+/g, '')
-          .trim()
+      const ordinalMatch =
+        /上から\s*(\d+|一|二|三|四|五|六|七|八|九|十)\s*番目/.exec(completionText);
+      const ordinalWords: Record<string, number> = {
+        一: 1, 二: 2, 三: 3, 四: 4, 五: 5,
+        六: 6, 七: 7, 八: 8, 九: 9, 十: 10
+      };
+      const ordinal = ordinalMatch
+        ? (Number(ordinalMatch[1]) || ordinalWords[ordinalMatch[1]] || null)
+        : null;
+
+      const queryWithoutAction = completionText
+        .replace(/(?:提出済み?|提出完了|完了済み?|完了|済み?|終わったこと)(?:にしてください|にして|にする|にしたい|に設定(?:して)?|に変えて|とする|に|を完了にして)(?:ください|お願いします)?[。！!？?]*$/, '')
+        .replace(/上から\s*(?:\d+|一|二|三|四|五|六|七|八|九|十)\s*番目(?:の)?/g, '')
+        .replace(/^\s*(?:この|その)?(?:課題|宿題|提出物)\s*(?:を|は)?/, '')
+        .replace(/(?:を|は|が|に|へ|も)\s*$/, '')
+        .replace(/[。！!？?]+$/, '')
+        .trim();
+
+      const canonicalTask = (value: string) =>
+        normalize(value)
+          .normalize('NFKC')
+          .toLocaleLowerCase()
+          .replace(/[\s　・「」『』"'“”（）()]/g, '')
+          .replace(/の/g, '');
+
+      const taskQuery = canonicalTask(queryWithoutAction);
+      const pendingTasks = tasks.filter(t => !t.completed);
+
+      const exactTask = pendingTasks.find(
+        t => canonicalTask(t.title) === taskQuery
       );
 
-      const exactTask = tasks.find(t => normalize(t.title) === taskQuery);
-      const partialMatches = tasks.filter(t => {
-        const title = normalize(t.title);
-        return taskQuery.length >= 4 &&
+      const partialMatches = pendingTasks.filter(t => {
+        const title = canonicalTask(t.title);
+        return taskQuery.length >= 3 &&
           (title.includes(taskQuery) || taskQuery.includes(title));
       });
 
-      const targetTask = exactTask || (partialMatches.length === 1 ? partialMatches[0] : undefined);
+      // 「上から3番目」は、未完了課題一覧の現在の順番で特定する。
+      const targetTask = ordinal !== null
+        ? pendingTasks[ordinal - 1]
+        : exactTask || (partialMatches.length === 1 ? partialMatches[0] : undefined);
 
       if (!targetTask || !targetTask.id) {
         return NextResponse.json({
-          answer: '変更する課題を一意に特定できませんでした。課題名を含めて「（課題名）を提出済みにして」と聞いてください。状態は変更していません。'
+          answer: '変更する課題を一意に特定できませんでした。未完了課題の正確な名前か、「上から3番目の課題を提出済みにして」のように指定してください。状態は変更していません。'
         });
       }
 
