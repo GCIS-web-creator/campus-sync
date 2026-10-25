@@ -42,6 +42,11 @@ export default function AdminCampusAI({
   const [busy, setBusy] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [mode, setMode] = useState<'model' | 'template' | null>(null);
+  const [report, setReport] = useState('');
+  const [reportWarnings, setReportWarnings] = useState<string[]>([]);
+  const [reportStatus, setReportStatus] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportGeneratedAt, setReportGeneratedAt] = useState('');
 
   function changeKind(next: 'notice' | 'assignment') {
     setKind(next);
@@ -93,6 +98,40 @@ export default function AdminCampusAI({
       setStatus(error instanceof Error ? error.message : '下書きの作成に失敗しました。');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadReport() {
+    if (reportLoading) return;
+    if (!adminPassword.trim()) {
+      setReportStatus('管理用パスワードを入力してください。');
+      return;
+    }
+
+    setReportLoading(true);
+    setReportStatus('');
+    try {
+      const response = await fetch('/api/admin/campus-ai/report', {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPassword },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || `レポートの取得に失敗しました（HTTP ${response.status}）。`);
+      }
+
+      setReport(typeof result.answer === 'string' ? result.answer : '');
+      setReportWarnings(Array.isArray(result.warnings) ? result.warnings : []);
+      setReportGeneratedAt(typeof result.generatedAt === 'string' ? result.generatedAt : '');
+      setReportStatus('管理状況を取得しました。表示内容は取得時点の情報です。');
+    } catch (error) {
+      setReportStatus(error instanceof Error ? error.message : '管理状況を取得できませんでした。');
+      setReport('');
+      setReportWarnings([]);
+    } finally {
+      setReportLoading(false);
     }
   }
 
@@ -157,6 +196,50 @@ export default function AdminCampusAI({
             {busy ? '下書きを作成中…' : kind === 'notice' ? 'お知らせの下書きを作成' : '課題の下書きを作成'}
           </button>
         </form>
+      </div>
+
+      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 space-y-4">
+        <div>
+          <h3 className="text-lg font-black">管理状況レポート</h3>
+          <p className="mt-1 text-sm text-slate-400">
+            課題の期限、LINE配信履歴、蔵書、落とし物、キャリアセンター、学食のお知らせ設定を読み取ります。データの変更や送信は行いません。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadReport()}
+          disabled={reportLoading}
+          className="rounded-xl border border-blue-500/40 bg-blue-600/10 px-4 py-3 text-sm font-bold text-blue-200 hover:bg-blue-600/20 disabled:opacity-50"
+        >
+          {reportLoading ? '管理状況を取得中…' : '管理状況を確認'}
+        </button>
+
+        {reportStatus && (
+          <p role="status" className="rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-300">
+            {reportStatus}
+          </p>
+        )}
+
+        {report && (
+          <div className="space-y-3">
+            <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm leading-7 text-slate-200 font-sans">
+              {report}
+            </pre>
+            {reportGeneratedAt && (
+              <p className="text-xs text-slate-500">
+                取得日時：{new Date(reportGeneratedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+              </p>
+            )}
+            {reportWarnings.length > 0 && (
+              <div className="rounded-xl border border-amber-700/40 bg-amber-950/30 p-3 text-sm text-amber-200">
+                <p className="font-bold">一部のデータを取得できませんでした</p>
+                {reportWarnings.map((warning, index) => (
+                  <p key={`${warning}-${index}`}>{warning}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {status && (
