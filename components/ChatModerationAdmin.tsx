@@ -99,6 +99,7 @@ const EVENT_LABEL: Record<string, string> = {
   admin_message_deleted: '管理者による削除',
   admin_report_status_changed: '管理者による通報処理',
   logs_exported: 'ログ書き出し',
+  admin_chat_data_viewed: '管理者によるチャット情報の閲覧',
   reaction_created: 'リアクション追加',
   reaction_deleted: 'リアクション取り消し',
 };
@@ -488,7 +489,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
             <div className="flex items-center gap-2"><History size={18} className="text-violet-300"/><h2 className="font-black text-white">監査イベント</h2></div>
-            <p className="mt-1 text-xs text-slate-500">最新{filteredLogs.length}件を表示。ログ全体は上のボタンから書き出せます。</p>
+            <p className="mt-1 text-xs text-slate-500">最新{filteredLogs.length}件（最大150件）を表示。閲覧履歴を含む全ログは上のボタンから書き出せます。</p>
             <div className="mt-3 space-y-2">
               {filteredLogs.map(log => (
                 <article key={log.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
