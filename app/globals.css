@@ -175,3 +175,47 @@ body {
   color: #00e5ff !important;
   text-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
 }
+
+
+/* Cinematic 6.3-second CampusSync logo intro */
+.campus-intro{position:fixed;inset:0;z-index:99999;overflow:hidden;isolation:isolate;color:#f4fbff;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,rgba(24,77,131,.35),transparent 47%),linear-gradient(165deg,#08152c 0%,#071126 45%,#02050f 100%);animation:campusIntroFade 6.3s ease-in forwards}
+.campus-intro__nebula{position:absolute;inset:-20%;opacity:.5;background:radial-gradient(ellipse at 18% 30%,rgba(43,116,190,.16),transparent 36%),radial-gradient(ellipse at 78% 60%,rgba(39,74,170,.14),transparent 38%),radial-gradient(ellipse at 48% 90%,rgba(13,174,214,.1),transparent 36%);filter:blur(24px);animation:campusIntroNebula 6.3s ease-in-out both}
+.campus-intro__stars{position:absolute;inset:0;opacity:0;background-repeat:repeat;pointer-events:none}
+.campus-intro__stars--back{z-index:1;background-image:radial-gradient(1px 1px at 4% 17%,#c9e9ff 98%,transparent),radial-gradient(1px 1px at 21% 65%,#fff 98%,transparent),radial-gradient(1px 1px at 32% 21%,#b6e7ff 98%,transparent),radial-gradient(1px 1px at 44% 83%,#fff 98%,transparent),radial-gradient(1px 1px at 63% 12%,#d5efff 98%,transparent),radial-gradient(1px 1px at 76% 55%,#fff 98%,transparent),radial-gradient(1px 1px at 92% 32%,#b6e7ff 98%,transparent),radial-gradient(1px 1px at 13% 91%,#fff 98%,transparent);background-size:410px 310px;animation:campusIntroStarReveal 1.2s ease 3.6s both,campusIntroParallaxBack 6.3s ease-out both}
+.campus-intro__stars--front{z-index:2;background-image:radial-gradient(2px 2px at 8% 28%,#fff 98%,transparent),radial-gradient(1.5px 1.5px at 29% 46%,#fff 98%,transparent),radial-gradient(2px 2px at 52% 23%,#dcf8ff 98%,transparent),radial-gradient(1.5px 1.5px at 71% 73%,#fff 98%,transparent),radial-gradient(2px 2px at 88% 18%,#fff 98%,transparent),radial-gradient(1.4px 1.4px at 95% 85%,#bdeaff 98%,transparent);background-size:530px 390px;animation:campusIntroStarReveal .85s ease 3.85s both,campusIntroParallaxFront 6.3s ease-out both}
+.campus-intro__shooting-star{position:absolute;z-index:8;top:8%;right:9%;width:clamp(130px,26vw,285px);height:2px;opacity:0;transform-origin:right center;transform:rotate(138deg) scaleX(.05);border-radius:999px;background:linear-gradient(90deg,transparent,rgba(92,199,255,.14) 23%,#bff7ff 72%,#fff 100%);filter:drop-shadow(0 0 5px #8ceaff) drop-shadow(0 0 15px rgba(79,154,255,.85));animation:campusIntroStarFlight .72s cubic-bezier(.2,.7,.22,1) .12s both}
+.campus-intro__shooting-star span{position:absolute;right:-3px;top:-4px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 8px 4px #baf7ff,0 0 22px 7px rgba(83,188,255,.9)}
+.campus-intro__logo-stage{position:absolute;z-index:5;top:36%;left:50%;width:min(88vw,620px);aspect-ratio:620 / 120;transform:translate(-50%,-50%)}
+.campus-intro__logo-trace{position:absolute;inset:0;width:100%;height:100%;overflow:visible;filter:url(#campusIntroTraceGlow)}
+.campus-intro__trace-mark,.campus-intro__trace-word{fill:none;stroke:url(#campusIntroTraceGradient);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1450;stroke-dashoffset:1450;animation:campusIntroDraw 1.68s cubic-bezier(.25,.7,.15,1) .52s forwards}
+.campus-intro__trace-word{font-family:Arial,Helvetica,sans-serif;font-size:70px;font-weight:800;letter-spacing:-4px}
+.campus-intro__real-logo{position:absolute;left:50%;top:50%;opacity:0;width:100%;display:flex;justify-content:center;transform:translate(-50%,-50%) scale(.985);filter:drop-shadow(0 0 0 rgba(105,224,255,0));animation:campusIntroLogoReveal .52s ease 2.15s forwards,campusIntroLogoPulse 1.2s ease 2.8s both}
+.campus-intro__real-logo>span{width:100%;justify-content:center}
+.campus-intro__gloss{position:absolute;z-index:4;top:0;bottom:0;left:-40%;width:24%;opacity:0;pointer-events:none;background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.05) 18%,rgba(226,252,255,.95) 50%,rgba(255,255,255,.24) 64%,transparent 100%);transform:skewX(-22deg);mix-blend-mode:screen;animation:campusIntroGloss .9s ease-in-out 2.62s both}
+.campus-intro__logo-aura{position:absolute;inset:-22%;opacity:0;border-radius:50%;background:radial-gradient(ellipse,rgba(105,224,255,.42),rgba(69,140,255,.12) 32%,transparent 68%);filter:blur(10px);animation:campusIntroAura 1.1s ease-out 3.15s both}
+.campus-intro__supernova{position:absolute;z-index:4;top:36%;left:50%;width:min(88vw,620px);aspect-ratio:620 / 120;transform:translate(-50%,-50%);opacity:0;pointer-events:none;animation:campusIntroNova .9s ease-out 3.25s both}
+.campus-intro__supernova-core{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);background:#fff;box-shadow:0 0 18px 10px rgba(191,248,255,.9),0 0 46px 24px rgba(62,162,255,.48)}
+.campus-intro__supernova-ring{position:absolute;left:50%;top:50%;width:24%;aspect-ratio:1;border:2px solid rgba(207,250,255,.92);border-radius:50%;box-shadow:0 0 18px rgba(113,216,255,.8),inset 0 0 12px rgba(100,198,255,.45);transform:translate(-50%,-50%) scale(.18)}
+.campus-intro__supernova-ring--one{animation:campusIntroNovaRing .85s ease-out 3.26s both}.campus-intro__supernova-ring--two{animation:campusIntroNovaRing .85s ease-out 3.38s both}
+.campus-intro__supernova-rays{position:absolute;inset:-110% -10%;opacity:0;background:conic-gradient(from 0deg,transparent 0deg,rgba(182,241,255,.2) 10deg,transparent 20deg,rgba(255,255,255,.38) 32deg,transparent 42deg,rgba(104,178,255,.25) 65deg,transparent 85deg,rgba(182,241,255,.18) 104deg,transparent 124deg,rgba(255,255,255,.3) 150deg,transparent 162deg,rgba(104,178,255,.2) 194deg,transparent 214deg,rgba(255,255,255,.32) 242deg,transparent 255deg,rgba(182,241,255,.2) 280deg,transparent 300deg,rgba(255,255,255,.28) 330deg,transparent 345deg);filter:blur(5px);animation:campusIntroNovaRays .78s ease-out 3.28s both}
+.campus-intro__brand-copy{position:absolute;z-index:6;top:48%;left:0;width:100%;padding:0 20px;text-align:center;opacity:0;transform:translateY(10px);animation:campusIntroBrandCopy .7s ease 4.15s both}
+.campus-intro__eyebrow{color:#8eeaff;font-size:10px;font-weight:800;letter-spacing:.34em;margin-bottom:12px;text-shadow:0 0 10px rgba(103,222,255,.5)}
+.campus-intro__tagline{color:rgba(231,244,255,.9);font-size:clamp(12px,2vw,15px);font-weight:600;letter-spacing:.12em;text-shadow:0 0 12px rgba(110,181,255,.28)}
+.campus-intro__skip{position:absolute;z-index:30;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));padding:9px 13px;border:1px solid rgba(145,215,255,.38);border-radius:999px;background:rgba(5,13,30,.48);color:rgba(239,250,255,.9);font-size:12px;font-weight:700;letter-spacing:.08em;pointer-events:auto;cursor:pointer;backdrop-filter:blur(10px)}
+.campus-intro__skip:hover{border-color:rgba(169,243,255,.9);box-shadow:0 0 14px rgba(111,220,255,.25)}
+@keyframes campusIntroFade{0%,92%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+@keyframes campusIntroNebula{0%{transform:scale(.92);opacity:.18}45%{transform:scale(1.03);opacity:.56}100%{transform:scale(1.1);opacity:.42}}
+@keyframes campusIntroDraw{0%{stroke-dashoffset:1450;opacity:.1}14%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
+@keyframes campusIntroLogoReveal{0%{opacity:0;transform:translate(-50%,-50%) scale(.985)}100%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:drop-shadow(0 0 18px rgba(105,224,255,.5))}}
+@keyframes campusIntroLogoPulse{0%{filter:drop-shadow(0 0 18px rgba(105,224,255,.5))}65%{filter:drop-shadow(0 0 27px rgba(105,224,255,.95)) drop-shadow(0 0 44px rgba(93,158,255,.42))}100%{filter:drop-shadow(0 0 8px rgba(105,224,255,.4)}}
+@keyframes campusIntroGloss{0%{left:-40%;opacity:0}15%{opacity:.95}85%{opacity:.95}100%{left:120%;opacity:0}}
+@keyframes campusIntroAura{0%{opacity:0;transform:scale(.4)}35%{opacity:.9;transform:scale(1.03)}100%{opacity:0;transform:scale(1.55)}}
+@keyframes campusIntroNova{0%{opacity:0}12%{opacity:1}70%{opacity:.85}100%{opacity:0}}
+@keyframes campusIntroNovaRing{0%{opacity:0;transform:translate(-50%,-50%) scale(.15)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(4.8)}}
+@keyframes campusIntroNovaRays{0%{opacity:0;transform:scale(.12) rotate(0)}24%{opacity:.9}100%{opacity:0;transform:scale(1.2) rotate(100deg)}}
+@keyframes campusIntroStarFlight{0%{opacity:0;transform:translate3d(0,0,0) rotate(138deg) scaleX(.08)}12%{opacity:1;transform:translate3d(0,0,0) rotate(138deg) scaleX(.8)}82%{opacity:1;transform:translate3d(-26vw,18vh,0) rotate(138deg) scaleX(1)}100%{opacity:0;transform:translate3d(-34vw,24vh,0) rotate(138deg) scaleX(.4)}}
+@keyframes campusIntroStarReveal{0%{opacity:0}100%{opacity:.95}}
+@keyframes campusIntroParallaxBack{0%{background-position:0 0}100%{background-position:90px 32px}}
+@keyframes campusIntroParallaxFront{0%{background-position:0 0}100%{background-position:-125px 55px}}
+@keyframes campusIntroBrandCopy{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.campus-intro,.campus-intro *{animation-duration:.01ms!important}}
