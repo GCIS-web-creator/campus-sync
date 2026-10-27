@@ -280,9 +280,35 @@ export async function GET(request: Request) {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 150);
 
+  // Private attachments are only exposed to an authenticated admin through short-lived signed URLs.
+  const attachmentPaths = [...new Set([
+    ...messages.map(message => message.attachment_path),
+    ...hydratedReports.map(report => report.message_preview?.attachment_path),
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0 && value.length < 500))];
+  const signedUrlByPath = new Map<string, string>();
+  if (attachmentPaths.length) {
+    const signed = await supabase.storage.from('chat-attachments').createSignedUrls(attachmentPaths, 120);
+    for (const item of signed.data || []) {
+      if (item.path && item.signedUrl && !item.error) signedUrlByPath.set(item.path, item.signedUrl);
+    }
+  }
+  const messagesWithAttachmentLinks = messages.map(message => ({
+    ...message,
+    attachment_url: message.attachment_path ? signedUrlByPath.get(message.attachment_path) || null : null,
+  }));
+  const reportsWithAttachmentLinks = hydratedReports.map(report => ({
+    ...report,
+    message_preview: report.message_preview ? {
+      ...report.message_preview,
+      attachment_url: report.message_preview.attachment_path
+        ? signedUrlByPath.get(report.message_preview.attachment_path) || null
+        : null,
+    } : null,
+  }));
+
   return NextResponse.json({
-    reports: hydratedReports,
-    messages,
+    reports: reportsWithAttachmentLinks,
+    messages: messagesWithAttachmentLinks,
     auditLogs: logs,
     counts: {
       openReports: hydratedReports.filter(r => r.status === 'open').length,
