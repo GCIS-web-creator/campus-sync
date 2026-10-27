@@ -2,13 +2,12 @@
 
 
 import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
-import AdminCampusAI from '@/components/AdminCampusAI';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
 import { 
-  LayoutDashboard, Megaphone, FilePlus, Package, Thermometer, Bot,
+  LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
   BellRing, Save, RefreshCw, History
@@ -998,9 +997,6 @@ export default function CampusSyncAdmin() {
             <button aria-label="ダッシュボード概要" title="ダッシュボード概要" onClick={() => setActiveTab('dashboard')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <LayoutDashboard size={18} /><span className="sr-only md:not-sr-only">ダッシュボード概要</span>
             </button>
-            <button aria-label="管理者AI" title="管理者AI" onClick={() => setActiveTab('admin-ai')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'admin-ai' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Bot size={18} /><span className="sr-only md:not-sr-only">管理者AI</span>
-            </button>
             <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
             </button>
@@ -1208,31 +1204,6 @@ export default function CampusSyncAdmin() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'admin-ai' && (
-          <div className="max-w-5xl space-y-6">
-            <AdminCampusAI
-              adminPassword={adminApiPassword}
-              onAdminPasswordChange={setAdminApiPassword}
-              onUseDraft={(title, body) => {
-                setLineNoticeTitle(title);
-                setLineNoticeText(body);
-                setLineNoticeTemplate('custom');
-                setLineBroadcastMessage('');
-                setActiveTab('dashboard');
-              }}
-              onUseAssignmentDraft={(title, details, dueAt) => {
-                setEditingAssignmentId(null);
-                setAssignmentTitle(title);
-                setAssignmentDetails(details);
-                setAssignmentType('paper');
-                setAssignmentDueAt(dueAt ? toAdminDateTimeInput(dueAt) : '');
-                setAssignmentMessage('AIの下書きを反映しました。課題の種類と提出期限を確認してから保存してください。');
-                setActiveTab('assignments');
-              }}
-            />
           </div>
         )}
 
