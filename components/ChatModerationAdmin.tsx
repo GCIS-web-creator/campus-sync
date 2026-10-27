@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Download, FileSearch, Flag, History, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldAlert, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileSearch, Flag, History, LoaderCircle, MessageSquare, RefreshCw, Search, ShieldAlert, Trash2 } from 'lucide-react';
 
 type View = 'reports' | 'messages' | 'audit';
 type Scope = 'all' | 'class' | 'grade' | 'school';
@@ -16,6 +16,8 @@ type MessagePreview = {
   body?: string;
   created_at?: string;
   deleted?: boolean;
+  attachment_name?: string | null;
+  attachment_mime?: string | null;
 } | null;
 
 type ChatReport = {
@@ -109,6 +111,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [exportAcknowledged, setExportAcknowledged] = useState(false);
   const initialLoadDone = useRef(false);
 
   const loadData = useCallback(async (nextScope: Scope = scope) => {
@@ -166,6 +169,9 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
 
   async function updateReport(report: ChatReport, status: Status) {
     if (busyId || report.status === status) return;
+    const note = window.prompt('今回の対応メモ（任意・500文字以内）。入力内容は監査ログに記録されます。', '');
+    if (note === null) return;
+    if (note.trim().length > 500) { setError('対応メモは500文字以内にしてください。'); return; }
     setBusyId(report.id);
     setError('');
     setNotice('');
@@ -173,13 +179,13 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
       const response = await fetch('/api/admin/chat', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', 'x-admin-password': adminPassword },
-        body: JSON.stringify({ id: report.id, status }),
+        body: JSON.stringify({ id: report.id, status, note: note.trim() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || '通報状態を更新できませんでした。');
       setReports(current => current.map(item => item.id === report.id ? result.report : item));
+      await loadData();
       setNotice('通報を「' + STATUS_LABEL[status] + '」に更新しました。');
-      void loadData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '通報状態を更新できませんでした。');
     } finally {
@@ -204,8 +210,8 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || 'メッセージを削除できませんでした。');
       setMessages(current => current.filter(item => item.id !== message.id));
+      await loadData();
       setNotice('メッセージを削除し、理由を監査ログに記録しました。');
-      void loadData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'メッセージを削除できませんでした。');
     } finally {
@@ -214,7 +220,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
   }
 
   async function exportLogs() {
-    if (!adminPassword.trim() || exporting) {
+    if (!adminPassword.trim() || exporting || !exportAcknowledged) {
       if (!adminPassword.trim()) setError('管理用パスワードを入力してください。');
       return;
     }
@@ -245,8 +251,9 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
       setNotice('監査ログを .cslogson 形式で書き出しました。');
+      setExportAcknowledged(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'ログを書き出せませんでした。');
     } finally {
@@ -349,7 +356,8 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                 <p className="text-[11px] font-bold text-slate-400">{report.message_preview.student_name || '投稿者'} · {report.message_preview.user_class || report.message_preview.class_name || 'クラス不明'} {report.message_preview.deleted ? '· 削除済み' : ''}</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{report.message_preview.body}</p>
               </div> : <p className="mt-3 text-xs text-slate-500">元メッセージは既に削除済みか、監査ログから復元できません。</p>}
-              {report.details && <p className="mt-2 text-sm text-slate-400">補足：{report.details}</p>}
+              {report.message_preview?.attachment_name && <p className="mt-2 text-xs text-cyan-300">添付：{report.message_preview.attachment_name} · {report.message_preview.attachment_mime || 'ファイル'}</p>}
+              {report.details && <p className="mt-2 text-sm text-slate-400">通報者の補足：{report.details}</p>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void updateReport(report, 'reviewing')} disabled={busyId === report.id || report.status === 'reviewing'} className="rounded-lg border border-amber-800 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-950 disabled:opacity-40">確認中にする</button>
                 <button type="button" onClick={() => void updateReport(report, 'resolved')} disabled={busyId === report.id || report.status === 'resolved'} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40"><CheckCircle2 size={14}/>対応済みにする</button>
@@ -390,7 +398,8 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                   <label className="text-xs text-slate-400">開始日（空欄なら最初から）<input type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"/></label>
                   <label className="text-xs text-slate-400">終了日（空欄なら最新まで）<input type="date" value={toDate} onChange={event => setToDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"/></label>
                 </div>
-                <button type="button" onClick={() => void exportLogs()} disabled={exporting || !adminPassword.trim()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:opacity-50">{exporting ? <LoaderCircle size={16} className="animate-spin"/> : <Download size={16}/>} {exporting ? '書き出し中…' : '.cslogson をダウンロード'}</button>
+                <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-amber-200"><input type="checkbox" checked={exportAcknowledged} onChange={event => setExportAcknowledged(event.target.checked)} className="mt-1" />氏名・学籍番号・会話本文などの個人情報が含まれる可能性を理解し、学校が承認した保管先だけに保存します。</label>
+                <button type="button" onClick={() => void exportLogs()} disabled={exporting || !adminPassword.trim() || !exportAcknowledged} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:opacity-50">{exporting ? <LoaderCircle size={16} className="animate-spin"/> : <Download size={16}/>} {exporting ? '書き出し中…' : '.cslogson をダウンロード'}</button>
               </div>
             </div>
           </div>
