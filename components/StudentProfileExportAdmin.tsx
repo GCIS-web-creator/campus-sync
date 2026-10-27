@@ -5,9 +5,10 @@ import { Download, ShieldAlert } from "lucide-react";
 
 type Props = {
   adminPassword: string;
+  onAdminPasswordChange: (value: string) => void;
 };
 
-export default function StudentProfileExportAdmin({ adminPassword }: Props) {
+export default function StudentProfileExportAdmin({ adminPassword, onAdminPasswordChange }: Props) {
   const [exportPassword, setExportPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,7 +100,19 @@ export default function StudentProfileExportAdmin({ adminPassword }: Props) {
           <Download size={20} className="text-cyan-300" />
           <h2 className="font-black">二段階の確認</h2>
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">管理画面に入力した管理用パスワードに加えて、Vercel の環境変数 <code>STUDENT_PROFILE_EXPORT_PASSWORD</code> に設定した書き出し確認用シークレットを入力します。シークレットはソースコードやファイルに含めないでください。</p>
+        <p className="mt-2 text-sm leading-6 text-slate-400">この画面で入力する管理用パスワードに加えて、Vercel の環境変数 <code>STUDENT_PROFILE_EXPORT_PASSWORD</code> に設定した書き出し確認用シークレットを入力します。シークレットはソースコードやファイルに含めないでください。</p>
+
+        <label className="mt-5 block text-sm font-bold" htmlFor="student-profile-admin-password">管理用パスワード</label>
+        <input
+          id="student-profile-admin-password"
+          type="password"
+          autoComplete="current-password"
+          value={adminPassword}
+          onChange={(event) => onAdminPasswordChange(event.target.value)}
+          disabled={busy}
+          placeholder="管理用パスワード"
+          className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500 disabled:opacity-60"
+        />
 
         <label className="mt-5 block text-sm font-bold" htmlFor="student-profile-export-password">書き出し確認パスワード</label>
         <input
