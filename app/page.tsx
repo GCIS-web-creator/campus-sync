@@ -4147,7 +4147,7 @@ Supabaseの設定を確認してください。
             </div>
 
             {/* テーマカラーカスタム */}
-            <div className={`${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-3`}>
+            <div className={`campus-theme-settings-card ${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-3`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-xl ${themeCls.lightBg}`}>
                   <Palette size={20} className={themeCls.text} />
@@ -4180,7 +4180,7 @@ Supabaseの設定を確認してください。
                 })}
               </div>
 
-              <div className="rounded-2xl border border-gray-100 dark:border-slate-700 bg-white/70 dark:bg-slate-900/70 p-3 space-y-3">
+              <div className="campus-theme-color-editor rounded-2xl border border-gray-100 dark:border-slate-700 bg-white/70 dark:bg-slate-900/70 p-3 space-y-3">
                 <div>
                   <h4 className="text-xs font-black text-gray-800 dark:text-slate-100">自由なカラー・グラデーション</h4>
                   <p className="mt-1 text-[10px] text-gray-500 dark:text-slate-400">カラーピッカーは約1,600万色を選べます。HEXコードや色名でも指定できます。</p>
