@@ -4532,7 +4532,7 @@ Supabaseの設定を確認してください。
         </header>
 
         {/* スクロールコンテンツコンテナ */}
-        <main className="flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6">
+        <main className={activeTab === 'chat' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-16 md:pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6"}>
           {renderContent()}
           {contributionToast && (
             <div
