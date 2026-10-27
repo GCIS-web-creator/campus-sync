@@ -49,6 +49,7 @@ alter table public.chat_audit_logs add constraint chat_audit_logs_event_type_che
 
 -- A report retains a small snapshot of the message it refers to even if the message is later removed.
 alter table public.chat_message_reports add column if not exists message_snapshot jsonb;
+grant select, insert, update, delete on table public.class_chat_messages, public.school_chat_messages, public.chat_message_reports to service_role;
 
 create index if not exists chat_audit_logs_time_idx
   on public.chat_audit_logs(occurred_at desc, id desc);
@@ -231,7 +232,7 @@ set search_path = ''
 as $function$
 begin
   -- Never let a client or later status update rewrite a report's original snapshot.
-  if tg_op = 'UPDATE' then
+  if tg_op = 'UPDATE' and old.message_snapshot is not null then
     new.message_snapshot := old.message_snapshot;
     return new;
   end if;
@@ -275,7 +276,6 @@ security definer
 set search_path = ''
 as $function$
 declare
-  actor_sub text;
   actor_id uuid;
   actor_text text;
 begin
@@ -354,6 +354,7 @@ begin
   -- Triggers use this transaction-local marker to identify an admin API operation,
   -- instead of incorrectly attributing it to the original message author.
   perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{"role":"campus_sync_admin_api"}', true);
   perform set_config('request.jwt.claim.role', 'campus_sync_admin_api', true);
 
   if p_message_table = 'class_chat_messages' then
