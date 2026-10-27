@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { AlertCircle, Check, LoaderCircle, MessageCircle, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, Flag, LoaderCircle, MessageCircle, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GradeSchoolChat from '@/components/GradeSchoolChat';
 
@@ -233,6 +233,19 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
     setReactions(current => current.filter(item => item.message_id !== message.id));
   }
 
+  async function reportMessage(messageId: string) {
+    if (!authUser?.id) return;
+    const reason = window.prompt('通報理由を入力してください：いじめ・嫌がらせ / 個人情報 / 迷惑投稿・連投 / 不適切な内容 / その他');
+    if (!reason) return;
+    const allowed = ['いじめ・嫌がらせ', '個人情報', '迷惑投稿・連投', '不適切な内容', 'その他'];
+    if (!allowed.includes(reason.trim())) { setError('表示された通報理由のいずれかを入力してください。'); return; }
+    const { error: reportError } = await supabase.from('chat_message_reports').insert({
+      reporter_user_id: authUser.id, message_id: messageId, message_table: 'class_chat_messages', reason: reason.trim()
+    });
+    if (reportError) setError(reportError.code === '23505' ? 'このメッセージは通報済みです。' : '通報できませんでした。SQLの実行状況を確認してください。');
+    else setNotice('通報を受け付けました。管理者が確認します。');
+  }
+
   async function toggleReaction(message: ChatMessage, emoji: ReactionEmoji) {
     if (!authUser?.id || !profileReady) return;
     const existing = (groupedReactions.get(message.id) ?? []).find(item => item.user_id === authUser.id && item.emoji === emoji);
@@ -320,6 +333,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
                         </button>
                       );
                     })}
+                    <button type="button" onClick={() => void reportMessage(message.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-amber-600 hover:bg-amber-50"><Flag size={11} />通報</button>
                     {mine && <>
                       <button type="button" onClick={() => { setEditingId(message.id); setDraft(message.body); setError(''); setNotice(''); inputRef.current?.focus(); }} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil size={11} />編集</button>
                       <button type="button" onClick={() => void deleteMessage(message)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950"><Trash2 size={11} />削除</button>
