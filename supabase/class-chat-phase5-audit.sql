@@ -140,7 +140,6 @@ declare
   chosen_row jsonb;
   event_name text;
   actor_id uuid;
-  actor_sub text;
   actor_text text;
   old_body text;
   new_body text;
@@ -408,6 +407,7 @@ begin
   if not found then raise exception 'Report not found'; end if;
 
   perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{"role":"campus_sync_admin_api"}', true);
   perform set_config('request.jwt.claim.role', 'campus_sync_admin_api', true);
 
   update public.chat_message_reports
