@@ -193,7 +193,7 @@ body {
 .campus-intro__real-logo>span{width:100%;justify-content:center}
 .campus-intro__gloss{position:absolute;z-index:4;top:0;bottom:0;left:-40%;width:24%;opacity:0;pointer-events:none;background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.05) 18%,rgba(226,252,255,.95) 50%,rgba(255,255,255,.24) 64%,transparent 100%);transform:skewX(-22deg);mix-blend-mode:screen;animation:campusIntroGloss .9s ease-in-out 2.62s both}
 .campus-intro__logo-aura{position:absolute;inset:-22%;opacity:0;border-radius:50%;background:radial-gradient(ellipse,rgba(105,224,255,.42),rgba(69,140,255,.12) 32%,transparent 68%);filter:blur(10px);animation:campusIntroAura 1.1s ease-out 3.15s both}
-.campus-intro__supernova{position:absolute;z-index:4;top:36%;left:50%;width:min(88vw,620px);aspect-ratio:620 / 120;transform:translate(-50%,-50%);opacity:0;pointer-events:none;animation:campusIntroNova .9s ease-out 3.25s both}
+.campus-intro__supernova{position:absolute;z-index:7;top:36%;left:50%;width:min(88vw,620px);aspect-ratio:620 / 120;transform:translate(-50%,-50%);opacity:0;pointer-events:none;animation:campusIntroNova .9s ease-out 3.25s both}
 .campus-intro__supernova-core{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);background:#fff;box-shadow:0 0 18px 10px rgba(191,248,255,.9),0 0 46px 24px rgba(62,162,255,.48)}
 .campus-intro__supernova-ring{position:absolute;left:50%;top:50%;width:24%;aspect-ratio:1;border:2px solid rgba(207,250,255,.92);border-radius:50%;box-shadow:0 0 18px rgba(113,216,255,.8),inset 0 0 12px rgba(100,198,255,.45);transform:translate(-50%,-50%) scale(.18)}
 .campus-intro__supernova-ring--one{animation:campusIntroNovaRing .85s ease-out 3.26s both}.campus-intro__supernova-ring--two{animation:campusIntroNovaRing .85s ease-out 3.38s both}
@@ -207,7 +207,7 @@ body {
 @keyframes campusIntroNebula{0%{transform:scale(.92);opacity:.18}45%{transform:scale(1.03);opacity:.56}100%{transform:scale(1.1);opacity:.42}}
 @keyframes campusIntroDraw{0%{stroke-dashoffset:1450;opacity:.1}14%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
 @keyframes campusIntroLogoReveal{0%{opacity:0;transform:translate(-50%,-50%) scale(.985)}100%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:drop-shadow(0 0 18px rgba(105,224,255,.5))}}
-@keyframes campusIntroLogoPulse{0%{filter:drop-shadow(0 0 18px rgba(105,224,255,.5))}65%{filter:drop-shadow(0 0 27px rgba(105,224,255,.95)) drop-shadow(0 0 44px rgba(93,158,255,.42))}100%{filter:drop-shadow(0 0 8px rgba(105,224,255,.4)}}
+@keyframes campusIntroLogoPulse{0%{filter:drop-shadow(0 0 18px rgba(105,224,255,.5))}65%{filter:drop-shadow(0 0 27px rgba(105,224,255,.95)) drop-shadow(0 0 44px rgba(93,158,255,.42))}100%{filter:drop-shadow(0 0 8px rgba(105,224,255,.4))}}
 @keyframes campusIntroGloss{0%{left:-40%;opacity:0}15%{opacity:.95}85%{opacity:.95}100%{left:120%;opacity:0}}
 @keyframes campusIntroAura{0%{opacity:0;transform:scale(.4)}35%{opacity:.9;transform:scale(1.03)}100%{opacity:0;transform:scale(1.55)}}
 @keyframes campusIntroNova{0%{opacity:0}12%{opacity:1}70%{opacity:.85}100%{opacity:0}}
