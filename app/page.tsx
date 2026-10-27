@@ -1561,7 +1561,7 @@ useEffect(() => {
 
 // Adminと共有する図書室蔵書を読み込む
 useEffect(() => {
-  if (!authUser && !isGuestMode) { setLibraryBooksLoading(false); return; }
+  if (!authUser) { setLibraryBooksLoading(false); return; }
   let cancelled = false;
 
   const fetchLibraryBooks = async () => {
