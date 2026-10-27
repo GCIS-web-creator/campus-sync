@@ -177,10 +177,132 @@ const THEMES = {
     gradient: 'from-indigo-500 to-purple-500',
     borderLight: 'border-indigo-100',
     ring: 'focus:ring-indigo-500/20',
+  },
+  neon: {
+    bg: 'bg-cyan-400', bgHover: 'hover:bg-cyan-300', text: 'text-cyan-300',
+    textLight: 'text-cyan-200', border: 'border-cyan-400', lightBg: 'bg-cyan-950',
+    lightBgHover: 'hover:bg-cyan-900', shadow: 'shadow-cyan-400',
+    gradient: 'from-cyan-300 to-fuchsia-500', borderLight: 'border-cyan-900',
+    ring: 'focus:ring-cyan-400/30',
+  },
+  cyber: {
+    bg: 'bg-lime-400', bgHover: 'hover:bg-lime-300', text: 'text-cyan-300',
+    textLight: 'text-lime-300', border: 'border-cyan-400', lightBg: 'bg-slate-900',
+    lightBgHover: 'hover:bg-slate-800', shadow: 'shadow-cyan-400',
+    gradient: 'from-cyan-400 to-lime-400', borderLight: 'border-cyan-900',
+    ring: 'focus:ring-cyan-400/30',
+  },
+  fairytale: {
+    bg: 'bg-pink-400', bgHover: 'hover:bg-pink-500', text: 'text-purple-600',
+    textLight: 'text-pink-500', border: 'border-pink-300', lightBg: 'bg-pink-50',
+    lightBgHover: 'hover:bg-purple-50', shadow: 'shadow-pink-200',
+    gradient: 'from-pink-300 to-violet-300', borderLight: 'border-pink-100',
+    ring: 'focus:ring-pink-300/30',
+  },
+  custom: {
+    bg: 'bg-[var(--campus-theme-primary)]',
+    bgHover: 'hover:bg-[var(--campus-theme-primary-hover)]',
+    text: 'text-[var(--campus-theme-primary)]',
+    textLight: 'text-[var(--campus-theme-primary)]',
+    border: 'border-[var(--campus-theme-primary)]',
+    lightBg: 'bg-[var(--campus-theme-soft)]',
+    lightBgHover: 'hover:bg-[var(--campus-theme-soft-hover)]',
+    shadow: 'shadow-[0_0_12px_var(--campus-theme-shadow)]',
+    gradient: 'from-[var(--campus-theme-primary)] to-[var(--campus-theme-secondary)]',
+    borderLight: 'border-[var(--campus-theme-soft-hover)]',
+    ring: 'focus:ring-[var(--campus-theme-ring)]',
   }
 };
 
 type ThemeKey = keyof typeof THEMES;
+const THEME_LABELS: Record<ThemeKey, string> = {
+  blue: '青', pink: 'ピンク', purple: '紫', emerald: '緑', orange: 'オレンジ',
+  indigo: '藍色', neon: 'ネオン', cyber: 'サイバー', fairytale: 'メルヘン', custom: '自由設定',
+};
+const THEME_COLOR_VALUES: Record<ThemeKey, { primary: string; secondary: string }> = {
+  blue: { primary: '#3B82F6', secondary: '#22D3EE' },
+  pink: { primary: '#EC4899', secondary: '#FB7185' },
+  purple: { primary: '#A855F7', secondary: '#818CF8' },
+  emerald: { primary: '#10B981', secondary: '#2DD4BF' },
+  orange: { primary: '#F97316', secondary: '#FBBF24' },
+  indigo: { primary: '#6366F1', secondary: '#A855F7' },
+  neon: { primary: '#00FFFF', secondary: '#FF00E5' },
+  cyber: { primary: '#00E5FF', secondary: '#B6FF00' },
+  fairytale: { primary: '#F472B6', secondary: '#A78BFA' },
+  custom: { primary: '#00A9FF', secondary: '#A855F7' },
+};
+const COLOR_DIC_PRESETS = [
+  { name: '赤', hex: '#FF0000' }, { name: 'コーラル', hex: '#FF7F50' },
+  { name: 'トマト', hex: '#FF6347' }, { name: 'ディープピンク', hex: '#FF1493' },
+  { name: 'ホットピンク', hex: '#FF69B4' }, { name: 'ピンク', hex: '#FFC0CB' },
+  { name: 'ラベンダー', hex: '#E6E6FA' }, { name: 'マゼンタ', hex: '#FF00FF' },
+  { name: '紫', hex: '#800080' }, { name: '藍', hex: '#4B0082' },
+  { name: '青', hex: '#0095D9' }, { name: '群青色', hex: '#4C6CB3' },
+  { name: '青藍', hex: '#274A78' }, { name: '青緑', hex: '#00A497' },
+  { name: 'ドジャーブルー', hex: '#1E90FF' }, { name: 'スカイブルー', hex: '#00BFFF' },
+  { name: 'シアン', hex: '#00FFFF' }, { name: 'ターコイズ', hex: '#40E0D0' },
+  { name: 'ティール', hex: '#008080' }, { name: 'ライム', hex: '#00FF00' },
+  { name: '春緑', hex: '#00FF7F' }, { name: 'ゴールド', hex: '#FFD700' },
+  { name: 'オレンジ', hex: '#FFA500' }, { name: 'チョコレート', hex: '#D2691E' },
+  { name: 'サーモン', hex: '#FA8072' },
+] as const;
+const COLOR_INPUT_ALIASES: Record<string, string> = {
+  赤: '#FF0000', あか: '#FF0000', red: '#FF0000',
+  青: '#0095D9', あお: '#0095D9', blue: '#0000FF',
+  青藍: '#274A78', 群青色: '#4C6CB3', 青緑: '#00A497',
+  水色: '#00BFFF', シアン: '#00FFFF', cyan: '#00FFFF',
+  ターコイズ: '#40E0D0', turquoise: '#40E0D0',
+  緑: '#008000', みどり: '#008000', green: '#008000',
+  ライム: '#00FF00', lime: '#00FF00',
+  黄: '#FFFF00', 黄色: '#FFFF00', yellow: '#FFFF00',
+  金: '#FFD700', ゴールド: '#FFD700', gold: '#FFD700',
+  オレンジ: '#FFA500', orange: '#FFA500',
+  朱色: '#FF6347', コーラル: '#FF7F50', coral: '#FF7F50',
+  ピンク: '#FFC0CB', pink: '#FFC0CB',
+  ホットピンク: '#FF69B4', hotpink: '#FF69B4',
+  ディープピンク: '#FF1493', deeppink: '#FF1493',
+  桜色: '#FFB7C5', 'さくら色': '#FFB7C5',
+  紫: '#800080', むらさき: '#800080', purple: '#800080',
+  藤色: '#E6E6FA', ラベンダー: '#E6E6FA', lavender: '#E6E6FA',
+  藍色: '#4B0082', indigo: '#4B0082', ネイビー: '#000080', navy: '#000080',
+  マゼンタ: '#FF00FF', magenta: '#FF00FF', violet: '#EE82EE',
+  白: '#FFFFFF', しろ: '#FFFFFF', white: '#FFFFFF',
+  黒: '#000000', くろ: '#000000', black: '#000000',
+  灰色: '#808080', グレー: '#808080', gray: '#808080', grey: '#808080',
+  茶色: '#A52A2A', brown: '#A52A2A',
+  サーモン: '#FA8072', salmon: '#FA8072',
+  チョコレート: '#D2691E', chocolate: '#D2691E',
+};
+function normalizeThemeColorInput(input: string): string | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  const alias = COLOR_INPUT_ALIASES[raw.toLowerCase()] ?? COLOR_INPUT_ALIASES[raw];
+  const candidate = alias || raw;
+  const hexMatch = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(candidate);
+  if (hexMatch) {
+    const hex = hexMatch[1].length === 3
+      ? hexMatch[1].split('').map((char) => char + char).join('')
+      : hexMatch[1];
+    return '#' + hex.toUpperCase();
+  }
+  if (typeof document !== 'undefined') {
+    const context = document.createElement('canvas').getContext('2d');
+    if (context) {
+      context.fillStyle = '#010203';
+      const sentinel = context.fillStyle;
+      context.fillStyle = candidate;
+      const resolved = context.fillStyle;
+      if (resolved !== sentinel) {
+        if (/^#[0-9a-f]{6}$/i.test(resolved)) return resolved.toUpperCase();
+        const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(resolved);
+        if (rgb) return '#' + rgb.slice(1, 4).map(part =>
+          Number(part).toString(16).padStart(2, '0')
+        ).join('').toUpperCase();
+      }
+    }
+  }
+  return null;
+}
 
 // --- 📋 初期モックデータ群の超拡充 ---
 
@@ -690,7 +812,53 @@ export default function CampusSyncApp() {
   // --- 🎨 テーマカラー＆モード管理 ---
   const [theme, setTheme] = useState<ThemeKey>('blue');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const themeCls = THEMES[theme];
+  const [customPrimaryColor, setCustomPrimaryColor] = useState('#00A9FF');
+  const [customSecondaryColor, setCustomSecondaryColor] = useState('#A855F7');
+  const [customGradientEnabled, setCustomGradientEnabled] = useState(true);
+  const [themeColorInput, setThemeColorInput] = useState('');
+  const [themeColorMessage, setThemeColorMessage] = useState('');
+  const [themeSettingsReady, setThemeSettingsReady] = useState(false);
+  const themeCls = theme === 'custom'
+    ? {
+        ...THEMES.custom,
+        gradient: customGradientEnabled
+          ? 'from-[var(--campus-theme-primary)] to-[var(--campus-theme-secondary)]'
+          : 'from-[var(--campus-theme-primary)] to-[var(--campus-theme-primary)]',
+      }
+    : THEMES[theme];
+
+  const selectTheme = (nextTheme: ThemeKey) => {
+    setTheme(nextTheme);
+    if (nextTheme === 'neon' || nextTheme === 'cyber') setIsDarkMode(true);
+    if (nextTheme === 'fairytale') setIsDarkMode(false);
+    try { window.localStorage.setItem('campus-sync-theme', nextTheme); } catch {}
+  };
+
+  useEffect(() => {
+    if (!themeSettingsReady) return;
+    const colors = theme === 'custom'
+      ? { primary: customPrimaryColor, secondary: customGradientEnabled ? customSecondaryColor : customPrimaryColor }
+      : THEME_COLOR_VALUES[theme];
+    const root = document.documentElement;
+    root.style.setProperty('--campus-theme-primary', colors.primary);
+    root.style.setProperty('--campus-theme-primary-hover', colors.primary);
+    root.style.setProperty('--campus-theme-secondary', colors.secondary);
+    root.style.setProperty('--campus-theme-soft', `color-mix(in srgb, ${colors.primary} 12%, white)`);
+    root.style.setProperty('--campus-theme-soft-hover', `color-mix(in srgb, ${colors.primary} 20%, white)`);
+    root.style.setProperty('--campus-theme-shadow', `${colors.primary}77`);
+    root.style.setProperty('--campus-theme-ring', `color-mix(in srgb, ${colors.primary} 30%, transparent)`);
+  }, [theme, customPrimaryColor, customSecondaryColor, customGradientEnabled, themeSettingsReady]);
+
+  useEffect(() => {
+    if (!themeSettingsReady) return;
+    try {
+      window.localStorage.setItem('campus-sync-theme', theme);
+      window.localStorage.setItem('campus-sync-theme-settings', JSON.stringify({
+        primary: customPrimaryColor, secondary: customSecondaryColor, gradient: customGradientEnabled,
+      }));
+      window.localStorage.setItem('campus-sync-dark-mode', String(isDarkMode));
+    } catch {}
+  }, [theme, customPrimaryColor, customSecondaryColor, customGradientEnabled, isDarkMode, themeSettingsReady]);
 
   // --- 🔐 学校メール認証・プロフィール ---
   const [authUser, setAuthUser] = useState<any>(null);
@@ -1034,20 +1202,35 @@ export default function CampusSyncApp() {
   });
 
 
-// 保存されたテーマとお気に入り教室を復元する。
+// 保存されたテーマ・自由色・ダークモード・お気に入り教室を復元する。
 useEffect(() => {
   try {
     const savedTheme = window.localStorage.getItem('campus-sync-theme');
+    let restoredTheme: ThemeKey = 'blue';
     if (savedTheme && Object.prototype.hasOwnProperty.call(THEMES, savedTheme)) {
-      setTheme(savedTheme as ThemeKey);
+      restoredTheme = savedTheme as ThemeKey;
+      setTheme(restoredTheme);
     }
 
-    const savedRoomId = Number(window.localStorage.getItem('campus-sync-favorite-room-id'));
-    if (Number.isInteger(savedRoomId) && INITIAL_ROOMS.some(room => room.id === savedRoomId)) {
-      setFavoriteRoomId(savedRoomId);
+    const savedSettings = window.localStorage.getItem('campus-sync-theme-settings');
+    if (savedSettings) {
+      const saved = JSON.parse(savedSettings) as { primary?: unknown; secondary?: unknown; gradient?: unknown };
+      if (typeof saved.primary === 'string' && /^#[0-9a-f]{6}$/i.test(saved.primary)) setCustomPrimaryColor(saved.primary.toUpperCase());
+      if (typeof saved.secondary === 'string' && /^#[0-9a-f]{6}$/i.test(saved.secondary)) setCustomSecondaryColor(saved.secondary.toUpperCase());
+      if (typeof saved.gradient === 'boolean') setCustomGradientEnabled(saved.gradient);
     }
+
+    const savedDarkMode = window.localStorage.getItem('campus-sync-dark-mode');
+    if (savedDarkMode === 'true') setIsDarkMode(true);
+    else if (savedDarkMode === 'false') setIsDarkMode(false);
+    if (restoredTheme === 'neon' || restoredTheme === 'cyber') setIsDarkMode(true);
+
+    const savedRoomId = Number(window.localStorage.getItem('campus-sync-favorite-room-id'));
+    if (Number.isInteger(savedRoomId) && INITIAL_ROOMS.some(room => room.id === savedRoomId)) setFavoriteRoomId(savedRoomId);
   } catch {
     // ストレージが使用できなくても画面は初期設定で動かす。
+  } finally {
+    setThemeSettingsReady(true);
   }
 }, []);
 
@@ -2481,28 +2664,25 @@ Supabaseの設定を確認してください。
           const action = detail.action!;
 
           if (action.type === 'set-theme') {
-            const theme = action.theme;
-            if (!theme || !Object.prototype.hasOwnProperty.call(THEMES, theme)) {
-              detail.resolve!({ success: false, message: '指定されたテーマカラーは対応していません。' });
+            const requestedTheme = typeof action.theme === 'string' ? action.theme.trim() : '';
+            if (!requestedTheme) {
+              detail.resolve!({ success: false, message: '色名またはHEXカラーコードを指定してください。' });
               return;
             }
-
-            setTheme(theme as ThemeKey);
-            window.localStorage.setItem('campus-sync-theme', theme);
-
-            const labels: Record<ThemeKey, string> = {
-              blue: '青',
-              pink: 'ピンク',
-              purple: '紫',
-              emerald: '緑',
-              orange: 'オレンジ',
-              indigo: '藍色',
-            };
-
-            detail.resolve!({
-              success: true,
-              message: `テーマカラーを${labels[theme as ThemeKey]}に変更しました。`,
-            });
+            if (Object.prototype.hasOwnProperty.call(THEMES, requestedTheme)) {
+              const selected = requestedTheme as ThemeKey;
+              selectTheme(selected);
+              detail.resolve!({ success: true, message: `テーマを「${THEME_LABELS[selected]}」に変更しました。` });
+              return;
+            }
+            const customHex = normalizeThemeColorInput(requestedTheme);
+            if (!customHex) {
+              detail.resolve!({ success: false, message: '色を認識できませんでした。例：ネオン、メルヘン、#FF66AA、coral、青藍。' });
+              return;
+            }
+            setCustomPrimaryColor(customHex);
+            setTheme('custom');
+            detail.resolve!({ success: true, message: `テーマカラーを${requestedTheme}（${customHex}）に変更しました。` });
             return;
           }
 
@@ -3874,26 +4054,84 @@ Supabaseの設定を確認してください。
                 </div>
               </div>
 
-              <div className="grid grid-cols-6 gap-1.5 pt-1">
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 pt-1">
                 {(Object.keys(THEMES) as ThemeKey[]).map(key => {
                   const item = THEMES[key];
                   const isActive = theme === key;
                   return (
                     <button
                       key={key}
-                      onClick={() => {
-                        setTheme(key);
-                        try { window.localStorage.setItem('campus-sync-theme', key); } catch {}
-                      }}
+                      onClick={() => selectTheme(key)}
                       className={`flex flex-col items-center py-2 rounded-xl border transition-all ${isActive ? 'border-gray-800 bg-gray-50' : 'border-gray-100 bg-white'}`}
                     >
-                      <span className={`w-5 h-5 rounded-full block mb-1 flex items-center justify-center ${item.bg} text-white`}>
+                      <span
+                        className={`w-5 h-5 rounded-full block mb-1 flex items-center justify-center ${item.bg} text-white`}
+                        style={key === 'custom' ? { backgroundColor: customPrimaryColor } : undefined}
+                      >
                         {isActive && <Check size={10} strokeWidth={3} />}
                       </span>
-                      <span className="text-[8px] font-bold text-gray-500 uppercase">{key}</span>
+                      <span className="text-[8px] font-bold text-gray-500">{THEME_LABELS[key]}</span>
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 dark:border-slate-700 bg-white/70 dark:bg-slate-900/70 p-3 space-y-3">
+                <div>
+                  <h4 className="text-xs font-black text-gray-800 dark:text-slate-100">自由なカラー・グラデーション</h4>
+                  <p className="mt-1 text-[10px] text-gray-500 dark:text-slate-400">カラーピッカーは約1,600万色を選べます。HEXコードや色名でも指定できます。</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
+                    メインカラー
+                    <div className="mt-1 flex gap-2">
+                      <input aria-label="メインカラーを選ぶ" type="color" value={customPrimaryColor} onChange={event => { setCustomPrimaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                      <input aria-label="色名またはHEXコード" value={themeColorInput} onChange={event => setThemeColorInput(event.target.value)} placeholder="#FF66AA / coral / 青藍" className="min-w-0 flex-1 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-2 text-xs text-gray-800 dark:text-white" />
+                    </div>
+                  </label>
+                  <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
+                    グラデーションの終点
+                    <input aria-label="グラデーションの終点カラー" type="color" value={customSecondaryColor} onChange={event => { setCustomSecondaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => {
+                    const color = normalizeThemeColorInput(themeColorInput);
+                    if (!color) { setThemeColorMessage('色名またはHEXコードを確認してね。例：#FF66AA、coral、青藍。'); return; }
+                    setCustomPrimaryColor(color);
+                    setTheme('custom');
+                    setThemeColorMessage(`カラーを ${color} に変更しました。`);
+                  }} className="rounded-lg px-3 py-2 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-700">
+                    色名・HEXを適用
+                  </button>
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-gray-600 dark:text-slate-300">
+                    <input type="checkbox" checked={customGradientEnabled} onChange={event => { setCustomGradientEnabled(event.target.checked); setTheme('custom'); }} />
+                    グラデーションを有効にする
+                  </label>
+                </div>
+                <div aria-label="カラー設定プレビュー" className="h-10 rounded-xl border border-black/10" style={{ background: customGradientEnabled ? `linear-gradient(110deg, ${customPrimaryColor}, ${customSecondaryColor})` : customPrimaryColor }} />
+                {themeColorMessage && <p role="status" className="text-[10px] text-emerald-600">{themeColorMessage}</p>}
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h5 className="text-[10px] font-black text-gray-700 dark:text-slate-300">原色大辞典から選んだ色見本</h5>
+                    <a href="https://www.colordic.org/colorsample" target="_blank" rel="noreferrer" className="text-[10px] font-bold underline text-blue-600">色見本一覧</a>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+                    {COLOR_DIC_PRESETS.map(color => (
+                      <button key={color.hex} type="button" onClick={() => {
+                        setCustomPrimaryColor(color.hex);
+                        setTheme('custom');
+                        setThemeColorInput(color.name);
+                        setThemeColorMessage(`${color.name}（${color.hex}）を適用しました。`);
+                      }} title={`${color.name} ${color.hex}`} className="min-w-0 rounded-lg border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-950 p-1.5 text-left hover:scale-[1.02] transition-transform">
+                        <span className="mb-1 block h-5 rounded-md border border-black/5" style={{ backgroundColor: color.hex }} />
+                        <span className="block truncate text-[9px] font-bold text-gray-700 dark:text-slate-200">{color.name}</span>
+                        <span className="block text-[8px] text-gray-400">{color.hex}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[9px] leading-4 text-gray-400">色名・HEX値の参考：原色大辞典（colordic.org）。サイト掲載色の一部を見本として収録しています。</p>
+                </div>
               </div>
 
               {/* 新機能：ダークモード風切り替え */}
@@ -4081,7 +4319,7 @@ Supabaseの設定を確認してください。
   }
 
   return (
-    <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''}`}>
+    <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
       
       {/* デスクトップ用 左側固定サイドバーレイアウト */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
