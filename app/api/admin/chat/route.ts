@@ -135,8 +135,9 @@ export async function GET(request: Request) {
         source_table: 'chat_audit_logs',
         reason: 'cslogson_export',
         metadata: {
-          from: fromDate?.toISOString() ?? null,
-          to: toDate?.toISOString() ?? null,
+          from: url.searchParams.get('from') || null,
+          to: url.searchParams.get('to') || null,
+          timezone: 'Asia/Tokyo',
           record_count: events.length,
           final_hash: previousHash,
         },
@@ -150,7 +151,7 @@ export async function GET(request: Request) {
       extension: '.cslogson',
       schema_version: '1.0',
       exported_at: new Date().toISOString(),
-      date_range: { from: fromDate?.toISOString() ?? null, to: toDate?.toISOString() ?? null },
+      date_range: { from: url.searchParams.get('from') || null, to: url.searchParams.get('to') || null, timezone: 'Asia/Tokyo', to_date_inclusive: true },
       event_count: events.length,
       integrity: {
         algorithm: 'SHA-256 hash chain over each event JSON',
@@ -160,7 +161,7 @@ export async function GET(request: Request) {
       },
       events,
     };
-    const day = new Date().toISOString().slice(0, 10);
+    const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
     return new Response(JSON.stringify(packageData, null, 2), {
       status: 200,
       headers: {
