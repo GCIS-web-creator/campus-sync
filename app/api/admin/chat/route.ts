@@ -277,16 +277,22 @@ export async function GET(request: Request) {
       message_preview: targetMap.get(report.message_id) || savedPreview,
     };
   });
-  // Explicitly materialize created_at in both branches so TypeScript retains it on the union.
-  const messages = [
-    ...classRows.map(row => ({
+  // Keep the fields used below explicit; inferred spread-union types can drop
+  // properties that exist on the source rows but differ between the two chat tables.
+  type AdminChatMessage = Record<string, any> & {
+    created_at: string;
+    message_table: 'class_chat_messages' | 'school_chat_messages';
+    attachment_path?: string | null;
+  };
+  const messages: AdminChatMessage[] = [
+    ...classRows.map((row): AdminChatMessage => ({
       ...row,
       created_at: String(row.created_at ?? ''),
       message_table: 'class_chat_messages',
       scope: 'class',
       scope_key: row.class_name,
     })),
-    ...schoolRows.map(row => ({
+    ...schoolRows.map((row): AdminChatMessage => ({
       ...row,
       created_at: String(row.created_at ?? ''),
       message_table: 'school_chat_messages',
