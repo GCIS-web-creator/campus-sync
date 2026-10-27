@@ -47,7 +47,9 @@ function safeUuid(value: unknown): value is string {
 
 function parseDate(value: string | null): Date | null | false {
   if (!value) return null;
-  const parsed = new Date(value);
+  // Date-only values from the admin UI are interpreted in Japan Standard Time.
+  const normalized = /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? value + 'T00:00:00+09:00' : value;
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? false : parsed;
 }
 
@@ -83,8 +85,9 @@ export async function GET(request: Request) {
       let query = supabase.from('chat_audit_logs').select('*').order('occurred_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + pageSize - 1);
       if (fromDate) query = query.gte('occurred_at', fromDate.toISOString());
       if (toDate) {
+        const toRaw = url.searchParams.get('to') || '';
         const endExclusive = new Date(toDate.getTime());
-        if (url.searchParams.get('to')?.length === 10) endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+        if (/^\\d{4}-\\d{2}-\\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
         query = query.lt('occurred_at', endExclusive.toISOString());
       }
       const result = await query;
@@ -93,7 +96,16 @@ export async function GET(request: Request) {
       rows.push(...batch);
       if (batch.length < pageSize) break;
       if (rows.length >= maximum) {
-        const probe = await supabase.from('chat_audit_logs').select('id').order('occurred_at', { ascending: true }).order('id', { ascending: true }).range(maximum, maximum);
+        let probeQuery = supabase.from('chat_audit_logs').select('id').order('occurred_at', { ascending: true }).order('id', { ascending: true }).range(maximum, maximum);
+        if (fromDate) probeQuery = probeQuery.gte('occurred_at', fromDate.toISOString());
+        if (toDate) {
+          const toRaw = url.searchParams.get('to') || '';
+          const endExclusive = new Date(toDate.getTime());
+          if (/^\\d{4}-\\d{2}-\\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
+          probeQuery = probeQuery.lt('occurred_at', endExclusive.toISOString());
+        }
+        const probe = await probeQuery;
+        if (probe.error) return jsonError('ログ件数の確認に失敗しました: ' + probe.error.message, 500);
         if (probe.data?.length) return jsonError('対象ログが50,000件を超えています。開始日・終了日を絞って書き出してください。', 413);
         break;
       }
@@ -165,7 +177,7 @@ export async function GET(request: Request) {
 
   const [reportsResult, logsResult] = await Promise.all([
     supabase.from('chat_message_reports')
-      .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by')
+      .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by,message_snapshot')
       .order('created_at', { ascending: false }).limit(150),
     supabase.from('chat_audit_logs')
       .select('id,occurred_at,event_type,source_table,record_id,actor_user_id,actor_label,student_id,student_name,user_class,scope,scope_key,body,previous_body,reason,details,status,previous_status,metadata')
