@@ -1758,7 +1758,10 @@ export default function CampusSyncAdmin() {
         )}
 
         {activeTab === 'student-profile-export' && (
-          <StudentProfileExportAdmin adminPassword={adminApiPassword} />
+          <StudentProfileExportAdmin
+            adminPassword={adminApiPassword}
+            onAdminPasswordChange={setAdminApiPassword}
+          />
         )}
 
       </main>
