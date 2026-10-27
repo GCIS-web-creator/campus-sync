@@ -65,6 +65,10 @@ type AuditRow = {
   scope?: string | null;
   body?: string | null;
   previous_body?: string | null;
+  attachment_path?: string | null;
+  attachment_url?: string | null;
+  attachment_name?: string | null;
+  attachment_mime?: string | null;
   reason?: string | null;
   details?: string | null;
   status?: string | null;
@@ -492,6 +496,8 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                   {log.body && <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{log.body}</p>}
                   {log.previous_body && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-amber-200">編集前：{log.previous_body}</p>}
                   {log.reason && <p className="mt-1 text-xs text-rose-300">理由：{log.reason}</p>}
+                  {log.details && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-400">対応メモ・補足：{log.details}</p>}
+                  {log.attachment_name && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-cyan-300"><span>📎 {log.attachment_name} · {log.attachment_mime || 'ファイル'}</span>{log.attachment_url && <a href={log.attachment_url} target="_blank" rel="noreferrer" className="rounded-lg border border-cyan-900 px-2 py-1 font-bold hover:bg-cyan-950">添付を確認（2分間有効）</a>}</div>}
                   {log.previous_status && <p className="mt-1 text-xs text-slate-400">状態：{log.previous_status} → {log.status || '不明'}</p>}
                 </article>
               ))}
