@@ -75,7 +75,14 @@ function detectPageAction(question: string): PageAction | null {
   const themeCommand =
     /(?:変え|変更|設定|切り替え|にして|にする|にしたい|適用|使って|お願い|に[。！!？?]*$)/.test(q);
   const hasHexColor = /#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i.test(q);
-  const hasNamedColor = /ネオン|サイバー|メルヘン|フェアリー|自由設定|カスタムテーマ|青藍|群青色|青緑|ドジャーブルー|スカイブルー|ターコイズ|ラベンダー|マゼンタ|チョコレート|サーモン|春緑|ゴールド|ホットピンク|ディープピンク|コーラル|トマト|水色|シアン|ライム|朱色|桜色|さくら色|藤色|ネイビー|灰色|グレー|茶色|赤|青|緑|黄|金|藍|紫|白|黒|\\b(?:coral|tomato|deeppink|hotpink|lavender|magenta|violet|dodgerblue|deepskyblue|cyan|turquoise|teal|lime|springgreen|gold|orange|chocolate|salmon|navy|crimson|yellow|olive|aqua|fuchsia|sienna|tan|skyblue|rebeccapurple|darkcyan|darkblue|lightblue|lightpink|pink|blue|purple|green|indigo|red)\\b/i.test(q);
+  const englishWords = q.match(/\b[a-z][a-z-]{2,24}\b/gi) ?? [];
+  const ignoredWords = new Set(['theme', 'color', 'colour', 'site', 'website', 'background', 'screen', 'design', 'change', 'changed', 'set', 'make', 'use', 'apply', 'please', 'with', 'and', 'the', 'for', 'into', 'from']);
+  const cssColorName = englishWords.find(name =>
+    !ignoredWords.has(name.toLowerCase()) &&
+    typeof CSS !== 'undefined' &&
+    CSS.supports('color', name)
+  );
+  const hasNamedColor = /ネオン|サイバー|メルヘン|フェアリー|自由設定|カスタムテーマ|青藍|群青色|青緑|ドジャーブルー|スカイブルー|ターコイズ|ラベンダー|マゼンタ|チョコレート|サーモン|春緑|ゴールド|ホットピンク|ディープピンク|コーラル|トマト|水色|シアン|ライム|朱色|桜色|さくら色|藤色|ネイビー|灰色|グレー|茶色|赤|青|緑|黄|金|藍|紫|白|黒/.test(q) || Boolean(cssColorName)
 
   if ((themeIntent || hasHexColor || hasNamedColor) && themeCommand) {
     if (/ネオン|neon/i.test(q)) return { type: 'set-theme', theme: 'neon' };
@@ -111,6 +118,7 @@ function detectPageAction(question: string): PageAction | null {
         : q.includes(name)
     );
     if (colorName) return { type: 'set-theme', theme: colorName };
+    if (cssColorName) return { type: 'set-theme', theme: cssColorName };
 
     if (/\bpink\b/i.test(q)) return { type: 'set-theme', theme: 'pink' };
     if (/\bblue\b/i.test(q)) return { type: 'set-theme', theme: 'blue' };
