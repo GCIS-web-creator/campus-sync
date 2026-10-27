@@ -3,6 +3,7 @@
 
 import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
+import ChatModerationAdmin from '@/components/ChatModerationAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -10,7 +11,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History
+  BellRing, Save, RefreshCw, History, MessageSquare
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -1000,6 +1001,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
             </button>
+            <button aria-label="チャット管理・監査ログ" title="チャット管理・監査ログ" onClick={() => setActiveTab('chat-moderation')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'chat-moderation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
+            </button>
             <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
             </button>
@@ -1740,6 +1744,13 @@ export default function CampusSyncAdmin() {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'chat-moderation' && (
+          <ChatModerationAdmin
+            adminPassword={adminApiPassword}
+            onAdminPasswordChange={setAdminApiPassword}
+          />
         )}
 
       </main>
