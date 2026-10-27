@@ -180,7 +180,7 @@ export async function GET(request: Request) {
       .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by,message_snapshot')
       .order('created_at', { ascending: false }).limit(150),
     supabase.from('chat_audit_logs')
-      .select('id,occurred_at,event_type,source_table,record_id,actor_user_id,actor_label,student_id,student_name,user_class,scope,scope_key,body,previous_body,reason,details,status,previous_status,metadata')
+      .select('id,occurred_at,event_type,source_table,record_id,actor_user_id,actor_label,student_id,student_name,user_class,scope,scope_key,body,previous_body,attachment_path,attachment_name,attachment_mime,reason,details,status,previous_status,metadata')
       .order('occurred_at', { ascending: false }).order('id', { ascending: false }).limit(150),
   ]);
 
@@ -284,6 +284,7 @@ export async function GET(request: Request) {
   const attachmentPaths = [...new Set([
     ...messages.map(message => message.attachment_path),
     ...hydratedReports.map(report => report.message_preview?.attachment_path),
+    ...logs.map(log => log.attachment_path),
   ].filter((value): value is string => typeof value === 'string' && value.length > 0 && value.length < 500))];
   const signedUrlByPath = new Map<string, string>();
   if (attachmentPaths.length) {
@@ -305,11 +306,15 @@ export async function GET(request: Request) {
         : null,
     } : null,
   }));
+  const logsWithAttachmentLinks = logs.map(log => ({
+    ...log,
+    attachment_url: log.attachment_path ? signedUrlByPath.get(log.attachment_path) || null : null,
+  }));
 
   return NextResponse.json({
     reports: reportsWithAttachmentLinks,
     messages: messagesWithAttachmentLinks,
-    auditLogs: logs,
+    auditLogs: logsWithAttachmentLinks,
     counts: {
       openReports: hydratedReports.filter(r => r.status === 'open').length,
       totalReports: hydratedReports.length,
