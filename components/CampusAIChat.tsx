@@ -115,7 +115,7 @@ function detectPageAction(question: string): PageAction | null {
     const colorName = colorNames
       .sort((a, b) => b.length - a.length)
       .find(name => name.toLowerCase() === name
-        ? new RegExp('\\\\b' + name + '\\\\b', 'i').test(q)
+        ? new RegExp('\\b' + name + '\\b', 'i').test(q)
         : q.includes(name)
       );
     if (colorName) return { type: 'set-theme', theme: colorName };
