@@ -1,0 +1,343 @@
+import { createClient } from '@supabase/supabase-js';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+type MessageTable = 'class_chat_messages' | 'school_chat_messages';
+type ReportStatus = 'open' | 'reviewing' | 'resolved' | 'dismissed';
+
+function isAuthorized(request: Request): boolean {
+  const expected = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
+  const received = request.headers.get('x-admin-password') || '';
+  if (!expected || !received) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function authError(request: Request) {
+  if (!process.env.CAMPUS_SYNC_ADMIN_PASSWORD || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return NextResponse.json(
+      { message: 'サーバー環境変数 CAMPUS_SYNC_ADMIN_PASSWORD / SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL を設定してください。' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ message: '管理用パスワードが正しくありません。' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+  }
+  return null;
+}
+
+function getAdminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+function jsonError(message: string, status = 400) {
+  return NextResponse.json({ message }, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
+function safeUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseDate(value: string | null): Date | null | false {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? false : parsed;
+}
+
+async function writeAdminAudit(
+  supabase: NonNullable<ReturnType<typeof getAdminSupabase>>,
+  record: Record<string, unknown>,
+) {
+  const { error } = await supabase.from('chat_audit_logs').insert({
+    actor_user_id: null,
+    actor_label: 'admin_shared_password',
+    ...record,
+  });
+  if (error) throw new Error('監査ログを記録できませんでした。Phase 5 SQLとテーブル権限を確認してください: ' + error.message);
+}
+
+export async function GET(request: Request) {
+  const denied = authError(request);
+  if (denied) return denied;
+  const supabase = getAdminSupabase();
+  if (!supabase) return jsonError('Supabaseサーバー設定が不足しています。', 503);
+
+  const url = new URL(request.url);
+  if (url.searchParams.get('format') === 'cslogson') {
+    const fromDate = parseDate(url.searchParams.get('from'));
+    const toDate = parseDate(url.searchParams.get('to'));
+    if (fromDate === false || toDate === false) return jsonError('書き出し期間の日付が不正です。');
+    if (fromDate && toDate && fromDate > toDate) return jsonError('開始日は終了日以前にしてください。');
+
+    const pageSize = 500;
+    const maximum = 50000;
+    const rows: Record<string, any>[] = [];
+    for (let offset = 0; offset < maximum; offset += pageSize) {
+      let query = supabase.from('chat_audit_logs').select('*').order('occurred_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + pageSize - 1);
+      if (fromDate) query = query.gte('occurred_at', fromDate.toISOString());
+      if (toDate) {
+        const endExclusive = new Date(toDate.getTime());
+        if (url.searchParams.get('to')?.length === 10) endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+        query = query.lt('occurred_at', endExclusive.toISOString());
+      }
+      const result = await query;
+      if (result.error) return jsonError('監査ログを読み込めません。supabase/class-chat-phase5-audit.sql を実行してください: ' + result.error.message, 409);
+      const batch = (result.data || []) as Record<string, any>[];
+      rows.push(...batch);
+      if (batch.length < pageSize) break;
+      if (rows.length >= maximum) {
+        const probe = await supabase.from('chat_audit_logs').select('id').order('occurred_at', { ascending: true }).order('id', { ascending: true }).range(maximum, maximum);
+        if (probe.data?.length) return jsonError('対象ログが50,000件を超えています。開始日・終了日を絞って書き出してください。', 413);
+        break;
+      }
+    }
+
+    let previousHash = '0'.repeat(64);
+    const events = rows.map((row, index) => {
+      const canonicalRecord = JSON.stringify(row);
+      const recordHash = createHash('sha256').update(previousHash + '\n' + canonicalRecord, 'utf8').digest('hex');
+      const wrapped = {
+        ...row,
+        integrity: {
+          sequence: index + 1,
+          algorithm: 'SHA-256',
+          previous_hash: previousHash,
+          record_hash: recordHash,
+        },
+      };
+      previousHash = recordHash;
+      return wrapped;
+    });
+
+    // The export event is written after the snapshot, so it will appear in the next export.
+    try {
+      await writeAdminAudit(supabase, {
+        event_type: 'logs_exported',
+        source_table: 'chat_audit_logs',
+        reason: 'cslogson_export',
+        metadata: {
+          from: fromDate?.toISOString() ?? null,
+          to: toDate?.toISOString() ?? null,
+          record_count: events.length,
+          final_hash: previousHash,
+        },
+      });
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : '書き出し監査ログを記録できません。', 500);
+    }
+
+    const packageData = {
+      format: 'CampusSync Chat Log JSON',
+      extension: '.cslogson',
+      schema_version: '1.0',
+      exported_at: new Date().toISOString(),
+      date_range: { from: fromDate?.toISOString() ?? null, to: toDate?.toISOString() ?? null },
+      event_count: events.length,
+      integrity: {
+        algorithm: 'SHA-256 hash chain over each event JSON',
+        initial_hash: '0'.repeat(64),
+        final_hash: previousHash,
+        note: 'A verifier can remove each event.integrity object and recalculate SHA-256(previous_hash + newline + JSON.stringify(event_without_integrity)). This detects changes to the exported sequence; it does not prove who originally authored a message.',
+      },
+      events,
+    };
+    const day = new Date().toISOString().slice(0, 10);
+    return new Response(JSON.stringify(packageData, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="campus-sync-chat-logs-' + day + '.cslogson"',
+        'Cache-Control': 'no-store, private',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  const scope = url.searchParams.get('scope') || 'all';
+  if (!['all', 'class', 'grade', 'school'].includes(scope)) return jsonError('対象範囲の指定が不正です。');
+
+  const [reportsResult, logsResult] = await Promise.all([
+    supabase.from('chat_message_reports')
+      .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by')
+      .order('created_at', { ascending: false }).limit(150),
+    supabase.from('chat_audit_logs')
+      .select('id,occurred_at,event_type,source_table,record_id,actor_user_id,actor_label,student_id,student_name,user_class,scope,scope_key,body,previous_body,reason,details,status,previous_status,metadata')
+      .order('occurred_at', { ascending: false }).order('id', { ascending: false }).limit(150),
+  ]);
+
+  if (reportsResult.error) return jsonError('通報一覧を読み込めません。supabase/class-chat-phase3.sql を確認してください: ' + reportsResult.error.message, 409);
+  if (logsResult.error) return jsonError('監査ログを読み込めません。supabase/class-chat-phase5-audit.sql を実行してください: ' + logsResult.error.message, 409);
+
+  let classRows: Record<string, any>[] = [];
+  let schoolRows: Record<string, any>[] = [];
+  if (scope !== 'grade' && scope !== 'school') {
+    const result = await supabase.from('class_chat_messages')
+      .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime')
+      .order('created_at', { ascending: false }).limit(100);
+    if (result.error) return jsonError('クラスチャットを取得できません: ' + result.error.message, 500);
+    classRows = (result.data || []) as Record<string, any>[];
+  }
+  if (scope !== 'class') {
+    let query = supabase.from('school_chat_messages')
+      .select('id,user_id,student_id,student_name,user_class,scope,scope_key,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime')
+      .order('created_at', { ascending: false }).limit(100);
+    if (scope === 'grade') query = query.eq('scope', 'grade');
+    if (scope === 'school') query = query.eq('scope', 'school');
+    const result = await query;
+    if (result.error) return jsonError('学年・全校チャットを取得できません: ' + result.error.message, 500);
+    schoolRows = (result.data || []) as Record<string, any>[];
+  }
+
+  const reports = (reportsResult.data || []) as Record<string, any>[];
+  const logs = (logsResult.data || []) as Record<string, any>[];
+  const relevantReports = reports.filter(report => {
+    if (scope === 'all') return true;
+    if (scope === 'class') return report.message_table === 'class_chat_messages';
+    if (scope === 'school') return report.message_table === 'school_chat_messages' && schoolRows.some(m => m.id === report.message_id && m.scope === 'school');
+    return report.message_table === 'school_chat_messages' && schoolRows.some(m => m.id === report.message_id && m.scope === 'grade');
+  });
+
+  const classMessageIds = relevantReports.filter(r => r.message_table === 'class_chat_messages').map(r => r.message_id);
+  const schoolMessageIds = relevantReports.filter(r => r.message_table === 'school_chat_messages').map(r => r.message_id);
+  const [classTargetsResult, schoolTargetsResult] = await Promise.all([
+    classMessageIds.length
+      ? supabase.from('class_chat_messages').select('id,student_name,class_name,body,created_at').in('id', classMessageIds)
+      : Promise.resolve({ data: [], error: null }),
+    schoolMessageIds.length
+      ? supabase.from('school_chat_messages').select('id,student_name,user_class,scope,body,created_at').in('id', schoolMessageIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const targetMap = new Map<string, Record<string, any>>();
+  for (const row of [...((classTargetsResult.data || []) as Record<string, any>[]), ...((schoolTargetsResult.data || []) as Record<string, any>[])]) {
+    targetMap.set(row.id, row);
+  }
+  for (const log of logs) {
+    if (!log.record_id || !log.body) continue;
+    if (log.source_table !== 'class_chat_messages' && log.source_table !== 'school_chat_messages') continue;
+    if (!targetMap.has(log.record_id)) targetMap.set(log.record_id, {
+      id: log.record_id, student_name: log.student_name, user_class: log.user_class,
+      class_name: log.user_class, scope: log.scope, body: log.body, created_at: log.occurred_at, deleted: log.event_type === 'message_deleted',
+    });
+  }
+
+  const hydratedReports = relevantReports.map(report => ({
+    ...report,
+    message_preview: targetMap.get(report.message_id) || null,
+  }));
+  const messages = [...classRows.map(row => ({ ...row, message_table: 'class_chat_messages', scope: 'class', scope_key: row.class_name })), ...schoolRows.map(row => ({ ...row, message_table: 'school_chat_messages' }))]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 150);
+
+  return NextResponse.json({
+    reports: hydratedReports,
+    messages,
+    auditLogs: logs,
+    counts: {
+      openReports: hydratedReports.filter(r => r.status === 'open').length,
+      totalReports: hydratedReports.length,
+      messages: messages.length,
+      auditEvents: logs.length,
+    },
+  }, { headers: { 'Cache-Control': 'no-store, private' } });
+}
+
+export async function PATCH(request: Request) {
+  const denied = authError(request);
+  if (denied) return denied;
+  const supabase = getAdminSupabase();
+  if (!supabase) return jsonError('Supabaseサーバー設定が不足しています。', 503);
+
+  let payload: { id?: string; status?: ReportStatus };
+  try { payload = await request.json(); } catch { return jsonError('送信データを読み取れません。'); }
+  if (!safeUuid(payload.id) || !payload.status || !['open', 'reviewing', 'resolved', 'dismissed'].includes(payload.status)) {
+    return jsonError('通報IDまたは対応状況が不正です。');
+  }
+
+  const { data: existing, error: readError } = await supabase.from('chat_message_reports')
+    .select('id,reporter_user_id,message_id,message_table,reason,details,status')
+    .eq('id', payload.id).maybeSingle();
+  if (readError) return jsonError('通報の読み込みに失敗しました: ' + readError.message, 500);
+  if (!existing) return jsonError('対象の通報が見つかりません。', 404);
+
+  const reviewedAt = payload.status === 'resolved' || payload.status === 'dismissed' ? new Date().toISOString() : null;
+  const { data: updated, error: updateError } = await supabase.from('chat_message_reports')
+    .update({ status: payload.status, reviewed_at: reviewedAt })
+    .eq('id', payload.id)
+    .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by')
+    .single();
+  if (updateError) return jsonError('通報状態を更新できません: ' + updateError.message, 500);
+
+  try {
+    await writeAdminAudit(supabase, {
+      event_type: 'admin_report_status_changed',
+      source_table: 'chat_message_reports',
+      record_id: existing.id,
+      reason: existing.reason,
+      details: existing.details,
+      status: updated.status,
+      previous_status: existing.status,
+      metadata: {
+        message_id: existing.message_id,
+        message_table: existing.message_table,
+        reporter_user_id: existing.reporter_user_id,
+      },
+    });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : '管理操作を監査ログに記録できません。', 500);
+  }
+
+  return NextResponse.json({ report: updated }, { headers: { 'Cache-Control': 'no-store, private' } });
+}
+
+export async function DELETE(request: Request) {
+  const denied = authError(request);
+  if (denied) return denied;
+  const supabase = getAdminSupabase();
+  if (!supabase) return jsonError('Supabaseサーバー設定が不足しています。', 503);
+
+  let payload: { id?: string; message_table?: MessageTable; reason?: string };
+  try { payload = await request.json(); } catch { return jsonError('送信データを読み取れません。'); }
+  if (!safeUuid(payload.id) || !payload.message_table || !['class_chat_messages', 'school_chat_messages'].includes(payload.message_table)) {
+    return jsonError('削除対象のメッセージ指定が不正です。');
+  }
+  const reason = (payload.reason || '').trim();
+  if (!reason || reason.length > 500) return jsonError('削除理由を1〜500文字で入力してください。');
+
+  const table = payload.message_table;
+  const { data: existing, error: readError } = await supabase.from(table).select('*').eq('id', payload.id).maybeSingle();
+  if (readError) return jsonError('メッセージの読み込みに失敗しました: ' + readError.message, 500);
+  if (!existing) return jsonError('メッセージは既に削除されているか、見つかりません。', 404);
+
+  const { error: deleteError } = await supabase.from(table).delete().eq('id', payload.id);
+  if (deleteError) return jsonError('メッセージを削除できません: ' + deleteError.message, 500);
+
+  try {
+    await writeAdminAudit(supabase, {
+      event_type: 'admin_message_deleted',
+      source_table: table,
+      record_id: existing.id,
+      student_id: existing.student_id,
+      student_name: existing.student_name,
+      user_class: existing.class_name || existing.user_class,
+      scope: table === 'class_chat_messages' ? 'class' : existing.scope,
+      scope_key: existing.class_name || existing.scope_key,
+      body: existing.body,
+      attachment_path: existing.attachment_path || null,
+      attachment_name: existing.attachment_name || null,
+      attachment_mime: existing.attachment_mime || null,
+      reason,
+      metadata: { moderation_action: 'delete_message', source_table: table },
+    });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : '削除操作を監査ログに記録できません。', 500);
+  }
+
+  return NextResponse.json({ success: true }, { headers: { 'Cache-Control': 'no-store, private' } });
+}
