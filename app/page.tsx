@@ -3997,7 +3997,22 @@ Supabaseの設定を確認してください。
             <form onSubmit={handleAddClubNote} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
               <h4 className="text-xs font-black text-purple-600 flex items-center gap-1"><Plus size={16}/> クラブ内・委員会内への新規業務・連絡投稿</h4>
               <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="部活・委員会名 (例: 男子バドミントン部)" value={newClubName} onChange={e => setNewClubName(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                <div className="min-w-0">
+                  <input
+                    type="text"
+                    list="school-club-name-options"
+                    required
+                    placeholder="部活・委員会名（候補から選択）"
+                    value={newClubName}
+                    onChange={e => setNewClubName(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none"
+                  />
+                  <datalist id="school-club-name-options">
+                    {SCHOOL_CLUBS.map(club => <option key={club.id} value={club.name}>{club.category}</option>)}
+                    <option value="生徒会執行部" />
+                    <option value="その他の委員会" />
+                  </datalist>
+                </div>
                 <input type="text" placeholder="件名・タイトル" value={newClubTitle} onChange={e => setNewClubTitle(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
                 <textarea placeholder="部員へ共有する詳細スケジュールや持参物、重要連絡事項を記載..." value={newClubContent} onChange={e => setNewClubContent(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-16 resize-none" />
               </div>
@@ -4012,11 +4027,14 @@ Supabaseの設定を確認してください。
           {clubNotes.map(note => (
                 <div key={note.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-2`}>
                   <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
-                        {note.clubName}
-                      </span>
-                      <h4 className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <ClubNoteIcon clubName={note.clubName} size={40} />
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                          {note.clubName}
+                        </span>
+                        <h4 className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
+                      </div>
                     </div>
                     <span className={`text-[10px] ${subTextClass}`}>{note.date}</span>
                   </div>
