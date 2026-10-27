@@ -4008,7 +4008,7 @@ Supabaseの設定を確認してください。
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none"
                   />
                   <datalist id="school-club-name-options">
-                    {SCHOOL_CLUBS.map(club => <option key={club.id} value={club.name}>{club.category}</option>)}
+                    {SCHOOL_CLUBS.map(club => <option key={club.id} value={club.name} label={club.category} />)}
                     <option value="生徒会執行部" />
                     <option value="その他の委員会" />
                   </datalist>
