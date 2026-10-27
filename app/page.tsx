@@ -702,6 +702,78 @@ const INITIAL_CLUB_NOTES = [
   { id: 3, clubName: '生徒会執行部', title: '文化祭パンフレット校正確認', date: '2日前', content: '各クラスの企画紹介文の最終校正データが届いています。担当委員は本日17時までに生徒会室に集まり、チェックを完了させてください。', author: '執行部書記 より' },
 ];
 
+type SchoolClub = { id: string; name: string; category: '文化クラブ' | '運動クラブ' | '同好会' | '研究会'; sprite: 1 | 2 | 3 | 4 };
+
+// 学校の正式な部活・同好会・研究会一覧と、club-icons.zip に入っていたアイコンの対応表。
+const SCHOOL_CLUBS: SchoolClub[] = [
+  { id: 'drama', name: '演劇部', category: '文化クラブ', sprite: 1 },
+  { id: 'physics', name: '物理技工部', category: '文化クラブ', sprite: 1 },
+  { id: 'calligraphy', name: '書道部', category: '文化クラブ', sprite: 1 },
+  { id: 'biology', name: '生物部', category: '文化クラブ', sprite: 1 },
+  { id: 'art', name: '美術部', category: '文化クラブ', sprite: 1 },
+  { id: 'brass-band', name: '吹奏楽部', category: '文化クラブ', sprite: 1 },
+  { id: 'broadcast', name: '放送部', category: '文化クラブ', sprite: 1 },
+  { id: 'koto', name: '箏曲部', category: '文化クラブ', sprite: 1 },
+  { id: 'tsubasa-chorus', name: '翼コーラス部', category: '文化クラブ', sprite: 1 },
+  { id: 'ic-english-debate', name: 'IC・英語ディベート部', category: '文化クラブ', sprite: 2 },
+  { id: 'soka-oratory', name: '創価雄弁会', category: '文化クラブ', sprite: 2 },
+  { id: 'manga', name: '漫画研究会', category: '文化クラブ', sprite: 2 },
+  { id: 'string-ensemble', name: '弦楽アンサンブル部', category: '文化クラブ', sprite: 2 },
+  { id: 'track-and-field', name: '陸上部', category: '運動クラブ', sprite: 2 },
+  { id: 'soccer', name: 'サッカー部（男子）', category: '運動クラブ', sprite: 2 },
+  { id: 'basketball', name: 'バスケットボール部', category: '運動クラブ', sprite: 2 },
+  { id: 'volleyball', name: 'バレーボール部', category: '運動クラブ', sprite: 2 },
+  { id: 'badminton', name: 'バドミントン部', category: '運動クラブ', sprite: 2 },
+  { id: 'dance', name: 'ダンス部', category: '運動クラブ', sprite: 3 },
+  { id: 'baseball-hard', name: '硬式野球部（男子）', category: '運動クラブ', sprite: 3 },
+  { id: 'baseball-soft', name: '軟式野球部（男子）', category: '運動クラブ', sprite: 3 },
+  { id: 'tennis', name: '硬式テニス部', category: '運動クラブ', sprite: 3 },
+  { id: 'soft-tennis', name: 'ソフトテニス部（女子）', category: '運動クラブ', sprite: 3 },
+  { id: 'swimming', name: '水泳部（男子）', category: '運動クラブ', sprite: 3 },
+  { id: 'handball', name: 'ハンドボール部', category: '運動クラブ', sprite: 3 },
+  { id: 'kendo', name: '剣道部', category: '運動クラブ', sprite: 3 },
+  { id: 'table-tennis', name: '卓球部（男子）', category: '運動クラブ', sprite: 3 },
+  { id: 'chemistry', name: '化学同好会', category: '同好会', sprite: 4 },
+  { id: 'math', name: '数学同好会', category: '同好会', sprite: 4 },
+  { id: 'astronomy', name: '天文同好会', category: '同好会', sprite: 4 },
+  { id: 'hangul', name: 'ハングル研究会', category: '研究会', sprite: 4 },
+  { id: 'russian', name: 'ロシア語研究会', category: '研究会', sprite: 4 },
+  { id: 'spanish', name: 'スペイン語研究会', category: '研究会', sprite: 4 },
+  { id: 'german', name: 'ドイツ語研究会', category: '研究会', sprite: 4 },
+  { id: 'chinese', name: '中国語研究会', category: '研究会', sprite: 4 },
+  { id: 'french', name: 'フランス語研究会', category: '研究会', sprite: 4 },
+];
+
+const getSchoolClub = (clubName: string): SchoolClub | undefined =>
+  SCHOOL_CLUBS.find(club => club.name === String(clubName || '').trim());
+
+function ClubNoteIcon({ clubName, size = 32 }: { clubName: string; size?: number }) {
+  const club = getSchoolClub(clubName);
+  if (!club) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center rounded-xl border border-purple-100 bg-purple-50 text-purple-600"
+        style={{ width: size, height: size }}
+        aria-hidden="true"
+      >
+        <MessageSquare size={Math.max(14, Math.round(size * 0.55))} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50"
+      style={{ width: size, height: size }}
+      title={club.name}
+    >
+      <svg viewBox="0 0 64 64" width={size - 2} height={size - 2} role="img" aria-label={club.name}>
+        <use href={`/club-icons/sprite-${club.sprite}.svg#${club.id}`} />
+      </svg>
+    </span>
+  );
+}
+
 type LibraryBook = {
   id: string;
   title: string;
