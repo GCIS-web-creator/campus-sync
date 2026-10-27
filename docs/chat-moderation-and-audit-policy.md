@@ -11,6 +11,7 @@ The moderation system supports handling of reports, abusive or harmful messages,
 The intended audit events are:
 - Current messages imported as a one-time `baseline_snapshot` when the Phase 5 migration runs.
 - New messages, edits, and deletions after the migration.
+- Current class-chat reactions as a one-time baseline, plus reaction additions and removals after migration.
 - Reports submitted by students and report status changes.
 - Administrative message removals, moderation notes, and log exports.
 
