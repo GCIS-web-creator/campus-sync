@@ -43,8 +43,8 @@ export function CampusSyncLogo({ variant = 'wordmark', theme = 'auto', height = 
 
   return (
     <span className={wrapperClass} role="img" aria-label={alt}>
-      <img src={files.light} alt="" aria-hidden="true" style={imgStyle} className="dark:hidden" />
-      <img src={files.dark} alt="" aria-hidden="true" style={imgStyle} className="hidden dark:block" />
+      <img src={files.light} alt="" aria-hidden="true" style={imgStyle} className="campus-sync-logo-light" />
+      <img src={files.dark} alt="" aria-hidden="true" style={imgStyle} className="campus-sync-logo-dark" />
     </span>
   );
 }
