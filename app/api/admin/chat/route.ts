@@ -312,6 +312,22 @@ export async function GET(request: Request) {
     attachment_url: log.attachment_path ? signedUrlByPath.get(log.attachment_path) || null : null,
   }));
 
+  try {
+    await writeAdminAudit(supabase, {
+      event_type: 'admin_chat_data_viewed',
+      source_table: 'chat_audit_logs',
+      reason: 'moderation_data_read',
+      metadata: {
+        scope,
+        report_count: hydratedReports.length,
+        message_count: messages.length,
+        visible_audit_event_count: logs.length,
+      },
+    });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : '管理者の閲覧履歴を記録できません。', 500);
+  }
+
   return NextResponse.json({
     reports: reportsWithAttachmentLinks,
     messages: messagesWithAttachmentLinks,
