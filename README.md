@@ -20,6 +20,11 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+
+## Student profile setup and secure export
+
+Before enabling the first-login profile setup or exporting profile snapshots, follow the [setup and export guide](docs/student-profile-setup-and-export.md). It covers the Supabase SQL migration, RLS policy review, required Vercel environment variables, Admin export, and `.cslogson` verification. Passwords and password hashes are managed only by Supabase Auth and are not part of profile exports.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
