@@ -48,7 +48,7 @@ function safeUuid(value: unknown): value is string {
 function parseDate(value: string | null): Date | null | false {
   if (!value) return null;
   // Date-only values from the admin UI are interpreted in Japan Standard Time.
-  const normalized = /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? value + 'T00:00:00+09:00' : value;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value + 'T00:00:00+09:00' : value;
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? false : parsed;
 }
@@ -87,7 +87,7 @@ export async function GET(request: Request) {
       if (toDate) {
         const toRaw = url.searchParams.get('to') || '';
         const endExclusive = new Date(toDate.getTime());
-        if (/^\\d{4}-\\d{2}-\\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
         query = query.lt('occurred_at', endExclusive.toISOString());
       }
       const result = await query;
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
         if (toDate) {
           const toRaw = url.searchParams.get('to') || '';
           const endExclusive = new Date(toDate.getTime());
-          if (/^\\d{4}-\\d{2}-\\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(toRaw)) endExclusive.setTime(endExclusive.getTime() + 24 * 60 * 60 * 1000);
           probeQuery = probeQuery.lt('occurred_at', endExclusive.toISOString());
         }
         const probe = await probeQuery;
