@@ -16,6 +16,8 @@ type MessagePreview = {
   body?: string;
   created_at?: string;
   deleted?: boolean;
+  attachment_path?: string | null;
+  attachment_url?: string | null;
   attachment_name?: string | null;
   attachment_mime?: string | null;
 } | null;
@@ -45,6 +47,8 @@ type ChatMessage = {
   body: string;
   created_at: string;
   updated_at: string;
+  attachment_path?: string | null;
+  attachment_url?: string | null;
   attachment_name?: string | null;
   attachment_mime?: string | null;
 };
@@ -356,7 +360,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                 <p className="text-[11px] font-bold text-slate-400">{report.message_preview.student_name || '投稿者'} · {report.message_preview.user_class || report.message_preview.class_name || 'クラス不明'} {report.message_preview.deleted ? '· 削除済み' : ''}</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{report.message_preview.body}</p>
               </div> : <p className="mt-3 text-xs text-slate-500">元メッセージは既に削除済みか、監査ログから復元できません。</p>}
-              {report.message_preview?.attachment_name && <p className="mt-2 text-xs text-cyan-300">添付：{report.message_preview.attachment_name} · {report.message_preview.attachment_mime || 'ファイル'}</p>}
+              {report.message_preview?.attachment_name && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-cyan-300"><span>添付：{report.message_preview.attachment_name} · {report.message_preview.attachment_mime || 'ファイル'}</span>{report.message_preview.attachment_url && <a href={report.message_preview.attachment_url} target="_blank" rel="noreferrer" className="rounded-lg border border-cyan-900 px-2 py-1 font-bold hover:bg-cyan-950">添付を確認（2分間有効）</a>}</div>}
               {report.details && <p className="mt-2 text-sm text-slate-400">通報者の補足：{report.details}</p>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void updateReport(report, 'reviewing')} disabled={busyId === report.id || report.status === 'reviewing'} className="rounded-lg border border-amber-800 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-950 disabled:opacity-40">確認中にする</button>
@@ -380,7 +384,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                 <button type="button" onClick={() => void deleteMessage(message)} disabled={Boolean(busyId)} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-950 disabled:opacity-40"><Trash2 size={14}/>削除</button>
               </div>
               <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{message.body}</p>
-              {message.attachment_name && <p className="mt-2 text-xs text-cyan-300">📎 {message.attachment_name} · {message.attachment_mime || 'ファイル'}</p>}
+              {message.attachment_name && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-cyan-300"><span>📎 {message.attachment_name} · {message.attachment_mime || 'ファイル'}</span>{message.attachment_url && <a href={message.attachment_url} target="_blank" rel="noreferrer" className="rounded-lg border border-cyan-900 px-2 py-1 font-bold hover:bg-cyan-950">添付を確認（2分間有効）</a>}</div>}
             </article>
           ))}
         </section>
