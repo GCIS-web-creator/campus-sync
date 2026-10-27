@@ -10,6 +10,31 @@ alter table public.school_chat_messages
   add column if not exists attachment_name text,
   add column if not exists attachment_mime text;
 
+
+-- Restrictive RLS checks prevent a user from attaching another student's storage path
+-- to a wider-scope message and thereby exposing a private file.
+drop policy if exists "Only own uploaded paths on class chat insert" on public.class_chat_messages;
+create policy "Only own uploaded paths on class chat insert"
+on public.class_chat_messages as restrictive for insert to authenticated
+with check (attachment_path is null or attachment_path like auth.uid()::text || '/%');
+
+drop policy if exists "Only own uploaded paths on class chat update" on public.class_chat_messages;
+create policy "Only own uploaded paths on class chat update"
+on public.class_chat_messages as restrictive for update to authenticated
+using (attachment_path is null or attachment_path like auth.uid()::text || '/%')
+with check (attachment_path is null or attachment_path like auth.uid()::text || '/%');
+
+drop policy if exists "Only own uploaded paths on grade school chat insert" on public.school_chat_messages;
+create policy "Only own uploaded paths on grade school chat insert"
+on public.school_chat_messages as restrictive for insert to authenticated
+with check (attachment_path is null or attachment_path like auth.uid()::text || '/%');
+
+drop policy if exists "Only own uploaded paths on grade school chat update" on public.school_chat_messages;
+create policy "Only own uploaded paths on grade school chat update"
+on public.school_chat_messages as restrictive for update to authenticated
+using (attachment_path is null or attachment_path like auth.uid()::text || '/%')
+with check (attachment_path is null or attachment_path like auth.uid()::text || '/%');
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'chat-attachments',
