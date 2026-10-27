@@ -257,6 +257,10 @@ begin
   end if;
 
   if new.message_snapshot is null then
+    -- A new report must reference a live message. A legacy report whose target
+    -- was deleted before snapshots existed may still be moderated, but cannot
+    -- regain content that was never captured.
+    if tg_op = 'UPDATE' then return new; end if;
     raise exception 'Reported chat message snapshot could not be captured';
   end if;
   return new;
