@@ -247,31 +247,41 @@ const COLOR_DIC_PRESETS = [
   { name: 'サーモン', hex: '#FA8072' },
 ] as const;
 const COLOR_INPUT_ALIASES: Record<string, string> = {
+  トマト: '#FF6347', tomato: '#FF6347',
+  ディープピンク: '#FF1493', deeppink: '#FF1493',
+  ホットピンク: '#FF69B4', hotpink: '#FF69B4',
+  コーラル: '#FF7F50', coral: '#FF7F50',
+  ラベンダー: '#E6E6FA', lavender: '#E6E6FA',
+  マゼンタ: '#FF00FF', magenta: '#FF00FF',
+  ドジャーブルー: '#1E90FF', dodgerblue: '#1E90FF',
+  スカイブルー: '#00BFFF', skyblue: '#87CEEB',
+  春緑: '#00FF7F', springgreen: '#00FF7F',
+  藤色: '#C8A2C8', violet: '#EE82EE',
+  サーモン: '#FA8072', salmon: '#FA8072',
+  チョコレート: '#D2691E', chocolate: '#D2691E',
+  ターコイズ: '#40E0D0', turquoise: '#40E0D0',
+  シアン: '#00FFFF', cyan: '#00FFFF',
+  ライム: '#00FF00', lime: '#00FF00',
+  ゴールド: '#FFD700', gold: '#FFD700',
+  青緑: '#00A497', teal: '#008080',
+  群青色: '#4C6CB3',
   赤: '#FF0000', あか: '#FF0000', red: '#FF0000',
   青: '#0095D9', あお: '#0095D9', blue: '#0000FF',
   青藍: '#274A78', 群青色: '#4C6CB3', 青緑: '#00A497',
   水色: '#00BFFF', シアン: '#00FFFF', cyan: '#00FFFF',
-  ターコイズ: '#40E0D0', turquoise: '#40E0D0',
   緑: '#008000', みどり: '#008000', green: '#008000',
-  ライム: '#00FF00', lime: '#00FF00',
   黄: '#FFFF00', 黄色: '#FFFF00', yellow: '#FFFF00',
   金: '#FFD700', ゴールド: '#FFD700', gold: '#FFD700',
   オレンジ: '#FFA500', orange: '#FFA500',
   朱色: '#FF6347', コーラル: '#FF7F50', coral: '#FF7F50',
   ピンク: '#FFC0CB', pink: '#FFC0CB',
-  ホットピンク: '#FF69B4', hotpink: '#FF69B4',
-  ディープピンク: '#FF1493', deeppink: '#FF1493',
   桜色: '#FFB7C5', 'さくら色': '#FFB7C5',
   紫: '#800080', むらさき: '#800080', purple: '#800080',
-  藤色: '#E6E6FA', ラベンダー: '#E6E6FA', lavender: '#E6E6FA',
   藍色: '#4B0082', indigo: '#4B0082', ネイビー: '#000080', navy: '#000080',
-  マゼンタ: '#FF00FF', magenta: '#FF00FF', violet: '#EE82EE',
   白: '#FFFFFF', しろ: '#FFFFFF', white: '#FFFFFF',
   黒: '#000000', くろ: '#000000', black: '#000000',
   灰色: '#808080', グレー: '#808080', gray: '#808080', grey: '#808080',
   茶色: '#A52A2A', brown: '#A52A2A',
-  サーモン: '#FA8072', salmon: '#FA8072',
-  チョコレート: '#D2691E', chocolate: '#D2691E',
 };
 function normalizeThemeColorInput(input: string): string | null {
   const raw = input.trim();
@@ -833,8 +843,8 @@ export default function CampusSyncApp() {
 
   const selectTheme = (nextTheme: ThemeKey) => {
     setTheme(nextTheme);
-    if (nextTheme === 'neon' || nextTheme === 'cyber') setIsDarkMode(true);
-    if (nextTheme === 'fairytale') setIsDarkMode(false);
+    // ネオン・サイバーは暗い表示、それ以外のプリセットに戻したら黒背景も解除。
+    setIsDarkMode(nextTheme === 'neon' || nextTheme === 'cyber');
     try { window.localStorage.setItem('campus-sync-theme', nextTheme); } catch {}
   };
 
@@ -4326,11 +4336,11 @@ Supabaseの設定を確認してください。
     <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
       
       {/* デスクトップ用 左側固定サイドバーレイアウト */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
+      <aside className="campus-theme-sidebar hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
         <div className="p-5 flex flex-col h-full justify-between">
           <div>
             <div className="mb-6 min-w-0 max-w-full">
-              <CampusSyncLogo variant="wordmark" height={30} theme="light" />
+              <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
             </div>
             <nav className="space-y-1">
               <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
@@ -4353,9 +4363,9 @@ Supabaseの設定を確認してください。
       <div className="flex-1 flex flex-col relative w-full max-w-2xl mx-auto shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden">
         
         {/* モバイル用トップナビヘッダー */}
-        <header className="md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
+        <header className="campus-theme-mobile-header md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
           <div className="min-w-0 max-w-[68%] shrink">
-            <CampusSyncLogo variant="wordmark" height={23} theme="light" />
+            <CampusSyncLogo variant="wordmark" height={23} theme="auto" />
           </div>
           <div className={`text-xs font-black px-2.5 py-1 rounded-full ${themeCls.lightBg} ${themeCls.text}`}>
             ★ {score} pt
@@ -4386,7 +4396,7 @@ Supabaseの設定を確認してください。
         </main>
 
         {/* モバイルスマートフォンスクリーン用ボトムナビゲーションバー */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-16 pb-2 px-1 z-20 overflow-x-auto">
+        <nav className="campus-theme-mobile-nav md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-16 pb-2 px-1 z-20 overflow-x-auto">
           <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
           <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
