@@ -1,5 +1,5 @@
 -- CampusSync Phase 5: append-only chat audit trail for moderation and export.
--- Run after class-chat.sql, class-chat-phase2.sql and class-chat-phase3.sql.
+-- Run after class-chat.sql, class-chat-phase2.sql, class-chat-phase3.sql and class-chat-phase4.sql.
 -- This records new message events, edits, deletions, reports and report status changes.
 -- Existing messages are imported once as baseline_snapshot; historical deletions before this migration cannot be reconstructed.
 
@@ -14,7 +14,8 @@ create table if not exists public.chat_audit_logs (
     'report_created',
     'report_status_changed',
     'admin_message_deleted',
-    'admin_report_status_changed'
+    'admin_report_status_changed',
+    'logs_exported'
   )),
   source_table text not null,
   record_id uuid,
