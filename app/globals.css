@@ -92,3 +92,86 @@ body {
   box-shadow: 0 0 7px rgba(0, 229, 255, 0.13);
   border-radius: 5px;
 }
+
+
+/* Strong neon/cyber overrides for navigation shells. */
+.campus-theme-neon .campus-theme-sidebar,
+.campus-theme-neon .campus-theme-mobile-header,
+.campus-theme-neon .campus-theme-mobile-nav {
+  background-color: #000 !important;
+  background-image: linear-gradient(135deg, rgba(0, 255, 255, 0.10), rgba(255, 0, 229, 0.06)) !important;
+  color: #00ffff !important;
+  border-color: #00ffff !important;
+  box-shadow: 0 0 24px rgba(0, 255, 255, 0.28), inset 0 0 18px rgba(0, 255, 255, 0.06) !important;
+}
+.campus-theme-neon .campus-theme-sidebar button {
+  background-color: rgba(0, 12, 16, 0.98) !important;
+  color: #00ffff !important;
+  border: 1px solid rgba(0, 255, 255, 0.52) !important;
+  text-shadow: 0 0 6px #00ffff, 0 0 15px rgba(0, 255, 255, 0.85);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.22), inset 0 0 8px rgba(0, 255, 255, 0.08) !important;
+}
+.campus-theme-neon .campus-theme-sidebar button:hover,
+.campus-theme-neon .campus-theme-sidebar button[class*="bg-cyan-950"] {
+  background-color: #00353b !important;
+  color: #ffffff !important;
+  border-color: #ff00e5 !important;
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.75), 0 0 20px rgba(255, 0, 229, 0.30) !important;
+}
+.campus-theme-neon h1,
+.campus-theme-neon h2,
+.campus-theme-neon h3,
+.campus-theme-neon h4,
+.campus-theme-neon .text-cyan-300,
+.campus-theme-neon .text-cyan-400 {
+  color: #00ffff !important;
+  text-shadow: 0 0 5px #00ffff, 0 0 12px #00ffff, 0 0 25px rgba(0, 255, 255, 0.85) !important;
+}
+.campus-theme-neon button:not([disabled]) {
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.42), 0 0 22px rgba(0, 255, 255, 0.16);
+}
+.campus-theme-neon .campus-theme-mobile-nav button {
+  color: #00ffff !important;
+  text-shadow: 0 0 7px #00ffff;
+}
+
+.campus-theme-cyber .campus-theme-sidebar,
+.campus-theme-cyber .campus-theme-mobile-header,
+.campus-theme-cyber .campus-theme-mobile-nav {
+  background-color: #020b12 !important;
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(130deg, #03101a, #041923 65%, #07150b) !important;
+  background-size: 20px 20px, 20px 20px, auto !important;
+  color: #00e5ff !important;
+  border-color: #00e5ff !important;
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.25), inset 0 0 18px rgba(0, 229, 255, 0.08) !important;
+}
+.campus-theme-cyber .campus-theme-sidebar button {
+  background-color: rgba(0, 17, 27, 0.97) !important;
+  color: #00e5ff !important;
+  border: 1px solid rgba(0, 229, 255, 0.42) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.18) !important;
+  border-radius: 5px !important;
+}
+.campus-theme-cyber .campus-theme-sidebar button:hover,
+.campus-theme-cyber .campus-theme-sidebar button[class*="bg-slate-900"] {
+  background-color: #17330e !important;
+  color: #d6ff00 !important;
+  border-color: #d6ff00 !important;
+  box-shadow: 0 0 14px rgba(214, 255, 0, 0.44), 0 0 20px rgba(0, 229, 255, 0.18) !important;
+}
+.campus-theme-cyber h1,
+.campus-theme-cyber h2,
+.campus-theme-cyber h3,
+.campus-theme-cyber h4 {
+  color: #00e5ff !important;
+  text-shadow: 0 0 6px #00e5ff, 0 0 16px rgba(0, 229, 255, 0.8) !important;
+}
+.campus-theme-cyber .campus-theme-mobile-nav button {
+  color: #00e5ff !important;
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
+}
