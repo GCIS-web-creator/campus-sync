@@ -277,7 +277,21 @@ export async function GET(request: Request) {
       message_preview: targetMap.get(report.message_id) || savedPreview,
     };
   });
-  const messages = [...classRows.map(row => ({ ...row, message_table: 'class_chat_messages', scope: 'class', scope_key: row.class_name })), ...schoolRows.map(row => ({ ...row, message_table: 'school_chat_messages' }))]
+  // Explicitly materialize created_at in both branches so TypeScript retains it on the union.
+  const messages = [
+    ...classRows.map(row => ({
+      ...row,
+      created_at: String(row.created_at ?? ''),
+      message_table: 'class_chat_messages',
+      scope: 'class',
+      scope_key: row.class_name,
+    })),
+    ...schoolRows.map(row => ({
+      ...row,
+      created_at: String(row.created_at ?? ''),
+      message_table: 'school_chat_messages',
+    })),
+  ]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 150);
 
