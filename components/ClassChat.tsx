@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, LoaderCircle, MessageCircle, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import GradeSchoolChat from '@/components/GradeSchoolChat';
 
 type ChatUser = { id: string; email?: string | null };
 type Props = {
@@ -44,7 +45,7 @@ function sortMessages(items: ChatMessage[]) {
   return [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-MAX_MESSAGES);
 }
 
-export default function ClassChat({ authUser, studentId, studentName, userClass, unreadCount = 0 }: Props) {
+function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCount = 0 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reactions, setReactions] = useState<ChatReaction[]>([]);
   const [draft, setDraft] = useState('');
@@ -343,4 +344,14 @@ export default function ClassChat({ authUser, studentId, studentName, userClass,
       </div>
     </section>
   );
+}
+
+export default function ClassChat(props: Props) {
+ const [scope,setScope]=useState<'class'|'grade'|'school'>('class');
+ return <section className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col gap-4">
+ <nav aria-label="チャット範囲" className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+ {[{id:'class',label:'クラス',detail:props.userClass+'組'},{id:'grade',label:'学年',detail:props.userClass.slice(0,1)+'年生'},{id:'school',label:'全校',detail:'全生徒'}].map(item=><button key={item.id} type="button" aria-pressed={scope===item.id} onClick={()=>setScope(item.id as 'class'|'grade'|'school')} className={'rounded-xl px-2 py-3 text-center '+(scope===item.id?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}><span className="block text-sm font-black">{item.label}</span><span className="mt-1 block text-[10px]">{item.detail}</span></button>)}
+ </nav>
+ {scope==='class'?<ClassChatPanel {...props}/>:<GradeSchoolChat {...props} scope={scope}/>}
+ </section>;
 }
