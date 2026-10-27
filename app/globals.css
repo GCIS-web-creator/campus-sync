@@ -313,3 +313,18 @@ body {
 .campus-theme-cyber .campus-theme-color-editor .text-emerald-600 {
   color: #72f7c5 !important;
 }
+
+
+/* Exactly one auto-theme logo variant must be visible. */
+.campus-sync-logo-light {
+  display: block !important;
+}
+.campus-sync-logo-dark {
+  display: none !important;
+}
+.dark .campus-sync-logo-light {
+  display: none !important;
+}
+.dark .campus-sync-logo-dark {
+  display: block !important;
+}
