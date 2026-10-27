@@ -59,6 +59,7 @@ type AuditRow = {
   event_type: string;
   source_table: string;
   record_id?: string | null;
+  actor_user_id?: string | null;
   student_name?: string | null;
   student_id?: string | null;
   user_class?: string | null;
@@ -492,7 +493,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
               {filteredLogs.map(log => (
                 <article key={log.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2"><p className="text-xs font-black text-white">{EVENT_LABEL[log.event_type] || log.event_type}</p><time className="text-[10px] text-slate-500">{formatDate(log.occurred_at)}</time></div>
-                  <p className="mt-1 text-[11px] text-slate-400">{log.student_name || 'システム'} · {log.user_class || log.scope || '範囲不明'} · {log.actor_label || '不明な実行者'}</p>
+                  <p className="mt-1 break-words text-[11px] text-slate-400">{log.student_name || (log.student_id ? '学籍番号 ' + log.student_id : 'システム')} · {log.user_class || log.scope || '範囲不明'} · {log.actor_label || '不明な実行者'}{log.actor_user_id ? ' · 利用者ID ' + log.actor_user_id : ''}</p>
                   {log.body && <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{log.body}</p>}
                   {log.previous_body && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-amber-200">編集前：{log.previous_body}</p>}
                   {log.reason && <p className="mt-1 text-xs text-rose-300">理由：{log.reason}</p>}
