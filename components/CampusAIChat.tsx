@@ -82,7 +82,7 @@ function detectPageAction(question: string): PageAction | null {
     typeof CSS !== 'undefined' &&
     CSS.supports('color', name)
   );
-  const hasNamedColor = /ネオン|サイバー|メルヘン|フェアリー|自由設定|カスタムテーマ|パープル|ブルー|グリーン|オレンジ|インディゴ|ピンク|青藍|群青色|青緑|ドジャーブルー|スカイブルー|ターコイズ|ラベンダー|マゼンタ|チョコレート|サーモン|春緑|ゴールド|ホットピンク|ディープピンク|コーラル|トマト|水色|シアン|ライム|朱色|桜色|さくら色|藤色|ネイビー|灰色|グレー|茶色|赤|青|緑|黄|金|藍|紫|白|黒/.test(q) || Boolean(cssColorName);
+  const hasNamedColor = /ネオン|サイバー|メルヘン|フェアリー|自由設定|カスタムテーマ|neon|cyber|fairytale|pastel|custom|パープル|ブルー|グリーン|オレンジ|インディゴ|ピンク|青藍|群青色|青緑|ドジャーブルー|スカイブルー|ターコイズ|ラベンダー|マゼンタ|チョコレート|サーモン|春緑|ゴールド|ホットピンク|ディープピンク|コーラル|トマト|水色|シアン|ライム|朱色|桜色|さくら色|藤色|ネイビー|灰色|グレー|茶色|赤|青|緑|黄|金|藍|紫|白|黒/.test(q) || Boolean(cssColorName);
 
   if ((themeIntent || hasHexColor || hasNamedColor) && themeCommand) {
     if (/ネオン|neon/i.test(q)) return { type: 'set-theme', theme: 'neon' };
