@@ -45,7 +45,7 @@ function getOrCreateVoteId(studentId: string): string {
 }
 
 type PageAction =
-  | { type: 'set-theme'; theme: 'blue' | 'pink' | 'purple' | 'emerald' | 'orange' | 'indigo' }
+  | { type: 'set-theme'; theme: string }
   | { type: 'set-favorite-room'; room: string }
   | { type: 'get-favorite-room' }
   | { type: 'test-push' };
@@ -69,19 +69,54 @@ function detectPageAction(question: string): PageAction | null {
     return { type: 'set-favorite-room', room: favorite[1].trim() };
   }
 
-  // 「テーマカラーを青に」「画面の色を紫に」などに対応。
+  // テーマプリセット・自由色コード・色名をAIチャットから設定する。
   const themeIntent =
-    /テーマカラー|テーマ色|テーマ|画面(?:の)?色|サイト(?:の)?色|画面を|サイトを|デザイン/.test(q);
+    /テーマカラー|テーマ色|テーマ|画面(?:の)?色|サイト(?:の)?色|背景色|アクセントカラー|カラーコード|色を|カラーを|画面を|サイトを|デザイン/.test(q);
   const themeCommand =
-    /(?:変え|変更|設定|切り替え|にして|にする|にしたい|に[。！!？?]*$)/.test(q);
+    /(?:変え|変更|設定|切り替え|にして|にする|にしたい|適用|使って|お願い|に[。！!？?]*$)/.test(q);
+  const hasHexColor = /#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i.test(q);
 
-  if (themeIntent && themeCommand) {
+  if ((themeIntent || hasHexColor) && themeCommand) {
+    if (/ネオン|neon/i.test(q)) return { type: 'set-theme', theme: 'neon' };
+    if (/サイバー|cyber|console/i.test(q)) return { type: 'set-theme', theme: 'cyber' };
+    if (/メルヘン|フェアリー|fairytale|pastelテーマ/i.test(q)) return { type: 'set-theme', theme: 'fairytale' };
+    if (/自由設定|カスタムテーマ|customテーマ/i.test(q)) return { type: 'set-theme', theme: 'custom' };
+
     if (/紫|パープル/.test(q)) return { type: 'set-theme', theme: 'purple' };
-    if (/ピンク/.test(q)) return { type: 'set-theme', theme: 'pink' };
-    if (/青|ブルー/.test(q)) return { type: 'set-theme', theme: 'blue' };
-    if (/緑|グリーン/.test(q)) return { type: 'set-theme', theme: 'emerald' };
+    if (/ピンク/.test(q) && !/ホットピンク|ディープピンク/.test(q)) return { type: 'set-theme', theme: 'pink' };
+    if (/青|ブルー/.test(q) && !/青藍|群青色|青緑/.test(q)) return { type: 'set-theme', theme: 'blue' };
+    if (/緑|グリーン/.test(q) && !/青緑/.test(q)) return { type: 'set-theme', theme: 'emerald' };
     if (/オレンジ/.test(q)) return { type: 'set-theme', theme: 'orange' };
-    if (/藍色|インディゴ/.test(q)) return { type: 'set-theme', theme: 'indigo' };
+    if (/藍色|インディゴ/.test(q) && !/青藍/.test(q)) return { type: 'set-theme', theme: 'indigo' };
+
+    const hex = q.match(/#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i);
+    if (hex) return { type: 'set-theme', theme: hex[0] };
+
+    const colorNames = [
+      'ディープピンク', 'ホットピンク', 'コーラル', 'トマト', '群青色', '青藍', '青緑',
+      'ドジャーブルー', 'スカイブルー', 'ターコイズ', 'ラベンダー', 'マゼンタ',
+      'チョコレート', 'サーモン', '春緑', 'ゴールド', '水色', 'シアン', 'ライム',
+      '朱色', '桜色', 'さくら色', '藤色', 'ネイビー', '灰色', 'グレー', '茶色',
+      '赤', '青', '緑', '黄', '金', '藍', '紫', '白', '黒',
+      'coral', 'tomato', 'deeppink', 'hotpink', 'lavender', 'magenta', 'violet',
+      'dodgerblue', 'deepskyblue', 'cyan', 'turquoise', 'teal', 'lime',
+      'springgreen', 'gold', 'orange', 'chocolate', 'salmon', 'navy',
+      'crimson', 'yellow', 'olive', 'aqua', 'fuchsia', 'sienna', 'tan', 'skyblue',
+      'rebeccapurple', 'darkcyan', 'darkblue', 'lightblue', 'lightpink',
+    ];
+    const colorName = colorNames.find(name =>
+      name.toLowerCase() === name
+        ? new RegExp('\\\\b' + name + '\\\\b', 'i').test(q)
+        : q.includes(name)
+    );
+    if (colorName) return { type: 'set-theme', theme: colorName };
+
+    if (/\bpink\b/i.test(q)) return { type: 'set-theme', theme: 'pink' };
+    if (/\bblue\b/i.test(q)) return { type: 'set-theme', theme: 'blue' };
+    if (/\bpurple\b/i.test(q)) return { type: 'set-theme', theme: 'purple' };
+    if (/\bgreen\b/i.test(q)) return { type: 'set-theme', theme: 'emerald' };
+    if (/\borange\b/i.test(q)) return { type: 'set-theme', theme: 'orange' };
+    if (/\bindigo\b/i.test(q)) return { type: 'set-theme', theme: 'indigo' };
   }
 
   if (/リマインダー.*テスト通知|テスト通知.*(?:送って|送信|して)|通知.*テストして/.test(q)) {
