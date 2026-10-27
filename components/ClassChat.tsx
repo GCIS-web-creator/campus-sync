@@ -337,7 +337,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
                     <time className="text-[10px] text-slate-400" dateTime={message.created_at}>{formatTime(message.created_at)}</time>
                     {message.updated_at !== message.created_at && <span className="text-[9px] text-slate-400">編集済み</span>}
                   </div>
-                  <div className={'whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-6 ' + (mine ? 'rounded-tr-md bg-blue-600 text-white' : 'rounded-tl-md bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100')}}><ChatMessageContent body={message.body} attachmentPath={message.attachment_path} attachmentName={message.attachment_name} attachmentMime={message.attachment_mime} /></div>
+                  <div className={'whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-6 ' + (mine ? 'rounded-tr-md bg-blue-600 text-white' : 'rounded-tl-md bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100')}><ChatMessageContent body={message.body} attachmentPath={message.attachment_path} attachmentName={message.attachment_name} attachmentMime={message.attachment_mime} /></div>
                   <div className={'flex flex-wrap items-center gap-1.5 ' + (mine ? 'justify-end' : 'justify-start')}>
                     {REACTION_CHOICES.map(emoji => {
                       const matching = messageReactions.filter(item => item.emoji === emoji);
