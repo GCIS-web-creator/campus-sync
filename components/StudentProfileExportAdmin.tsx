@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Download, FileLock2, ShieldAlert } from "lucide-react";
+import { Download, ShieldAlert } from "lucide-react";
 
 type Props = {
   adminPassword: string;
@@ -59,7 +59,7 @@ export default function StudentProfileExportAdmin({ adminPassword }: Props) {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setMessageType("success");
       setMessage("プロフィールの .cslogson ファイルを作成しました。安全な場所に保管し、不要になったコピーは削除してください。");
       setExportPassword("");
@@ -96,7 +96,7 @@ export default function StudentProfileExportAdmin({ adminPassword }: Props) {
 
       <div className="max-w-2xl rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-6">
         <div className="flex items-center gap-2">
-          <FileLock2 size={20} className="text-cyan-300" />
+          <Download size={20} className="text-cyan-300" />
           <h2 className="font-black">二段階の確認</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">管理画面に入力した管理用パスワードに加えて、Vercel の環境変数 <code>STUDENT_PROFILE_EXPORT_PASSWORD</code> に設定した書き出し確認用シークレットを入力します。シークレットはソースコードやファイルに含めないでください。</p>
