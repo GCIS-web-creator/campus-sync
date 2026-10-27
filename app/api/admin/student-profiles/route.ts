@@ -92,7 +92,7 @@ export async function POST(request: Request) {
   });
 
   const packageData = {
-    format: 'CampusSync Chat Log JSON',
+    format: 'CampusSync Student Profile Export',
     extension: '.cslogson',
     schema_version: '1.0',
     export_type: 'student_profile_snapshot',
