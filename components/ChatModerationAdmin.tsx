@@ -77,8 +77,6 @@ type AuditRow = {
   metadata?: Record<string, unknown>;
 };
 
-type Payload = { reports: ChatReport[]; messages: ChatMessage[]; auditLogs: AuditRow[]; counts?: { openReports: number; totalReports: number; messages: number; auditEvents: number } };
-
 type Props = {
   adminPassword: string;
   onAdminPasswordChange: (value: string) => void;
@@ -100,6 +98,8 @@ const EVENT_LABEL: Record<string, string> = {
   admin_message_deleted: '管理者による削除',
   admin_report_status_changed: '管理者による通報処理',
   logs_exported: 'ログ書き出し',
+  reaction_created: 'リアクション追加',
+  reaction_deleted: 'リアクション取り消し',
 };
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString('ja-JP', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
@@ -257,8 +257,10 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
+      const disposition = response.headers.get('content-disposition') || '';
+      const serverFilename = disposition.match(/filename="([^"]+)"/)?.[1];
       link.href = objectUrl;
-      link.download = 'campus-sync-chat-logs.cslogson';
+      link.download = serverFilename || ('campus-sync-chat-logs-' + new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }) + '.cslogson');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -291,7 +293,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
         integrity?: { initial_hash?: string; final_hash?: string };
         events?: Array<Record<string, unknown>>;
       };
-      if (parsed.format !== 'CampusSync Chat Log JSON' || parsed.extension !== '.cslogson' || !Array.isArray(parsed.events)) {
+      if (parsed.format !== 'CampusSync Chat Log JSON' || parsed.extension !== '.cslogson' || parsed.schema_version !== '1.0' || !Array.isArray(parsed.events)) {
         throw new Error('CampusSync .cslogson形式のファイルではありません。');
       }
       if (parsed.integrity?.initial_hash !== '0'.repeat(64)) {
@@ -331,8 +333,6 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
       setVerificationBusy(false);
     }
   }
-
-  const openCount = reports.filter(report => report.status === 'open').length;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
@@ -412,7 +412,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
 
       {loaded && view === 'reports' && (
         <section className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-black text-white"><Flag size={17} className="text-rose-300" />通報一覧 <span className="text-xs font-normal text-slate-500">({filteredReports.length}件表示)</span></div>
+          <div className="flex items-center gap-2 text-sm font-black text-white"><Flag size={17} className="text-rose-300" />通報一覧 <span className="text-xs font-normal text-slate-500">({filteredReports.length}件表示・最新150件まで)</span></div>
           {filteredReports.length === 0 && <div className="rounded-xl border border-slate-800 p-6 text-center text-sm text-slate-500">条件に合う通報はありません。</div>}
           {filteredReports.map(report => (
             <article key={report.id} className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
