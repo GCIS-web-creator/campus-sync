@@ -385,9 +385,12 @@ export default function ClassChat(props: Props) {
  const [scope,setScope]=useState<'class'|'grade'|'school'>('class');
  const [headerVisible,setHeaderVisible]=useState(true);
  const lastScrollTop=useRef(0);
+ const userScrollIntent=useRef(false);
  function handleMessagesScroll(event:UIEvent<HTMLDivElement>) {
    const next=event.currentTarget.scrollTop;
    const previous=lastScrollTop.current;
+   if (!userScrollIntent.current) { lastScrollTop.current=next; return; }
+   userScrollIntent.current=false;
    if (next <= 8 || next < previous - 2) setHeaderVisible(true);
    else if (next > previous + 2) setHeaderVisible(false);
    lastScrollTop.current=next;
@@ -396,8 +399,9 @@ export default function ClassChat(props: Props) {
    setScope(next);
    setHeaderVisible(true);
    lastScrollTop.current=0;
+   userScrollIntent.current=false;
  }
- return <section className="relative mx-auto flex flex-1 min-h-0 w-full max-w-3xl flex-col gap-2">
+ return <section onWheel={() => { userScrollIntent.current=true; }} onTouchMove={() => { userScrollIntent.current=true; }} className="relative mx-auto flex flex-1 min-h-0 w-full max-w-3xl flex-col gap-2">
  {headerVisible && <nav aria-label="チャット範囲" className="grid shrink-0 grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
  {[{id:'class',label:'クラス',detail:props.userClass+'組'},{id:'grade',label:'学年',detail:props.userClass.slice(0,1)+'年生'},{id:'school',label:'全校',detail:'全生徒'}].map(item=><button key={item.id} type="button" aria-pressed={scope===item.id} onClick={()=>changeScope(item.id as 'class'|'grade'|'school')} className={'rounded-xl px-2 py-2 text-center '+(scope===item.id?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}><span className="block text-sm font-black">{item.label}</span><span className="mt-0.5 block text-[10px]">{item.detail}</span></button>)}
  </nav>}
