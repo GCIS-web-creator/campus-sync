@@ -44,7 +44,7 @@ export default function AdminCampusLocalChat() {
       const transformers = await import('@huggingface/transformers');
       const createPipeline = transformers.pipeline as any;
       const options = {
-        dtype: 'q4',
+        dtype: 'q4f16',
         progress_callback: (progress: any) => {
           if (progress?.status === 'progress' && typeof progress.progress === 'number') {
             setStatus(`モデルをダウンロード中… ${Math.round(progress.progress)}%`);
@@ -54,25 +54,16 @@ export default function AdminCampusLocalChat() {
         },
       };
 
-      try {
-        generatorRef.current = await createPipeline(
-          'text-generation',
-          MODEL,
-          { ...options, device: 'webgpu' },
-        );
-      } catch {
-        setStatus('WebGPUが利用できないため、CPU実行を試しています…');
-        generatorRef.current = await createPipeline(
-          'text-generation',
-          MODEL,
-          { ...options, device: 'wasm' },
-        );
-      }
+      generatorRef.current = await createPipeline(
+        'text-generation',
+        MODEL,
+        { ...options, device: 'webgpu' },
+      );
 
       setStatus('準備完了！ 会話できるよ。');
     } catch (error) {
       console.error('CampusSync local model failed to load:', error);
-      setStatus('モデルを読み込めませんでした。ブラウザーの対応状況や通信を確認して、もう一度試してください。');
+      setStatus('モデルを読み込めませんでした。メモリ不足またはWebGPU非対応の可能性があります。ほかのタブを閉じて、ページを再読み込みしてから再試行してください。');
       generatorRef.current = null;
     } finally {
       setLoading(false);
@@ -101,14 +92,14 @@ export default function AdminCampusLocalChat() {
         throw new Error('モデルを読み込めませんでした。');
       }
 
-      const history = nextMessages.slice(-8);
+      const history = nextMessages.slice(-4);
       const result = await generator(
         [
           { role: 'system', content: SYSTEM_PROMPT },
           ...history,
         ],
         {
-          max_new_tokens: 160,
+          max_new_tokens: 96,
           do_sample: true,
           temperature: 0.7,
           top_p: 0.9,
