@@ -9,7 +9,7 @@ type Message = {
 
 type Generator = (messages: any[], options: any) => Promise<any[]>;
 
-const MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct';
+const MODEL = 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
 
 const SYSTEM_PROMPT = `
 あなたはCampusSync AIです。
@@ -21,6 +21,28 @@ const SYSTEM_PROMPT = `
 学校や生徒について、個人情報を尋ねないでください。
 `;
 
+function makeSimpleReply(text: string): string {
+  if (/こんにちは|おはよう|こんばんは|やあ|やっほ/u.test(text)) {
+    return 'こんにちは！ 今日あったことを教えてくれる？';
+  }
+  if (/ありがとう|ありがと/u.test(text)) {
+    return 'どういたしまして！ ほかにも話したいことはある？';
+  }
+  if (/疲れ|つかれ|しんどい|大変/u.test(text)) {
+    return 'おつかれさま。無理しすぎないでね。何があったの？';
+  }
+  if (/悲しい|かなしい|不安|心配/u.test(text)) {
+    return 'そうなんだね。話してくれてありがとう。よかったら、もう少し聞かせてね。';
+  }
+  if (/名前/u.test(text)) {
+    return 'ぼくはCampusSync AIだよ。よろしくね！';
+  }
+  if (/好き|すき/u.test(text)) {
+    return 'いいね！ どういうところが好きなの？';
+  }
+  return 'うん、そうなんだね。もう少し教えてくれる？';
+}
+
 export default function AdminCampusLocalChat() {
   const generatorRef = useRef<Generator | null>(null);
   const [messages, setMessages] = useState<Message[]>([
@@ -30,7 +52,7 @@ export default function AdminCampusLocalChat() {
     },
   ]);
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState('モデルはまだ読み込まれていません。');
+  const [status, setStatus] = useState('省メモリモードです。モデル未読み込み中は簡易応答で会話します。');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -38,13 +60,23 @@ export default function AdminCampusLocalChat() {
     if (generatorRef.current || loading) return;
 
     setLoading(true);
-    setStatus('モデルを読み込んでいます。初回はダウンロードに時間がかかります。');
+    if ('deviceMemory' in navigator && typeof (navigator as Navigator & { deviceMemory?: number }).deviceMemory === 'number'
+      && (navigator as Navigator & { deviceMemory?: number }).deviceMemory! <= 4) {
+      const proceed = window.confirm(
+        'この端末はメモリが少ない可能性があります。小型モデルでも動作が重くなることがあります。読み込みを試しますか？'
+      );
+      if (!proceed) {
+        setStatus('モデルの読み込みを中止しました。簡易モードのまま利用できます。');
+        return;
+      }
+    }
+    setStatus('小型モデルを準備中です。初回は約140MBのモデルをダウンロードします。重くなったらページを閉じてください。');
 
     try {
       const transformers = await import('@huggingface/transformers');
       const createPipeline = transformers.pipeline as any;
       const options = {
-        dtype: 'q4f16',
+        dtype: 'q4',
         progress_callback: (progress: any) => {
           if (progress?.status === 'progress' && typeof progress.progress === 'number') {
             setStatus(`モデルをダウンロード中… ${Math.round(progress.progress)}%`);
@@ -57,7 +89,7 @@ export default function AdminCampusLocalChat() {
       generatorRef.current = await createPipeline(
         'text-generation',
         MODEL,
-        { ...options, device: 'webgpu' },
+        { ...options, device: 'wasm' },
       );
 
       setStatus('準備完了！ 会話できるよ。');
@@ -76,30 +108,33 @@ export default function AdminCampusLocalChat() {
     if (!text || busy) return;
 
     const userMessage: Message = { role: 'user', content: text };
-    const nextMessages = [...messages, userMessage];
+    const nextMessages = [...messages, userMessage].slice(-12);
+
+    setInput('');
+
+    if (!generatorRef.current) {
+      setMessages([...nextMessages, {
+        role: 'assistant',
+        content: makeSimpleReply(text),
+      }].slice(-12));
+      setStatus('省メモリの簡易モードです。小型モデルを試すときだけ「小型会話モデルを手動で読み込む」を押してください。');
+      return;
+    }
 
     setMessages(nextMessages);
-    setInput('');
     setBusy(true);
 
     try {
-      if (!generatorRef.current) {
-        await loadModel();
-      }
-
       const generator = generatorRef.current;
-      if (!generator) {
-        throw new Error('モデルを読み込めませんでした。');
-      }
 
-      const history = nextMessages.slice(-4);
+      const history = nextMessages.slice(-2);
       const result = await generator(
         [
           { role: 'system', content: SYSTEM_PROMPT },
           ...history,
         ],
         {
-          max_new_tokens: 96,
+          max_new_tokens: 32,
           do_sample: true,
           temperature: 0.7,
           top_p: 0.9,
@@ -124,20 +159,16 @@ export default function AdminCampusLocalChat() {
         answer = 'うまく答えを作れなかったよ。もう一度聞いてみてね。';
       }
 
-      setMessages(current => [
-        ...current,
-        { role: 'assistant', content: answer },
-      ]);
+      setMessages(current => [...current, { role: 'assistant', content: answer }].slice(-12));
       setStatus('会話中：ブラウザー内のモデルで生成しています。');
     } catch (error) {
       console.error('CampusSync local chat failed:', error);
-      setMessages(current => [
-        ...current,
+      setMessages(current => [...current,
         {
           role: 'assistant',
           content: 'ごめんね、今はうまく返事を作れなかったよ。モデルの読み込み状態を確認してみてね。',
         },
-      ]);
+      ].slice(-12));
       setStatus('会話に失敗しました。もう一度お試しください。');
     } finally {
       setBusy(false);
@@ -149,8 +180,7 @@ export default function AdminCampusLocalChat() {
       <div>
         <h3 className="text-xl font-black">CampusSync AI｜ローカル会話</h3>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          外部AIのAPIキーは使わず、ブラウザー内で会話を生成します。
-          初回はモデルのダウンロードが必要です。
+          モデル未読み込み時はダウンロード不要の簡易応答で動きます。必要なときだけ約140MBの小型モデルを手動で読み込めます。外部AI APIキーは不要です。
         </p>
       </div>
 
@@ -165,7 +195,7 @@ export default function AdminCampusLocalChat() {
           disabled={loading || busy || !!generatorRef.current}
           className="rounded-xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
         >
-          {loading ? '読み込み中…' : generatorRef.current ? 'モデル読み込み済み' : '会話モデルを読み込む'}
+          {loading ? '読み込み中…' : generatorRef.current ? 'モデル読み込み済み' : '小型会話モデルを手動で読み込む'}
         </button>
         <button
           type="button"
@@ -218,8 +248,7 @@ export default function AdminCampusLocalChat() {
       </form>
 
       <p className="text-xs leading-5 text-slate-500">
-        会話は今のところ画面内だけに保持され、学習データとしては保存されません。
-        個人情報や秘密の情報は入力しないでください。
+        モデル未読み込み時は軽量なルール応答を使います。小型モデルは必要なときだけ手動で読み込めます。会話は画面内のみで、学習データとして保存されません。個人情報や秘密の情報は入力しないでください。
       </p>
     </section>
   );
