@@ -283,46 +283,27 @@ export async function PATCH(request: Request) {
   const supabase = getAdminSupabase();
   if (!supabase) return jsonError('Supabaseサーバー設定が不足しています。', 503);
 
-  let payload: { id?: string; status?: ReportStatus };
+  let payload: { id?: string; status?: ReportStatus; note?: string };
   try { payload = await request.json(); } catch { return jsonError('送信データを読み取れません。'); }
   if (!safeUuid(payload.id) || !payload.status || !['open', 'reviewing', 'resolved', 'dismissed'].includes(payload.status)) {
     return jsonError('通報IDまたは対応状況が不正です。');
   }
-
-  const { data: existing, error: readError } = await supabase.from('chat_message_reports')
-    .select('id,reporter_user_id,message_id,message_table,reason,details,status')
-    .eq('id', payload.id).maybeSingle();
-  if (readError) return jsonError('通報の読み込みに失敗しました: ' + readError.message, 500);
-  if (!existing) return jsonError('対象の通報が見つかりません。', 404);
-
-  const reviewedAt = payload.status === 'resolved' || payload.status === 'dismissed' ? new Date().toISOString() : null;
-  const { data: updated, error: updateError } = await supabase.from('chat_message_reports')
-    .update({ status: payload.status, reviewed_at: reviewedAt })
-    .eq('id', payload.id)
-    .select('id,reporter_user_id,message_id,message_table,reason,details,status,created_at,reviewed_at,reviewed_by')
-    .single();
-  if (updateError) return jsonError('通報状態を更新できません: ' + updateError.message, 500);
-
-  try {
-    await writeAdminAudit(supabase, {
-      event_type: 'admin_report_status_changed',
-      source_table: 'chat_message_reports',
-      record_id: existing.id,
-      reason: existing.reason,
-      details: existing.details,
-      status: updated.status,
-      previous_status: existing.status,
-      metadata: {
-        message_id: existing.message_id,
-        message_table: existing.message_table,
-        reporter_user_id: existing.reporter_user_id,
-      },
-    });
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : '管理操作を監査ログに記録できません。', 500);
+  if (typeof payload.note === 'string' && payload.note.trim().length > 500) {
+    return jsonError('対応メモは500文字以内にしてください。');
   }
 
-  return NextResponse.json({ report: updated }, { headers: { 'Cache-Control': 'no-store, private' } });
+  const { data, error } = await supabase.rpc('admin_update_chat_report', {
+    p_report_id: payload.id,
+    p_status: payload.status,
+    p_note: (payload.note || '').trim(),
+  });
+  if (error) {
+    const message = error.message || '通報状態を更新できませんでした。';
+    const status = /report not found/i.test(message) ? 404
+      : /invalid report status|at most 500/i.test(message) ? 400 : 500;
+    return jsonError('通報状態の更新に失敗しました。Phase 5 SQLの適用状況を確認してください: ' + message, status);
+  }
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store, private' } });
 }
 
 export async function DELETE(request: Request) {
@@ -339,34 +320,16 @@ export async function DELETE(request: Request) {
   const reason = (payload.reason || '').trim();
   if (!reason || reason.length > 500) return jsonError('削除理由を1〜500文字で入力してください。');
 
-  const table = payload.message_table;
-  const { data: existing, error: readError } = await supabase.from(table).select('*').eq('id', payload.id).maybeSingle();
-  if (readError) return jsonError('メッセージの読み込みに失敗しました: ' + readError.message, 500);
-  if (!existing) return jsonError('メッセージは既に削除されているか、見つかりません。', 404);
-
-  const { error: deleteError } = await supabase.from(table).delete().eq('id', payload.id);
-  if (deleteError) return jsonError('メッセージを削除できません: ' + deleteError.message, 500);
-
-  try {
-    await writeAdminAudit(supabase, {
-      event_type: 'admin_message_deleted',
-      source_table: table,
-      record_id: existing.id,
-      student_id: existing.student_id,
-      student_name: existing.student_name,
-      user_class: existing.class_name || existing.user_class,
-      scope: table === 'class_chat_messages' ? 'class' : existing.scope,
-      scope_key: existing.class_name || existing.scope_key,
-      body: existing.body,
-      attachment_path: existing.attachment_path || null,
-      attachment_name: existing.attachment_name || null,
-      attachment_mime: existing.attachment_mime || null,
-      reason,
-      metadata: { moderation_action: 'delete_message', source_table: table },
-    });
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : '削除操作を監査ログに記録できません。', 500);
+  const { data, error } = await supabase.rpc('admin_delete_chat_message', {
+    p_message_id: payload.id,
+    p_message_table: payload.message_table,
+    p_reason: reason,
+  });
+  if (error) {
+    const message = error.message || 'メッセージを削除できませんでした。';
+    const status = /message not found/i.test(message) ? 404
+      : /invalid chat message table|reason must contain/i.test(message) ? 400 : 500;
+    return jsonError('メッセージ削除に失敗しました。Phase 5 SQLの適用状況を確認してください: ' + message, status);
   }
-
-  return NextResponse.json({ success: true }, { headers: { 'Cache-Control': 'no-store, private' } });
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store, private' } });
 }
