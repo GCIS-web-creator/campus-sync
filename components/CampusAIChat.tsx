@@ -75,8 +75,9 @@ function detectPageAction(question: string): PageAction | null {
   const themeCommand =
     /(?:変え|変更|設定|切り替え|にして|にする|にしたい|適用|使って|お願い|に[。！!？?]*$)/.test(q);
   const hasHexColor = /#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i.test(q);
+  const hasNamedColor = /ネオン|サイバー|メルヘン|フェアリー|自由設定|カスタムテーマ|青藍|群青色|青緑|ドジャーブルー|スカイブルー|ターコイズ|ラベンダー|マゼンタ|チョコレート|サーモン|春緑|ゴールド|ホットピンク|ディープピンク|コーラル|トマト|水色|シアン|ライム|朱色|桜色|さくら色|藤色|ネイビー|灰色|グレー|茶色|赤|青|緑|黄|金|藍|紫|白|黒|\\b(?:coral|tomato|deeppink|hotpink|lavender|magenta|violet|dodgerblue|deepskyblue|cyan|turquoise|teal|lime|springgreen|gold|orange|chocolate|salmon|navy|crimson|yellow|olive|aqua|fuchsia|sienna|tan|skyblue|rebeccapurple|darkcyan|darkblue|lightblue|lightpink|pink|blue|purple|green|indigo|red)\\b/i.test(q);
 
-  if ((themeIntent || hasHexColor) && themeCommand) {
+  if ((themeIntent || hasHexColor || hasNamedColor) && themeCommand) {
     if (/ネオン|neon/i.test(q)) return { type: 'set-theme', theme: 'neon' };
     if (/サイバー|cyber|console/i.test(q)) return { type: 'set-theme', theme: 'cyber' };
     if (/メルヘン|フェアリー|fairytale|pastelテーマ/i.test(q)) return { type: 'set-theme', theme: 'fairytale' };
