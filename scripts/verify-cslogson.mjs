@@ -3,9 +3,10 @@
  * Offline verifier for CampusSync .cslogson exports.
  *
  * Usage:
- *   node scripts/verify-cslogson.mjs path/to/campus-sync-chat-logs.cslogson
+ *   node scripts/verify-cslogson.mjs path/to/export.cslogson
  *
- * This checks the JSON structure, event count, order, and SHA-256 hash chain.
+ * Supports chat audit exports and student profile snapshots. This checks the
+ * JSON structure, event count, order, and SHA-256 hash chain.
  * A successful result detects no inconsistency in this file's chain; it does
  * not prove the identity of the exporter or that the source database was never
  * altered before export.
@@ -48,7 +49,11 @@ async function main() {
   }
 
   if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) return fail('最上位要素がJSONオブジェクトではありません。');
-  if (pkg.format !== 'CampusSync Chat Log JSON') return fail('format が対応していません。');
+  const supportedFormats = new Set([
+    'CampusSync Chat Log JSON',
+    'CampusSync Student Profile Export',
+  ]);
+  if (!supportedFormats.has(pkg.format)) return fail('format が対応していません。');
   if (pkg.extension !== '.cslogson') return fail('extension が .cslogson ではありません。');
   if (pkg.schema_version !== '1.0') return fail('未対応の schema_version です。');
   if (!Array.isArray(pkg.events)) return fail('events が配列ではありません。');
@@ -92,7 +97,7 @@ async function main() {
   }
 
   console.log('検証成功: ' + basename(filePath));
-  console.log('イベント件数: ' + pkg.events.length.toLocaleString('ja-JP'));
+  console.log((pkg.export_type === 'student_profile_snapshot' ? 'プロフィール件数: ' : 'イベント件数: ') + pkg.events.length.toLocaleString('ja-JP'));
   console.log('最終ハッシュ: ' + previousHash);
   console.log('注意: これはファイル内の整合性検査であり、作成者の真正性やエクスポート前のデータベース状態を証明するものではありません。');
 }
