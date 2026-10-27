@@ -307,9 +307,11 @@ set search_path = ''
 as $function$
 begin
   -- Never let a client or later status update rewrite a report's original snapshot.
-  if tg_op = 'UPDATE' and old.message_snapshot is not null then
-    new.message_snapshot := old.message_snapshot;
-    return new;
+  if tg_op = 'UPDATE' then
+    if old.message_snapshot is not null then
+      new.message_snapshot := old.message_snapshot;
+      return new;
+    end if;
   end if;
 
   if new.message_table = 'class_chat_messages' then
