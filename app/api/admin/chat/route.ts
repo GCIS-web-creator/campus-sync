@@ -257,7 +257,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const hydratedReports = relevantReports.map(report => {
+  const hydratedReports: Record<string, any>[] = relevantReports.map((report): Record<string, any> => {
     const snapshot = report.message_snapshot as Record<string, any> | null;
     const savedPreview = snapshot ? {
       id: String(snapshot.id || report.message_id),
