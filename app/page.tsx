@@ -2695,7 +2695,7 @@ Supabaseの設定を確認してください。
               return;
             }
             setCustomPrimaryColor(customHex);
-            setTheme('custom');
+            setTheme('custom'); setIsDarkMode(false);
             detail.resolve!({ success: true, message: `テーマカラーを${requestedTheme}（${customHex}）に変更しました。` });
             return;
           }
@@ -4099,13 +4099,13 @@ Supabaseの設定を確認してください。
                   <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
                     メインカラー
                     <div className="mt-1 flex gap-2">
-                      <input aria-label="メインカラーを選ぶ" type="color" value={customPrimaryColor} onChange={event => { setCustomPrimaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                      <input aria-label="メインカラーを選ぶ" type="color" value={customPrimaryColor} onChange={event => { setCustomPrimaryColor(event.target.value.toUpperCase()); setTheme('custom'); setIsDarkMode(false); }} className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
                       <input aria-label="色名またはHEXコード" value={themeColorInput} onChange={event => setThemeColorInput(event.target.value)} placeholder="#FF66AA / coral / 青藍" className="min-w-0 flex-1 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-2 text-xs text-gray-800 dark:text-white" />
                     </div>
                   </label>
                   <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
                     グラデーションの終点
-                    <input aria-label="グラデーションの終点カラー" type="color" value={customSecondaryColor} onChange={event => { setCustomSecondaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                    <input aria-label="グラデーションの終点カラー" type="color" value={customSecondaryColor} onChange={event => { setCustomSecondaryColor(event.target.value.toUpperCase()); setTheme('custom'); setIsDarkMode(false); }} className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
                   </label>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -4113,13 +4113,13 @@ Supabaseの設定を確認してください。
                     const color = normalizeThemeColorInput(themeColorInput);
                     if (!color) { setThemeColorMessage('色名またはHEXコードを確認してね。例：#FF66AA、coral、青藍。'); return; }
                     setCustomPrimaryColor(color);
-                    setTheme('custom');
+                    setTheme('custom'); setIsDarkMode(false);
                     setThemeColorMessage(`カラーを ${color} に変更しました。`);
                   }} className="rounded-lg px-3 py-2 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-700">
                     色名・HEXを適用
                   </button>
                   <label className="flex items-center gap-2 text-[10px] font-bold text-gray-600 dark:text-slate-300">
-                    <input type="checkbox" checked={customGradientEnabled} onChange={event => { setCustomGradientEnabled(event.target.checked); setTheme('custom'); }} />
+                    <input type="checkbox" checked={customGradientEnabled} onChange={event => { setCustomGradientEnabled(event.target.checked); setTheme('custom'); setIsDarkMode(false); }} />
                     グラデーションを有効にする
                   </label>
                 </div>
@@ -4134,7 +4134,7 @@ Supabaseの設定を確認してください。
                     {COLOR_DIC_PRESETS.map(color => (
                       <button key={color.hex} type="button" onClick={() => {
                         setCustomPrimaryColor(color.hex);
-                        setTheme('custom');
+                        setTheme('custom'); setIsDarkMode(false);
                         setThemeColorInput(color.name);
                         setThemeColorMessage(`${color.name}（${color.hex}）を適用しました。`);
                       }} title={`${color.name} ${color.hex}`} className="min-w-0 rounded-lg border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-950 p-1.5 text-left hover:scale-[1.02] transition-transform">
