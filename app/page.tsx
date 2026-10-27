@@ -4,12 +4,13 @@
 import { ContributionRankWidget } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
+import ClassChat from '@/components/ClassChat';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  Home, CheckCircle, Clock, Monitor, Wind,
+  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
   ThermometerSun, Info, Users, Check, X,
   Plus, ChevronRight, AlertTriangle, Sparkles, Star,
   MapPin, User, Palette, BellRing, Sparkle,
@@ -864,6 +865,7 @@ export default function CampusSyncApp() {
   const introStartedAtRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState('home');
+  const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
   const [score, setScore] = useState(65); // 本日の貢献度（0〜100）
@@ -1067,6 +1069,61 @@ export default function CampusSyncApp() {
     })();
     return () => { cancelled = true; };
   }, [authUser]);
+
+  // クラスチャットの未読件数。最終閲覧時刻を端末内に保存し、別クラスの行はRLSで取得できない。
+  useEffect(() => {
+    if (!authUser?.id || !/^\d{6}$/.test(studentId) || !studentName.trim() || !/^[1-3]-[1-8]$/.test(userClass)) {
+      setClassChatUnreadCount(0);
+      return;
+    }
+
+    const storageKey = 'campus-sync-class-chat-last-seen:' + studentId + ':' + userClass;
+    const now = new Date().toISOString();
+    if (activeTab === 'chat') {
+      try { window.localStorage.setItem(storageKey, now); } catch {}
+      setClassChatUnreadCount(0);
+      return;
+    }
+
+    let active = true;
+    let lastSeen = '';
+    try { lastSeen = window.localStorage.getItem(storageKey) || ''; } catch {}
+    if (!lastSeen) {
+      lastSeen = now;
+      try { window.localStorage.setItem(storageKey, lastSeen); } catch {}
+    } else {
+      void supabase
+        .from('class_chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('class_name', userClass)
+        .gt('created_at', lastSeen)
+        .neq('user_id', authUser.id)
+        .then(({ count, error }) => {
+          if (!active) return;
+          if (!error) setClassChatUnreadCount(count ?? 0);
+        });
+    }
+
+    const channel = supabase
+      .channel('class-chat-unread:' + studentId + ':' + userClass)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'class_chat_messages',
+        filter: 'class_name=eq.' + userClass,
+      }, payload => {
+        const row = payload.new as { user_id?: string; class_name?: string };
+        if (active && row.class_name === userClass && row.user_id !== authUser.id) {
+          setClassChatUnreadCount(current => Math.min(999, current + 1));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [authUser?.id, studentId, studentName, userClass, activeTab]);
 
   // 既にこのブラウザーで通知登録済みなら、設定画面に状態を表示する。
   useEffect(() => {
@@ -3989,6 +4046,17 @@ Supabaseの設定を確認してください。
         );
 
 
+      case 'chat':
+        return (
+          <ClassChat
+            authUser={authUser ? { id: authUser.id, email: authUser.email } : null}
+            studentId={studentId}
+            studentName={studentName}
+            userClass={userClass}
+            unreadCount={classChatUnreadCount}
+          />
+        );
+
       case 'club':
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
@@ -4438,6 +4506,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+              <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
               <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
               <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
               <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
@@ -4491,6 +4560,7 @@ Supabaseの設定を確認してください。
           <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
           <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+          <NavItem icon={<MessageCircle size={20} />} label="チャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
           <NavItem icon={<Settings size={20} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
         </nav>
       </div>
@@ -4875,11 +4945,12 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
   );
 }
 
-function NavItem({ icon, label, isActive, onClick, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any }) {
+function NavItem({ icon, label, isActive, onClick, themeCls, badge }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any, badge?: number }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0 [&_svg]:block [&_svg]:shrink-0 [&_img]:block [&_img]:shrink-0">
-      <div className={`flex h-5 w-5 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
+    <button onClick={onClick} className="relative flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0 [&_svg]:block [&_svg]:shrink-0 [&_img]:block [&_img]:shrink-0">
+      <div className={`relative flex h-5 w-5 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
         {icon}
+        {badge ? <span className="absolute -right-2 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white">{badge > 99 ? '99+' : badge}</span> : null}
       </div>
       <span className={`text-[9px] font-black transition-colors ${isActive ? themeCls.text : 'text-gray-400'}`}>
         {label}
