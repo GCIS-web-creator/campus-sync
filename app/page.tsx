@@ -4692,6 +4692,79 @@ Supabaseの設定を確認してください。
     );
   }
 
+  if (authUser && profileSetupStatus === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="space-y-3 text-center">
+          <img src="/animated/loading-logo.svg" alt="" className="mx-auto h-20 w-16 max-w-full object-contain" />
+          <p className="text-sm font-bold">初回プロフィールの登録状態を確認しています…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authUser && profileSetupStatus === 'error') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4 text-white">
+        <div className="w-full max-w-md space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
+          <h1 className="text-xl font-black">プロフィール登録を確認できません</h1>
+          <p className="text-sm leading-6 text-slate-300">{authMessage || 'Supabaseの設定を確認してください。'}</p>
+          <button type="button" onClick={() => void signOutStudent()} className="w-full rounded-xl bg-cyan-400 py-3 text-sm font-black text-slate-950">ログアウトして戻る</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authUser && profileSetupStatus === 'required') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 p-4 text-white">
+        <form onSubmit={completeInitialProfile} className="w-full max-w-lg space-y-5 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+          <div className="text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/15"><CampusSyncLogo variant="mark" height={28} className="text-cyan-200" /></div>
+            <h1 className="text-2xl font-black">初回プロフィール登録</h1>
+            <p className="mt-2 text-xs leading-5 text-slate-300">学校メールの認証が完了しました。氏名・学年クラス・パスワードを設定してください。</p>
+          </div>
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3">
+            <p className="text-[10px] font-bold text-cyan-100">認証済み学校メール</p>
+            <p className="mt-1 break-all text-sm font-black text-white">{authUser.email}</p>
+            <p className="mt-1 text-[10px] text-cyan-100/80">学籍番号：{studentId}（メールアドレスから自動設定）</p>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="campus-sync-profile-name" className="block text-xs font-bold text-slate-200">氏名</label>
+            <input id="campus-sync-profile-name" type="text" autoComplete="name" maxLength={80} required value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="学校で使用する氏名" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="campus-sync-profile-grade" className="block text-xs font-bold text-slate-200">学年</label>
+              <select id="campus-sync-profile-grade" value={profileSetupGrade} onChange={e => setProfileSetupGrade(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300">
+                <option value="1">1年</option><option value="2">2年</option><option value="3">3年</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="campus-sync-profile-class" className="block text-xs font-bold text-slate-200">クラス</label>
+              <select id="campus-sync-profile-class" value={profileSetupClass} onChange={e => setProfileSetupClass(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300">
+                {Array.from({length:8},(_,index)=>String(index+1)).map(value=><option key={value} value={value}>{value}組</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="campus-sync-profile-password" className="block text-xs font-bold text-slate-200">パスワード（12文字以上）</label>
+            <input id="campus-sync-profile-password" type="password" autoComplete="new-password" minLength={12} required value={profileSetupPassword} onChange={e => setProfileSetupPassword(e.target.value)} placeholder="他のサービスと異なるパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+            <p className="text-[10px] leading-4 text-slate-400">パスワードはSupabase Authに設定します。プロフィール表や管理者向けエクスポートには保存・表示しません。</p>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="campus-sync-profile-password-confirm" className="block text-xs font-bold text-slate-200">パスワード（確認）</label>
+            <input id="campus-sync-profile-password-confirm" type="password" autoComplete="new-password" minLength={12} required value={profileSetupPasswordConfirm} onChange={e => setProfileSetupPasswordConfirm(e.target.value)} placeholder="同じパスワードをもう一度入力" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+          </div>
+          {profileSetupMessage && <p role="alert" className="rounded-xl border border-rose-300/20 bg-rose-300/10 p-3 text-xs leading-5 text-rose-100">{profileSetupMessage}</p>}
+          <button type="submit" disabled={profileSetupBusy || !studentName.trim() || profileSetupPassword.length<12 || profileSetupPassword!==profileSetupPasswordConfirm} className="w-full rounded-xl bg-cyan-400 py-3.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40">{profileSetupBusy ? '登録中…' : 'プロフィールとパスワードを保存する'}</button>
+          <p className="text-center text-[10px] leading-4 text-slate-400">初回登録を完了するとCampusSyncを利用できます。管理者がパスワードを閲覧・書き出すことはできません。</p>
+          <button type="button" onClick={() => void signOutStudent()} className="w-full py-2 text-xs font-bold text-slate-400 underline">ログアウトして後で登録する</button>
+        </form>
+      </div>
+    );
+  }
+
   if (!authUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white flex items-center justify-center p-4">
@@ -4703,6 +4776,11 @@ Supabaseの設定を確認してください。
                 <div><h2 className="text-lg font-black">生徒ログイン</h2><p className="mt-1 text-xs leading-relaxed text-slate-300">@tokyo.soka.ed.jp の学校メールのみ利用できます。メールの@より前にある6桁を学籍番号として自動設定します。</p></div>
                 <div className="space-y-2"><label className="block text-xs font-bold text-slate-300">学校メールアドレス</label><input type="email" autoComplete="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="123456@tokyo.soka.ed.jp" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" /><p className="text-[11px] text-slate-400">例：123456@tokyo.soka.ed.jp → 学籍番号 123456</p></div>
                 <button type="button" onClick={() => void requestSchoolEmailCode()} disabled={authBusy} className="w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black py-3 text-sm disabled:opacity-50">{authBusy ? '送信中…' : 'メールにログインコードを送る'}</button>
+                <div className="space-y-2 rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                  <label htmlFor="campus-sync-login-password" className="block text-xs font-bold text-slate-300">パスワードでログイン（初回登録後）</label>
+                  <input id="campus-sync-login-password" type="password" autoComplete="current-password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="設定済みのパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+                  <button type="button" onClick={() => void signInWithSchoolPassword()} disabled={authBusy || !loginPassword} className="w-full rounded-xl border border-cyan-300/40 py-2.5 text-xs font-black text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40">{authBusy ? 'ログイン中…' : '学校メール＋パスワードでログイン'}</button>
+                </div>
                 <button type="button" onClick={() => { setShowCardScanner(true); setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 py-3 text-sm font-bold flex items-center justify-center gap-2"><QrCode size={17} /> 別の端末のログインQRを読み取る</button>
                 <div className="space-y-3 border-t border-white/10 pt-4">
                   <div><h3 className="text-sm font-black text-white">アカウントなしでお試し</h3><p className="mt-1 text-[11px] leading-relaxed text-slate-300">メール認証不要。CampusSyncの画面をサンプルデータで閲覧できます。</p></div>
