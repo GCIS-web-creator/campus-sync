@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, FileLock2
+  BellRing, Save, RefreshCw, History, MessageSquare
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -1006,7 +1006,7 @@ export default function CampusSyncAdmin() {
               <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
             </button>
             <button aria-label="生徒プロフィール書き出し" title="生徒プロフィール書き出し" onClick={() => setActiveTab('student-profile-export')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'student-profile-export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <FileLock2 size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
+              <FilePlus size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
             </button>
             <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
