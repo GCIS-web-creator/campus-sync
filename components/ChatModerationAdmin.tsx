@@ -116,6 +116,9 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
   const [toDate, setToDate] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportAcknowledged, setExportAcknowledged] = useState(false);
+  const [verificationFile, setVerificationFile] = useState<File | null>(null);
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
   const initialLoadDone = useRef(false);
 
   const loadData = useCallback(async (nextScope: Scope = scope) => {
@@ -265,6 +268,66 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
     }
   }
 
+  async function verifyCslogson() {
+    if (!verificationFile || verificationBusy) return;
+    setVerificationBusy(true);
+    setVerificationMessage('');
+    try {
+      if (verificationFile.size > 100 * 1024 * 1024) {
+        throw new Error('ファイルが大きすぎます。100MB以下のログを選択してください。');
+      }
+      if (!window.crypto?.subtle) {
+        throw new Error('このブラウザーではSHA-256の検証を利用できません。HTTPSで開いてください。');
+      }
+      const parsed = JSON.parse(await verificationFile.text()) as {
+        format?: string;
+        extension?: string;
+        schema_version?: string;
+        event_count?: number;
+        integrity?: { initial_hash?: string; final_hash?: string };
+        events?: Array<Record<string, unknown>>;
+      };
+      if (parsed.format !== 'CampusSync Chat Log JSON' || parsed.extension !== '.cslogson' || !Array.isArray(parsed.events)) {
+        throw new Error('CampusSync .cslogson形式のファイルではありません。');
+      }
+      if (parsed.integrity?.initial_hash !== '0'.repeat(64)) {
+        throw new Error('初期ハッシュが一致しません。');
+      }
+
+      let previousHash = '0'.repeat(64);
+      for (let index = 0; index < parsed.events.length; index += 1) {
+        const event = parsed.events[index];
+        const integrity = event.integrity as Record<string, unknown> | undefined;
+        if (!integrity || integrity.algorithm !== 'SHA-256' || integrity.sequence !== index + 1) {
+          throw new Error('イベント ' + (index + 1) + ' の連番またはハッシュ形式が不正です。');
+        }
+        if (integrity.previous_hash !== previousHash) {
+          throw new Error('イベント ' + (index + 1) + ' の前レコードハッシュが一致しません。');
+        }
+        const eventContent = { ...event };
+        delete eventContent.integrity;
+        const source = previousHash + '\n' + JSON.stringify(eventContent);
+        const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
+        const calculated = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        if (integrity.record_hash !== calculated) {
+          throw new Error('イベント ' + (index + 1) + ' の内容ハッシュが一致しません。ファイルが変更された可能性があります。');
+        }
+        previousHash = calculated;
+      }
+      if (parsed.event_count !== parsed.events.length) {
+        throw new Error('記録件数と実際のイベント数が一致しません。');
+      }
+      if (parsed.integrity?.final_hash !== previousHash) {
+        throw new Error('最終ハッシュが一致しません。');
+      }
+      setVerificationMessage('検証成功：' + parsed.events.length.toLocaleString('ja-JP') + '件。ファイル内のSHA-256ハッシュ連鎖は一致しました。ただし、署名ではないため出所の真正性はこの検査だけでは証明できません。');
+    } catch (caught) {
+      setVerificationMessage('検証失敗：' + (caught instanceof Error ? caught.message : 'ファイルを検証できませんでした。'));
+    } finally {
+      setVerificationBusy(false);
+    }
+  }
+
   const openCount = reports.filter(report => report.status === 'open').length;
 
   return (
@@ -406,6 +469,16 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
                 <button type="button" onClick={() => void exportLogs()} disabled={exporting || !adminPassword.trim() || !exportAcknowledged} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:opacity-50">{exporting ? <LoaderCircle size={16} className="animate-spin"/> : <Download size={16}/>} {exporting ? '書き出し中…' : '.cslogson をダウンロード'}</button>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+            <div className="flex items-center gap-2"><ShieldAlert size={18} className="text-amber-300"/><h2 className="font-black text-white">.cslogson ファイルの整合性チェック</h2></div>
+            <p className="mt-2 text-xs leading-5 text-slate-400">選択したファイルはこのブラウザー内で検証し、サーバーへアップロードしません。ハッシュ連鎖が一致しても、電子署名や別保管先の記録と照合しない限り、ファイルの出所まで保証するものではありません。</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input type="file" accept=".cslogson,.json,application/json" onChange={event => { setVerificationFile(event.target.files?.[0] ?? null); setVerificationMessage(''); }} className="min-w-0 flex-1 text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-200"/>
+              <button type="button" onClick={() => void verifyCslogson()} disabled={!verificationFile || verificationBusy} className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-700 px-4 py-2 text-xs font-black text-violet-200 hover:bg-violet-950 disabled:opacity-40">{verificationBusy ? <LoaderCircle size={15} className="animate-spin"/> : <ShieldAlert size={15}/>} {verificationBusy ? '検証中…' : '整合性を検証'}</button>
+            </div>
+            {verificationMessage && <p role="status" className={'mt-3 rounded-xl p-3 text-xs leading-5 ' + (verificationMessage.startsWith('検証成功') ? 'bg-emerald-950 text-emerald-200' : 'bg-rose-950 text-rose-200')}>{verificationMessage}</p>}
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
