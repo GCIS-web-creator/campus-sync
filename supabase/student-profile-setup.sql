@@ -1,6 +1,7 @@
 -- CampusSync initial student profile setup marker.
 -- Run this once in Supabase SQL Editor before deploying the profile setup UI.
--- This makes every current profile complete the one-time setup after rollout.
+-- Existing profile rows will have a NULL marker and will be asked to complete setup on their next sign-in.
+-- Once setup is saved, setup_completed_at prevents the form from being shown again.
 -- Passwords are managed by Supabase Auth and must never be added to public.profiles.
 
 alter table public.profiles
