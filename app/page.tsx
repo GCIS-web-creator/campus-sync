@@ -821,6 +821,10 @@ export default function CampusSyncApp() {
   const themeCls = theme === 'custom'
     ? {
         ...THEMES.custom,
+        bg: customGradientEnabled
+          ? 'bg-gradient-to-r from-[var(--campus-theme-primary)] to-[var(--campus-theme-secondary)]'
+          : 'bg-[var(--campus-theme-primary)]',
+        bgHover: customGradientEnabled ? 'hover:brightness-110' : 'hover:bg-[var(--campus-theme-primary-hover)]',
         gradient: customGradientEnabled
           ? 'from-[var(--campus-theme-primary)] to-[var(--campus-theme-secondary)]'
           : 'from-[var(--campus-theme-primary)] to-[var(--campus-theme-primary)]',
