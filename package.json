@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:cslogson": "node scripts/verify-cslogson.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
