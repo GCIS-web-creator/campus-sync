@@ -1069,6 +1069,8 @@ export default function CampusSyncApp() {
   const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
   const [authBusy, setAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+  const [guestCode, setGuestCode] = useState('');
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
@@ -1262,6 +1264,25 @@ export default function CampusSyncApp() {
     })();
     return () => { cancelled = true; };
   }, [authUser, studentId]);
+
+  const enterGuestMode = () => {
+    const code = guestCode.trim();
+    if (!/^90\d{4}$/.test(code)) {
+      setAuthMessage('ゲストコードは「90」から始まる6桁の数字を入力してください。');
+      return;
+    }
+    // This is only a client-side demo selector, not an authenticated account.
+    // The guest preview is isolated from real student data and all backend writes.
+    setAuthMessage('');
+    setIsGuestMode(true);
+  };
+
+  const exitGuestMode = () => {
+    setIsGuestMode(false);
+    setGuestCode('');
+    setAuthMessage('');
+    setAuthStep('email');
+  };
 
   const requestSchoolEmailCode = async () => {
     const email = loginEmail.trim().toLowerCase();
@@ -1540,7 +1561,7 @@ useEffect(() => {
 
 // Adminと共有する図書室蔵書を読み込む
 useEffect(() => {
-  if (!authUser) { setLibraryBooksLoading(false); return; }
+  if (!authUser && !isGuestMode) { setLibraryBooksLoading(false); return; }
   let cancelled = false;
 
   const fetchLibraryBooks = async () => {
@@ -4541,6 +4562,10 @@ Supabaseの設定を確認してください。
     }
   };
 
+  if (isGuestMode) {
+    return <GuestPreviewApp onExit={exitGuestMode} />;
+  }
+
   if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6">
@@ -4561,6 +4586,12 @@ Supabaseの設定を確認してください。
                 <div className="space-y-2"><label className="block text-xs font-bold text-slate-300">学校メールアドレス</label><input type="email" autoComplete="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="123456@tokyo.soka.ed.jp" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" /><p className="text-[11px] text-slate-400">例：123456@tokyo.soka.ed.jp → 学籍番号 123456</p></div>
                 <button type="button" onClick={() => void requestSchoolEmailCode()} disabled={authBusy} className="w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black py-3 text-sm disabled:opacity-50">{authBusy ? '送信中…' : 'メールにログインコードを送る'}</button>
                 <button type="button" onClick={() => { setShowCardScanner(true); setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 py-3 text-sm font-bold flex items-center justify-center gap-2"><QrCode size={17} /> 別の端末のログインQRを読み取る</button>
+                <div className="space-y-3 border-t border-white/10 pt-4">
+                  <div><h3 className="text-sm font-black text-white">アカウントなしでお試し</h3><p className="mt-1 text-[11px] leading-relaxed text-slate-300">メール認証不要。CampusSyncの画面をサンプルデータで閲覧できます。</p></div>
+                  <div className="space-y-1.5"><label htmlFor="campus-sync-guest-code" className="block text-xs font-bold text-slate-300">ゲストコード（90＋任意の数字4桁）</label><input id="campus-sync-guest-code" type="text" inputMode="numeric" autoComplete="off" maxLength={6} value={guestCode} onChange={e => { setGuestCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthMessage(''); }} placeholder="例：901234" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-center font-mono text-lg tracking-[0.25em] text-white outline-none focus:ring-2 focus:ring-cyan-300" /></div>
+                  <button type="button" onClick={enterGuestMode} disabled={!/^90\d{4}$/.test(guestCode)} className="w-full rounded-xl border border-cyan-300/50 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-40">ゲストとして閲覧する</button>
+                  <p className="text-[10px] leading-relaxed text-slate-400">※これは本人確認用の認証ではありません。ゲスト画面は実データ・実際の生徒とのチャットから分離され、投稿や保存はできません。</p>
+                </div>
               </>
             ) : (
               <>
