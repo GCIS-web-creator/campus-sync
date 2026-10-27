@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { AlertCircle, Check, Flag, LoaderCircle, MessageCircle, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, Flag, LoaderCircle, MessageCircle, Paperclip, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import ChatMessageContent, { ChatFormattingToolbar } from '@/components/ChatMessageContent';
 import { supabase } from '@/lib/supabase';
 import GradeSchoolChat from '@/components/GradeSchoolChat';
 
@@ -22,6 +23,9 @@ type ChatMessage = {
   body: string;
   created_at: string;
   updated_at: string;
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_mime?: string | null;
 };
 type ReactionEmoji = '👍' | '❤️' | '😂' | '👀';
 type ChatReaction = {
@@ -49,6 +53,8 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reactions, setReactions] = useState<ChatReaction[]>([]);
   const [draft, setDraft] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,6 +76,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
   }, [reactions]);
 
   const loadMessages = useCallback(async (isStillActive?: () => boolean) => {
+    if (selectedFile && (selectedFile.size > 10 * 1024 * 1024 || !['application/pdf','image/jpeg','image/png','image/webp','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(selectedFile.type))) { setError('添付はPDF・画像・テキスト・Word（10MB以内）に対応しています。'); return; }
     if (!profileReady || !authUser?.id) {
       setLoading(false);
       return;
@@ -77,7 +84,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
     setError('');
     const { data, error: queryError } = await supabase
       .from('class_chat_messages')
-      .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at')
+      .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime')
       .eq('class_name', userClass)
       .order('created_at', { ascending: false })
       .limit(MAX_MESSAGES);
@@ -167,7 +174,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
     event.preventDefault();
     if (sending) return;
     const body = draft.trim();
-    if (!body) return;
+    if (!body) { setError('本文を入力してください。'); return; }
     if (body.length > MAX_MESSAGE_LENGTH) {
       setError('メッセージは' + MAX_MESSAGE_LENGTH + '文字以内にしてください。');
       return;
@@ -186,20 +193,28 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
           .update({ body, updated_at: new Date().toISOString() })
           .eq('id', editingId)
           .eq('user_id', authUser.id)
-          .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at')
+          .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime')
           .single();
         if (updateError) throw updateError;
         setMessages(current => sortMessages(current.map(item => item.id === editingId ? data as ChatMessage : item)));
         setEditingId(null);
         setNotice('メッセージを編集しました。');
       } else {
-        const { data, error: insertError } = await supabase
-          .from('class_chat_messages')
-          .insert({ user_id: authUser.id, student_id: studentId, student_name: studentName.trim(), class_name: userClass, body })
-          .select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at')
-          .single();
-        if (insertError) throw insertError;
+        let uploadedPath: string | null = null;
+        let attachmentFields: { attachment_path: string | null; attachment_name: string | null; attachment_mime: string | null } = { attachment_path: null, attachment_name: null, attachment_mime: null };
+        if (selectedFile) {
+          const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'attachment';
+          const path = authUser.id + '/' + crypto.randomUUID() + '-' + safeName;
+          const upload = await supabase.storage.from('chat-attachments').upload(path, selectedFile, { contentType: selectedFile.type, upsert: false });
+          if (upload.error) throw upload.error;
+          uploadedPath = path;
+          attachmentFields = { attachment_path: path, attachment_name: selectedFile.name, attachment_mime: selectedFile.type };
+        }
+        const { data, error: insertError } = await supabase.from('class_chat_messages').insert({ user_id: authUser.id, student_id: studentId, student_name: studentName.trim(), class_name: userClass, body, ...attachmentFields }).select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime').single();
+        if (insertError) { if (uploadedPath) await supabase.storage.from('chat-attachments').remove([uploadedPath]); throw insertError; }
         setMessages(current => sortMessages([...current.filter(item => item.id !== data.id), data as ChatMessage]));
+        setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
       setDraft('');
     } catch (caught) {
