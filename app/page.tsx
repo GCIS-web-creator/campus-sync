@@ -1066,11 +1066,19 @@ export default function CampusSyncApp() {
   const [authChecking, setAuthChecking] = useState(true);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
   const [authBusy, setAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [guestCode, setGuestCode] = useState('');
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [profileSetupStatus, setProfileSetupStatus] = useState<'checking' | 'required' | 'complete' | 'error'>('checking');
+  const [profileSetupGrade, setProfileSetupGrade] = useState('1');
+  const [profileSetupClass, setProfileSetupClass] = useState('1');
+  const [profileSetupPassword, setProfileSetupPassword] = useState('');
+  const [profileSetupPasswordConfirm, setProfileSetupPasswordConfirm] = useState('');
+  const [profileSetupMessage, setProfileSetupMessage] = useState('');
+  const [profileSetupBusy, setProfileSetupBusy] = useState(false);
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
@@ -1097,9 +1105,11 @@ export default function CampusSyncApp() {
         setAuthUser(user);
         setStudentId(derivedStudentId);
         setLoginEmail(email);
+        setProfileSetupStatus('checking');
       } else {
         setAuthUser(null);
         setStudentId('');
+        setProfileSetupStatus('complete');
       }
     };
 
@@ -1150,27 +1160,38 @@ export default function CampusSyncApp() {
     void (async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('student_id, student_name, user_class')
+        .select('student_id, student_name, user_class, setup_completed_at')
         .eq('student_id', derivedStudentId)
         .maybeSingle();
       if (cancelled) return;
       if (error) {
         console.error('ログインプロフィールの取得に失敗:', error);
-        setAuthMessage('ログインできましたが、プロフィールを読み込めません。profilesのSQLとRLSを確認してください。');
+        setAuthMessage('プロフィール登録の準備に失敗しました。Supabaseで student-profile-setup.sql を実行し、profiles のRLSを確認してください。');
+        setProfileSetupStatus('error');
         return;
       }
       if (data) {
-        setStudentName(data.student_name || '');
-        setUserClass(normalizeSchoolClass(data.user_class));
+        const savedName = String(data.student_name || '');
+        const savedClass = String(data.user_class || '');
+        const normalizedClass = normalizeSchoolClass(savedClass);
+        const [savedGrade, savedClassNumber] = normalizedClass.split('-');
+        setStudentName(savedName);
+        setUserClass(normalizedClass);
+        setProfileSetupGrade(savedGrade || '1');
+        setProfileSetupClass(savedClassNumber || '1');
+        setProfileSetupStatus(data.setup_completed_at && savedName.trim() && /^[1-3]-[1-8]$/.test(savedClass) ? 'complete' : 'required');
       } else {
         setStudentName('');
         setUserClass('1-1');
+        setProfileSetupGrade('1');
+        setProfileSetupClass('1');
+        setProfileSetupStatus('required');
       }
     })();
     return () => { cancelled = true; };
-  }, [authUser]);
+  }, [authUser?.id]);
 
-  // クラスチャットの未読件数。最終閲覧時刻を端末内に保存し、別クラスの行はRLSで取得できない。
+  // クラスチャットの未読件数.最終閲覧時刻を端末内に保存し、別クラスの行はRLSで取得できない。
   useEffect(() => {
     if (!authUser?.id || !/^\d{6}$/.test(studentId) || !studentName.trim() || !/^[1-3]-[1-8]$/.test(userClass)) {
       setClassChatUnreadCount(0);
@@ -1284,6 +1305,38 @@ export default function CampusSyncApp() {
     setAuthStep('email');
   };
 
+  const signInWithSchoolPassword = async () => {
+    const email = loginEmail.trim().toLowerCase();
+    if (!SCHOOL_EMAIL_PATTERN.test(email)) {
+      setAuthMessage('6桁の学籍番号@tokyo.soka.ed.jp の学校メールアドレスを入力してください。');
+      return;
+    }
+    if (!loginPassword) {
+      setAuthMessage('パスワードを入力してください。');
+      return;
+    }
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: loginPassword });
+      if (error) throw error;
+      const user = data.user ?? data.session?.user;
+      const derivedStudentId = getStudentIdFromSchoolEmail(user?.email || email);
+      if (!user || !derivedStudentId) throw new Error('学校メールのアカウントを確認できませんでした。');
+      setProfileSetupStatus('checking');
+      setAuthUser(user);
+      setStudentId(derivedStudentId);
+      setLoginEmail(email);
+      setLoginPassword('');
+      setAuthMessage('ログインしました。プロフィールを確認しています。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setAuthMessage(`ログインできませんでした: ${message}`);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   const requestSchoolEmailCode = async () => {
     const email = loginEmail.trim().toLowerCase();
     if (!SCHOOL_EMAIL_PATTERN.test(email)) {
@@ -1336,9 +1389,11 @@ export default function CampusSyncApp() {
       const user = data.user ?? data.session?.user;
       const derivedStudentId = getStudentIdFromSchoolEmail(user?.email || email);
       if (!user || !derivedStudentId) throw new Error('学校メールの認証を確認できませんでした。');
+      setProfileSetupStatus('checking');
       setAuthUser(user);
       setStudentId(derivedStudentId);
       setLoginOtp('');
+      setLoginPassword('');
       setAuthMessage('メール認証が完了しました。プロフィールを確認してください。');
     } catch (error) {
       const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
@@ -1348,11 +1403,74 @@ export default function CampusSyncApp() {
     }
   };
 
+  const completeInitialProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!authUser || !/^\d{6}$/.test(studentId)) {
+      setProfileSetupMessage('認証セッションを確認できません。ログインし直してください。');
+      return;
+    }
+    const cleanName = studentName.trim();
+    const nextClass = `${profileSetupGrade}-${profileSetupClass}`;
+    if (!cleanName || cleanName.length > 80) {
+      setProfileSetupMessage('氏名を入力してください（80文字以内）。');
+      return;
+    }
+    if (!/^[1-3]-[1-8]$/.test(nextClass)) {
+      setProfileSetupMessage('学年とクラスを選択してください。');
+      return;
+    }
+    if (profileSetupPassword.length < 12) {
+      setProfileSetupMessage('パスワードは12文字以上にしてください。');
+      return;
+    }
+    if (profileSetupPassword !== profileSetupPasswordConfirm) {
+      setProfileSetupMessage('確認用パスワードが一致しません。');
+      return;
+    }
+
+    setProfileSetupBusy(true);
+    setProfileSetupMessage('');
+    try {
+      // Password credentials are managed by Supabase Auth; never save them in profiles.
+      const { error: passwordError } = await supabase.auth.updateUser({ password: profileSetupPassword });
+      if (passwordError) throw passwordError;
+
+      const email = String(authUser.email || '').trim().toLowerCase();
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        student_id: studentId,
+        student_name: cleanName,
+        user_class: nextClass,
+        email,
+        auth_user_id: authUser.id,
+        setup_completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'student_id' });
+      if (profileError) throw profileError;
+
+      setStudentName(cleanName);
+      setUserClass(nextClass);
+      setProfileSetupPassword('');
+      setProfileSetupPasswordConfirm('');
+      setProfileSetupStatus('complete');
+      setProfileSetupMessage('');
+      setAuthMessage('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setProfileSetupMessage('登録を完了できませんでした: ' + message + '。入力内容を確認してもう一度お試しください。');
+    } finally {
+      setProfileSetupBusy(false);
+    }
+  };
+
   const signOutStudent = async () => {
     await supabase.auth.signOut({ scope: 'local' });
     setAuthUser(null);
     setStudentId('');
     setStudentName('');
+    setLoginPassword('');
+    setProfileSetupPassword('');
+    setProfileSetupPasswordConfirm('');
+    setProfileSetupStatus('complete');
     setLoginHandoffId('');
     setLoginHandoffSecret('');
     setLoginHandoffStatus('idle');
