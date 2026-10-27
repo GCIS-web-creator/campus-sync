@@ -178,7 +178,7 @@ body {
 
 
 /* Cinematic 6.3-second CampusSync logo intro */
-.campus-intro{position:fixed;inset:0;z-index:99999;overflow:hidden;isolation:isolate;color:#f4fbff;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,rgba(24,77,131,.35),transparent 47%),linear-gradient(165deg,#08152c 0%,#071126 45%,#02050f 100%);animation:campusIntroFade 6.3s ease-in forwards}
+.campus-intro{position:fixed;inset:0;z-index:99999;overflow:hidden;isolation:isolate;color:#f4fbff;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,rgba(24,77,131,.35),transparent 47%),linear-gradient(165deg,#08152c 0%,#071126 45%,#02050f 100%)}
 .campus-intro__nebula{position:absolute;inset:-20%;opacity:.5;background:radial-gradient(ellipse at 18% 30%,rgba(43,116,190,.16),transparent 36%),radial-gradient(ellipse at 78% 60%,rgba(39,74,170,.14),transparent 38%),radial-gradient(ellipse at 48% 90%,rgba(13,174,214,.1),transparent 36%);filter:blur(24px);animation:campusIntroNebula 6.3s ease-in-out both}
 .campus-intro__stars{position:absolute;inset:0;opacity:0;background-repeat:repeat;pointer-events:none}
 .campus-intro__stars--back{z-index:1;background-image:radial-gradient(1px 1px at 4% 17%,#c9e9ff 98%,transparent),radial-gradient(1px 1px at 21% 65%,#fff 98%,transparent),radial-gradient(1px 1px at 32% 21%,#b6e7ff 98%,transparent),radial-gradient(1px 1px at 44% 83%,#fff 98%,transparent),radial-gradient(1px 1px at 63% 12%,#d5efff 98%,transparent),radial-gradient(1px 1px at 76% 55%,#fff 98%,transparent),radial-gradient(1px 1px at 92% 32%,#b6e7ff 98%,transparent),radial-gradient(1px 1px at 13% 91%,#fff 98%,transparent);background-size:410px 310px;animation:campusIntroStarReveal 1.2s ease 3.6s both,campusIntroParallaxBack 6.3s ease-out both}
@@ -327,4 +327,84 @@ body {
 }
 .dark .campus-sync-logo-dark {
   display: block !important;
+}
+
+
+/* Smooth handoff from the intro, page switches, and chat's collapsible chrome. */
+.campus-intro--exiting {
+  animation: campusIntroExit 720ms cubic-bezier(.22, .61, .36, 1) both;
+  transform-origin: center;
+  will-change: opacity, transform, filter;
+}
+@keyframes campusIntroExit {
+  0% { opacity: 1; transform: scale(1); filter: blur(0); visibility: visible; }
+  72% { opacity: .94; transform: scale(1.012); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.035); filter: blur(7px); visibility: hidden; }
+}
+
+.campus-page-transition {
+  min-width: 0;
+  animation: campusPageEnter 360ms cubic-bezier(.2, .72, .22, 1) both;
+  transform-origin: 50% 0;
+}
+.campus-page-transition--chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+@keyframes campusPageEnter {
+  0% { opacity: 0; transform: translate3d(0, 10px, 0) scale(.996); filter: blur(1.5px); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+
+.campus-chat-shell {
+  row-gap: 8px;
+  transition: row-gap 360ms cubic-bezier(.22, .61, .36, 1);
+}
+.campus-chat-shell--collapsed { row-gap: 0; }
+.campus-chat-collapsible {
+  max-height: 112px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    max-height 360ms cubic-bezier(.22, .61, .36, 1),
+    opacity 250ms ease,
+    transform 360ms cubic-bezier(.22, .61, .36, 1),
+    padding 320ms ease,
+    border-width 320ms ease;
+  will-change: max-height, opacity, transform;
+}
+.campus-chat-collapsible--hidden {
+  max-height: 0 !important;
+  padding-block: 0 !important;
+  border-width: 0 !important;
+  opacity: 0;
+  transform: translate3d(0, -8px, 0);
+  pointer-events: none;
+}
+.campus-chat-panel-header { max-height: 88px; }
+.campus-chat-panel-title { max-height: 58px; }
+.campus-chat-scope-nav { max-height: 108px; }
+.campus-chat-show-header {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+  transition: opacity 240ms ease, transform 320ms cubic-bezier(.22, .61, .36, 1);
+}
+.campus-chat-show-header--hidden {
+  opacity: 0;
+  transform: translate3d(-50%, -8px, 0);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campus-page-transition { animation: none !important; }
+  .campus-chat-shell,
+  .campus-chat-collapsible,
+  .campus-chat-show-header {
+    transition-duration: .01ms !important;
+  }
+  .campus-intro--exiting { animation-duration: .01ms !important; }
 }
