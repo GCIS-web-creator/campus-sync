@@ -1017,26 +1017,11 @@ export default function CampusSyncApp() {
       return;
     }
 
-    // PCの通常ブラウザーとホーム画面に追加したアプリ（PWA）の両方で表示する。
-    // prefers-reduced-motion が有効な端末ではアニメーションを省略する。
-
-    // このページが開かれた後、認証完了時に1回だけ表示する。
-    // Strict Modeのeffect再実行時は開始時刻を維持し、終了タイマーだけ再設定する。
-    const durationMs = 6300;
-    const now = Date.now();
-    if (introStartedAtRef.current === null) {
-      introStartedAtRef.current = now;
-    }
-    const elapsedMs = now - introStartedAtRef.current;
-    const remainingMs = durationMs - elapsedMs;
-    if (remainingMs <= 0) {
-      setShowCampusIntro(false);
-      return;
-    }
-
+    // 認証完了時に一度だけ表示する。終了アニメーションはCampusSyncIntro側で完了させる。
+    // ページ切替や認証状態オブジェクトの更新でイントロを再生し直さない。
+    if (introStartedAtRef.current !== null) return;
+    introStartedAtRef.current = Date.now();
     setShowCampusIntro(true);
-    const introTimer = window.setTimeout(() => setShowCampusIntro(false), remainingMs);
-    return () => window.clearTimeout(introTimer);
   }, [authUser]);
 
   // ログインした本人のプロフィールのみ読み込み、メールの@前6桁を固定の学籍番号として使う。
@@ -4533,7 +4518,14 @@ Supabaseの設定を確認してください。
 
         {/* スクロールコンテンツコンテナ */}
         <main className={activeTab === 'chat' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-16 md:pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6"}>
-          {renderContent()}
+          <div
+            key={activeTab}
+            className={activeTab === 'chat'
+              ? 'campus-page-transition campus-page-transition--chat flex min-h-0 flex-1 flex-col'
+              : 'campus-page-transition'}
+          >
+            {renderContent()}
+          </div>
           {contributionToast && (
             <div
               role="status"
