@@ -185,7 +185,7 @@ body {
 .campus-intro__stars--front{z-index:2;background-image:radial-gradient(2px 2px at 8% 28%,#fff 98%,transparent),radial-gradient(1.5px 1.5px at 29% 46%,#fff 98%,transparent),radial-gradient(2px 2px at 52% 23%,#dcf8ff 98%,transparent),radial-gradient(1.5px 1.5px at 71% 73%,#fff 98%,transparent),radial-gradient(2px 2px at 88% 18%,#fff 98%,transparent),radial-gradient(1.4px 1.4px at 95% 85%,#bdeaff 98%,transparent);background-size:530px 390px;animation:campusIntroStarReveal .85s ease 3.85s both,campusIntroParallaxFront 6.3s ease-out both}
 .campus-intro__shooting-star{position:absolute;z-index:8;top:8%;right:9%;width:clamp(130px,26vw,285px);height:2px;opacity:0;transform-origin:right center;transform:translate3d(0,0,0) rotate(138deg) scaleX(.12);border-radius:999px;background:linear-gradient(90deg,transparent,rgba(92,199,255,.18) 23%,#bff7ff 72%,#fff 100%);box-shadow:0 0 6px rgba(140,234,255,.75),0 0 14px rgba(79,154,255,.5);will-change:transform,opacity;backface-visibility:hidden;animation:campusIntroStarFlight 1.08s cubic-bezier(.22,.61,.36,1) .08s both}
 .campus-intro__shooting-star span{position:absolute;right:-3px;top:-4px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 8px 4px #baf7ff,0 0 22px 7px rgba(83,188,255,.9)}
-.campus-intro__logo-stage{position:absolute;z-index:5;top:36%;left:50%;width:min(88vw,528px);aspect-ratio:528 / 120;transform:translate3d(-50%,-50%,0);isolation:isolate}
+.campus-intro__logo-stage{position:absolute;z-index:5;top:36%;left:50%;width:min(88vw,416px);aspect-ratio:416 / 94;transform:translate3d(-50%,-50%,0);isolation:isolate}
 .campus-intro__logo-trace{position:absolute;inset:0;width:100%;height:100%;overflow:visible;filter:url(#campusIntroTraceGlow)}
 .campus-intro__trace-mark,.campus-intro__trace-word{fill:none;stroke:url(#campusIntroTraceGradient);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1450;stroke-dashoffset:1450;animation:campusIntroDraw 1.68s cubic-bezier(.25,.7,.15,1) .52s forwards}
 .campus-intro__trace-word{font-family:Arial,Helvetica,sans-serif;font-size:70px;font-weight:800;letter-spacing:-4px}
@@ -224,7 +224,7 @@ body {
 .campus-intro__draw-spark{position:absolute;inset:0;z-index:6;pointer-events:none;overflow:hidden;contain:paint}
 .campus-intro__draw-spark span{position:absolute;top:-5%;left:0;width:clamp(18px,3vw,30px);height:110%;background:linear-gradient(90deg,transparent,rgba(117,225,255,.18) 18%,rgba(221,251,255,.9) 55%,#fff 72%,rgba(101,190,255,.45) 88%,transparent);box-shadow:0 0 9px rgba(125,224,255,.65);opacity:0;will-change:transform,opacity;backface-visibility:hidden;animation:campusIntroDrawSpark 1.52s cubic-bezier(.22,.61,.36,1) .88s both}
 @keyframes campusIntroLogoDraw{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
-@keyframes campusIntroDrawSpark{0%{opacity:0;transform:translate3d(0,0,0)}8%{opacity:1}92%{opacity:.95}100%{opacity:0;transform:translate3d(calc(min(88vw,528px) - 30px),0,0)}}
+@keyframes campusIntroDrawSpark{0%{opacity:0;transform:translate3d(0,0,0)}8%{opacity:1}92%{opacity:.95}100%{opacity:0;transform:translate3d(calc(min(88vw,416px) - 30px),0,0)}}
 @keyframes campusIntroGloss{0%{opacity:0;transform:translate3d(-180%,0,0) skewX(-22deg)}12%{opacity:.92}88%{opacity:.92}100%{opacity:0;transform:translate3d(520%,0,0) skewX(-22deg)}}
 @keyframes campusIntroLogoPulse{0%{filter:drop-shadow(0 0 7px rgba(105,224,255,.25))}55%{filter:drop-shadow(0 0 13px rgba(105,224,255,.75))}100%{filter:drop-shadow(0 0 9px rgba(105,224,255,.4))}}
 @keyframes campusIntroNebula{0%{opacity:.25}50%{opacity:.46}100%{opacity:.35}}
@@ -232,3 +232,11 @@ body {
 @keyframes campusIntroNovaRing{0%{opacity:0;transform:translate3d(-50%,-50%,0) scale(.15)}18%{opacity:.8}100%{opacity:0;transform:translate3d(-50%,-50%,0) scale(3.9)}}
 @keyframes campusIntroNovaRays{0%{opacity:0;transform:scale(.12) rotate(0)}26%{opacity:.58}100%{opacity:0;transform:scale(1.1) rotate(72deg)}}
 @media(prefers-reduced-motion:reduce){.campus-intro__draw-spark span,.campus-intro__shooting-star,.campus-intro__real-logo,.campus-intro__gloss,.campus-intro__supernova-ring,.campus-intro__supernova-rays{animation-duration:.01ms!important}}
+
+/* Motion-performance refinements for low-power Chromebooks. */
+.campus-intro__nebula{filter:none;will-change:opacity}
+.campus-intro__logo-aura{filter:none}
+.campus-intro__stars--back{animation:campusIntroStarReveal 1.2s ease 3.6s both}
+.campus-intro__stars--front{animation:campusIntroStarReveal .85s ease 3.85s both}
+.campus-intro__supernova-rays{filter:none}
+.campus-intro__logo-stage,.campus-intro__real-logo,.campus-intro__draw-spark span{backface-visibility:hidden}
