@@ -281,7 +281,7 @@ const COLOR_INPUT_ALIASES: Record<string, string> = {
   sienna: '#A0522D', tan: '#D2B48C',
   rebeccapurple: '#663399', darkcyan: '#008B8B',
   darkblue: '#00008B', lightblue: '#ADD8E6', lightpink: '#FFB6C1',
-};;
+};
 function normalizeThemeColorInput(input: string): string | null {
   const raw = input.trim();
   if (!raw) return null;
