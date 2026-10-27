@@ -220,24 +220,39 @@ export async function GET(request: Request) {
 
   const classMessageIds = relevantReports.filter(r => r.message_table === 'class_chat_messages').map(r => r.message_id);
   const schoolMessageIds = relevantReports.filter(r => r.message_table === 'school_chat_messages').map(r => r.message_id);
+  const uniqueClassIds = [...new Set(classMessageIds)];
+  const uniqueSchoolIds = [...new Set(schoolMessageIds)];
   const [classTargetsResult, schoolTargetsResult] = await Promise.all([
     classMessageIds.length
-      ? supabase.from('class_chat_messages').select('id,student_name,class_name,body,created_at').in('id', classMessageIds)
+      ? supabase.from('class_chat_messages').select('id,student_name,class_name,body,created_at,attachment_path,attachment_name,attachment_mime').in('id', uniqueClassIds)
       : Promise.resolve({ data: [], error: null }),
     schoolMessageIds.length
-      ? supabase.from('school_chat_messages').select('id,student_name,user_class,scope,body,created_at').in('id', schoolMessageIds)
+      ? supabase.from('school_chat_messages').select('id,student_name,user_class,scope,body,created_at,attachment_path,attachment_name,attachment_mime').in('id', uniqueSchoolIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   const targetMap = new Map<string, Record<string, any>>();
   for (const row of [...((classTargetsResult.data || []) as Record<string, any>[]), ...((schoolTargetsResult.data || []) as Record<string, any>[])]) {
     targetMap.set(row.id, row);
   }
+  const [classDeleteEvents, schoolDeleteEvents] = await Promise.all([
+    uniqueClassIds.length
+      ? supabase.from('chat_audit_logs').select('record_id,event_type').eq('source_table', 'class_chat_messages').in('record_id', uniqueClassIds).in('event_type', ['message_deleted', 'admin_message_deleted'])
+      : Promise.resolve({ data: [], error: null }),
+    uniqueSchoolIds.length
+      ? supabase.from('chat_audit_logs').select('record_id,event_type').eq('source_table', 'school_chat_messages').in('record_id', uniqueSchoolIds).in('event_type', ['message_deleted', 'admin_message_deleted'])
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const deletedMessageIds = new Set<string>();
+  for (const row of [...((classDeleteEvents.data || []) as Record<string, any>[]), ...((schoolDeleteEvents.data || []) as Record<string, any>[])]) {
+    if (row.record_id) deletedMessageIds.add(String(row.record_id));
+  }
   for (const log of logs) {
     if (!log.record_id || !log.body) continue;
     if (log.source_table !== 'class_chat_messages' && log.source_table !== 'school_chat_messages') continue;
     if (!targetMap.has(log.record_id)) targetMap.set(log.record_id, {
       id: log.record_id, student_name: log.student_name, user_class: log.user_class,
-      class_name: log.user_class, scope: log.scope, body: log.body, created_at: log.occurred_at, deleted: log.event_type === 'message_deleted',
+      class_name: log.user_class, scope: log.scope, body: log.body, created_at: log.occurred_at,
+      deleted: deletedMessageIds.has(String(log.record_id)),
     });
   }
 
@@ -254,6 +269,7 @@ export async function GET(request: Request) {
       attachment_path: snapshot.attachment_path || null,
       attachment_name: snapshot.attachment_name || null,
       attachment_mime: snapshot.attachment_mime || null,
+      deleted: deletedMessageIds.has(report.message_id),
     } : null;
     return {
       ...report,
