@@ -59,8 +59,8 @@ export default function AdminCampusLocalChat() {
 
     const next: Message[] = [
       ...messages,
-      { role: 'user', content: text },
-      { role: 'assistant', content: makeSimpleReply(text) },
+      { role: 'user' as const, content: text },
+      { role: 'assistant' as const, content: makeSimpleReply(text) },
     ].slice(-12);
 
     setMessages(next);
