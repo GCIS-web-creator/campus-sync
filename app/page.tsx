@@ -1073,6 +1073,7 @@ export default function CampusSyncApp() {
   const [guestCode, setGuestCode] = useState('');
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [profileSetupStatus, setProfileSetupStatus] = useState<'checking' | 'required' | 'complete' | 'error'>('checking');
+  const authUserIdRef = useRef<string | null>(null);
   const [profileSetupGrade, setProfileSetupGrade] = useState('1');
   const [profileSetupClass, setProfileSetupClass] = useState('1');
   const [profileSetupPassword, setProfileSetupPassword] = useState('');
@@ -1102,11 +1103,16 @@ export default function CampusSyncApp() {
       const email = String(user?.email || '').trim().toLowerCase();
       const derivedStudentId = getStudentIdFromSchoolEmail(email);
       if (user && derivedStudentId) {
+        const nextAuthUserId = String(user.id || '');
+        if (authUserIdRef.current !== nextAuthUserId) {
+          authUserIdRef.current = nextAuthUserId;
+          setProfileSetupStatus('checking');
+        }
         setAuthUser(user);
         setStudentId(derivedStudentId);
         setLoginEmail(email);
-        setProfileSetupStatus('checking');
       } else {
+        authUserIdRef.current = null;
         setAuthUser(null);
         setStudentId('');
         setProfileSetupStatus('complete');
@@ -1323,7 +1329,6 @@ export default function CampusSyncApp() {
       const user = data.user ?? data.session?.user;
       const derivedStudentId = getStudentIdFromSchoolEmail(user?.email || email);
       if (!user || !derivedStudentId) throw new Error('学校メールのアカウントを確認できませんでした。');
-      setProfileSetupStatus('checking');
       setAuthUser(user);
       setStudentId(derivedStudentId);
       setLoginEmail(email);
@@ -1389,7 +1394,6 @@ export default function CampusSyncApp() {
       const user = data.user ?? data.session?.user;
       const derivedStudentId = getStudentIdFromSchoolEmail(user?.email || email);
       if (!user || !derivedStudentId) throw new Error('学校メールの認証を確認できませんでした。');
-      setProfileSetupStatus('checking');
       setAuthUser(user);
       setStudentId(derivedStudentId);
       setLoginOtp('');
@@ -1456,6 +1460,7 @@ export default function CampusSyncApp() {
       setAuthMessage('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      setProfileSetupStatus('required');
       setProfileSetupMessage('登録を完了できませんでした: ' + message + '。入力内容を確認してもう一度お試しください。');
     } finally {
       setProfileSetupBusy(false);
