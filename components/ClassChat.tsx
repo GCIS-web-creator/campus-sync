@@ -286,7 +286,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
   const statusText = realtimeConnected ? 'リアルタイム接続中' : '接続状態を確認中';
   return (
     <section className="mx-auto flex flex-1 min-h-0 w-full max-w-3xl flex-col gap-2 animate-in fade-in duration-200">
-      {headerVisible && <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className={'campus-chat-panel-header ' + (headerVisible ? 'campus-chat-panel-header--visible' : 'campus-chat-panel-header--hidden') + ' flex flex-wrap items-center justify-between gap-3'}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20"><MessageCircle size={24} /></div>
           <div className="min-w-0">
@@ -303,7 +303,7 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
             {loading ? <LoaderCircle size={14} className="animate-spin" /> : '更新'}
           </button>
         </div>
-      </header>}
+      </header>
 
       {!profileReady && (
         <div role="alert" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -314,10 +314,10 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
       {notice && <div role="status" className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-100">{notice}</div>}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        {headerVisible && <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className={'campus-chat-panel-title ' + (headerVisible ? 'campus-chat-panel-title--visible' : 'campus-chat-panel-title--hidden') + ' flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800'}>
           <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">{userClass}組の会話</p><p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">最新50件 · 最大500文字</p></div>
           <ShieldCheck size={18} className="text-emerald-600" aria-label="クラス単位で保護" />
-        </div>}
+        </div>
         <div onScroll={onMessagesScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500"><LoaderCircle size={18} className="animate-spin" />メッセージを読み込んでいます…</div>
@@ -402,10 +402,10 @@ export default function ClassChat(props: Props) {
    userScrollIntent.current=false;
  }
  return <section onWheel={() => { userScrollIntent.current=true; }} onTouchMove={() => { userScrollIntent.current=true; }} className="relative mx-auto flex flex-1 min-h-0 w-full max-w-3xl flex-col gap-2">
- {headerVisible && <nav aria-label="チャット範囲" className="grid shrink-0 grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+ <nav aria-label="チャット範囲" className={'campus-chat-scope-nav ' + (headerVisible ? 'campus-chat-scope-nav--visible' : 'campus-chat-scope-nav--hidden') + ' grid shrink-0 grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900'}>
  {[{id:'class',label:'クラス',detail:props.userClass+'組'},{id:'grade',label:'学年',detail:props.userClass.slice(0,1)+'年生'},{id:'school',label:'全校',detail:'全生徒'}].map(item=><button key={item.id} type="button" aria-pressed={scope===item.id} onClick={()=>changeScope(item.id as 'class'|'grade'|'school')} className={'rounded-xl px-2 py-2 text-center '+(scope===item.id?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}><span className="block text-sm font-black">{item.label}</span><span className="mt-0.5 block text-[10px]">{item.detail}</span></button>)}
- </nav>}
- {!headerVisible && <button type="button" onClick={()=>{setHeaderVisible(true);userScrollIntent.current=false;}} className="absolute left-1/2 top-1 z-20 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[10px] font-bold text-slate-600 shadow-md backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-200">⌃ 上部を表示</button>}
+ </nav>
+ <button type="button" aria-hidden={headerVisible} tabIndex={headerVisible ? -1 : 0} onClick={()=>{setHeaderVisible(true);userScrollIntent.current=false;}} className={'campus-chat-show-header absolute left-1/2 top-1 z-20 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[10px] font-bold text-slate-600 shadow-md backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-200 ' + (headerVisible ? 'campus-chat-show-header--hidden' : 'campus-chat-show-header--visible')}>⌃ 上部を表示</button>
  {scope==='class'?<ClassChatPanel {...props} headerVisible={headerVisible} onMessagesScroll={handleMessagesScroll}/>:<GradeSchoolChat {...props} scope={scope} headerVisible={headerVisible} onMessagesScroll={handleMessagesScroll}/>}
  </section>;
 }
