@@ -291,7 +291,7 @@ function normalizeThemeColorInput(input: string): string | null {
       context.fillStyle = '#010203';
       const sentinel = context.fillStyle;
       context.fillStyle = candidate;
-      const resolved = context.fillStyle;
+      const resolved = String(context.fillStyle);
       if (resolved !== sentinel) {
         if (/^#[0-9a-f]{6}$/i.test(resolved)) return resolved.toUpperCase();
         const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(resolved);
