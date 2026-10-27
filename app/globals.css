@@ -240,3 +240,76 @@ body {
 .campus-intro__stars--front{animation:campusIntroStarReveal .85s ease 3.85s both}
 .campus-intro__supernova-rays{filter:none}
 .campus-intro__logo-stage,.campus-intro__real-logo,.campus-intro__draw-spark span{backface-visibility:hidden}
+
+
+/* High contrast theme editor panels: keep the neon look without sacrificing readability. */
+.campus-theme-neon .campus-theme-settings-card,
+.campus-theme-cyber .campus-theme-settings-card {
+  background: rgba(2, 13, 22, .98) !important;
+  color: #f4fdff !important;
+  border-color: rgba(0, 229, 255, .62) !important;
+  box-shadow: 0 0 18px rgba(0, 229, 255, .12), inset 0 0 18px rgba(0, 229, 255, .035) !important;
+}
+.campus-theme-neon .campus-theme-color-editor,
+.campus-theme-cyber .campus-theme-color-editor {
+  background: #06141e !important;
+  color: #f4fdff !important;
+  border: 1px solid rgba(0, 229, 255, .58) !important;
+  box-shadow: inset 0 0 16px rgba(0, 229, 255, .055), 0 0 13px rgba(0, 229, 255, .10) !important;
+}
+.campus-theme-neon .campus-theme-settings-card h3,
+.campus-theme-neon .campus-theme-color-editor h4,
+.campus-theme-neon .campus-theme-color-editor h5,
+.campus-theme-cyber .campus-theme-settings-card h3,
+.campus-theme-cyber .campus-theme-color-editor h4,
+.campus-theme-cyber .campus-theme-color-editor h5 {
+  color: #8ffaff !important;
+  text-shadow: 0 0 5px rgba(0, 245, 255, .5), 0 0 12px rgba(0, 245, 255, .22) !important;
+}
+.campus-theme-neon .campus-theme-settings-card p,
+.campus-theme-neon .campus-theme-settings-card label,
+.campus-theme-neon .campus-theme-settings-card span,
+.campus-theme-cyber .campus-theme-settings-card p,
+.campus-theme-cyber .campus-theme-settings-card label,
+.campus-theme-cyber .campus-theme-settings-card span {
+  color: #e0f7ff !important;
+  text-shadow: none !important;
+}
+.campus-theme-neon .campus-theme-settings-card .text-gray-400,
+.campus-theme-neon .campus-theme-settings-card .text-gray-500,
+.campus-theme-neon .campus-theme-settings-card .text-gray-600,
+.campus-theme-neon .campus-theme-settings-card .text-gray-700,
+.campus-theme-cyber .campus-theme-settings-card .text-gray-400,
+.campus-theme-cyber .campus-theme-settings-card .text-gray-500,
+.campus-theme-cyber .campus-theme-settings-card .text-gray-600,
+.campus-theme-cyber .campus-theme-settings-card .text-gray-700 {
+  color: #c1dce8 !important;
+}
+.campus-theme-neon .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]),
+.campus-theme-cyber .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]) {
+  background: #020a10 !important;
+  color: #f4fdff !important;
+  border-color: #168da7 !important;
+}
+.campus-theme-neon .campus-theme-color-editor input::placeholder,
+.campus-theme-cyber .campus-theme-color-editor input::placeholder {
+  color: #9abac8 !important;
+  opacity: 1 !important;
+}
+.campus-theme-neon .campus-theme-color-editor button:not([disabled]),
+.campus-theme-cyber .campus-theme-color-editor button:not([disabled]) {
+  text-shadow: none !important;
+}
+.campus-theme-neon .campus-theme-color-editor a,
+.campus-theme-cyber .campus-theme-color-editor a {
+  color: #75eaff !important;
+}
+.campus-theme-neon .campus-theme-color-editor .bg-white,
+.campus-theme-cyber .campus-theme-color-editor .bg-white {
+  background-color: #071823 !important;
+  border-color: rgba(0, 229, 255, .4) !important;
+}
+.campus-theme-neon .campus-theme-color-editor .text-emerald-600,
+.campus-theme-cyber .campus-theme-color-editor .text-emerald-600 {
+  color: #72f7c5 !important;
+}
