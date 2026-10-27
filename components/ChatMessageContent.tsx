@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type Props = {
@@ -32,7 +32,7 @@ export function ChatFormattingToolbar({
 }: {
   value: string;
   onChange: (value: string) => void;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  inputRef: RefObject<HTMLTextAreaElement | null>;
 }) {
   function wrapSelection(before: string, after = before) {
     const input = inputRef.current;
