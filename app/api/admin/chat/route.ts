@@ -210,10 +210,12 @@ export async function GET(request: Request) {
   const reports = (reportsResult.data || []) as Record<string, any>[];
   const logs = (logsResult.data || []) as Record<string, any>[];
   const relevantReports = reports.filter(report => {
+    const snapshot = report.message_snapshot as Record<string, any> | null;
     if (scope === 'all') return true;
     if (scope === 'class') return report.message_table === 'class_chat_messages';
-    if (scope === 'school') return report.message_table === 'school_chat_messages' && schoolRows.some(m => m.id === report.message_id && m.scope === 'school');
-    return report.message_table === 'school_chat_messages' && schoolRows.some(m => m.id === report.message_id && m.scope === 'grade');
+    if (report.message_table !== 'school_chat_messages') return false;
+    if (scope === 'school') return snapshot?.scope === 'school';
+    return snapshot?.scope === 'grade';
   });
 
   const classMessageIds = relevantReports.filter(r => r.message_table === 'class_chat_messages').map(r => r.message_id);
@@ -239,10 +241,25 @@ export async function GET(request: Request) {
     });
   }
 
-  const hydratedReports = relevantReports.map(report => ({
-    ...report,
-    message_preview: targetMap.get(report.message_id) || null,
-  }));
+  const hydratedReports = relevantReports.map(report => {
+    const snapshot = report.message_snapshot as Record<string, any> | null;
+    const savedPreview = snapshot ? {
+      id: String(snapshot.id || report.message_id),
+      student_name: snapshot.student_name || '投稿者',
+      user_class: snapshot.user_class || snapshot.class_name || '',
+      class_name: snapshot.class_name || snapshot.user_class || '',
+      scope: snapshot.scope || (report.message_table === 'class_chat_messages' ? 'class' : ''),
+      body: snapshot.body || '',
+      created_at: snapshot.created_at || report.created_at,
+      attachment_path: snapshot.attachment_path || null,
+      attachment_name: snapshot.attachment_name || null,
+      attachment_mime: snapshot.attachment_mime || null,
+    } : null;
+    return {
+      ...report,
+      message_preview: targetMap.get(report.message_id) || savedPreview,
+    };
+  });
   const messages = [...classRows.map(row => ({ ...row, message_table: 'class_chat_messages', scope: 'class', scope_key: row.class_name })), ...schoolRows.map(row => ({ ...row, message_table: 'school_chat_messages' }))]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 150);
