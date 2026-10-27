@@ -858,6 +858,119 @@ const getOrCreateVoteId = (studentId: string): string => {
   return newId;
 };
 
+type GuestPreviewTab = 'home' | 'timetable' | 'cafeteria' | 'facilities' | 'transport' | 'chat' | 'club' | 'notifications' | 'settings';
+
+const GUEST_PREVIEW_NAV: Array<{ id: GuestPreviewTab; label: string; icon: React.ElementType }> = [
+  { id: 'home', label: 'ホーム', icon: Home },
+  { id: 'timetable', label: '時間割', icon: Calendar },
+  { id: 'cafeteria', label: '学食', icon: Utensils },
+  { id: 'facilities', label: '校内施設', icon: BookOpen },
+  { id: 'transport', label: '電車案内', icon: Train },
+  { id: 'chat', label: 'チャット', icon: MessageCircle },
+  { id: 'club', label: '部活ノート', icon: MessageSquare },
+  { id: 'notifications', label: '通知', icon: Bell },
+  { id: 'settings', label: '設定', icon: Settings },
+];
+
+const GUEST_PREVIEW_TIMETABLE = [
+  { period: '1限', time: '08:50–09:40', subject: '数学演習', teacher: '山田先生', room: '1-1教室' },
+  { period: '2限', time: '09:50–10:40', subject: '英語コミュニケーション', teacher: '佐藤先生', room: '1-1教室' },
+  { period: '3限', time: '10:50–11:40', subject: '現代の国語', teacher: '鈴木先生', room: '1-1教室' },
+  { period: '4限', time: '11:50–12:40', subject: '化学基礎', teacher: '田中先生', room: '化学実験室' },
+  { period: '5限', time: '13:25–14:15', subject: '体育', teacher: '高橋先生', room: '体育館' },
+];
+const GUEST_PREVIEW_MESSAGES = [
+  { name: '青空さん（サンプル）', className: '1-1', time: '10:02', body: '明日の数学演習、プリントP20〜21を忘れないように！' },
+  { name: 'CampusSync運営（サンプル）', className: 'お知らせ', time: '09:45', body: 'これはデモ用のメッセージです。実際の生徒の投稿は表示されません。' },
+  { name: 'みどりさん（サンプル）', className: '1-1', time: '昨日', body: '時間割や提出物をまとめて確認できるのは便利ですね。' },
+];
+
+function GuestPreviewApp({ onExit }: { onExit: () => void }) {
+  const [activeTab, setActiveTab] = useState<GuestPreviewTab>('home');
+  const activeNav = GUEST_PREVIEW_NAV.find(item => item.id === activeTab) || GUEST_PREVIEW_NAV[0];
+  const sampleTag = <span className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-black tracking-wide text-cyan-800">SAMPLE / サンプル</span>;
+  const cardClass = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const mutedClass = 'text-xs leading-5 text-slate-500';
+
+  const renderView = () => {
+    switch (activeTab) {
+      case 'home':
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                { label: '提出物', value: '3件', note: '未完了（サンプル）', icon: FileText },
+                { label: '今日の授業', value: '5限', note: '時間割の例', icon: Calendar },
+                { label: '学食の混雑', value: 'やや混雑', note: '架空の集計', icon: Utensils },
+                { label: 'お知らせ', value: '2件', note: 'デモ通知', icon: Bell },
+              ].map(item => {
+                const Icon = item.icon;
+                return <div key={item.label} className={cardClass}><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{item.label}</span><Icon size={17} className="text-cyan-700" /></div><p className="mt-3 text-2xl font-black text-slate-900">{item.value}</p><p className="mt-1 text-[10px] text-slate-500">{item.note}</p></div>;
+              })}
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <section className={cardClass}>
+                <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-black text-slate-900">今日の時間割</h3>{sampleTag}</div>
+                <div className="space-y-2">{GUEST_PREVIEW_TIMETABLE.slice(0, 3).map(row => <div key={row.period} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="w-12 shrink-0 text-center"><p className="text-xs font-black text-cyan-800">{row.period}</p><p className="mt-1 text-[9px] text-slate-500">{row.time.split('–')[0]}</p></div><div className="min-w-0 flex-1 border-l border-slate-200 pl-3"><p className="text-sm font-black text-slate-800">{row.subject}</p><p className="mt-1 text-[10px] text-slate-500">{row.teacher} ・ {row.room}</p></div></div>)}</div>
+                <button type="button" onClick={() => setActiveTab('timetable')} className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-50">時間割を確認 <ChevronRight size={15} /></button>
+              </section>
+              <section className={cardClass}>
+                <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-black text-slate-900">提出物リマインダー</h3>{sampleTag}</div>
+                {[
+                  { title: '数学演習プリント P20-21', due: '明日 08:30', tone: 'text-rose-600 bg-rose-50' },
+                  { title: '英語 Unit 4 ワーク', due: '金曜日', tone: 'text-amber-700 bg-amber-50' },
+                  { title: '化学基礎 レポート', due: '期限未設定', tone: 'text-slate-600 bg-slate-100' },
+                ].map(item => <div key={item.title} className="border-b border-slate-100 py-3 last:border-0"><p className="text-sm font-bold text-slate-800">{item.title}</p><span className={'mt-1 inline-flex rounded-md px-2 py-1 text-[10px] font-black ' + item.tone}>{item.due}</span></div>)}
+                <p className="mt-2 text-[10px] leading-4 text-slate-400">デモ画面のため、完了操作や期限変更はできません。</p>
+              </section>
+            </div>
+            <section className={cardClass}><div className="mb-3 flex items-center gap-2"><Info size={17} className="text-cyan-700" /><h3 className="font-black text-slate-900">CampusSyncでできること</h3></div><div className="grid gap-3 sm:grid-cols-3">{[{title:'学校生活を一覧',body:'時間割、提出物、通知をひとつの画面で確認。'},{title:'キャンパス情報',body:'学食メニュー、校内施設、交通案内をチェック。'},{title:'学校内の連絡',body:'クラスや部活の連絡機能の画面をプレビュー。'}].map(item=><div key={item.title} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-800">{item.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{item.body}</p></div>)}</div></section>
+          </div>
+        );
+      case 'timetable':
+        return <section className={cardClass}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">時間割表</h3><p className={mutedClass}>月曜日の例・授業名と教室はすべてサンプル</p></div>{sampleTag}</div><div className="space-y-2">{GUEST_PREVIEW_TIMETABLE.map(row=><div key={row.period} className="grid grid-cols-[48px_1fr] gap-3 rounded-xl border border-slate-100 p-3 sm:grid-cols-[55px_110px_1fr] sm:items-center"><div className="text-sm font-black text-cyan-800">{row.period}</div><div className="text-[10px] text-slate-500">{row.time}</div><div className="sm:border-l sm:border-slate-100 sm:pl-3"><p className="text-sm font-black text-slate-800">{row.subject}</p><p className="mt-1 text-xs text-slate-500">{row.teacher} ・ {row.room}</p></div></div>)}</div><p className="mt-4 text-xs text-slate-400">時間割の切り替えや変更内容の保存は無効化されています。</p></section>;
+      case 'cafeteria':
+        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">学食メニュー・混雑状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-3">{[{name:'Sokaランチ',price:'550円',desc:'主菜・ご飯・スープ'},{name:'情熱ラーメン',price:'480円',desc:'醤油ベース'},{name:'カレーライス',price:'450円',desc:'定番メニュー'}].map((item,i)=><div key={item.name} className="overflow-hidden rounded-xl border border-slate-200"><div className={'flex h-24 items-center justify-center ' + (i===0?'bg-amber-50':i===1?'bg-rose-50':'bg-yellow-50')}><Utensils size={30} className="text-slate-500" /></div><div className="p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.desc}</p><p className="mt-2 text-sm font-black text-cyan-800">{item.price}</p><p className="mt-1 text-[10px] font-bold text-emerald-700">サンプル：販売中</p></div></div>)}</div></section><section className={cardClass}><h3 className="mb-3 font-black text-slate-900">学食の混雑（サンプル集計）</h3><div className="grid grid-cols-3 gap-2 text-center">{[{label:'空いている',num:24,color:'bg-emerald-500'},{label:'普通',num:85,color:'bg-amber-500'},{label:'混雑',num:42,color:'bg-rose-500'}].map(item=><div key={item.label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">{item.label}</p><p className="my-2 text-xl font-black text-slate-900">{item.num}</p><div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className={'h-full rounded-full ' + item.color} style={{width:(item.num/85*100)+'%'}} /></div></div>)}</div><p className="mt-3 text-xs text-slate-400">投票・レビュー投稿は利用できません。</p></section></div>;
+      case 'facilities':
+        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">校内施設の状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-2">{[{name:'キャリアセンター自習室',sub:'利用中 22 / 35席',label:'余裕あり',tone:'text-emerald-700 bg-emerald-50'},{name:'図書室',sub:'開館中（サンプル）',label:'閲覧可',tone:'text-cyan-800 bg-cyan-50'},{name:'普通教室（1-1）',sub:'空調 25℃（サンプル）',label:'快適',tone:'text-emerald-700 bg-emerald-50'},{name:'グローリーホール',sub:'現在の利用状況は架空',label:'確認用',tone:'text-slate-600 bg-slate-100'}].map(item=><div key={item.name} className="rounded-xl border border-slate-100 p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.sub}</p><span className={'mt-2 inline-block rounded-full px-2.5 py-1 text-[10px] font-black '+item.tone}>{item.label}</span></div>)}</div></section><section className={cardClass}><h3 className="mb-3 font-black text-slate-900">落とし物情報（サンプル）</h3>{[{name:'黒い折りたたみ傘',place:'中央棟 1階・受付付近',date:'本日 09:20'},{name:'青いペンケース',place:'図書室の机',date:'昨日 15:40'}].map(item=><div key={item.name} className="border-b border-slate-100 py-3 last:border-0"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500"><MapPin size={12} className="mr-1 inline" />{item.place} ・ {item.date}</p></div>)}<p className="mt-2 text-xs text-slate-400">落とし物の登録・連絡はできません。</p></section></div>;
+      case 'transport':
+        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">電車発車案内</h3>{sampleTag}</div><div className="rounded-2xl bg-gradient-to-r from-cyan-700 to-blue-700 p-5 text-white"><p className="text-xs font-bold text-cyan-100">鷹の台駅 ・ サンプル時刻表</p><p className="mt-2 text-3xl font-black">16:12</p><p className="mt-1 text-sm font-bold">国分寺方面（デモ表示）</p><p className="mt-3 rounded-lg bg-white/10 p-2 text-xs">次発の時刻・カウントダウンは実際の運行情報ではありません。</p></div><div className="mt-3 grid gap-3 sm:grid-cols-2">{[{destination:'国分寺方面',times:'16:12 / 16:24 / 16:36'},{destination:'東村山方面',times:'16:18 / 16:30 / 16:42'}].map(item=><div key={item.destination} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-800">{item.destination}</p><p className="mt-2 font-mono text-sm text-slate-600">{item.times}</p></div>)}</div></section></div>;
+      case 'chat':
+        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">クラスチャット</h3><p className={mutedClass}>デモ用の架空メッセージのみ表示しています。</p></div>{sampleTag}</div><div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">ゲストモードでは実際のクラス・学年・全校チャットに接続しません。投稿、返信、リアクション、通報、添付ファイルも利用できません。</div><div className="space-y-3">{GUEST_PREVIEW_MESSAGES.map((message,i)=><div key={message.name+message.time} className={'flex gap-2 ' +(i===1?'flex-row-reverse':'')}><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-black text-cyan-900">{message.name.slice(0,1)}</div><div className={'max-w-[85%] rounded-2xl p-3 '+(i===1?'bg-cyan-50':'bg-slate-100')}><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-black text-slate-700">{message.name}</span><span className="text-[10px] text-slate-400">{message.className} ・ {message.time}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.body}</p></div></div>)}</div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-4"><input disabled value="" placeholder="ゲストはメッセージを送信できません" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-xs text-slate-400" /><button type="button" disabled className="rounded-xl bg-slate-200 px-4 text-xs font-black text-slate-400">送信</button></div></section>;
+      case 'club':
+        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">部活動・委員会ノート</h3>{sampleTag}</div><div className="space-y-3">{[{club:'吹奏楽部（サンプル）',title:'今週の練習予定',body:'水曜・金曜は音楽室で基礎練習を行う想定です。これは架空の連絡です。',date:'今日 08:30'},{club:'図書委員会（サンプル）',title:'おすすめ本コーナー',body:'今月のテーマ展示を準備中というデモ投稿です。',date:'昨日 16:10'}].map(item=><article key={item.title} className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-black text-purple-700">{item.club}</p><h4 className="mt-1 text-sm font-black text-slate-800">{item.title}</h4><p className="mt-2 text-xs leading-5 text-slate-600">{item.body}</p><p className="mt-3 text-[10px] text-slate-400">{item.date}</p></article>)}</div><p className="mt-3 text-xs text-slate-400">ノートの投稿・返信はできません。</p></section>;
+      case 'notifications':
+        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">通知・連絡</h3>{sampleTag}</div><div className="space-y-2">{[{title:'提出物リマインダー',body:'数学演習プリントの期限が近づいています（デモ通知）。',time:'今日 07:00'},{title:'学食メニューのお知らせ',body:'本日のメニューを更新しました（サンプル）。',time:'昨日 12:00'},{title:'CampusSyncからのお知らせ',body:'これは通知画面のプレビューです。',time:'10/20 09:00'}].map(item=><article key={item.title} className="flex gap-3 rounded-xl border border-slate-100 p-3"><span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-600" /><div><h4 className="text-sm font-black text-slate-800">{item.title}</h4><p className="mt-1 text-xs leading-5 text-slate-600">{item.body}</p><p className="mt-2 text-[10px] text-slate-400">{item.time}</p></div></article>)}</div></section>;
+      case 'settings':
+        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-800"><User size={22}/></div><div><h3 className="font-black text-slate-900">ゲストプロフィール</h3><p className="text-xs text-slate-500">サンプル情報・保存されません</p></div>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-500">表示名</p><p className="mt-1 text-sm font-black text-slate-800">ゲスト見学者</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-500">クラス</p><p className="mt-1 text-sm font-black text-slate-800">1-1（サンプル）</p></div><div className="rounded-xl bg-slate-50 p-3 sm:col-span-2"><p className="text-[10px] font-bold text-slate-500">ログイン状態</p><p className="mt-1 text-sm font-black text-cyan-800">ゲスト閲覧専用 ・ メール認証なし</p></div></div></section><section className={cardClass}><h3 className="mb-2 font-black text-slate-900">利用できない機能</h3><div className="grid gap-2 sm:grid-cols-2">{['投稿・編集・削除','投票・レビュー','課題の完了・期限変更','プロフィール保存','通知設定・送信','生徒間のチャット'].map(item=><div key={item} className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-xs font-bold text-slate-600"><Lock size={14} className="text-slate-400"/>{item}</div>)}</div></section></div>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-3 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-700 text-lg font-black text-white">C</div><div className="min-w-0"><div className="text-lg font-black tracking-tight">Campus<span className="text-cyan-700">Sync</span></div><p className="text-[10px] font-bold tracking-widest text-slate-500">GUEST PREVIEW</p></div></div>
+          <div className="flex items-center gap-2"><span className="hidden rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10px] font-black text-cyan-800 sm:inline-flex">閲覧専用デモ</span><button type="button" onClick={onExit} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">ログイン画面へ戻る</button></div>
+        </div>
+      </header>
+      <div className="mx-auto grid max-w-[1500px] gap-0 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="hidden border-r border-slate-200 bg-white p-4 lg:block">
+          <p className="mb-3 px-3 text-[10px] font-black tracking-widest text-slate-400">DEMO NAVIGATION</p>
+          <nav className="space-y-1">{GUEST_PREVIEW_NAV.map(item=>{const Icon=item.icon;const isActive=activeTab===item.id;return <button key={item.id} type="button" onClick={()=>setActiveTab(item.id)} className={'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-black transition '+(isActive?'bg-cyan-50 text-cyan-800':'text-slate-600 hover:bg-slate-50')}><Icon size={17}/>{item.label}{isActive&&<ChevronRight size={14} className="ml-auto"/>}</button>;})}</nav>
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-[10px] font-black text-amber-900">サンプル環境</p><p className="mt-1 text-[10px] leading-4 text-amber-800">この画面から実データへアクセスすることはありません。</p></div>
+        </aside>
+        <main className="min-w-0 p-3 sm:p-5 lg:p-7">
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3"><div className="flex items-start gap-2.5"><Info size={18} className="mt-0.5 shrink-0 text-amber-700"/><div><p className="text-xs font-black text-amber-950">ゲスト閲覧モード：すべてサンプルデータです</p><p className="mt-1 text-[11px] leading-5 text-amber-900">実際の生徒データやチャットには接続していません。投稿・保存・投票・通知送信はできず、この画面での操作によって実データが変わることもありません。</p></div></div></div>
+          <div className="mb-5 lg:hidden"><nav className="flex gap-1.5 overflow-x-auto pb-1">{GUEST_PREVIEW_NAV.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" onClick={()=>setActiveTab(item.id)} className={'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-black '+(activeTab===item.id?'border-cyan-700 bg-cyan-700 text-white':'border-slate-200 bg-white text-slate-600')}><Icon size={14}/>{item.label}</button>;})}</nav></div>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-800">CampusSync / Sample</p><h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{activeNav.label}</h1><p className="mt-1 text-xs text-slate-500">実際のデータとは分離された操作不可のプレビュー</p></div>{sampleTag}</div>
+          {renderView()}
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export default function CampusSyncApp() {
   // オープニング演出は、このページを開いた後の認証完了時に1回だけ再生する。
   // 認証ユーザーのオブジェクト更新やタブ切替では再生し直さない。
