@@ -338,7 +338,7 @@ declare
   message_row jsonb;
   occurred_time timestamptz := clock_timestamp();
 begin
-  if p_message_table not in ('class_chat_messages', 'school_chat_messages') then
+  if p_message_table is null or p_message_table not in ('class_chat_messages', 'school_chat_messages') then
     raise exception 'Invalid chat message table';
   end if;
   if nullif(btrim(p_reason), '') is null or char_length(btrim(p_reason)) > 500 then
@@ -402,7 +402,7 @@ declare
   note_text text := btrim(coalesce(p_note, ''));
   changed_time timestamptz := clock_timestamp();
 begin
-  if p_status not in ('open', 'reviewing', 'resolved', 'dismissed') then
+  if p_status is null or p_status not in ('open', 'reviewing', 'resolved', 'dismissed') then
     raise exception 'Invalid report status';
   end if;
   if char_length(note_text) > 500 then raise exception 'Moderator note must be at most 500 characters'; end if;
