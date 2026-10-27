@@ -15,7 +15,7 @@ create table if not exists public.chat_audit_logs (
     'report_status_changed',
     'admin_message_deleted',
     'admin_report_status_changed',
-    'logs_exported', 'reaction_created', 'reaction_deleted'
+    'logs_exported', 'reaction_created', 'reaction_deleted', 'admin_chat_data_viewed'
   )),
   source_table text not null,
   record_id uuid,
@@ -44,7 +44,7 @@ alter table public.chat_audit_logs add constraint chat_audit_logs_event_type_che
   check (event_type in (
     'baseline_snapshot', 'message_created', 'message_updated', 'message_deleted',
     'report_created', 'report_status_changed', 'admin_message_deleted',
-    'admin_report_status_changed', 'logs_exported', 'reaction_created', 'reaction_deleted'
+    'admin_report_status_changed', 'logs_exported', 'reaction_created', 'reaction_deleted', 'admin_chat_data_viewed'
   ));
 
 -- A report retains a small snapshot of the message it refers to even if the message is later removed.
