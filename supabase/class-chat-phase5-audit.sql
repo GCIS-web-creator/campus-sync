@@ -15,7 +15,7 @@ create table if not exists public.chat_audit_logs (
     'report_status_changed',
     'admin_message_deleted',
     'admin_report_status_changed',
-    'logs_exported'
+    'logs_exported', 'reaction_created', 'reaction_deleted'
   )),
   source_table text not null,
   record_id uuid,
@@ -44,7 +44,7 @@ alter table public.chat_audit_logs add constraint chat_audit_logs_event_type_che
   check (event_type in (
     'baseline_snapshot', 'message_created', 'message_updated', 'message_deleted',
     'report_created', 'report_status_changed', 'admin_message_deleted',
-    'admin_report_status_changed', 'logs_exported'
+    'admin_report_status_changed', 'logs_exported', 'reaction_created', 'reaction_deleted'
   ));
 
 -- A report retains a small snapshot of the message it refers to even if the message is later removed.
@@ -126,6 +126,24 @@ where not exists (
   where a.event_type = 'baseline_snapshot'
     and a.source_table = 'school_chat_messages'
     and a.record_id = m.id
+);
+
+-- Baseline snapshot of current class-chat reactions as well as future changes.
+insert into public.chat_audit_logs (
+  event_type, source_table, record_id, actor_user_id, actor_label,
+  student_id, student_name, user_class, scope, scope_key, reason, metadata
+)
+select
+  'baseline_snapshot', 'class_chat_reactions', r.id, r.user_id, 'migration_baseline',
+  r.student_id, m.student_name, r.class_name, 'class', r.class_name, r.emoji,
+  jsonb_build_object('message_id', r.message_id, 'created_at', r.created_at)
+from public.class_chat_reactions r
+left join public.class_chat_messages m on m.id = r.message_id
+where not exists (
+  select 1 from public.chat_audit_logs a
+  where a.event_type = 'baseline_snapshot'
+    and a.source_table = 'class_chat_reactions'
+    and a.record_id = r.id
 );
 
 create or replace function public.audit_chat_message_change()
@@ -222,6 +240,64 @@ drop trigger if exists audit_school_chat_message_changes on public.school_chat_m
 create trigger audit_school_chat_message_changes
 after insert or update or delete on public.school_chat_messages
 for each row execute function public.audit_chat_message_change();
+
+
+create or replace function public.audit_chat_reaction_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  row_data jsonb;
+  reaction_event text;
+  actor_id uuid;
+  actor_label_value text;
+begin
+  if tg_op = 'INSERT' then
+    row_data := to_jsonb(new);
+    reaction_event := 'reaction_created';
+  else
+    row_data := to_jsonb(old);
+    reaction_event := 'reaction_deleted';
+  end if;
+
+  actor_id := auth.uid();
+  if actor_id is not null then
+    actor_label_value := 'authenticated_user';
+  else
+    actor_label_value := coalesce(nullif(current_setting('request.jwt.claim.role', true), ''), 'database_trigger');
+  end if;
+
+  insert into public.chat_audit_logs (
+    event_type, source_table, record_id, actor_user_id, actor_label,
+    student_id, user_class, scope, scope_key, reason, metadata
+  ) values (
+    reaction_event,
+    'class_chat_reactions',
+    (row_data ->> 'id')::uuid,
+    actor_id,
+    actor_label_value,
+    row_data ->> 'student_id',
+    row_data ->> 'class_name',
+    'class',
+    row_data ->> 'class_name',
+    row_data ->> 'emoji',
+    jsonb_build_object(
+      'operation', tg_op,
+      'message_id', row_data ->> 'message_id',
+      'created_at', row_data ->> 'created_at'
+    )
+  );
+
+  if tg_op = 'DELETE' then return old; else return new; end if;
+end
+$function$;
+
+drop trigger if exists audit_class_chat_reaction_changes on public.class_chat_reactions;
+create trigger audit_class_chat_reaction_changes
+after insert or delete on public.class_chat_reactions
+for each row execute function public.audit_chat_reaction_change();
 
 create or replace function public.capture_chat_report_snapshot()
 returns trigger
@@ -442,6 +518,7 @@ $function$;
 
 revoke all on function public.capture_chat_report_snapshot() from public, anon, authenticated;
 revoke all on function public.audit_chat_message_change() from public, anon, authenticated;
+revoke all on function public.audit_chat_reaction_change() from public, anon, authenticated;
 revoke all on function public.audit_chat_report_change() from public, anon, authenticated;
 revoke all on function public.admin_delete_chat_message(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.admin_update_chat_report(uuid, text, text) from public, anon, authenticated;
