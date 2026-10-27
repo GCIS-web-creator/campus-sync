@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState, type AnimationEvent } from 'react';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 
 type CampusSyncIntroProps = {
@@ -7,8 +8,20 @@ type CampusSyncIntroProps = {
 };
 
 export default function CampusSyncIntro({ onSkip }: CampusSyncIntroProps) {
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => setIsExiting(true), reducedMotion ? 0 : 5550);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function handleAnimationEnd(event: AnimationEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget && event.animationName === 'campusIntroExit') onSkip();
+  }
+
   return (
-    <div className="campus-intro" role="status" aria-label="CampusSyncを開いています">
+    <div className={'campus-intro' + (isExiting ? ' campus-intro--exiting' : '')} onAnimationEnd={handleAnimationEnd} role="status" aria-label="CampusSyncを開いています">
       <div className="campus-intro__nebula" aria-hidden="true" />
       <div className="campus-intro__stars campus-intro__stars--back" aria-hidden="true" />
       <div className="campus-intro__stars campus-intro__stars--front" aria-hidden="true" />
@@ -35,7 +48,7 @@ export default function CampusSyncIntro({ onSkip }: CampusSyncIntroProps) {
         <div className="campus-intro__tagline">学校生活を、もっとスムーズに。</div>
       </div>
 
-      <button type="button" className="campus-intro__skip" onClick={onSkip} aria-label="イントロをスキップ">
+      <button type="button" className="campus-intro__skip" onClick={() => setIsExiting(true)} aria-label="イントロをスキップ">
         スキップ <span aria-hidden="true">›</span>
       </button>
     </div>
