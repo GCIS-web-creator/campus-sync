@@ -143,6 +143,7 @@ revoke all on public.club_notes from anon;
 grant select on public.club_notes to authenticated;
 grant all on public.club_notes to service_role;
 
+drop policy if exists club_notes_authenticated_read on public.club_notes;
 create policy club_notes_authenticated_read
   on public.club_notes for select to authenticated
   using (true);
