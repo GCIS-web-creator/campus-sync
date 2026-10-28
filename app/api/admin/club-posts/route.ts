@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     const displayName = typeof payload.displayName === 'string' ? payload.displayName.trim() : '';
     if (!/^\d{6}$/.test(studentId)) return jsonError('6桁の学籍番号を入力してください。', 400);
     if (action === 'grant' && displayName.length > 50) return jsonError('表示名は50文字以内にしてください。', 400);
-    if (action === 'grant' && (displayName.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(displayName))) {
+    if (action === 'grant' && (displayName.includes('@') || /^[0-9]{6}(?:\s*より)?$/.test(displayName))) {
       return jsonError('既定表示名にメールアドレスや学籍番号は使えません。', 400);
     }
     const { data: profile, error: profileError } = await admin.from('profiles')
