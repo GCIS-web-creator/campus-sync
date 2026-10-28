@@ -989,7 +989,7 @@ export default function CampusSyncApp() {
   const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
-  const [score, setScore] = useState(65); // 本日の貢献度（0〜100）
+  const [score, setScore] = useState(0); // 初期ポイントは0。実績はSupabaseから取得
   const [lifetimeContributionPoints, setLifetimeContributionPoints] = useState(0);
   const [contributionToast, setContributionToast] = useState<{ points: number; reason: string } | null>(null);
   const contributionToastTimer = useRef<number | null>(null);
@@ -2250,7 +2250,7 @@ useEffect(() => {
       } else {
         const { data: newScore, error: createScoreError } = await supabase
           .from('contribution_scores')
-          .insert({ student_id: initialStudentId, score: 65 })
+          .insert({ student_id: initialStudentId, score: 0 })
           .select('score')
           .single();
 
@@ -3834,7 +3834,7 @@ Supabaseの設定を確認してください。
       return;
     }
 
-    const currentScore = current?.score ?? 65;
+    const currentScore = current?.score ?? 0;
     const nextScore = Math.max(0, Math.min(currentScore + delta, 100));
 
     const { error: scoreError } = await supabase
@@ -3906,6 +3906,10 @@ Supabaseの設定を確認してください。
               </div>
               <div className="h-2.5 bg-black/15 rounded-full overflow-hidden mt-4 relative z-10">
                 <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out" style={{ width: `${score}%` }}></div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-2.5">
+                <span className="text-xs font-semibold text-white/75">累計獲得ポイント</span>
+                <span className="text-sm font-black tabular-nums text-white">{lifetimeContributionPoints.toLocaleString('ja-JP')} pt</span>
               </div>
               <p className="text-[10px] text-white/70 mt-2 text-right">※情報を報告したりタスクを完了するとポイントが貯まります</p>
             </div>
