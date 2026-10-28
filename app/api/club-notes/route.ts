@@ -55,9 +55,16 @@ export async function GET(request: Request) {
     .maybeSingle();
   if (error) return jsonError('投稿設定を読み込めませんでした。SupabaseのSQL適用状態を確認してください。', 500);
 
+  const { data: notes, error: notesError } = await context.admin.from('club_notes')
+    .select('id,club_name,title,content,author_name,author,created_at')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (notesError) return jsonError('部活・委員会のタイムラインを取得できません。SupabaseのSQL適用状態を確認してください。', 500);
+
   return NextResponse.json({
     canPostWithoutCode: permission?.can_post === true,
     defaultDisplayName: String(permission?.display_name || profile.student_name || '').trim(),
+    notes: notes || [],
   }, { headers: { 'Cache-Control': 'no-store, private' } });
 }
 
