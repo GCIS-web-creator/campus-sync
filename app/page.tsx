@@ -361,13 +361,21 @@ const MOCK_NOTIFICATIONS = [
   { id: 5, title: '定期考査の範囲表がClassroomにアップロードされました', time: '3日前', isRead: true },
 ];
 
-const MENU_ITEMS = [
-  { id: 'snack', name: 'スナック（唐揚げポテト）', calorie: '450kcal', allergy: '小麦・鶏肉' },
-  { id: 'soka', name: '創価ランチ（日替わりA）', calorie: '680kcal', allergy: '小麦・卵・乳' },
-  { id: 'noodles', name: '情熱ラーメン / うどん', calorie: '520kcal', allergy: '小麦・大豆' },
-  { id: 'curry', name: '栄光カレーライス', calorie: '710kcal', allergy: '小麦・豚肉・リンゴ' },
-  { id: 'healthy', name: 'ヘルシーバリューランチ', calorie: '540kcal', allergy: 'さば・大豆・ごま' },
-];
+type CafeteriaMenuItem = {
+  id: string;
+  name: string;
+  price: string;
+  calorie: string;
+  allergy: string;
+};
+
+const getTokyoDateKey = (): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
 
 const INITIAL_LOST_AND_FOUND = [
   { id: 1, title: '青いシャープペンシル', location: '図書室', date: '今日 12:30頃', description: 'パイロット製のドクターグリップ（青）です。消しゴムのキャップがありません。', finder: '図書室カウンターに預けました' },
@@ -1549,7 +1557,10 @@ export default function CampusSyncApp() {
   const [selectedWeekType, setSelectedWeekType] = useState<'A' | 'B'>('A');
   const [selectedDay, setSelectedDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
   const [timetableData, setTimetableData] = useState(MOCK_TIMETABLE_DATA);
-  const [menuItems, setMenuItems] = useState(MENU_ITEMS);
+  const [menuItems, setMenuItems] = useState<CafeteriaMenuItem[]>([]);
+  const [cafeteriaMenuLoading, setCafeteriaMenuLoading] = useState(true);
+  const [cafeteriaMenuLoadMessage, setCafeteriaMenuLoadMessage] = useState('本日の献立を読み込んでいます…');
+  const [reportingSoldOutMenuId, setReportingSoldOutMenuId] = useState<string | null>(null);
 
   // バス用状態
   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
@@ -1618,23 +1629,22 @@ export default function CampusSyncApp() {
   const [newReviewUser, setNewReviewUser] = useState('');
 
   // 学食投票関係
-  const [crowdVotes, setCrowdVotes] = useState({ empty: 24, normal: 85, crowded: 42 });
+  const [crowdVotes, setCrowdVotes] = useState({ empty: 0, normal: 0, crowded: 0 });
   const [userVote, setUserVote] = useState<'empty' | 'normal' | 'crowded' | null>(null);
   const [isVoting, setIsVoting] = useState(false);
 
   const [menuVotes, setMenuVotes] = useState<Record<string, { empty: number, normal: number, crowded: number }>>({
-    snack: { empty: 8, normal: 22, crowded: 14 },
-    soka: { empty: 2, normal: 15, crowded: 56 },
-    noodles: { empty: 11, normal: 34, crowded: 12 },
-    curry: { empty: 14, normal: 40, crowded: 21 },
-    healthy: { empty: 25, normal: 12, crowded: 3 },
+    snack: { empty: 0, normal: 0, crowded: 0 },
+    soka: { empty: 0, normal: 0, crowded: 0 },
+    noodles: { empty: 0, normal: 0, crowded: 0 },
+    curry: { empty: 0, normal: 0, crowded: 0 },
+    healthy: { empty: 0, normal: 0, crowded: 0 },
   });
   const [userMenuVotes, setUserMenuVotes] = useState<Record<string, 'empty' | 'normal' | 'crowded' | null>>({
     snack: null, soka: null, noodles: null, curry: null, healthy: null,
   });
-  const [soldOutItems, setSoldOutItems] = useState<Record<string, boolean>>({
-    snack: false, soka: false, noodles: false, curry: false, healthy: false,
-  });
+  const [soldOutItems, setSoldOutItems] = useState<Record<string, boolean>>({});
+  const [userSoldOutReports, setUserSoldOutReports] = useState<Record<string, boolean>>({});
 
   // 落とし物関係（Supabaseに保存し、再読み込み後も共有）
   const [lostAndFoundList, setLostAndFoundList] = useState<LostAndFoundItem[]>(INITIAL_LOST_AND_FOUND);
@@ -2045,27 +2055,40 @@ useEffect(() => {
       );
     }
 
-    fetchStep = '学食メニュー取得（cafeteria_menu）';
-    const { data: menuData, error: menuError } = await supabase
-      .from('cafeteria_menu')
+    fetchStep = '本日の献立取得（cafeteria_daily_menus）';
+    setCafeteriaMenuLoading(true);
+    const today = getTokyoDateKey();
+    const { data: dailyMenu, error: dailyMenuError } = await supabase
+      .from('cafeteria_daily_menus')
       .select('*')
-      .eq('is_active', true)
-      .order('id', { ascending: true });
+      .eq('service_date', today)
+      .maybeSingle();
 
-    const activeMenuItems = (menuData && menuData.length > 0)
-      ? menuData.map(item => ({
-          id: item.id,
-          name: item.name,
-          calorie: item.calorie,
-          allergy: item.allergy,
-        }))
-      : MENU_ITEMS;
+    const activeMenuItems: CafeteriaMenuItem[] = (!dailyMenuError && dailyMenu && !dailyMenu.is_closed)
+      ? [
+          { id: 'soka', name: String(dailyMenu.soka_lunch || '').trim(), price: String(dailyMenu.soka_lunch_price || '').trim(), calorie: String(dailyMenu.soka_lunch_calorie || '').trim(), allergy: String(dailyMenu.soka_lunch_allergy || '').trim() },
+          { id: 'healthy', name: String(dailyMenu.healthy_lunch || '').trim(), price: String(dailyMenu.healthy_lunch_price || '').trim(), calorie: String(dailyMenu.healthy_lunch_calorie || '').trim(), allergy: String(dailyMenu.healthy_lunch_allergy || '').trim() },
+          { id: 'snack', name: String(dailyMenu.snack_lunch || '').trim(), price: String(dailyMenu.snack_lunch_price || '').trim(), calorie: String(dailyMenu.snack_lunch_calorie || '').trim(), allergy: String(dailyMenu.snack_lunch_allergy || '').trim() },
+          { id: 'curry', name: String(dailyMenu.curry || '').trim(), price: String(dailyMenu.curry_price || '').trim(), calorie: String(dailyMenu.curry_calorie || '').trim(), allergy: String(dailyMenu.curry_allergy || '').trim() },
+          { id: 'noodles', name: String(dailyMenu.noodles || '').trim(), price: String(dailyMenu.noodles_price || '').trim(), calorie: String(dailyMenu.noodles_calorie || '').trim(), allergy: String(dailyMenu.noodles_allergy || '').trim() },
+        ].filter(item => item.name.length > 0)
+      : [];
 
-    if (menuError) {
-      console.error('学食メニューの取得に失敗:', menuError);
-    } else if (menuData && menuData.length > 0) {
-      setMenuItems(activeMenuItems);
+    if (dailyMenuError) {
+      console.error('本日の献立の取得に失敗:', dailyMenuError);
+      setCafeteriaMenuLoadMessage('本日の献立を読み込めません。Supabaseの cafeteria_daily_menus と権限設定を確認してください。');
+    } else if (!dailyMenu) {
+      setCafeteriaMenuLoadMessage('本日の献立は未登録です。管理画面の「月間献立表の管理」で今日の日付に献立を入力してください。');
+    } else if (dailyMenu.is_closed) {
+      setCafeteriaMenuLoadMessage('本日は学食の営業がありません。');
+    } else if (activeMenuItems.length === 0) {
+      setCafeteriaMenuLoadMessage('本日の献立はまだ入力されていません。管理画面の月間献立表を確認してください。');
+    } else {
+      setCafeteriaMenuLoadMessage('');
     }
+
+    setMenuItems(activeMenuItems);
+    setCafeteriaMenuLoading(false);
 
     fetchStep = 'メニュー別投票取得（cafeteria_votes）';
     const { data: menuVoteData, error: menuVoteError } = await supabase
@@ -2104,7 +2127,7 @@ useEffect(() => {
       setUserMenuVotes(myMenuVotes);
     }
 
-    fetchStep = '売切れ情報取得（cafeteria_sold_out）';
+    fetchStep = '公式売切状態取得（cafeteria_sold_out）';
     const { data: soldOutData, error: soldOutError } = await supabase
       .from('cafeteria_sold_out')
       .select('menu_id, is_sold_out');
@@ -2112,21 +2135,29 @@ useEffect(() => {
     if (soldOutError) {
       console.error('売り切れ情報の取得に失敗:', soldOutError);
     } else if (soldOutData) {
-      const nextSoldOut: Record<string, boolean> = {
-        snack: false,
-        soka: false,
-        noodles: false,
-        curry: false,
-        healthy: false,
-      };
-
+      const nextSoldOut: Record<string, boolean> = {};
       soldOutData.forEach(row => {
-        if (row.menu_id in nextSoldOut) {
-          nextSoldOut[row.menu_id] = Boolean(row.is_sold_out);
-        }
+        nextSoldOut[String(row.menu_id)] = row.is_sold_out === true;
       });
-
       setSoldOutItems(nextSoldOut);
+    }
+
+    fetchStep = '本日の自分の売切報告取得（cafeteria_sold_out_reports）';
+    const reportDate = getTokyoDateKey();
+    const { data: reportData, error: reportError } = await supabase
+      .from('cafeteria_sold_out_reports')
+      .select('menu_id, reporter_id')
+      .eq('service_date', reportDate);
+
+    if (reportError) {
+      console.error('売切報告の取得に失敗:', reportError);
+      setUserSoldOutReports({});
+    } else {
+      const reportedByMe: Record<string, boolean> = {};
+      for (const report of reportData || []) {
+        if (report.reporter_id === authUser?.id) reportedByMe[String(report.menu_id)] = true;
+      }
+      setUserSoldOutReports(reportedByMe);
     }
 
     fetchStep = '学校通知取得（notifications）';
@@ -2265,7 +2296,7 @@ useEffect(() => {
   };
 
   fetchSharedData();
-}, []);
+}, [authUser?.id, studentId]);
 
 // 認証完了後に本人の課題を読み込む。
 // 共有データ取得用effectとは分け、ログイン前に実行されて終わる問題を防ぐ。
@@ -2572,36 +2603,33 @@ useEffect(() => {
     }
   };
 
-  const toggleSoldOut = async (menuId: string) => {
-    const wasSoldOut = soldOutItems[menuId];
-    const nextSoldOut = !wasSoldOut;
+  const reportSoldOut = async (menuId: string) => {
+    if (!authUser) {
+      alert('売り切れを報告するには学校メールでログインしてください。');
+      return;
+    }
+    if (soldOutItems[menuId] || userSoldOutReports[menuId] || reportingSoldOutMenuId) return;
 
+    setReportingSoldOutMenuId(menuId);
     const { error } = await supabase
-      .from('cafeteria_sold_out')
-      .upsert(
-        {
-          menu_id: menuId,
-          is_sold_out: nextSoldOut,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'menu_id' }
-      );
+      .from('cafeteria_sold_out_reports')
+      .insert({ menu_id: menuId });
 
+    setReportingSoldOutMenuId(null);
     if (error) {
-      console.error('売り切れ情報の保存に失敗:', error);
-      alert('売り切れ情報の保存に失敗しました。');
+      if (error.code === '23505') {
+        setUserSoldOutReports(prev => ({ ...prev, [menuId]: true }));
+        alert('このメニューは本日すでに報告済みです。');
+        return;
+      }
+      console.error('売切報告の保存に失敗:', error);
+      alert('売切報告を保存できませんでした。Supabaseで supabase/cafeteria-menu-metadata.sql を実行してください。');
       return;
     }
 
-    setSoldOutItems(prev => ({ ...prev, [menuId]: nextSoldOut }));
-
-    if (nextSoldOut) {
-      void updateContribution(10, '学食メニューの売り切れを報告');
-      alert(`「${menuItems.find(i => i.id === menuId)?.name}」の売り切れ報告を共有しました。貢献度+10pt！🎉`);
-    } else {
-      void updateContribution(-10, '学食メニューの売り切れ報告を取り消し');
-      alert(`「${menuItems.find(i => i.id === menuId)?.name}」を販売中に戻しました。`);
-    }
+    setUserSoldOutReports(prev => ({ ...prev, [menuId]: true }));
+    void updateContribution(5, '学食メニューの売り切れを報告');
+    alert(`「${menuItems.find(i => i.id === menuId)?.name}」の売切報告を管理画面に送信しました。正式な売切状態は管理側で確認・更新されます。`);
   };
 
   const handleAddPersonalTodo = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -4139,9 +4167,14 @@ Supabaseの設定を確認してください。
 
             {cafeteriaSubTab === 'menu' && (
               <div className="space-y-3">
+                {menuItems.length === 0 && (
+                  <div className={`${cardBgClass} rounded-2xl border p-5 text-sm leading-relaxed text-gray-500`}>
+                    {cafeteriaMenuLoading ? '本日の献立を読み込んでいます…' : cafeteriaMenuLoadMessage || '本日の献立は未登録です。管理画面の月間献立表に入力してください。'}
+                  </div>
+                )}
                 {menuItems.map(item => {
                   const isSoldOut = soldOutItems[item.id];
-                  const votes = menuVotes[item.id];
+                  const votes = menuVotes[item.id] ?? { empty: 0, normal: 0, crowded: 0 };
                   const userVoteItem = userMenuVotes[item.id];
                   const total = votes.empty + votes.normal + votes.crowded;
                   const getMenuPercent = (val: number, _key: string) => {
@@ -4162,15 +4195,18 @@ Supabaseの設定を確認してください。
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <h4 className="text-sm font-black text-gray-800">{item.name}</h4>
-                          <p className="text-[10px] text-gray-400 font-bold">成分: {item.calorie} | アレルギー: {item.allergy}</p>
+                          <p className="text-[10px] text-gray-400 font-bold">
+                            {item.price && `価格: ${item.price} ・ `}{item.calorie ? `カロリー: ${item.calorie}` : 'カロリー未登録'} ・ {item.allergy ? `アレルギー: ${item.allergy}` : 'アレルギー情報未登録'}
+                          </p>
                         </div>
                         <button
-                          onClick={() => toggleSoldOut(item.id)}
-                          className={`text-[10px] font-black px-2.5 py-1.5 rounded-xl border transition-all z-20 ${
+                          disabled={isSoldOut || Boolean(userSoldOutReports[item.id]) || reportingSoldOutMenuId === item.id}
+                          onClick={() => void reportSoldOut(item.id)}
+                          className={`text-[10px] font-black px-2.5 py-1.5 rounded-xl border transition-all z-20 disabled:cursor-not-allowed disabled:opacity-60 ${
                             isSoldOut ? 'bg-red-100 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-red-50'
                           }`}
                         >
-                          {isSoldOut ? '販売中に戻す' : '売り切れを報告'}
+                          {isSoldOut ? '売切確定' : reportingSoldOutMenuId === item.id ? '送信中…' : userSoldOutReports[item.id] ? '報告済み' : '売り切れを報告'}
                         </button>
                       </div>
 
