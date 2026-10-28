@@ -30,15 +30,15 @@ delete from public.lost_and_found
 where
   (title = '青いシャープペンシル'
     and location = '図書室'
-    and description = 'パイロット製のドクターグリップ（青）です。消しゴムのキャップがありません.')
+    and description = 'パイロット製のドクターグリップ（青）です。消しゴムのキャップがありません。')
   or
   (title = '黒い折りたたみ傘'
     and location = '食堂入口の傘立て'
-    and description = '無印良品の黒い傘。持ち手に星型のシールが貼ってあります.')
+    and description = '無印良品の黒い傘。持ち手に星型のシールが貼ってあります。')
   or
   (title = '電子辞書 (CASIO)'
     and location = '本館3階の渡り廊下'
-    and description = '白いケースに入ったEX-wordです。起動画面に名前シールが貼ってあります.');
+    and description = '白いケースに入ったEX-wordです。起動画面に名前シールが貼ってあります。');
 
 -- 既存の広すぎるSELECTポリシーが未承認投稿を公開しないよう、
 -- lost_and_found に設定済みのポリシーを一度整理して作り直す。
