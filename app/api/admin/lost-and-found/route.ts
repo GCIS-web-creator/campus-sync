@@ -68,9 +68,28 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, message: 'lost_and_foundテーブルを読み込めません。先にsupabase/lost-found-line-flex-hourly.sqlを実行してください。' }, { status: 500 });
   }
 
-  const items = ((data || []) as LostFoundRow[]).map(row => ({
+  const rows = (data || []) as Array<LostFoundRow & { created_at?: string }>;
+  const studentIds = Array.from(new Set(rows.map(row => String(row.student_id || '')).filter(id => /^\\d{6}$/.test(id))));
+  const reporterById = new Map<string, string>();
+  if (studentIds.length) {
+    const { data: profiles, error: profilesError } = await admin
+      .from('profiles')
+      .select('student_id,student_name,user_class')
+      .in('student_id', studentIds);
+    if (profilesError) {
+      console.error('落とし物報告者プロフィールの取得に失敗:', profilesError.message);
+    } else {
+      for (const profile of profiles || []) {
+        const name = String(profile.student_name || '').trim();
+        const schoolClass = String(profile.user_class || '').trim();
+        reporterById.set(String(profile.student_id), [schoolClass, name].filter(Boolean).join(' ') || ('学籍番号 ' + profile.student_id));
+      }
+    }
+  }
+  const items = rows.map(row => ({
     ...row,
-    date: formatDate((row as any).created_at),
+    reporter: reporterById.get(String(row.student_id || '')) || (row.student_id ? '学籍番号 ' + row.student_id : '事務室で直接回収'),
+    date: formatDate(row.created_at),
   }));
   return NextResponse.json({ success: true, items }, { headers: { 'Cache-Control': 'no-store' } });
 }
