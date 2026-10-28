@@ -33,6 +33,7 @@ Before enabling the first-login profile setup or exporting profile snapshots, fo
 - [Encrypted off-site backup and restore](docs/backup-and-restore.md)
 - [Initial student profile setup and secure export](docs/student-profile-setup-and-export.md)
 - [部活・委員会投稿の許可管理・一回限りコード](docs/club-posting-and-permissions.md)
+- [部活・委員会ノートのLINE自動配信](docs/club-posting-and-permissions.md#LINE公式アカウントへの自動配信)
 - [部活・委員会投稿のSupabase SQL](supabase/club-posting-permissions.sql)
 
 ## Learn More
