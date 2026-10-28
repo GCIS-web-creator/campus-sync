@@ -10,6 +10,7 @@ type ClubNoteLineRow = {
   created_at: string;
   line_delivery_status?: string | null;
   line_retry_key?: string | null;
+  line_last_attempt_at?: string | null;
 };
 
 type SupabaseAdminClient = {
@@ -23,7 +24,7 @@ export type ClubNoteLineDelivery = {
 
 function cleanLabel(value: unknown, fallback: string): string {
   const label = String(value || '').trim();
-  if (!label || label.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(label)) return fallback;
+  if (!label || label.includes('@') || /^[0-9]{6}(?:\s*より)?$/.test(label)) return fallback;
   return label.slice(0, 50);
 }
 
@@ -47,7 +48,7 @@ export async function broadcastClubNoteToLine(
 ): Promise<ClubNoteLineDelivery> {
   const { data: note, error: loadError } = await admin
     .from('club_notes')
-    .select('id,club_name,title,content,author,author_name,created_at,line_delivery_status,line_retry_key')
+    .select('id,club_name,title,content,author,author_name,created_at,line_delivery_status,line_retry_key,line_last_attempt_at')
     .eq('id', noteId)
     .maybeSingle();
 
@@ -84,10 +85,21 @@ export async function broadcastClubNoteToLine(
     return { status: 'failed', message: '投稿は保存されましたが、LINE_CHANNEL_ACCESS_TOKEN が未設定のため送信できませんでした。' };
   }
 
+  const now = Date.now();
+  const priorAttemptAt = row.line_last_attempt_at ? new Date(row.line_last_attempt_at).getTime() : NaN;
+  const retryWindowExpired = Number.isFinite(priorAttemptAt) && now - priorAttemptAt > 23 * 60 * 60 * 1000;
+  if (row.line_retry_key && retryWindowExpired && row.line_delivery_status !== 'not_sent' && row.line_delivery_status !== 'disabled') {
+    return {
+      status: 'failed',
+      message: '前回の送信試行から約24時間が経過したため、重複配信防止のため自動再送を止めました。LINE公式アカウントの配信履歴を確認してから対応してください。',
+    };
+  }
+
   const retryKey = row.line_retry_key || randomUUID();
   const keySaved = await updateStatus({
     line_delivery_status: 'sending',
     line_retry_key: retryKey,
+    line_last_attempt_at: new Date().toISOString(),
     line_delivery_error: null,
   });
   if (!keySaved) {
