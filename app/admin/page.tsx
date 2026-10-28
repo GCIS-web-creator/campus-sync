@@ -56,12 +56,20 @@ const getTokyoDateKey = (): string => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
-// 3. 落とし物（生徒の自己報告 ➡️ 先生の承認待ちフロー）
-const INITIAL_LOST_REPORTS = [
-  { id: 1, title: '青いシャープペンシル', location: '図書室', finder: '1年A組 山田', status: 'pending', date: '今日 12:30' },
-  { id: 2, title: '黒い折りたたみ傘', location: '食堂入口', finder: '2年B組 佐藤', status: 'approved', date: '昨日' }, // 承認され全体に公開中
-  { id: 3, title: '赤い筆箱', location: '3F廊下', finder: '事務室で直接回収', status: 'returned', date: '3日前' }, // 返却完了
-];
+// Supabaseの同じレコードを生徒画面・Admin画面で共有する落とし物データ
+type AdminLostReport = {
+  id: string | number;
+  title: string;
+  location: string;
+  finder: string;
+  description?: string | null;
+  student_id?: string | null;
+  reporter?: string | null;
+  status: 'pending' | 'approved' | 'returned';
+  date: string;
+  created_at?: string;
+};
+const INITIAL_LOST_REPORTS: AdminLostReport[] = [];
 
 
 const MENU_CATEGORIES = [
@@ -267,7 +275,9 @@ export default function CampusSyncAdmin() {
   const [cafeteriaControlLoading, setCafeteriaControlLoading] = useState(false);
   const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
   const [cafeteriaControlMessage, setCafeteriaControlMessage] = useState('');
-  const [lostItems, setLostItems] = useState(INITIAL_LOST_REPORTS);
+  const [lostItems, setLostItems] = useState<AdminLostReport[]>(INITIAL_LOST_REPORTS);
+  const [lostLoading, setLostLoading] = useState(false);
+  const [lostMessage, setLostMessage] = useState('');
   const [overdues, setOverdues] = useState(INITIAL_LIBRARY_OVERDUES);
 
 
@@ -853,20 +863,57 @@ export default function CampusSyncAdmin() {
     setCafeteriaControlMessage(`${item.name}を${nextSoldOut ? '売切中' : '販売中'}に更新しました。生徒側にも反映されます。`);
   };
 
-  // --- 介入アクション3: 落とし物報告の承認（承認すると初めて生徒用アプリに掲載される） ---
-  const handleApproveLostItem = (id: number) => {
-    setLostItems(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'approved' } : item
-    ));
-    alert('落とし物報告を承認しました。生徒用アプリの「落とし物一覧」に掲載されました！');
+  // 落とし物はAdmin APIを通してSupabaseへ保存。画面ローカルだけでは状態を変更しない。
+  const loadLostItems = async () => {
+    if (!adminApiPassword.trim()) {
+      setLostMessage('管理用パスワードを入力してください。');
+      return;
+    }
+    setLostLoading(true);
+    setLostMessage('');
+    try {
+      const response = await fetch('/api/admin/lost-and-found', {
+        method: 'GET',
+        headers: { 'x-admin-password': adminApiPassword },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || `読み込みに失敗しました（HTTP ${response.status}）。`);
+      setLostItems(Array.isArray(result.items) ? result.items : []);
+      setLostMessage('Supabaseの落とし物一覧を読み込みました。');
+    } catch (error) {
+      setLostMessage(error instanceof Error ? error.message : '落とし物一覧を読み込めませんでした。');
+    } finally {
+      setLostLoading(false);
+    }
   };
 
-  const handleReturnLostItem = (id: number) => {
-    setLostItems(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'returned' } : item
-    ));
-    alert('返却完了ステータスに変更しました。');
+  const changeLostItemStatus = async (id: string | number, action: 'approve' | 'return') => {
+    if (!adminApiPassword.trim()) {
+      setLostMessage('先に管理用パスワードを入力してください。');
+      return;
+    }
+    setLostLoading(true);
+    setLostMessage('');
+    try {
+      const response = await fetch('/api/admin/lost-and-found', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ id, action }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result?.message || `保存に失敗しました（HTTP ${response.status}）。`);
+      setLostItems(prev => prev.map(item => item.id === result.item.id ? { ...item, ...result.item, date: item.date } : item));
+      setLostMessage(result.message || (action === 'approve' ? '全体公開しました。' : '返却完了にしました。'));
+    } catch (error) {
+      setLostMessage(error instanceof Error ? error.message : '落とし物の状態を保存できませんでした。');
+    } finally {
+      setLostLoading(false);
+    }
   };
+
+  const handleApproveLostItem = (id: string | number) => void changeLostItemStatus(id, 'approve');
+  const handleReturnLostItem = (id: string | number) => void changeLostItemStatus(id, 'return');
 
   // --- 介入アクション4: 図書返却の個別催促 ---
   const handleNotifyOverdue = (id: number) => {
@@ -1790,8 +1837,19 @@ export default function CampusSyncAdmin() {
               <p className="text-sm text-slate-400">いたずら投稿を防ぐため、生徒がスマホから「これ拾いました」と投稿したものは、事務室で実物確認後に承認ボタンを押して初めて全体公開されます。</p>
             </div>
 
+            <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-4 space-y-2">
+              <h3 className="text-sm font-black text-amber-200">管理用パスワード</h3>
+              <p className="text-xs leading-relaxed text-amber-100/80">CAMPUS_SYNC_ADMIN_PASSWORDに設定した値を入力し、Supabaseの実データを読み込んでください。承認・返却はサーバーAPI経由で保存します。</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input type="password" autoComplete="current-password" value={adminApiPassword} onChange={e => setAdminApiPassword(e.target.value)} placeholder="管理用パスワード" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                <button type="button" onClick={() => void loadLostItems()} disabled={lostLoading} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:opacity-50">{lostLoading ? '読み込み中…' : '落とし物一覧を読み込む'}</button>
+              </div>
+              {lostMessage && <p role="status" className={`text-xs leading-5 ${lostMessage.includes('失敗') || lostMessage.includes('入力') || lostMessage.includes('設定') || lostMessage.includes('正しく') ? 'text-rose-300' : 'text-emerald-300'}`}>{lostMessage}</p>}
+            </div>
+
             <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
               <div className="space-y-3">
+                {lostItems.length === 0 && <p className="py-6 text-center text-sm text-slate-500">落とし物一覧は未読み込み、または投稿がありません。管理用パスワードを入力して読み込んでください。</p>}
                 {lostItems.map(item => (
                   <div key={item.id} className={`p-4 bg-slate-900 border rounded-xl flex justify-between items-center transition-all ${item.status === 'returned' ? 'border-slate-800/40 opacity-40' : 'border-slate-800'}`}>
                     <div>
@@ -1802,17 +1860,17 @@ export default function CampusSyncAdmin() {
                         </span>
                       </div>
                       <h4 className="text-base font-bold text-white">{item.title}</h4>
-                      <p className="text-xs text-slate-500 mt-1">報告者: {item.finder} | 発見日時: {item.date}</p>
+                      <p className="text-xs text-slate-500 mt-1">報告者: {item.reporter || (item.student_id ? '学籍番号 ' + item.student_id : '事務室で直接回収')} | 発見日時: {item.date}</p><p className="text-xs text-slate-400 mt-1">保管: {item.finder || '未入力'}</p>{item.description && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-xs leading-5 text-slate-300">{item.description}</p>}
                     </div>
 
                     <div className="flex gap-2">
                       {item.status === 'pending' && (
-                        <button onClick={() => handleApproveLostItem(item.id)} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
+                        <button disabled={lostLoading} onClick={() => handleApproveLostItem(item.id)} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
                           実物確認して全体公開する
                         </button>
                       )}
                       {item.status === 'approved' && (
-                        <button onClick={() => handleReturnLostItem(item.id)} className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
+                        <button disabled={lostLoading} onClick={() => handleReturnLostItem(item.id)} className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
                           本人に返却したので完了にする
                         </button>
                       )}
