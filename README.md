@@ -25,6 +25,14 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Before enabling the first-login profile setup or exporting profile snapshots, follow the [setup and export guide](docs/student-profile-setup-and-export.md). It covers the Supabase SQL migration, RLS policy review, required Vercel environment variables, Admin export, and `.cslogson` verification. Passwords and password hashes are managed only by Supabase Auth and are not part of profile exports.
 
+
+## CampusSync release and operations guides
+
+- [Feature roadmap and acceptance criteria](docs/campus-sync-roadmap.md)
+- [Notification settings migration](supabase/notification-preferences.sql)
+- [Encrypted off-site backup and restore](docs/backup-and-restore.md)
+- [Initial student profile setup and secure export](docs/student-profile-setup-and-export.md)
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
