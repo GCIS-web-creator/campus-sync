@@ -1484,10 +1484,30 @@ export default function CampusSyncApp() {
     setAuthMessage('ログアウトしました。');
   };
 
-  // --- ⏰ おせっかい通知リマインダー設定 ---
+  // --- 通知設定：カテゴリ別ON/OFF・リマインダー時刻・曜日・おやすみ時間 ---
+  type NotificationCategory =
+    | 'todo_reminders'
+    | 'chat_messages'
+    | 'school_announcements'
+    | 'transport_alerts'
+    | 'cafeteria_updates'
+    | 'activity_updates';
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']);
   const [allowedNotificationDays, setAllowedNotificationDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const [notificationSettings, setNotificationSettings] = useState<Record<NotificationCategory, boolean>>({
+    todo_reminders: true,
+    chat_messages: true,
+    school_announcements: true,
+    transport_alerts: true,
+    cafeteria_updates: false,
+    activity_updates: true,
+  });
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState('21:00');
+  const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
+  const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
+  const [notificationSaveStatus, setNotificationSaveStatus] = useState('');
   const [pushReady, setPushReady] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushStatus, setPushStatus] = useState('');
@@ -2905,6 +2925,10 @@ Supabaseの設定を確認してください。
     enabled: boolean = remindersEnabled,
     times: string[] = reminderTimes,
     days: string[] = allowedNotificationDays,
+    categories: Record<NotificationCategory, boolean> = notificationSettings,
+    quietEnabled: boolean = quietHoursEnabled,
+    quietStart: string = quietHoursStart,
+    quietEnd: string = quietHoursEnd,
   ) => {
     if (!authUser || !/^\d{6}$/.test(studentId)) throw new Error('学校メールでログインしてください。');
     const { error } = await supabase.from('push_reminder_preferences').upsert({
@@ -2913,11 +2937,60 @@ Supabaseの設定を確認してください。
       reminders_enabled: enabled,
       reminder_times: times,
       allowed_days: days,
+      notification_settings: categories,
+      quiet_hours_enabled: quietEnabled,
+      quiet_hours_start: quietStart,
+      quiet_hours_end: quietEnd,
       timezone: 'Asia/Tokyo',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
     if (error) throw error;
   };
+
+  // 設定は端末の状態ではなくSupabaseから読み込み、別端末でも同じ選択を復元する。
+  useEffect(() => {
+    if (!authUser?.id || !/^\d{6}$/.test(studentId)) {
+      setNotificationSettingsLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setNotificationSettingsLoaded(false);
+    void (async () => {
+      const { data, error } = await supabase
+        .from('push_reminder_preferences')
+        .select('reminders_enabled, reminder_times, allowed_days, notification_settings, quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
+        .eq('user_id', authUser.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error('通知設定の読み込みに失敗:', error);
+        setNotificationSaveStatus('通知設定を読み込めません。Supabaseで supabase/notification-preferences.sql を実行し、RLSを確認してください。');
+        setNotificationSettingsLoaded(true);
+        return;
+      }
+      if (data) {
+        setRemindersEnabled(data.reminders_enabled !== false);
+        setReminderTimes(Array.isArray(data.reminder_times) ? data.reminder_times : ['dayBefore', 'morningOf']);
+        setAllowedNotificationDays(Array.isArray(data.allowed_days) ? data.allowed_days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+        const loaded = data.notification_settings && typeof data.notification_settings === 'object'
+          ? data.notification_settings as Partial<Record<NotificationCategory, unknown>>
+          : {};
+        setNotificationSettings({
+          todo_reminders: loaded.todo_reminders !== false,
+          chat_messages: loaded.chat_messages !== false,
+          school_announcements: loaded.school_announcements !== false,
+          transport_alerts: loaded.transport_alerts !== false,
+          cafeteria_updates: loaded.cafeteria_updates === true,
+          activity_updates: loaded.activity_updates !== false,
+        });
+        setQuietHoursEnabled(data.quiet_hours_enabled === true);
+        setQuietHoursStart(String(data.quiet_hours_start || '21:00').slice(0, 5));
+        setQuietHoursEnd(String(data.quiet_hours_end || '07:00').slice(0, 5));
+      }
+      setNotificationSettingsLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [authUser?.id, studentId]);
 
   const enablePushNotifications = async () => {
     if (!authUser || !/^\d{6}$/.test(studentId)) {
@@ -2959,7 +3032,7 @@ Supabaseの設定を確認してください。
         updated_at: new Date().toISOString(),
       }, { onConflict: 'endpoint' });
       if (subscriptionError) throw subscriptionError;
-      await savePushReminderPreferences(remindersEnabled, reminderTimes, allowedNotificationDays);
+      await savePushReminderPreferences(remindersEnabled, reminderTimes, allowedNotificationDays, notificationSettings, quietHoursEnabled, quietHoursStart, quietHoursEnd);
       setPushReady(true);
       setPushStatus('通知を有効にしました。この端末で「テスト通知を送る」を押して確認してください。');
     } catch (error) {
@@ -3144,11 +3217,29 @@ Supabaseの設定を確認してください。
     return () => window.removeEventListener('campus-sync-ai-action', handleAction);
   }, [rooms, sendTestPushNotification]);
 
+  const saveCurrentNotificationPreferences = async (
+    enabled: boolean = remindersEnabled,
+    times: string[] = reminderTimes,
+    days: string[] = allowedNotificationDays,
+    categories: Record<NotificationCategory, boolean> = notificationSettings,
+    quietEnabled: boolean = quietHoursEnabled,
+    quietStart: string = quietHoursStart,
+    quietEnd: string = quietHoursEnd,
+  ) => {
+    if (!authUser || !notificationSettingsLoaded) return;
+    try {
+      await savePushReminderPreferences(enabled, times, days, categories, quietEnabled, quietStart, quietEnd);
+      setNotificationSaveStatus('通知設定をSupabaseに保存しました。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNotificationSaveStatus('通知設定を保存できませんでした: ' + message);
+    }
+  };
+
   const toggleRemindersEnabled = () => {
     const next = !remindersEnabled;
     setRemindersEnabled(next);
-    if (pushReady) void savePushReminderPreferences(next, reminderTimes, allowedNotificationDays)
-      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
+    void saveCurrentNotificationPreferences(next);
   };
 
   const toggleReminderTime = (timeKey: string) => {
@@ -3156,8 +3247,7 @@ Supabaseの設定を確認してください。
       ? reminderTimes.filter(t => t !== timeKey)
       : [...reminderTimes, timeKey];
     setReminderTimes(next);
-    if (pushReady) void savePushReminderPreferences(remindersEnabled, next, allowedNotificationDays)
-      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
+    void saveCurrentNotificationPreferences(remindersEnabled, next);
   };
 
   const toggleNotificationDay = (dayKey: string) => {
@@ -3165,8 +3255,23 @@ Supabaseの設定を確認してください。
       ? allowedNotificationDays.filter(d => d !== dayKey)
       : [...allowedNotificationDays, dayKey];
     setAllowedNotificationDays(next);
-    if (pushReady) void savePushReminderPreferences(remindersEnabled, reminderTimes, next)
-      .catch(error => setPushStatus(`通知設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`));
+    void saveCurrentNotificationPreferences(remindersEnabled, reminderTimes, next);
+  };
+
+  const toggleNotificationCategory = (key: NotificationCategory) => {
+    const next = { ...notificationSettings, [key]: !notificationSettings[key] };
+    setNotificationSettings(next);
+    void saveCurrentNotificationPreferences(remindersEnabled, reminderTimes, allowedNotificationDays, next);
+  };
+
+  const toggleQuietHours = () => {
+    const next = !quietHoursEnabled;
+    setQuietHoursEnabled(next);
+    void saveCurrentNotificationPreferences(remindersEnabled, reminderTimes, allowedNotificationDays, notificationSettings, next);
+  };
+
+  const saveQuietHoursTime = () => {
+    void saveCurrentNotificationPreferences();
   };
 
   const saveTodoDeadline = async () => {
@@ -4629,6 +4734,64 @@ Supabaseの設定を確認してください。
                         );
                       })}
                     </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 space-y-3">
+                    <div>
+                      <span className="text-[10px] font-black text-gray-400 block mb-1">通知カテゴリごとの設定</span>
+                      <p className="text-[10px] text-gray-500 mb-2">選んだ種類の通知だけを受け取れます。設定はSupabaseに保存されます。</p>
+                      {[
+                        { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '期限の前日・当日などの通知' },
+                        { key: 'chat_messages' as NotificationCategory, label: 'クラス・学年・学校チャット', description: '新しいメッセージの通知（送信側との連携は段階的に対応）' },
+                        { key: 'school_announcements' as NotificationCategory, label: '学校・先生からのお知らせ', description: '重要連絡や課題更新' },
+                        { key: 'transport_alerts' as NotificationCategory, label: 'バス・電車の運行情報', description: '遅延や運行関連の通知' },
+                        { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '売り切れ・メニューの更新（初期設定OFF）' },
+                        { key: 'activity_updates' as NotificationCategory, label: '部活動・校内活動', description: '部活動ノートなどの更新' },
+                      ].map(item => (
+                        <label key={item.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2 mb-1.5 cursor-pointer">
+                          <span className="min-w-0">
+                            <span className="block text-[11px] font-bold text-gray-700">{item.label}</span>
+                            <span className="block text-[10px] text-gray-400">{item.description}</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={notificationSettings[item.key]}
+                            disabled={!notificationSettingsLoaded}
+                            onChange={() => toggleNotificationCategory(item.key)}
+                            className="h-4 w-4 shrink-0 accent-blue-600"
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="rounded-xl border border-gray-100 p-3 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-[11px] font-black text-gray-700">おやすみ時間</span>
+                          <span className="block text-[10px] text-gray-500">設定時間中は対応済みのプッシュ通知を送信しません。</span>
+                        </span>
+                        <input
+                          aria-label="おやすみ時間を有効にする"
+                          type="checkbox"
+                          checked={quietHoursEnabled}
+                          disabled={!notificationSettingsLoaded}
+                          onChange={toggleQuietHours}
+                          className="h-4 w-4 shrink-0 accent-blue-600"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="text-[10px] font-bold text-gray-600">
+                          開始時刻
+                          <input type="time" value={quietHoursStart} disabled={!notificationSettingsLoaded || !quietHoursEnabled} onChange={event => setQuietHoursStart(event.target.value)} onBlur={saveQuietHoursTime} className="mt-1 block w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-800 disabled:opacity-50" />
+                        </label>
+                        <label className="text-[10px] font-bold text-gray-600">
+                          終了時刻
+                          <input type="time" value={quietHoursEnd} disabled={!notificationSettingsLoaded || !quietHoursEnabled} onChange={event => setQuietHoursEnd(event.target.value)} onBlur={saveQuietHoursTime} className="mt-1 block w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-800 disabled:opacity-50" />
+                        </label>
+                      </div>
+                    </div>
+                    {notificationSaveStatus && <p role="status" className="text-[10px] leading-relaxed font-bold text-blue-700 bg-blue-50 rounded-xl p-2.5">{notificationSaveStatus}</p>}
+                    {!notificationSettingsLoaded && <p className="text-[10px] text-gray-400">通知設定を読み込んでいます…</p>}
                   </div>
 
                   <div className="pt-3 border-t border-gray-100 space-y-2.5">
