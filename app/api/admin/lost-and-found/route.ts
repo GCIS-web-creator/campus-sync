@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   }
 
   const rows = (data || []) as Array<LostFoundRow & { created_at?: string }>;
-  const studentIds = Array.from(new Set(rows.map(row => String(row.student_id || '')).filter(id => /^\\d{6}$/.test(id))));
+  const studentIds = Array.from(new Set(rows.map(row => String(row.student_id || '')).filter(id => /^\d{6}$/.test(id))));
   const reporterById = new Map<string, string>();
   if (studentIds.length) {
     const { data: profiles, error: profilesError } = await admin
