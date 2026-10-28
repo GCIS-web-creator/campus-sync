@@ -240,6 +240,8 @@ export default function CampusSyncAdmin() {
   const [cafeteriaAnnouncementSaving, setCafeteriaAnnouncementSaving] = useState(false);
   const [cafeteriaAnnouncementMessage, setCafeteriaAnnouncementMessage] = useState('');
   const [cafeteriaAnnouncementPublished, setCafeteriaAnnouncementPublished] = useState(false);
+  const [cafeteriaAnnouncementAlsoSendLine, setCafeteriaAnnouncementAlsoSendLine] = useState(false);
+  const [cafeteriaAnnouncementLinePassword, setCafeteriaAnnouncementLinePassword] = useState('');
 
   // キャリアセンター自習室の座席状況（生徒用サイトとSupabaseで共有）
   const [studyRoomOccupiedSeats, setStudyRoomOccupiedSeats] = useState(22);
@@ -502,6 +504,16 @@ export default function CampusSyncAdmin() {
       setCafeteriaAnnouncementMessage('お知らせは500文字以内で入力してください。');
       return;
     }
+    if (cafeteriaAnnouncementAlsoSendLine) {
+      if (!cafeteriaAnnouncementLinePassword) {
+        setCafeteriaAnnouncementMessage('LINEにも配信する場合は、配信認証コードを入力してください。');
+        return;
+      }
+      const confirmed = window.confirm(
+        `次のお知らせを生徒サイトに掲載し、LINE公式アカウントの友だち全員へ一斉配信します。\n\n${message}\n\nLINE配信通数が発生する場合があります。本当に配信しますか？`
+      );
+      if (!confirmed) return;
+    }
 
     setCafeteriaAnnouncementSaving(true);
     setCafeteriaAnnouncementMessage('');
@@ -523,6 +535,32 @@ export default function CampusSyncAdmin() {
       }
       setCafeteriaAnnouncementText(message);
       setCafeteriaAnnouncementPublished(true);
+
+      if (cafeteriaAnnouncementAlsoSendLine) {
+        const lineResponse = await fetch('/api/line-broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password: cafeteriaAnnouncementLinePassword,
+            title: '学食からのお知らせ',
+            message,
+          }),
+          cache: 'no-store',
+        });
+        const lineResult = await lineResponse.json().catch(() => null);
+        if (!lineResponse.ok || !lineResult?.success) {
+          setCafeteriaAnnouncementMessage(
+            `生徒サイトへの掲載は完了しましたが、LINE配信は失敗しました。${lineResult?.message || `HTTP ${lineResponse.status}`}`
+          );
+          return;
+        }
+        setCafeteriaAnnouncementLinePassword('');
+        setCafeteriaAnnouncementAlsoSendLine(false);
+        setLineHistoryRefreshKey(key => key + 1);
+        setCafeteriaAnnouncementMessage('生徒サイトに掲載し、LINE公式アカウントの友だちへ配信しました。');
+        return;
+      }
+
       setCafeteriaAnnouncementMessage('掲載しました。生徒サイトのポップアップと学食タブのバナーに反映されます。');
     } catch (error) {
       console.error('学食おすすめのお知らせ保存中にエラー:', error);
@@ -1495,6 +1533,31 @@ export default function CampusSyncAdmin() {
                       <span>生徒サイトでポップアップとバナーに表示</span>
                       <span>{cafeteriaAnnouncementText.length}/500</span>
                     </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-3">
+                    <label htmlFor="cafeteria-announcement-send-line" className="flex cursor-pointer items-start gap-2 text-xs font-bold text-slate-200">
+                      <input
+                        id="cafeteria-announcement-send-line"
+                        type="checkbox"
+                        checked={cafeteriaAnnouncementAlsoSendLine}
+                        onChange={event => setCafeteriaAnnouncementAlsoSendLine(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-green-500"
+                      />
+                      <span>LINE公式アカウントにも同時配信する</span>
+                    </label>
+                    {cafeteriaAnnouncementAlsoSendLine && (
+                      <>
+                        <p className="text-[10px] leading-relaxed text-amber-300">配信先はLINE公式アカウントの友だち全員です。重要なお知らせなど、全体配信が必要な場合だけ選択してください。</p>
+                        <input
+                          type="password"
+                          autoComplete="current-password"
+                          value={cafeteriaAnnouncementLinePassword}
+                          onChange={event => setCafeteriaAnnouncementLinePassword(event.target.value)}
+                          placeholder="LINE配信認証コード（管理用）"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-xs font-bold text-white outline-none focus:border-blue-500"
+                        />
+                      </>
+                    )}
                   </div>
                   <button
                     type="button"
