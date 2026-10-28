@@ -3842,10 +3842,12 @@ Supabaseの設定を確認してください。
     }
 
     setScoreSaving(true);
+    const todayScoreDate = getTokyoDateKey();
+    const todayRange = getTokyoDayRange(todayScoreDate);
 
     const { data: current, error: fetchError } = await supabase
       .from('contribution_scores')
-      .select('score')
+      .select('*')
       .eq('student_id', cleanStudentId)
       .maybeSingle();
 
@@ -3855,19 +3857,46 @@ Supabaseの設定を確認してください。
       return;
     }
 
-    const currentScore = current?.score ?? 0;
-    const nextScore = Math.max(0, Math.min(currentScore + delta, 100));
+    let currentScore = current?.score_date === todayScoreDate ? Number(current.score) || 0 : 0;
+    if (current?.score_date !== todayScoreDate) {
+      const { data: todayHistory, error: todayHistoryError } = await supabase
+        .from('contribution_history')
+        .select('delta')
+        .eq('student_id', cleanStudentId)
+        .gte('created_at', todayRange.start)
+        .lt('created_at', todayRange.end);
+      if (!todayHistoryError) {
+        currentScore = Math.min(100, Math.max(0,
+          (todayHistory ?? []).reduce((total, row) => total + (Number(row.delta) || 0), 0)
+        ));
+      } else {
+        console.error('本日の貢献度履歴の取得に失敗:', todayHistoryError);
+      }
+    }
 
-    const { error: scoreError } = await supabase
+    const nextScore = Math.max(0, Math.min(currentScore + delta, 100));
+    const scoreValues = {
+      student_id: cleanStudentId,
+      score: nextScore,
+      score_date: todayScoreDate,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error: scoreError } = await supabase
       .from('contribution_scores')
-      .upsert(
-        {
+      .upsert(scoreValues, { onConflict: 'student_id' });
+
+    if (scoreError) {
+      // Older databases may not have score_date yet; keep the point update working until migration.
+      const legacyWrite = await supabase
+        .from('contribution_scores')
+        .upsert({
           student_id: cleanStudentId,
           score: nextScore,
           updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'student_id' }
-      );
+        }, { onConflict: 'student_id' });
+      scoreError = legacyWrite.error;
+    }
 
     if (scoreError) {
       console.error('貢献度ポイントの保存に失敗:', scoreError);
