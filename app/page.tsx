@@ -1540,6 +1540,8 @@ export default function CampusSyncApp() {
 
   // サブタブ管理
   const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
+  const [cafeteriaAnnouncement, setCafeteriaAnnouncement] = useState<{ message: string; show_popup: boolean; show_banner: boolean; updated_at?: string | null } | null>(null);
+  const [showCafeteriaAnnouncementPopup, setShowCafeteriaAnnouncementPopup] = useState(false);
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
@@ -1822,6 +1824,49 @@ useEffect(() => {
   void loadStudyRoomStatus();
   return () => { cancelled = true; };
 }, [authUser]);
+
+// 学食からのお知らせをSupabaseから取得し、ポップアップと学食タブのバナーに反映する。
+useEffect(() => {
+  if (!authUser) {
+    setCafeteriaAnnouncement(null);
+    setShowCafeteriaAnnouncementPopup(false);
+    return;
+  }
+
+  let cancelled = false;
+  const loadCafeteriaAnnouncement = async () => {
+    const { data, error } = await supabase
+      .from('cafeteria_announcements')
+      .select('id, message, show_popup, show_banner, updated_at')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (cancelled) return;
+    if (error) {
+      console.error('学食からのお知らせ取得に失敗:', error);
+      return;
+    }
+
+    const message = String(data?.message || '').trim();
+    if (!data || !message) {
+      setCafeteriaAnnouncement(null);
+      setShowCafeteriaAnnouncementPopup(false);
+      return;
+    }
+
+    const announcement = {
+      message,
+      show_popup: data.show_popup === true,
+      show_banner: data.show_banner === true,
+      updated_at: data.updated_at || null,
+    };
+    setCafeteriaAnnouncement(announcement);
+    setShowCafeteriaAnnouncementPopup(announcement.show_popup);
+  };
+
+  void loadCafeteriaAnnouncement();
+  return () => { cancelled = true; };
+}, [authUser?.id]);
 
 // Supabaseから落とし物・教室状況データを取得
 useEffect(() => {
@@ -4025,6 +4070,27 @@ Supabaseの設定を確認してください。
       case 'cafeteria':
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
+            {cafeteriaAnnouncement?.show_banner && (
+              <section
+                aria-label="学食からのお知らせ"
+                className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                    <BellRing size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-black text-amber-800">学食からのお知らせ</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm font-bold leading-relaxed text-amber-950">{cafeteriaAnnouncement.message}</p>
+                    {cafeteriaAnnouncement.updated_at && (
+                      <p className="mt-2 text-[10px] font-medium text-amber-700">
+                        更新：{new Date(cafeteriaAnnouncement.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
             {/* サブタブ切り替え */}
             <div className="flex bg-gray-100 p-1 rounded-2xl">
               <button 
@@ -5548,6 +5614,26 @@ Supabaseの設定を確認してください。
               設定温度と室内体感を報告
             </button>
           </div>
+        </div>
+      )}
+
+      {showCafeteriaAnnouncementPopup && cafeteriaAnnouncement?.show_popup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="cafeteria-announcement-popup-title">
+          <section className="w-full max-w-md rounded-3xl border border-amber-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                <Utensils size={22} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="cafeteria-announcement-popup-title" className="text-base font-black text-slate-900">学食からのお知らせ</h2>
+                <p className="mt-1 text-xs text-slate-500">今日・明日のおすすめ</p>
+              </div>
+            </div>
+            <p className="mt-4 whitespace-pre-wrap break-words rounded-2xl bg-amber-50 p-4 text-sm font-bold leading-relaxed text-amber-950">{cafeteriaAnnouncement.message}</p>
+            <button type="button" onClick={() => setShowCafeteriaAnnouncementPopup(false)} className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-amber-700">
+              確認しました
+            </button>
+          </section>
         </div>
       )}
 
