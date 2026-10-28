@@ -5,12 +5,7 @@ export type FlexMessage = {
 };
 
 const NAVY = '#0F172A';
-const CYAN = '#0891B2';
 const SLATE = '#475569';
-
-function flexText(text: string, size: string = 'sm', color: string = SLATE, weight: 'regular' | 'bold' = 'regular') {
-  return { type: 'text', text, size, color, wrap: true, weight, flex: 0 };
-}
 
 /** CampusSync共通デザインのAdminお知らせFlex Message */
 export function buildNoticeFlexMessage(title: string, message: string): FlexMessage {
@@ -120,7 +115,6 @@ function timetableDirectionBox(title: string, accent: string, rows: TimetableDep
 export function buildHourlyTrainTimetableFlex(input: {
   startLabel: string; endLabel: string; kokubunji: TimetableDeparture[]; higashimurayama: TimetableDeparture[];
 }): FlexMessage {
-  const total = input.kokubunji.length + input.higashimurayama.length;
   const alt = ('鷹の台駅 発車案内 ' + input.startLabel + '〜' + input.endLabel + '。国分寺方面 ' + input.kokubunji.length + '本、東村山方面 ' + input.higashimurayama.length + '本').slice(0, 400);
   return {
     type: 'flex',
