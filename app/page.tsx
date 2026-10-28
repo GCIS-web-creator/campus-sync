@@ -2949,7 +2949,8 @@ Supabaseの設定を確認してください。
       setNewClubContent('');
       setNewClubPermissionCode('');
       // Keep the user-entered display name available for the next post.
-      alert('部活動・委員会連絡ノートに投稿しました。貢献度+15pt！');
+      const lineMessage = typeof result.lineDelivery?.message === 'string' ? result.lineDelivery.message : '投稿しました。';
+      alert(`${lineMessage}\n貢献度+15pt！`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '不明なエラー';
       alert(message);
