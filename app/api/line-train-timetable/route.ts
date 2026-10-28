@@ -44,11 +44,22 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const configuredSecret = process.env.CRON_SECRET || '';
-  const authorization = request.headers.get('authorization') || '';
-  const providedSecret = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-  if (!configuredSecret || !providedSecret || !constantTimeEqual(configuredSecret, providedSecret)) {
-    return jsonError('定期配信の認証に失敗しました。', 401);
+  const body = await request.json().catch(() => ({})) as { mode?: unknown };
+  const manualRequest = body?.mode === 'manual';
+
+  if (manualRequest) {
+    const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
+    const providedPassword = request.headers.get('x-admin-password') || '';
+    if (!expectedPassword || !providedPassword || !constantTimeEqual(expectedPassword, providedPassword)) {
+      return jsonError('時刻表の手動配信には正しいAdmin用パスワードが必要です。', 401);
+    }
+  } else {
+    const configuredSecret = process.env.CRON_SECRET || '';
+    const authorization = request.headers.get('authorization') || '';
+    const providedSecret = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    if (!configuredSecret || !providedSecret || !constantTimeEqual(configuredSecret, providedSecret)) {
+      return jsonError('定期配信の認証に失敗しました。', 401);
+    }
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -60,15 +71,18 @@ export async function POST(request: Request) {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const now = new Date();
-  const windowStartDate = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+  const windowStartDate = manualRequest
+    ? new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 30_000)
+    : new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+  // Manual sends are tracked in a minute slot distinct from the scheduled hourly slot.
   const windowStart = windowStartDate.toISOString();
-  const parts = tokyoParts(windowStartDate);
-  const startMinute = Number(parts.hour) * 60;
-  const endMinute = startMinute + 60;
-  const endDate = new Date(windowStartDate.getTime() + 60 * 60_000);
+  const rangeStartDate = manualRequest ? now : windowStartDate;
+  const parts = tokyoParts(rangeStartDate);
+  const startMinute = Number(parts.hour) * 60 + Number(parts.minute);
+  const endDate = new Date(rangeStartDate.getTime() + 60 * 60_000);
   const endParts = tokyoParts(endDate);
-  const startLabel = parts.hour + ':00';
-  const endLabel = endParts.hour + ':00';
+  const startLabel = parts.hour + ':' + parts.minute;
+  const endLabel = endParts.hour + ':' + endParts.minute;
   const startDateLabel = parts.month + '/' + parts.day + ' ' + startLabel;
 
   const { data: timetableRows, error: timetableError } = await admin
@@ -85,7 +99,11 @@ export async function POST(request: Request) {
   const rows = (timetableRows || []) as TrainRow[];
   const inWindow = (row: TrainRow): TimetableDeparture | null => {
     const minutes = minutesFromTimetableTime(row.departure_time);
-    if (minutes === null || minutes < startMinute || minutes >= endMinute) return null;
+    if (minutes === null) return null;
+    const offset = (minutes - startMinute + 1440) % 1440;
+    // Scheduled sends cover the current clock hour; Admin manual sends cover
+    // the next 60 minutes starting from the current minute (including midnight wrap).
+    if (offset >= 60 || (!manualRequest && (minutes < startMinute || minutes >= startMinute + 60))) return null;
     return { time: String(row.departure_time).slice(0, 5), service: row.service || '各駅停車' };
   };
   const kokubunji = rows.filter(row => row.direction === 'kokubunji').map(inWindow).filter((row): row is TimetableDeparture => row !== null);
@@ -115,7 +133,7 @@ export async function POST(request: Request) {
       return jsonError('定期配信の送信履歴を確認できません。SQL設定を確認してください。', 500);
     }
     if (prior.status === 'sent') {
-      return NextResponse.json({ success: true, alreadySent: true, message: 'この時間帯の時刻表は送信済みです。' });
+      return NextResponse.json({ success: true, alreadySent: true, message: manualRequest ? 'この1分枠の手動時刻表はすでに送信済みです。重複配信を防ぐため、次の分に再度お試しください。' : 'この時間帯の時刻表は送信済みです。' });
     }
     if (prior.status === 'sending') {
       return NextResponse.json({ success: false, message: 'この時間帯の時刻表はすでに送信処理中です。' }, { status: 409 });
@@ -150,7 +168,7 @@ export async function POST(request: Request) {
         alreadyAccepted: response.status === 409,
         windowStart,
         departures: kokubunji.length + higashimurayama.length,
-        message: '鷹の台駅の今後1時間の発車案内をFlex Messageで配信しました。',
+        message: manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の今後1時間の発車案内をFlex Messageで配信しました。',
       });
     }
     const { error: savedError } = await admin.from('line_train_timetable_sends').update({
