@@ -55,6 +55,15 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function getTokyoDateKey(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+
 export async function GET(request: Request) {
   if (!process.env.CAMPUS_SYNC_ADMIN_PASSWORD || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return configError();
   const denied = authError(request);
@@ -137,17 +146,41 @@ export async function PATCH(request: Request) {
     const studentId = String(updated.student_id || '').trim();
     if (!contributionAwarded && /^\d{6}$/.test(studentId)) {
       const { data: current, error: scoreReadError } = await admin
-        .from('contribution_scores').select('score').eq('student_id', studentId).maybeSingle();
+        .from('contribution_scores').select('*').eq('student_id', studentId).maybeSingle();
       if (scoreReadError) {
         console.error('落とし物承認時の貢献度取得に失敗:', scoreReadError.message);
         contributionMessage = '公開しましたが貢献度を読み込めませんでした。';
       } else {
-        const scoreBefore = Number(current?.score ?? 0);
+        const todayScoreDate = getTokyoDateKey();
+        const todayStart = new Date(`${todayScoreDate}T00:00:00+09:00`).toISOString();
+        const todayEnd = new Date(new Date(todayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
+        let scoreBefore = current?.score_date === todayScoreDate ? Number(current.score) || 0 : 0;
+        if (current?.score_date !== todayScoreDate) {
+          const { data: todaysHistory, error: todaysHistoryError } = await admin
+            .from('contribution_history')
+            .select('delta')
+            .eq('student_id', studentId)
+            .gte('created_at', todayStart)
+            .lt('created_at', todayEnd);
+          if (!todaysHistoryError) {
+            scoreBefore = Math.min(100, Math.max(0,
+              (todaysHistory ?? []).reduce((sum, item) => sum + (Number(item.delta) || 0), 0)
+            ));
+          } else {
+            console.error('落とし物承認時に本日の貢献度履歴を取得できません:', todaysHistoryError.message);
+          }
+        }
         const scoreAfter = Math.min(100, Math.max(0, scoreBefore + 12));
         const awardedAt = new Date().toISOString();
-        const { error: scoreError } = await admin.from('contribution_scores').upsert({
-          student_id: studentId, score: scoreAfter, updated_at: awardedAt,
+        let { error: scoreError } = await admin.from('contribution_scores').upsert({
+          student_id: studentId, score: scoreAfter, score_date: todayScoreDate, updated_at: awardedAt,
         }, { onConflict: 'student_id' });
+        if (scoreError) {
+          const legacySave = await admin.from('contribution_scores').upsert({
+            student_id: studentId, score: scoreAfter, updated_at: awardedAt,
+          }, { onConflict: 'student_id' });
+          scoreError = legacySave.error;
+        }
         if (scoreError) {
           console.error('落とし物承認時の貢献度保存に失敗:', scoreError.message);
           contributionMessage = '公開しましたが貢献度を保存できませんでした。';
