@@ -940,7 +940,7 @@ function GuestPreviewApp({ onExit }: { onExit: () => void }) {
       case 'cafeteria':
         return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">学食メニュー・混雑状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-3">{[{name:'Sokaランチ',price:'550円',desc:'主菜・ご飯・スープ'},{name:'情熱ラーメン',price:'480円',desc:'醤油ベース'},{name:'カレーライス',price:'450円',desc:'定番メニュー'}].map((item,i)=><div key={item.name} className="overflow-hidden rounded-xl border border-slate-200"><div className={'flex h-24 items-center justify-center ' + (i===0?'bg-amber-50':i===1?'bg-rose-50':'bg-yellow-50')}><Utensils size={30} className="text-slate-500" /></div><div className="p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.desc}</p><p className="mt-2 text-sm font-black text-cyan-800">{item.price}</p><p className="mt-1 text-[10px] font-bold text-emerald-700">サンプル：販売中</p></div></div>)}</div></section><section className={cardClass}><h3 className="mb-3 font-black text-slate-900">学食の混雑（サンプル集計）</h3><div className="grid grid-cols-3 gap-2 text-center">{[{label:'空いている',num:24,color:'bg-emerald-500'},{label:'普通',num:85,color:'bg-amber-500'},{label:'混雑',num:42,color:'bg-rose-500'}].map(item=><div key={item.label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">{item.label}</p><p className="my-2 text-xl font-black text-slate-900">{item.num}</p><div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className={'h-full rounded-full ' + item.color} style={{width:(item.num/85*100)+'%'}} /></div></div>)}</div><p className="mt-3 text-xs text-slate-400">投票・レビュー投稿は利用できません。</p></section></div>;
       case 'facilities':
-        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">校内施設の状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-2">{[{name:'キャリアセンター自習室',sub:'利用中 22 / 35席',label:'余裕あり',tone:'text-emerald-700 bg-emerald-50'},{name:'図書室',sub:'開館中（サンプル）',label:'閲覧可',tone:'text-cyan-800 bg-cyan-50'},{name:'普通教室（1-1）',sub:'空調 25℃（サンプル）',label:'快適',tone:'text-emerald-700 bg-emerald-50'},{name:'グローリーホール',sub:'現在の利用状況は架空',label:'確認用',tone:'text-slate-600 bg-slate-100'}].map(item=><div key={item.name} className="rounded-xl border border-slate-100 p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.sub}</p><span className={'mt-2 inline-block rounded-full px-2.5 py-1 text-[10px] font-black '+item.tone}>{item.label}</span></div>)}</div></section><section className={cardClass}><h3 className="mb-3 font-black text-slate-900">落とし物情報（サンプル）</h3>{[{name:'黒い折りたたみ傘',place:'中央棟 1階・受付付近',date:'本日 09:20'},{name:'青いペンケース',place:'図書室の机',date:'昨日 15:40'}].map(item=><div key={item.name} className="border-b border-slate-100 py-3 last:border-0"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500"><MapPin size={12} className="mr-1 inline" />{item.place} ・ {item.date}</p></div>)}<p className="mt-2 text-xs text-slate-400">落とし物の登録・連絡はできません。</p></section></div>;
+        return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">校内施設の状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-2">{[{name:'キャリアセンター自習室',sub:'利用中 22 / 35席',label:'余裕あり',tone:'text-emerald-700 bg-emerald-50'},{name:'図書室',sub:'開館中（サンプル）',label:'閲覧可',tone:'text-cyan-800 bg-cyan-50'},{name:'普通教室（1-1）',sub:'空調 25℃（サンプル）',label:'快適',tone:'text-emerald-700 bg-emerald-50'},{name:'グローリーホール',sub:'現在の利用状況は架空',label:'確認用',tone:'text-slate-600 bg-slate-100'}].map(item=><div key={item.name} className="rounded-xl border border-slate-100 p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.sub}</p><span className={'mt-2 inline-block rounded-full px-2.5 py-1 text-[10px] font-black '+item.tone}>{item.label}</span></div>)}</div></section></div>;
       case 'transport':
         return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">電車発車案内</h3>{sampleTag}</div><div className="rounded-2xl bg-gradient-to-r from-cyan-700 to-blue-700 p-5 text-white"><p className="text-xs font-bold text-cyan-100">鷹の台駅 ・ サンプル時刻表</p><p className="mt-2 text-3xl font-black">16:12</p><p className="mt-1 text-sm font-bold">国分寺方面（デモ表示）</p><p className="mt-3 rounded-lg bg-white/10 p-2 text-xs">次発の時刻・カウントダウンは実際の運行情報ではありません。</p></div><div className="mt-3 grid gap-3 sm:grid-cols-2">{[{destination:'国分寺方面',times:'16:12 / 16:24 / 16:36'},{destination:'東村山方面',times:'16:18 / 16:30 / 16:42'}].map(item=><div key={item.destination} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-800">{item.destination}</p><p className="mt-2 font-mono text-sm text-slate-600">{item.times}</p></div>)}</div></section></div>;
       case 'chat':
@@ -2793,7 +2793,12 @@ useEffect(() => {
     const location = newLostLocation.trim();
     const description = newLostDescription.trim() || '詳細情報なし';
     const finder = newLostFinder.trim() || '保管場所未入力';
+    const cleanStudentId = studentId.trim();
 
+    if (!/^\\d{6}$/.test(cleanStudentId)) {
+      alert('学校メールでログインし、6桁の学籍番号が認識されていることを確認してください。');
+      return;
+    }
     if (!title || !location) {
       alert('「品名」と「見つけた場所」を入力してください。');
       return;
@@ -2805,7 +2810,7 @@ useEffect(() => {
     try {
       const { data, error } = await supabase
         .from('lost_and_found')
-        .insert({ title, location, description, finder, status: 'pending' })
+        .insert({ title, location, description, finder, status: 'pending', student_id: cleanStudentId })
         .select('*')
         .single();
 
