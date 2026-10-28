@@ -701,6 +701,15 @@ const MOCK_BUS_STATIONS: {
 
 type SchoolClub = { id: string; name: string; category: '文化クラブ' | '運動クラブ' | '同好会' | '研究会'; sprite: 1 | 2 | 3 | 4 };
 
+function formatClubAuthorLabel(value: unknown): string {
+  const label = String(value || '').trim();
+  if (!label || label.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(label)) {
+    return '学校からのお知らせ';
+  }
+  return label;
+}
+
+
 // 学校の正式な部活・同好会・研究会一覧と、club-icons.zip に入っていたアイコンの対応表。
 const SCHOOL_CLUBS: SchoolClub[] = [
   { id: 'drama', name: '演劇部', category: '文化クラブ', sprite: 1 },
@@ -1471,6 +1480,8 @@ export default function CampusSyncApp() {
     setProfileSetupPassword('');
     setProfileSetupPasswordConfirm('');
     setProfileSetupStatus('complete');
+    setNewClubAuthorName('');
+    setNewClubPermissionCode('');
     setLoginHandoffId('');
     setLoginHandoffSecret('');
     setLoginHandoffStatus('idle');
@@ -1554,6 +1565,28 @@ export default function CampusSyncApp() {
   const [newClubAuthorName, setNewClubAuthorName] = useState('');
   const [newClubPermissionCode, setNewClubPermissionCode] = useState('');
   const [isAddingClubNote, setIsAddingClubNote] = useState(false);
+
+  // Adminが登録した既定表示名を初期値にする（投稿者は投稿前に編集可能）。
+  useEffect(() => {
+    if (!authUser?.id || activeTab !== 'club') return;
+    let cancelled = false;
+    void (async () => {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) return;
+      const response = await fetch('/api/club-notes', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const result = await response.json().catch(() => ({}));
+      const suggestedName = typeof result.defaultDisplayName === 'string' ? result.defaultDisplayName.trim() : '';
+      if (!cancelled && suggestedName) {
+        setNewClubAuthorName(current => current.trim() ? current : suggestedName);
+      }
+    })().catch(error => console.error('部活投稿者設定の取得に失敗:', error));
+    return () => { cancelled = true; };
+  }, [authUser?.id, activeTab]);
 
   // 学食レビュー用状態
   const [cafeteriaReviews, setCafeteriaReviews] = useState<CafeteriaReview[]>(INITIAL_CAFETERIA_REVIEWS);
@@ -1942,7 +1975,7 @@ useEffect(() => {
           }),
           createdAt: note.created_at,
           content: note.content,
-          author: note.author_name || note.author || '学校からのお知らせ',
+          author: formatClubAuthorLabel(note.author_name || note.author),
         }))
       );
     }
@@ -2834,6 +2867,10 @@ Supabaseの設定を確認してください。
       alert('部活・委員会名、件名、本文、発信者名をすべて入力してください。');
       return;
     }
+    if (newClubAuthorName.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(newClubAuthorName.trim())) {
+      alert('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。');
+      return;
+    }
     if (newClubPermissionCode && !/^\d{8}$/.test(newClubPermissionCode.trim())) {
       alert('許可コードは8桁の数字で入力してください。');
       return;
@@ -2883,7 +2920,7 @@ Supabaseの設定を確認してください。
         }),
         createdAt: note.created_at,
         content: note.content,
-        author: note.author_name || note.author || newClubAuthorName.trim(),
+        author: formatClubAuthorLabel(note.author_name || note.author || newClubAuthorName.trim()),
       };
       setClubNotes(prev => [newNote, ...prev]);
       void updateContribution(15, '部活・委員会ノートを投稿');
