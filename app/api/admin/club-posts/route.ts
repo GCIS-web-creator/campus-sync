@@ -135,9 +135,17 @@ export async function POST(request: Request) {
       ...(action === 'grant' ? { granted_at: new Date().toISOString() } : {}),
     }, { onConflict: 'user_id' });
     if (error) return jsonError('投稿権限を保存できませんでした。SQL適用状態を確認してください。', 500);
+    if (action === 'revoke') {
+      // Revoking direct permission also invalidates unredeemed one-time codes.
+      const { error: codeError } = await admin.from('club_post_codes')
+        .update({ expires_at: new Date().toISOString() })
+        .eq('allowed_student_id', studentId)
+        .is('used_at', null);
+      if (codeError) return jsonError('投稿は禁止しましたが、未使用コードを無効化できませんでした。SQL適用状態を確認してください。', 500);
+    }
     return NextResponse.json({
       success: true,
-      message: action === 'grant' ? '投稿を許可しました。' : '投稿を禁止しました。',
+      message: action === 'grant' ? '投稿を許可しました。' : '投稿を禁止し、未使用の一回限りコードも無効化しました。',
     }, { headers: { 'Cache-Control': 'no-store, private' } });
   }
 
