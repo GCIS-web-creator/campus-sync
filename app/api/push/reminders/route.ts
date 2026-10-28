@@ -33,26 +33,36 @@ function shiftCalendarDate(date: string, days: number): string {
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
 
-function isReminderDue(rule: ReminderRule, dueAt: string, now: Date, timezone: string, allowedDays: string[]): boolean {
-  const current = localParts(now, timezone);
-  if (!allowedDays.includes(current.weekday)) return false;
-  const dueDate = localParts(new Date(dueAt), timezone).date;
-
-  if (rule === 'twoDaysBefore') {
-    return current.date === shiftCalendarDate(dueDate, -2) && current.hour === 20 && current.minute < 5;
+function localDateTimeToInstant(date: string, hour: number, minute: number, timezone: string): Date {
+  const [year, month, day] = date.split('-').map(Number);
+  const wanted = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let guess = wanted;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || 'Asia/Tokyo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(guess));
+    const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const represented = Date.UTC(
+      Number(map.year), Number(map.month) - 1, Number(map.day),
+      Number(map.hour), Number(map.minute), 0, 0,
+    );
+    const adjustment = wanted - represented;
+    guess += adjustment;
+    if (adjustment === 0) break;
   }
-  if (rule === 'dayBefore') {
-    return current.date === shiftCalendarDate(dueDate, -1) && current.hour === 20 && current.minute < 5;
-  }
-  if (rule === 'morningOf') {
-    return current.date === dueDate && current.hour === 7 && current.minute < 5;
-  }
-  const target = new Date(dueAt).getTime() - 3 * 60 * 60 * 1000;
-  return now.getTime() >= target && now.getTime() < target + 5 * 60 * 1000;
+  return new Date(guess);
 }
 
-function isWithinQuietHours(now: Date, timezone: string, enabled: boolean, startValue: string, endValue: string): boolean {
-  if (!enabled) return false;
+function moveTargetPastQuietHours(
+  target: Date,
+  timezone: string,
+  enabled: boolean,
+  startValue: string,
+  endValue: string,
+): Date {
+  if (!enabled) return target;
   const toMinutes = (value: string): number | null => {
     const match = /^(\\d{2}):(\\d{2})/.exec(String(value || ''));
     if (!match) return null;
@@ -63,12 +73,52 @@ function isWithinQuietHours(now: Date, timezone: string, enabled: boolean, start
   };
   const start = toMinutes(startValue);
   const end = toMinutes(endValue);
-  if (start === null || end === null || start === end) return false;
-  const local = localParts(now, timezone);
-  const current = local.hour * 60 + local.minute;
-  return start < end
-    ? current >= start && current < end
-    : current >= start || current < end;
+  if (start === null || end === null || start === end) return target;
+
+  const local = localParts(target, timezone);
+  const minuteOfDay = local.hour * 60 + local.minute;
+  let quiet = false;
+  let endDate = local.date;
+
+  if (start < end) {
+    quiet = minuteOfDay >= start && minuteOfDay < end;
+  } else {
+    quiet = minuteOfDay >= start || minuteOfDay < end;
+    if (minuteOfDay >= start) endDate = shiftCalendarDate(local.date, 1);
+  }
+
+  if (!quiet) return target;
+  const [endHour, endMinute] = String(endValue).split(':').map(Number);
+  return localDateTimeToInstant(endDate, endHour, endMinute, timezone);
+}
+
+function isReminderDue(
+  rule: ReminderRule,
+  dueAt: string,
+  now: Date,
+  timezone: string,
+  allowedDays: string[],
+  quietHoursEnabled: boolean,
+  quietHoursStart: string,
+  quietHoursEnd: string,
+): boolean {
+  const dueDate = localParts(new Date(dueAt), timezone).date;
+  let target: Date;
+
+  if (rule === 'twoDaysBefore') {
+    target = localDateTimeToInstant(shiftCalendarDate(dueDate, -2), 20, 0, timezone);
+  } else if (rule === 'dayBefore') {
+    target = localDateTimeToInstant(shiftCalendarDate(dueDate, -1), 20, 0, timezone);
+  } else if (rule === 'morningOf') {
+    target = localDateTimeToInstant(dueDate, 7, 0, timezone);
+  } else {
+    target = new Date(new Date(dueAt).getTime() - 3 * 60 * 60 * 1000);
+  }
+
+  target = moveTargetPastQuietHours(target, timezone, quietHoursEnabled, quietHoursStart, quietHoursEnd);
+  const current = localParts(now, timezone);
+  if (!allowedDays.includes(current.weekday)) return false;
+  return now.getTime() >= target.getTime() && now.getTime() < target.getTime() + 5 * 60 * 1000;
 }
 
 export async function POST(request: Request) {
@@ -143,14 +193,11 @@ export async function POST(request: Request) {
         : {};
       // An explicit category OFF suppresses todo push reminders without disabling other categories.
       if (notificationSettings.todo_reminders === false) continue;
-      // Quiet-hours currently suppress scheduled reminders during the configured window.
-      // Fixed-time reminders skipped here are not queued for later delivery.
-      if (isWithinQuietHours(now, timezone, pref.quiet_hours_enabled, pref.quiet_hours_start, pref.quiet_hours_end)) continue;
 
       for (const todo of userTodos) {
         for (const rule of RULES) {
           if (!selectedRules.includes(rule)) continue;
-          if (!isReminderDue(rule, todo.due_at, now, timezone, allowedDays)) continue;
+          if (!isReminderDue(rule, todo.due_at, now, timezone, allowedDays, pref.quiet_hours_enabled, pref.quiet_hours_start, pref.quiet_hours_end)) continue;
 
           const reminderKey = `${todo.id}|${rule}|${new Date(todo.due_at).getTime()}|${pref.user_id}`;
           const { data: previous, error: previousError } = await admin
