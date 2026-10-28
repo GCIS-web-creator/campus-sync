@@ -145,7 +145,7 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
 
   const issueCode = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!/^\\d{6}$/.test(codeStudentId)) {
+    if (!/^\d{6}$/.test(codeStudentId)) {
       setMessageKind("error");
       setMessage("コードを渡す対象の学籍番号を6桁で入力してください。");
       return;
@@ -250,7 +250,7 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
             <h3 className="flex items-center gap-2 text-sm font-black"><KeyRound size={16} /> 一回限りの8桁コードを発行</h3>
             <p className="mt-1 text-xs leading-5 text-slate-400">対象の学籍番号に紐づけて発行します。有効期限は24時間で、コードはハッシュで保存し、発行時の1回だけ表示します。</p>
             <form onSubmit={issueCode} className="mt-3 flex gap-2">
-              <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={codeStudentId} onChange={e => setCodeStudentId(e.target.value.replace(/\\D/g, "").slice(0, 6))} placeholder="対象の学籍番号6桁" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm" />
+              <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={codeStudentId} onChange={e => setCodeStudentId(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="対象の学籍番号6桁" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm" />
               <button type="submit" disabled={busy || !adminPassword.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-3 py-2.5 text-sm font-black text-slate-950 disabled:opacity-40"><KeyRound size={15} /> 発行</button>
             </form>
           </div>
