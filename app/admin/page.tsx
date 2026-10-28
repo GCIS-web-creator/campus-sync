@@ -447,6 +447,83 @@ export default function CampusSyncAdmin() {
     };
   }, []);
 
+  // 売切管理は、月間献立表の当日分とSupabaseの正式な売切状態・実際の生徒報告を使う。
+  useEffect(() => {
+    if (activeTab !== 'cafeteria') return;
+    let cancelled = false;
+
+    const loadTodayCafeteria = async () => {
+      setCafeteriaControlLoading(true);
+      setCafeteriaControlMessage('');
+      const today = getTokyoDateKey();
+      const [menuResult, soldOutResult, reportsResult] = await Promise.all([
+        supabase.from('cafeteria_daily_menus').select('*').eq('service_date', today).maybeSingle(),
+        supabase.from('cafeteria_sold_out').select('menu_id, is_sold_out'),
+        supabase.from('cafeteria_sold_out_reports').select('menu_id').eq('service_date', today),
+      ]);
+      if (cancelled) return;
+
+      if (menuResult.error) {
+        console.error('管理画面の本日献立取得に失敗:', menuResult.error);
+        setMenuItems([]);
+        setCafeteriaControlMessage('本日の献立を取得できません。月間献立表とSupabaseの設定を確認してください。');
+        setCafeteriaControlLoading(false);
+        return;
+      }
+
+      const soldOutById: Record<string, boolean> = {};
+      if (soldOutResult.data) {
+        for (const row of soldOutResult.data) {
+          soldOutById[String(row.menu_id)] = row.is_sold_out === true;
+        }
+      }
+
+      const reportsById: Record<string, number> = {};
+      if (reportsResult.error) {
+        console.error('実際の売切報告取得に失敗:', reportsResult.error);
+      } else {
+        for (const report of reportsResult.data || []) {
+          const key = String(report.menu_id);
+          reportsById[key] = (reportsById[key] || 0) + 1;
+        }
+      }
+
+      const saved = menuResult.data;
+      const currentMenuItems: AdminCafeteriaMenuItem[] = saved && !saved.is_closed
+        ? CAFETERIA_CONTROL_CATEGORIES.flatMap(category => {
+            const name = String(saved[category.nameField] || '').trim();
+            if (!name) return [];
+            return [{
+              id: category.id,
+              name,
+              price: String(saved[category.priceField] || ''),
+              calorie: String(saved[category.calorieField] || ''),
+              allergy: String(saved[category.allergyField] || ''),
+              isSoldOut: soldOutById[category.id] === true,
+              userReports: reportsById[category.id] || 0,
+            }];
+          })
+        : [];
+
+      setMenuItems(currentMenuItems);
+      if (reportsResult.error) {
+        setCafeteriaControlMessage('本日の献立・売切状態は読み込みましたが、売切報告件数を取得できません。supabase/cafeteria-menu-metadata.sql を実行してください。');
+      } else if (!saved) {
+        setCafeteriaControlMessage('本日の献立は未登録です。「月間献立表の管理」で本日の日付に献立を入力して保存してください。');
+      } else if (saved.is_closed) {
+        setCafeteriaControlMessage('本日は学食の営業がありません。');
+      } else if (currentMenuItems.length === 0) {
+        setCafeteriaControlMessage('本日の献立にメニューがありません。「月間献立表の管理」で入力して保存してください。');
+      } else {
+        setCafeteriaControlMessage('');
+      }
+      setCafeteriaControlLoading(false);
+    };
+
+    void loadTodayCafeteria();
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
   // 指定月の献立データをSupabaseから読み込む
   useEffect(() => {
     let cancelled = false;
@@ -1597,12 +1674,21 @@ export default function CampusSyncAdmin() {
               {/* メニューリスト */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4">
                 <h3 className="text-sm font-bold text-slate-400">本日のメニュー一覧（売切操作スイッチ）</h3>
+                {cafeteriaControlMessage && (
+                  <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">{cafeteriaControlMessage}</p>
+                )}
+                {cafeteriaControlLoading && <p className="text-xs text-slate-500">本日の献立・売切状態・報告件数を読み込み中...</p>}
                 <div className="space-y-2">
                   {menuItems.map(item => (
                     <div key={item.id} className={`p-4 bg-slate-900 border rounded-xl flex justify-between items-center transition-all ${item.isSoldOut ? 'border-red-500/30 opacity-70' : 'border-slate-800'}`}>
                       <div>
                         <h4 className="text-sm font-bold text-white">{item.name}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">価格: {item.price}</p>
+                        {item.price && <p className="text-xs text-slate-500 mt-0.5">価格: {item.price}</p>}
+                        {(item.calorie || item.allergy) && (
+                          <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                            {item.calorie && `カロリー: ${item.calorie}`}{item.calorie && item.allergy ? ' ・ ' : ''}{item.allergy && `アレルギー: ${item.allergy}`}
+                          </p>
+                        )}
                         {item.userReports > 0 && !item.isSoldOut && (
                           <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full font-bold inline-block mt-1 animate-pulse">
                             ⚠️ 生徒から {item.userReports} 件の売切報告あり！
@@ -1611,10 +1697,11 @@ export default function CampusSyncAdmin() {
                       </div>
                       
                       <button 
-                        onClick={() => toggleSoldOut(item.id)}
-                        className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all ${item.isSoldOut ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}`}
+                        onClick={() => void toggleSoldOut(item.id)}
+                        disabled={cafeteriaControlSavingId === item.id}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all disabled:opacity-50 ${item.isSoldOut ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}`}
                       >
-                        {item.isSoldOut ? '【売切中】販売再開' : '手動で売切にする'}
+                        {cafeteriaControlSavingId === item.id ? '保存中...' : item.isSoldOut ? '【売切中】販売再開' : '手動で売切にする'}
                       </button>
                     </div>
                   ))}
