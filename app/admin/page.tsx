@@ -29,13 +29,32 @@ const INITIAL_AC_REPORTS = [
   { id: 3, room: '図書室', issue: '寒い', count: 1, temp: '21℃', status: 'resolved' },
 ];
 
-// 2. 学食のメニュー状況（売切・混雑管理）
-const INITIAL_CAFETERIA_MENU = [
-  { id: 'soka', name: '創価ランチ', price: '420円', isSoldOut: false, userReports: 3 },
-  { id: 'noodles', name: '特製ラーメン', price: '380円', isSoldOut: true, userReports: 0 },
-  { id: 'curry', name: 'カツカレー', price: '450円', isSoldOut: false, userReports: 8 }, // 報告多数！
-  { id: 'healthy', name: 'ヘルシー丼', price: '400円', isSoldOut: false, userReports: 0 },
-];
+// 学食メニュー名・価格・栄養情報は、月間献立表の当日分から取得する。
+type AdminCafeteriaMenuItem = {
+  id: string;
+  name: string;
+  price: string;
+  calorie: string;
+  allergy: string;
+  isSoldOut: boolean;
+  userReports: number;
+};
+
+const CAFETERIA_CONTROL_CATEGORIES = [
+  { id: 'soka', nameField: 'soka_lunch', priceField: 'soka_lunch_price', calorieField: 'soka_lunch_calorie', allergyField: 'soka_lunch_allergy', label: '創価ランチ' },
+  { id: 'healthy', nameField: 'healthy_lunch', priceField: 'healthy_lunch_price', calorieField: 'healthy_lunch_calorie', allergyField: 'healthy_lunch_allergy', label: 'ヘルシーランチ' },
+  { id: 'snack', nameField: 'snack_lunch', priceField: 'snack_lunch_price', calorieField: 'snack_lunch_calorie', allergyField: 'snack_lunch_allergy', label: 'スナックランチ' },
+  { id: 'curry', nameField: 'curry', priceField: 'curry_price', calorieField: 'curry_calorie', allergyField: 'curry_allergy', label: 'カレー' },
+  { id: 'noodles', nameField: 'noodles', priceField: 'noodles_price', calorieField: 'noodles_calorie', allergyField: 'noodles_allergy', label: '麺類' },
+] as const;
+
+const getTokyoDateKey = (): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
 
 // 3. 落とし物（生徒の自己報告 ➡️ 先生の承認待ちフロー）
 const INITIAL_LOST_REPORTS = [
@@ -55,6 +74,9 @@ const MENU_CATEGORIES = [
 
 type MenuCategoryKey = typeof MENU_CATEGORIES[number]['key'];
 
+type MenuDetailsSuffix = 'price' | 'calorie' | 'allergy';
+type MenuDetailsField = `${MenuCategoryKey}_${MenuDetailsSuffix}`;
+
 type DailyMenuRow = {
   service_date: string;
   soka_lunch: string;
@@ -62,6 +84,21 @@ type DailyMenuRow = {
   snack_lunch: string;
   curry: string;
   noodles: string;
+  soka_lunch_price: string;
+  soka_lunch_calorie: string;
+  soka_lunch_allergy: string;
+  healthy_lunch_price: string;
+  healthy_lunch_calorie: string;
+  healthy_lunch_allergy: string;
+  snack_lunch_price: string;
+  snack_lunch_calorie: string;
+  snack_lunch_allergy: string;
+  curry_price: string;
+  curry_calorie: string;
+  curry_allergy: string;
+  noodles_price: string;
+  noodles_calorie: string;
+  noodles_allergy: string;
   is_closed: boolean;
   note: string;
 };
@@ -88,6 +125,21 @@ const createEmptyMonthRows = (monthValue: string): DailyMenuRow[] => {
     snack_lunch: '',
     curry: '',
     noodles: '',
+    soka_lunch_price: '',
+    soka_lunch_calorie: '',
+    soka_lunch_allergy: '',
+    healthy_lunch_price: '',
+    healthy_lunch_calorie: '',
+    healthy_lunch_allergy: '',
+    snack_lunch_price: '',
+    snack_lunch_calorie: '',
+    snack_lunch_allergy: '',
+    curry_price: '',
+    curry_calorie: '',
+    curry_allergy: '',
+    noodles_price: '',
+    noodles_calorie: '',
+    noodles_allergy: '',
     is_closed: false,
     note: '',
   }));
@@ -211,7 +263,10 @@ export default function CampusSyncAdmin() {
   
   // 各種ステート管理
   const [acReports, setAcReports] = useState(INITIAL_AC_REPORTS);
-  const [menuItems, setMenuItems] = useState(INITIAL_CAFETERIA_MENU);
+  const [menuItems, setMenuItems] = useState<AdminCafeteriaMenuItem[]>([]);
+  const [cafeteriaControlLoading, setCafeteriaControlLoading] = useState(false);
+  const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
+  const [cafeteriaControlMessage, setCafeteriaControlMessage] = useState('');
   const [lostItems, setLostItems] = useState(INITIAL_LOST_REPORTS);
   const [overdues, setOverdues] = useState(INITIAL_LIBRARY_OVERDUES);
 
@@ -438,6 +493,21 @@ export default function CampusSyncAdmin() {
           snack_lunch: saved.snack_lunch ?? '',
           curry: saved.curry ?? '',
           noodles: saved.noodles ?? '',
+          soka_lunch_price: saved.soka_lunch_price ?? '',
+          soka_lunch_calorie: saved.soka_lunch_calorie ?? '',
+          soka_lunch_allergy: saved.soka_lunch_allergy ?? '',
+          healthy_lunch_price: saved.healthy_lunch_price ?? '',
+          healthy_lunch_calorie: saved.healthy_lunch_calorie ?? '',
+          healthy_lunch_allergy: saved.healthy_lunch_allergy ?? '',
+          snack_lunch_price: saved.snack_lunch_price ?? '',
+          snack_lunch_calorie: saved.snack_lunch_calorie ?? '',
+          snack_lunch_allergy: saved.snack_lunch_allergy ?? '',
+          curry_price: saved.curry_price ?? '',
+          curry_calorie: saved.curry_calorie ?? '',
+          curry_allergy: saved.curry_allergy ?? '',
+          noodles_price: saved.noodles_price ?? '',
+          noodles_calorie: saved.noodles_calorie ?? '',
+          noodles_allergy: saved.noodles_allergy ?? '',
           is_closed: Boolean(saved.is_closed),
           note: saved.note ?? '',
         };
@@ -680,19 +750,31 @@ export default function CampusSyncAdmin() {
     alert('事務室へ温度変更リクエストを送信しました。生徒の画面に「調整完了」が反映されます！');
   };
 
-  // --- 介入アクション2: 学食メニューの売り切れ確定 ---
-  const toggleSoldOut = (id: string) => {
-    setMenuItems(prev => prev.map(item => {
-      if (item.id === id) {
-        const nextSoldOut = !item.isSoldOut;
-        return { 
-          ...item, 
-          isSoldOut: nextSoldOut,
-          userReports: nextSoldOut ? 0 : item.userReports // 売り切れ確定したら報告数をリセット
-        };
-      }
-      return item;
-    }));
+  // --- 学食メニューの公式売切状態をSupabaseへ保存 ---
+  const toggleSoldOut = async (id: string) => {
+    const item = menuItems.find(menu => menu.id === id);
+    if (!item || cafeteriaControlSavingId) return;
+
+    const nextSoldOut = !item.isSoldOut;
+    setCafeteriaControlSavingId(id);
+    setCafeteriaControlMessage('');
+    const { error } = await supabase
+      .from('cafeteria_sold_out')
+      .upsert({
+        menu_id: id,
+        is_sold_out: nextSoldOut,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'menu_id' });
+
+    setCafeteriaControlSavingId(null);
+    if (error) {
+      console.error('学食の売切状態保存に失敗:', error);
+      setCafeteriaControlMessage(`売切状態を保存できませんでした: ${error.message}`);
+      return;
+    }
+
+    setMenuItems(prev => prev.map(menu => menu.id === id ? { ...menu, isSoldOut: nextSoldOut } : menu));
+    setCafeteriaControlMessage(`${item.name}を${nextSoldOut ? '売切中' : '販売中'}に更新しました。生徒側にも反映されます。`);
   };
 
   // --- 介入アクション3: 落とし物報告の承認（承認すると初めて生徒用アプリに掲載される） ---
@@ -1424,14 +1506,40 @@ export default function CampusSyncAdmin() {
                           ) : (
                             MENU_CATEGORIES.map(category => (
                               <td key={category.key} className="px-2 py-2">
-                                <input
-                                  type="text"
-                                  value={row[category.key]}
-                                  onChange={e => updateDailyMenuRow(row.service_date, { [category.key]: e.target.value } as Partial<DailyMenuRow>)}
-                                  placeholder="献立を入力..."
-                                  aria-label={`${row.service_date} ${category.label}`}
-                                  className="w-full min-w-48 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
-                                />
+                                <div className="min-w-48 space-y-1.5">
+                                  <input
+                                    type="text"
+                                    value={row[category.key]}
+                                    onChange={e => updateDailyMenuRow(row.service_date, { [category.key]: e.target.value } as Partial<DailyMenuRow>)}
+                                    placeholder="献立名を入力..."
+                                    aria-label={`${row.service_date} ${category.label} 献立名`}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={row[`${category.key}_price` as MenuDetailsField]}
+                                    onChange={e => updateDailyMenuRow(row.service_date, { [`${category.key}_price`]: e.target.value } as Partial<DailyMenuRow>)}
+                                    placeholder="価格（例：420円）"
+                                    aria-label={`${row.service_date} ${category.label} 価格`}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-[11px] text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={row[`${category.key}_calorie` as MenuDetailsField]}
+                                    onChange={e => updateDailyMenuRow(row.service_date, { [`${category.key}_calorie`]: e.target.value } as Partial<DailyMenuRow>)}
+                                    placeholder="カロリー（例：680kcal）"
+                                    aria-label={`${row.service_date} ${category.label} カロリー`}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-[11px] text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={row[`${category.key}_allergy` as MenuDetailsField]}
+                                    onChange={e => updateDailyMenuRow(row.service_date, { [`${category.key}_allergy`]: e.target.value } as Partial<DailyMenuRow>)}
+                                    placeholder="アレルギー（例：小麦・卵）"
+                                    aria-label={`${row.service_date} ${category.label} アレルギー`}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-[11px] text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+                                  />
+                                </div>
                               </td>
                             ))
                           )}
