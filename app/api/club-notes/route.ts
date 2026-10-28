@@ -30,7 +30,7 @@ async function getAuthenticatedSchoolUser(request: Request) {
   const { data, error } = await authClient.auth.getUser(accessToken);
   if (error || !data.user) return { response: jsonError('ログインの有効期限が切れています。再ログインしてください。', 401) } as const;
   const email = String(data.user.email || '').trim().toLowerCase();
-  const match = /^([0-9]{6})@tokyo\\.soka\\.ed\\.jp$/.exec(email);
+  const match = /^([0-9]{6})@tokyo\.soka\.ed\.jp$/.exec(email);
   if (!match) return { response: jsonError('学校メールでログインしてください。', 403) } as const;
   const admin = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     return jsonError('許可コードは8桁の数字で入力してください。', 400);
   }
 
-  if (/@/.test(authorName) || /^[0-9]{6}(?:\\s*より)?$/.test(authorName)) {
+  if (/@/.test(authorName) || /^[0-9]{6}(?:\s*より)?$/.test(authorName)) {
     return jsonError('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。', 400);
   }
   const codeHash = permissionCode
