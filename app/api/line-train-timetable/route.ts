@@ -106,8 +106,13 @@ export async function POST(request: Request) {
     if (offset >= 60 || (!manualRequest && (minutes < startMinute || minutes >= startMinute + 60))) return null;
     return { time: String(row.departure_time).slice(0, 5), service: row.service || '各駅停車' };
   };
-  const kokubunji = rows.filter(row => row.direction === 'kokubunji').map(inWindow).filter((row): row is TimetableDeparture => row !== null);
-  const higashimurayama = rows.filter(row => row.direction === 'higashimurayama').map(inWindow).filter((row): row is TimetableDeparture => row !== null);
+  const sortFromRangeStart = (left: TimetableDeparture, right: TimetableDeparture) => {
+    const leftMinute = minutesFromTimetableTime(left.time) ?? 0;
+    const rightMinute = minutesFromTimetableTime(right.time) ?? 0;
+    return ((leftMinute - startMinute + 1440) % 1440) - ((rightMinute - startMinute + 1440) % 1440);
+  };
+  const kokubunji = rows.filter(row => row.direction === 'kokubunji').map(inWindow).filter((row): row is TimetableDeparture => row !== null).sort(sortFromRangeStart);
+  const higashimurayama = rows.filter(row => row.direction === 'higashimurayama').map(inWindow).filter((row): row is TimetableDeparture => row !== null).sort(sortFromRangeStart);
   const flex = buildHourlyTrainTimetableFlex({
     startLabel: startDateLabel,
     endLabel: manualRequest ? (endParts.hour + ':' + endParts.minute) : (endParts.hour + ':00'),
