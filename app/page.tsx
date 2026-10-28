@@ -4706,8 +4706,12 @@ Supabaseの設定を確認してください。
                   </div>
                 </div>
                 <button
+                  type="button"
+                  aria-label={remindersEnabled ? '提出期限リマインダーをオフにする' : '提出期限リマインダーをオンにする'}
+                  aria-pressed={remindersEnabled}
+                  disabled={!notificationSettingsLoaded}
                   onClick={toggleRemindersEnabled}
-                  className={`w-10 h-6 rounded-full p-0.5 transition-colors ${remindersEnabled ? themeCls.bg : 'bg-gray-200'}`}
+                  className={`w-10 h-6 rounded-full p-0.5 transition-colors ${remindersEnabled ? themeCls.bg : 'bg-gray-200'} disabled:opacity-50`}
                 >
                   <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-xs ${remindersEnabled ? 'translate-x-4' : 'translate-x-0'}`}></div>
                 </button>
@@ -4728,8 +4732,11 @@ Supabaseの設定を確認してください。
                         return (
                           <button
                             key={item.key}
+                            type="button"
+                            aria-pressed={isSelected}
+                            disabled={!notificationSettingsLoaded}
                             onClick={() => toggleReminderTime(item.key)}
-                            className={`p-2 rounded-xl text-left border text-xs font-bold transition-all flex items-center gap-2 ${
+                            className={`p-2 rounded-xl text-left border text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-50 ${
                               isSelected ? `border-${theme}-300 ${themeCls.lightBg} ${themeCls.text}` : 'border-gray-100 bg-gray-50'
                             }`}
                           >
@@ -4753,8 +4760,10 @@ Supabaseの設定を確認してください。
                           <button
                             key={day}
                             type="button"
+                            aria-pressed={isAllowed}
+                            disabled={!notificationSettingsLoaded}
                             onClick={() => toggleNotificationDay(day)}
-                            className={`py-1 text-[10px] font-bold border rounded-lg transition-all ${
+                            className={`py-1 text-[10px] font-bold border rounded-lg transition-all disabled:opacity-50 ${
                               isAllowed ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-400 border-gray-200'
                             }`}
                           >
