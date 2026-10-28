@@ -1,0 +1,87 @@
+name: Supabase encrypted off-site backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:00 JST daily (GitHub Actions cron uses UTC; execution may be delayed).
+    - cron: "0 18 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-offsite-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump, encrypt, and upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
+      BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - name: Validate backup configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for key in SUPABASE_DB_URL S3_ENDPOINT_URL S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION BACKUP_AGE_RECIPIENT; do
+            if [[ -z "${!key:-}" ]]; then missing+=("$key"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Backup is NOT configured. Add the required GitHub Actions secrets/variables described in docs/backup-and-restore.md. Missing: ${missing[*]}"
+            exit 1
+          fi
+          if [[ "$S3_ENDPOINT_URL" != https://* ]]; then
+            echo "::error::S3_ENDPOINT_URL must use HTTPS."
+            exit 1
+          fi
+          if [[ "$BACKUP_AGE_RECIPIENT" != age1* ]]; then
+            echo "::error::BACKUP_AGE_RECIPIENT must be an age public recipient (age1...)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install age encryption tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age awscli
+
+      - name: Dump application schema and data
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/campussync-backup"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$RUNNER_TEMP/campussync-backup/schema.sql"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$RUNNER_TEMP/campussync-backup/data.sql" --data-only --use-copy -x "storage.buckets_vectors" -x "storage.vector_indexes"
+          test -s "$RUNNER_TEMP/campussync-backup/schema.sql"
+          test -s "$RUNNER_TEMP/campussync-backup/data.sql"
+          tar -C "$RUNNER_TEMP/campussync-backup" -czf "$RUNNER_TEMP/campussync-backup.tar.gz" schema.sql data.sql
+          age -r "$BACKUP_AGE_RECIPIENT" -o "$RUNNER_TEMP/campussync-backup.tar.gz.age" "$RUNNER_TEMP/campussync-backup.tar.gz"
+          # Remove plaintext dumps before upload; only the encrypted archive leaves the runner.
+          rm -f "$RUNNER_TEMP/campussync-backup/schema.sql" "$RUNNER_TEMP/campussync-backup/data.sql" "$RUNNER_TEMP/campussync-backup.tar.gz"
+          test -s "$RUNNER_TEMP/campussync-backup.tar.gz.age"
+
+      - name: Upload encrypted archive to private S3-compatible storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          day="$(date -u +%F)"
+          object="campus-sync/database/$day-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz.age"
+          aws --endpoint-url "$S3_ENDPOINT_URL" s3 cp "$RUNNER_TEMP/campussync-backup.tar.gz.age" "s3://$S3_BUCKET/$object" --only-show-errors
+          echo "Encrypted backup uploaded: s3://$S3_BUCKET/$object"
+          echo "Configure bucket lifecycle deletion after the retention window in docs/backup-and-restore.md."
