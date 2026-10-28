@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { broadcastClubNoteToLine } from '@/lib/club-note-line';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
 
   const [notesResult, permissionsResult, codesResult] = await Promise.all([
     admin.from('club_notes')
-      .select('id,club_name,title,content,author,author_name,author_user_id,created_at')
+      .select('id,club_name,title,content,author,author_name,author_user_id,created_at,line_delivery_status,line_delivery_error,line_sent_at,line_request_id')
       .order('created_at', { ascending: false })
       .limit(200),
     admin.from('club_post_permissions')
@@ -113,7 +114,12 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
     }).select('id,club_name,title,content,author,author_name,author_user_id,created_at').single();
     if (error) return jsonError('投稿を保存できませんでした。SQL適用状態を確認してください。', 500);
-    return NextResponse.json({ note: data }, { status: 201, headers: { 'Cache-Control': 'no-store, private' } });
+    const lineDelivery = await broadcastClubNoteToLine(admin, data.id);
+    return NextResponse.json({
+      note: data,
+      lineDelivery,
+      message: lineDelivery.message,
+    }, { status: 201, headers: { 'Cache-Control': 'no-store, private' } });
   }
 
   if (action === 'grant' || action === 'revoke') {
@@ -187,6 +193,20 @@ export async function POST(request: Request) {
       expiresAt,
       message: 'この8桁コードは対象の生徒専用で、24時間後に期限切れになります。使用後は再利用できません。',
     }, { status: 201, headers: { 'Cache-Control': 'no-store, private' } });
+  }
+
+  if (action === 'retry-line') {
+    const id = typeof payload.id === 'string' || typeof payload.id === 'number' ? payload.id : null;
+    if (id === null || String(id).length > 80) return jsonError('投稿IDが不正です。', 400);
+    const lineDelivery = await broadcastClubNoteToLine(admin, id);
+    return NextResponse.json({
+      success: lineDelivery.status === 'sent' || lineDelivery.status === 'already_sent',
+      lineDelivery,
+      message: lineDelivery.message,
+    }, {
+      status: lineDelivery.status === 'failed' ? 502 : 200,
+      headers: { 'Cache-Control': 'no-store, private' },
+    });
   }
 
   if (action === 'delete-post') {
