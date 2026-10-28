@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -92,9 +92,21 @@ export async function POST(request: Request) {
   if (/@/.test(authorName) || /^[0-9]{6}(?:\s*より)?$/.test(authorName)) {
     return jsonError('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。', 400);
   }
-  const codeHash = permissionCode
-    ? createHash('sha256').update(permissionCode, 'utf8').digest('hex')
-    : null;
+  let codeHash: string | null = null;
+  if (permissionCode) {
+    const pepper = process.env.CLUB_POST_CODE_PEPPER || '';
+    if (pepper.length < 32) {
+      return jsonError('投稿コードのサーバー設定が不足しています。Adminに連絡してください。', 503);
+    }
+    const { data: attemptAllowed, error: attemptError } = await admin.rpc('allow_club_post_code_attempt', {
+      p_user_id: user.id,
+    });
+    if (attemptError) return jsonError('許可コードの確認機能が未設定です。SupabaseのSQL適用状態を確認してください。', 500);
+    if (attemptAllowed !== true) {
+      return jsonError('許可コードの確認は10分間に5回までです。しばらく待ってからお試しください。', 429);
+    }
+    codeHash = createHmac('sha256', pepper).update(permissionCode, 'utf8').digest('hex');
+  }
   const { data, error } = await admin.rpc('submit_club_note', {
     p_user_id: user.id,
     p_student_id: studentId,
