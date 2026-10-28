@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { buildClubNoteFlexMessage } from '@/lib/line-flex';
 
 type ClubNoteLineRow = {
   id: string | number;
@@ -107,25 +108,21 @@ export async function broadcastClubNoteToLine(
   }
 
   const author = cleanLabel(row.author_name || row.author, '学校からのお知らせ');
-  const text = [
-    '【部活・委員会連絡】',
-    row.club_name,
-    '件名：' + row.title,
-    '発信者：' + author,
-    '投稿日時：' + formatJst(row.created_at),
-    '',
-    row.content,
-    '',
-    'CampusSync',
-  ].join('\n');
-
-  if (Array.from(text).length > 5000) {
+  if (Array.from(row.content || '').length > 1800) {
     await updateStatus({
       line_delivery_status: 'failed',
-      line_delivery_error: 'Message exceeds LINE text message length limit',
+      line_delivery_error: 'Flex Message content exceeds 1800 characters',
     });
-    return { status: 'failed', message: '投稿は保存されましたが、LINE送信文が文字数上限を超えています。Adminで本文を短くしてください。' };
+    return { status: 'failed', message: '投稿は保存されましたが、Flex Messageの本文上限（1,800文字）を超えています。Adminで本文を短くしてください。' };
   }
+
+  const flexMessage = buildClubNoteFlexMessage({
+    clubName: row.club_name,
+    title: row.title,
+    content: row.content,
+    author,
+    createdAt: formatJst(row.created_at),
+  });
 
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -135,7 +132,7 @@ export async function broadcastClubNoteToLine(
         'Content-Type': 'application/json',
         'X-Line-Retry-Key': retryKey,
       },
-      body: JSON.stringify({ messages: [{ type: 'text', text }] }),
+      body: JSON.stringify({ messages: [flexMessage] }),
       cache: 'no-store',
     });
 
