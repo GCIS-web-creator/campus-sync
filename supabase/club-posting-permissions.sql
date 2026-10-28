@@ -11,6 +11,7 @@ alter table public.club_notes
   add column if not exists line_delivery_error text,
   add column if not exists line_sent_at timestamptz,
   add column if not exists line_retry_key uuid,
+  add column if not exists line_last_attempt_at timestamptz,
   add column if not exists line_request_id text;
 
 -- Keep useful legacy names, but never expose a school email or bare student ID as author label.
