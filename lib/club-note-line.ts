@@ -88,7 +88,7 @@ export async function broadcastClubNoteToLine(
   const now = Date.now();
   const priorAttemptAt = row.line_last_attempt_at ? new Date(row.line_last_attempt_at).getTime() : NaN;
   const retryWindowExpired = Number.isFinite(priorAttemptAt) && now - priorAttemptAt > 23 * 60 * 60 * 1000;
-  if (row.line_retry_key && retryWindowExpired && row.line_delivery_status !== 'not_sent' && row.line_delivery_status !== 'disabled') {
+  if (row.line_retry_key && retryWindowExpired) {
     return {
       status: 'failed',
       message: '前回の送信試行から約24時間が経過したため、重複配信防止のため自動再送を止めました。LINE公式アカウントの配信履歴を確認してから対応してください。',
