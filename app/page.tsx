@@ -2950,10 +2950,39 @@ Supabaseの設定を確認してください。
   // 設定は端末の状態ではなくSupabaseから読み込み、別端末でも同じ選択を復元する。
   useEffect(() => {
     if (!authUser?.id || !/^\d{6}$/.test(studentId)) {
+      setRemindersEnabled(true);
+      setReminderTimes(['dayBefore', 'morningOf']);
+      setAllowedNotificationDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+      setNotificationSettings({
+        todo_reminders: true,
+        chat_messages: true,
+        school_announcements: true,
+        transport_alerts: true,
+        cafeteria_updates: false,
+        activity_updates: true,
+      });
+      setQuietHoursEnabled(false);
+      setQuietHoursStart('21:00');
+      setQuietHoursEnd('07:00');
       setNotificationSettingsLoaded(false);
       return;
     }
     let cancelled = false;
+    // Reset immediately so settings from a previous signed-in account are not shown.
+    setRemindersEnabled(true);
+    setReminderTimes(['dayBefore', 'morningOf']);
+    setAllowedNotificationDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    setNotificationSettings({
+      todo_reminders: true,
+      chat_messages: true,
+      school_announcements: true,
+      transport_alerts: true,
+      cafeteria_updates: false,
+      activity_updates: true,
+    });
+    setQuietHoursEnabled(false);
+    setQuietHoursStart('21:00');
+    setQuietHoursEnd('07:00');
     setNotificationSettingsLoaded(false);
     void (async () => {
       const { data, error } = await supabase
@@ -4739,7 +4768,7 @@ Supabaseの設定を確認してください。
                   <div className="pt-3 border-t border-gray-100 space-y-3">
                     <div>
                       <span className="text-[10px] font-black text-gray-400 block mb-1">通知カテゴリごとの設定</span>
-                      <p className="text-[10px] text-gray-500 mb-2">選んだ種類の通知だけを受け取れます。設定はSupabaseに保存されます。</p>
+                      <p className="text-[10px] text-gray-500 mb-2">設定はSupabaseに保存されます。現時点で実際の送信に反映されるのは課題リマインダーです。他カテゴリは送信元との連携を順次追加します。</p>
                       {[
                         { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '期限の前日・当日などの通知' },
                         { key: 'chat_messages' as NotificationCategory, label: 'クラス・学年・学校チャット', description: '新しいメッセージの通知（送信側との連携は段階的に対応）' },
@@ -4768,7 +4797,7 @@ Supabaseの設定を確認してください。
                       <div className="flex items-center justify-between gap-3">
                         <span>
                           <span className="block text-[11px] font-black text-gray-700">おやすみ時間</span>
-                          <span className="block text-[10px] text-gray-500">設定時間中は対応済みのプッシュ通知を送信しません。</span>
+                          <span className="block text-[10px] text-gray-500">この時間内に予定された課題リマインダーは、終了時刻にずらして送ります。</span>
                         </span>
                         <input
                           aria-label="おやすみ時間を有効にする"
