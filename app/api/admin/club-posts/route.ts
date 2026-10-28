@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     if (!clubName || clubName.length > 80 || !title || title.length > 160 || !content || content.length > 3000 || !authorName || authorName.length > 50) {
       return jsonError('部活・委員会名、件名、本文、発信者名を入力してください。文字数の上限も確認してください。', 400);
     }
-    if (authorName.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(authorName)) {
+    if (authorName.includes('@') || /^[0-9]{6}(?:\s*より)?$/.test(authorName)) {
       return jsonError('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。', 400);
     }
     const { data, error } = await admin.from('club_notes').insert({
