@@ -1365,7 +1365,7 @@ export default function CampusSyncAdmin() {
               {/* 鷹の台駅の時刻表を手動でLINEへ送信 */}
               <div className="rounded-2xl border border-cyan-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><Train size={22} /></div>
+                  <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><Clock size={22} /></div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-black text-white">鷹の台駅・今後1時間の時刻表</h3>
                     <p className="mt-1 text-xs leading-5 text-slate-400">現在時刻から60分間の発車予定を、国分寺方面・東村山方面の2つに分けたFlex MessageでLINE公式アカウントへ送信します。毎時00分の自動配信とは別に、必要なとき手動送信できます。</p>
