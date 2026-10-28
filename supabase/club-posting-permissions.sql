@@ -66,6 +66,8 @@ create index if not exists club_post_codes_expiry_idx
   where used_at is null;
 create index if not exists club_post_code_attempts_user_time_idx
   on public.club_post_code_attempts (user_id, attempted_at desc);
+create index if not exists club_post_code_attempts_time_idx
+  on public.club_post_code_attempts (attempted_at);
 
 alter table public.club_post_permissions enable row level security;
 alter table public.club_post_codes enable row level security;
@@ -91,6 +93,8 @@ begin
     return false;
   end if;
   perform pg_advisory_xact_lock(hashtext(p_user_id::text));
+  delete from public.club_post_code_attempts
+  where attempted_at < now() - interval '30 days';
   select count(*) into recent_count
   from public.club_post_code_attempts a
   where a.user_id = p_user_id
