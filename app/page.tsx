@@ -1584,6 +1584,26 @@ export default function CampusSyncApp() {
       if (!cancelled && suggestedName) {
         setNewClubAuthorName(current => current.trim() ? current : suggestedName);
       }
+      if (!cancelled && Array.isArray(result.notes)) {
+        setClubNotes(result.notes.map((note: any) => ({
+          id: note.id,
+          clubName: String(note.club_name || ''),
+          title: String(note.title || ''),
+          date: new Date(note.created_at).toLocaleString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Tokyo',
+          }),
+          createdAt: note.created_at,
+          content: String(note.content || ''),
+          author: formatClubAuthorLabel(note.author_name || note.author),
+        })));
+      }
     })().catch(error => console.error('部活投稿者設定の取得に失敗:', error));
     return () => { cancelled = true; };
   }, [authUser?.id, activeTab]);
