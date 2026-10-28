@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHmac } from 'node:crypto';
+import { broadcastClubNoteToLine } from '@/lib/club-note-line';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -125,7 +126,18 @@ export async function POST(request: Request) {
     return jsonError(safeMessage, /許可|コード|短時間|プロフィール設定|投稿内容/.test(rawMessage) ? 403 : 500);
   }
 
-  return NextResponse.json({ note: data, message: '連絡事項をタイムラインに投稿しました。' }, {
+  const noteId = data && typeof data === 'object' && 'id' in data
+    ? (data as { id: string | number }).id
+    : null;
+  const lineDelivery = noteId !== null
+    ? await broadcastClubNoteToLine(admin, noteId)
+    : { status: 'failed' as const, message: '投稿は保存されましたがLINE送信状態を確認できませんでした。' };
+
+  return NextResponse.json({
+    note: data,
+    lineDelivery,
+    message: lineDelivery.message,
+  }, {
     status: 201,
     headers: { 'Cache-Control': 'no-store, private' },
   });
