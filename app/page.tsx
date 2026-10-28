@@ -4279,7 +4279,7 @@ Supabaseの設定を確認してください。
                     <div key={rev.id} className={`${cardBgClass} p-4 rounded-2xl border shadow-xs space-y-1.5`}>
                       <div className="flex justify-between items-center">
                         <span className={`text-xs font-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md`}>
-                          {MENU_ITEMS.find(m => m.id === rev.menuId)?.name.split('（')[0]}
+                          {(menuItems.find(m => m.id === rev.menuId)?.name || ({ soka: '創価ランチ', healthy: 'ヘルシーランチ', snack: 'スナックランチ', curry: 'カレー', noodles: '麺類' } as Record<string, string>)[rev.menuId] || '学食メニュー').split('（')[0]}
                         </span>
                         <span className={`text-[10px] ${subTextClass}`}>{rev.date}</span>
                       </div>
