@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -166,8 +166,12 @@ export async function POST(request: Request) {
     if (!profile?.auth_user_id || !profile.setup_completed_at) {
       return jsonError('対象の生徒は初回プロフィール設定が未完了です。', 409);
     }
+    const pepper = process.env.CLUB_POST_CODE_PEPPER || '';
+    if (pepper.length < 32) {
+      return jsonError('CLUB_POST_CODE_PEPPER に32文字以上のランダムな秘密値をVercel環境変数として設定してください。', 503);
+    }
     const code = String(randomInt(10_000_000, 100_000_000));
-    const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+    const codeHash = createHmac('sha256', pepper).update(code, 'utf8').digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const { error } = await admin.from('club_post_codes').insert({
       code_hash: codeHash,
