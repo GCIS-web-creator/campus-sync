@@ -785,16 +785,10 @@ export default function CampusSyncAdmin() {
       return;
     }
 
-    const lineMessageLength = Array.from(`【${lineNoticeTitle.trim()}】\n\n${lineNoticeText.trim()}`).length;
-    if (lineMessageLength > 5000) {
-      setLineBroadcastMessage('タイトルを含む送信文章は5,000文字以内にしてください。');
+    if (Array.from(lineNoticeTitle.trim()).length > 100 || Array.from(lineNoticeText.trim()).length > 1800) {
+      setLineBroadcastMessage('Flex Messageのタイトルは100文字以内、本文は1,800文字以内にしてください。');
       return;
     }
-
-    const confirmed = window.confirm(
-      `次の内容をLINE公式アカウントの友だち全員に配信します。\n\nタイトル：${lineNoticeTitle.trim()}\n\n${lineNoticeText.trim()}\n\n本当に配信しますか？`
-    );
-    if (!confirmed) return;
 
     setLineBroadcasting(true);
     setLineBroadcastMessage('');
@@ -1381,12 +1375,12 @@ export default function CampusSyncAdmin() {
                       <textarea
                         value={lineNoticeText}
                         onChange={e => { setLineNoticeText(e.target.value); setLineNoticeTemplate('custom'); setLineBroadcastMessage(''); }}
-                        maxLength={4900}
+                        maxLength={1800}
                         rows={6}
                         placeholder="ここにLINEで送りたい内容を入力してください。"
                         className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 placeholder:text-slate-600"
                       />
-                      <span className="mt-1 block text-right text-[11px] text-slate-500">本文 {Array.from(lineNoticeText).length.toLocaleString()} / 4,900文字（タイトルを含めて5,000文字以内）</span>
+                      <span className="mt-1 block text-right text-[11px] text-slate-500">本文 {Array.from(lineNoticeText).length.toLocaleString()} / 1,800文字（Flex Message上限）</span>
                     </label>
                     <label className="block text-xs font-bold text-slate-400">
                       配信認証コード
