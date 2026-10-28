@@ -55,16 +55,59 @@ create table if not exists public.club_post_codes (
   created_by_label text not null default 'Admin'
 );
 
+create table if not exists public.club_post_code_attempts (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  attempted_at timestamptz not null default now()
+);
+
 create index if not exists club_post_codes_expiry_idx
   on public.club_post_codes (expires_at)
   where used_at is null;
+create index if not exists club_post_code_attempts_user_time_idx
+  on public.club_post_code_attempts (user_id, attempted_at desc);
 
 alter table public.club_post_permissions enable row level security;
 alter table public.club_post_codes enable row level security;
+alter table public.club_post_code_attempts enable row level security;
 revoke all on public.club_post_permissions from public, anon, authenticated;
 revoke all on public.club_post_codes from public, anon, authenticated;
+revoke all on public.club_post_code_attempts from public, anon, authenticated;
 grant all on public.club_post_permissions to service_role;
 grant all on public.club_post_codes to service_role;
+grant all on public.club_post_code_attempts to service_role;
+
+-- Atomically cap one-time-code checks at 5 per user per 10 minutes.
+create or replace function public.allow_club_post_code_attempt(p_user_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  recent_count integer;
+begin
+  if p_user_id is null then
+    return false;
+  end if;
+  perform pg_advisory_xact_lock(hashtext(p_user_id::text));
+  select count(*) into recent_count
+  from public.club_post_code_attempts a
+  where a.user_id = p_user_id
+    and a.attempted_at > now() - interval '10 minutes';
+  if recent_count >= 5 then
+    return false;
+  end if;
+  insert into public.club_post_code_attempts (user_id, attempted_at)
+  values (p_user_id, now());
+  return true;
+end
+$function$;
+
+revoke all on function public.allow_club_post_code_attempt(uuid)
+  from public, anon, authenticated;
+grant execute on function public.allow_club_post_code_attempt(uuid)
+  to service_role;
 
 -- Remove every previous policy on club_notes so an older permissive INSERT
 -- policy cannot bypass the server permission/code check.
