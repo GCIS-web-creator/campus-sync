@@ -142,7 +142,7 @@ export async function PATCH(request: Request) {
         console.error('落とし物承認時の貢献度取得に失敗:', scoreReadError.message);
         contributionMessage = '公開しましたが貢献度を読み込めませんでした。';
       } else {
-        const scoreBefore = Number(current?.score ?? 65);
+        const scoreBefore = Number(current?.score ?? 0);
         const scoreAfter = Math.min(100, Math.max(0, scoreBefore + 12));
         const awardedAt = new Date().toISOString();
         const { error: scoreError } = await admin.from('contribution_scores').upsert({
