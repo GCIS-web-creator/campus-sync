@@ -377,6 +377,14 @@ const getTokyoDateKey = (): string => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
+const getTokyoDayRange = (dateKey = getTokyoDateKey()) => {
+  const start = new Date(`${dateKey}T00:00:00+09:00`);
+  return {
+    start: start.toISOString(),
+    end: new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  };
+};
+
 const INITIAL_LOST_AND_FOUND: LostAndFoundItem[] = [];
 
 // --- 📅 新機能：時間割データ定義 ---
@@ -2220,44 +2228,57 @@ useEffect(() => {
 
     const initialStudentId = studentId.trim();
     if (/^\d{6}$/.test(initialStudentId)) {
-      fetchStep = 'プロフィール取得（profiles）';
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('student_id, student_name, user_class')
+      fetchStep = '本日の貢献度取得（contribution_scores）';
+      const todayScoreDate = getTokyoDateKey();
+      const todayRange = getTokyoDayRange(todayScoreDate);
+      const { data: todayHistory, error: todayHistoryError } = await supabase
+        .from('contribution_history')
+        .select('delta')
         .eq('student_id', initialStudentId)
-        .maybeSingle();
+        .gte('created_at', todayRange.start)
+        .lt('created_at', todayRange.end);
+      const historyToday = todayHistoryError ? null : Math.min(100, Math.max(0,
+        (todayHistory ?? []).reduce((total, row) => total + (Number(row.delta) || 0), 0)
+      ));
+      if (todayHistoryError) console.error('本日の貢献度履歴の取得に失敗:', todayHistoryError);
 
-      if (profileError) {
-        console.error('プロフィールの取得に失敗:', profileError);
-      } else if (profileData) {
-        setStudentName(profileData.student_name);
-        setUserClass(normalizeSchoolClass(profileData.user_class));
-      }
-    }
-
-    if (/^\d{6}$/.test(initialStudentId)) {
-      fetchStep = '貢献度取得（contribution_scores）';
       const { data: scoreData, error: scoreError } = await supabase
         .from('contribution_scores')
-        .select('score')
+        .select('*')
         .eq('student_id', initialStudentId)
         .maybeSingle();
 
       if (scoreError) {
         console.error('貢献度ポイントの取得に失敗:', scoreError);
-      } else if (scoreData) {
-        setScore(scoreData.score);
+      } else if (scoreData && scoreData.score_date === todayScoreDate) {
+        setScore(Number(scoreData.score) || 0);
       } else {
-        const { data: newScore, error: createScoreError } = await supabase
-          .from('contribution_scores')
-          .insert({ student_id: initialStudentId, score: 0 })
-          .select('score')
-          .single();
+        const initialTodayScore = historyToday ?? (scoreData ? Number(scoreData.score) || 0 : 0);
+        setScore(initialTodayScore);
 
-        if (createScoreError) {
-          console.error('貢献度ポイントの初期登録に失敗:', createScoreError);
-        } else if (newScore) {
-          setScore(newScore.score);
+        if (scoreData) {
+          const { error: resetError } = await supabase
+            .from('contribution_scores')
+            .update({ score: initialTodayScore, score_date: todayScoreDate, updated_at: new Date().toISOString() })
+            .eq('student_id', initialStudentId);
+          if (resetError) {
+            // Old databases may not have score_date yet. Keep the display correct until the SQL migration is run.
+            const { error: legacyResetError } = await supabase
+              .from('contribution_scores')
+              .update({ score: initialTodayScore, updated_at: new Date().toISOString() })
+              .eq('student_id', initialStudentId);
+            if (legacyResetError) console.error('本日の貢献度初期化に失敗:', legacyResetError);
+          }
+        } else {
+          const { error: createScoreError } = await supabase
+            .from('contribution_scores')
+            .insert({ student_id: initialStudentId, score: initialTodayScore, score_date: todayScoreDate });
+          if (createScoreError) {
+            const { error: legacyCreateError } = await supabase
+              .from('contribution_scores')
+              .insert({ student_id: initialStudentId, score: initialTodayScore });
+            if (legacyCreateError) console.error('貢献度ポイントの初期登録に失敗:', createScoreError, legacyCreateError);
+          }
         }
       }
     }
