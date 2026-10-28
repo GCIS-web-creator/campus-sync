@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     ? await admin.from('profiles').select('student_id,student_name,user_class').in('student_id', studentIds)
     : { data: [], error: null };
   if (profilesResult.error) return jsonError('投稿許可ユーザーのプロフィールを取得できません。', 500);
-  const profileByStudentId = new Map((profilesResult.data || []).map(row => [row.student_id, row]));
+  const profileByStudentId = new Map((profilesResult.data || []).map(row => [row.student_id, row] as const));
   const permissions = permissionRows.map(row => {
     const profile = profileByStudentId.get(row.student_id);
     return {
@@ -99,6 +99,9 @@ export async function POST(request: Request) {
     const authorName = typeof payload.authorName === 'string' ? payload.authorName.trim() : '';
     if (!clubName || clubName.length > 80 || !title || title.length > 160 || !content || content.length > 3000 || !authorName || authorName.length > 50) {
       return jsonError('部活・委員会名、件名、本文、発信者名を入力してください。文字数の上限も確認してください。', 400);
+    }
+    if (authorName.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(authorName)) {
+      return jsonError('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。', 400);
     }
     const { data, error } = await admin.from('club_notes').insert({
       club_name: clubName,
