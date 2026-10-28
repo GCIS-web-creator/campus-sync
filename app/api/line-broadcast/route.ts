@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { buildNoticeFlexMessage } from '@/lib/line-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,10 +57,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const lineText = `【${title}】\n\n${message}`;
-  if (Array.from(lineText).length > 5000) {
+  if (Array.from(title).length > 100 || Array.from(message).length > 1800) {
     return NextResponse.json(
-      { success: false, message: 'LINEで送信する文章はタイトルを含めて5,000文字以内にしてください。' },
+      { success: false, message: 'Flex Messageのタイトルは100文字以内、本文は1,800文字以内にしてください。' },
       { status: 400, headers: { 'Cache-Control': 'no-store' } },
     );
   }
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ messages: [{ type: 'text', text: lineText }] }),
+      body: JSON.stringify({ messages: [buildNoticeFlexMessage(title, message)] }),
       cache: 'no-store',
     });
 
