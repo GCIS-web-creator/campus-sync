@@ -36,10 +36,11 @@ Add these **Secrets**:
 
 Add these **Variables**:
 
+- `BACKUP_ENABLED`: set to `true` only after the private destination and every required secret have been configured and reviewed. Until then the scheduled job is deliberately skipped.
 - `S3_REGION`: the region required by the bucket provider (for Cloudflare R2, commonly `auto`).
 - `BACKUP_AGE_RECIPIENT`: the age public recipient beginning with `age1...`. This is not the private key.
 
-Start with **Actions → Supabase encrypted off-site backup → Run workflow**. Review the result and confirm that the uploaded object exists in the private bucket. Once configured, the workflow also runs daily at approximately 03:00 Japan time (GitHub Actions schedules can be delayed). A failed run means that a reliable backup has not been confirmed; review the workflow log without pasting secrets into chat or issue comments.
+After configuration, set `BACKUP_ENABLED=true`, then start with **Actions → Supabase encrypted off-site backup → Run workflow**. Review the result and confirm that the uploaded object exists in the private bucket. Once configured, the workflow also runs daily at approximately 03:00 Japan time (GitHub Actions schedules can be delayed). A failed run means that a reliable backup has not been confirmed; review the workflow log without pasting secrets into chat or issue comments.
 
 ## What this workflow includes and excludes
 
