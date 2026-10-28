@@ -459,7 +459,7 @@ export default function CampusSyncAdmin() {
       const [menuResult, soldOutResult, reportsResult] = await Promise.all([
         supabase.from('cafeteria_daily_menus').select('*').eq('service_date', today).maybeSingle(),
         supabase.from('cafeteria_sold_out').select('menu_id, is_sold_out'),
-        supabase.from('cafeteria_sold_out_reports').select('menu_id').eq('service_date', today),
+        supabase.rpc('get_cafeteria_sold_out_report_counts', { p_service_date: today }),
       ]);
       if (cancelled) return;
 
@@ -483,8 +483,7 @@ export default function CampusSyncAdmin() {
         console.error('実際の売切報告取得に失敗:', reportsResult.error);
       } else {
         for (const report of reportsResult.data || []) {
-          const key = String(report.menu_id);
-          reportsById[key] = (reportsById[key] || 0) + 1;
+          reportsById[String(report.menu_id)] = Number(report.report_count) || 0;
         }
       }
 
