@@ -9,7 +9,7 @@ const RULES = ['twoDaysBefore', 'dayBefore', 'morningOf', 'threeHoursBefore'] as
 type ReminderRule = (typeof RULES)[number];
 type LocalParts = { date: string; weekday: string; hour: number; minute: number };
 type TodoRow = { id: string | number; student_id: string; title: string; due_at: string; completed: boolean };
-type PreferenceRow = { user_id: string; student_id: string; reminders_enabled: boolean; reminder_times: string[]; allowed_days: string[]; timezone: string };
+type PreferenceRow = { user_id: string; student_id: string; reminders_enabled: boolean; reminder_times: string[]; allowed_days: string[]; timezone: string; notification_settings: Record<string, unknown> | null; quiet_hours_enabled: boolean; quiet_hours_start: string; quiet_hours_end: string };
 type SubscriptionRow = { endpoint: string; user_id: string; student_id: string; subscription: Parameters<typeof webpush.sendNotification>[0] };
 
 function localParts(date: Date, timezone: string): LocalParts {
@@ -51,6 +51,26 @@ function isReminderDue(rule: ReminderRule, dueAt: string, now: Date, timezone: s
   return now.getTime() >= target && now.getTime() < target + 5 * 60 * 1000;
 }
 
+function isWithinQuietHours(now: Date, timezone: string, enabled: boolean, startValue: string, endValue: string): boolean {
+  if (!enabled) return false;
+  const toMinutes = (value: string): number | null => {
+    const match = /^(\\d{2}):(\\d{2})/.exec(String(value || ''));
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour > 23 || minute > 59) return null;
+    return hour * 60 + minute;
+  };
+  const start = toMinutes(startValue);
+  const end = toMinutes(endValue);
+  if (start === null || end === null || start === end) return false;
+  const local = localParts(now, timezone);
+  const current = local.hour * 60 + local.minute;
+  return start < end
+    ? current >= start && current < end
+    : current >= start || current < end;
+}
+
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
@@ -85,7 +105,7 @@ export async function POST(request: Request) {
 
     const { data: preferences, error: preferenceError } = await admin
       .from('push_reminder_preferences')
-      .select('user_id, student_id, reminders_enabled, reminder_times, allowed_days, timezone')
+      .select('user_id, student_id, reminders_enabled, reminder_times, allowed_days, timezone, notification_settings, quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
       .eq('reminders_enabled', true);
     if (preferenceError) throw new Error(`リマインダー設定を取得できません: ${preferenceError.message}`);
 
@@ -118,6 +138,14 @@ export async function POST(request: Request) {
       const timezone = pref.timezone || 'Asia/Tokyo';
       const allowedDays = Array.isArray(pref.allowed_days) ? pref.allowed_days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       const selectedRules = Array.isArray(pref.reminder_times) ? pref.reminder_times : [];
+      const notificationSettings = pref.notification_settings && typeof pref.notification_settings === 'object'
+        ? pref.notification_settings
+        : {};
+      // An explicit category OFF suppresses todo push reminders without disabling other categories.
+      if (notificationSettings.todo_reminders === false) continue;
+      // Quiet-hours currently suppress scheduled reminders during the configured window.
+      // Fixed-time reminders skipped here are not queued for later delivery.
+      if (isWithinQuietHours(now, timezone, pref.quiet_hours_enabled, pref.quiet_hours_start, pref.quiet_hours_end)) continue;
 
       for (const todo of userTodos) {
         for (const rule of RULES) {
