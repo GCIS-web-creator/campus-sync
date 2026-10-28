@@ -377,11 +377,7 @@ const getTokyoDateKey = (): string => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
-const INITIAL_LOST_AND_FOUND = [
-  { id: 1, title: '青いシャープペンシル', location: '図書室', date: '今日 12:30頃', description: 'パイロット製のドクターグリップ（青）です。消しゴムのキャップがありません。', finder: '図書室カウンターに預けました' },
-  { id: 2, title: '黒い折りたたみ傘', location: '食堂入口の傘立て', date: '昨日', description: '無印良品の黒い傘。持ち手に星型のシールが貼ってあります。', finder: 'まだその場に置いてあります' },
-  { id: 3, title: '電子辞書 (CASIO)', location: '本館3階の渡り廊下', date: '3日前', description: '白いケースに入ったEX-wordです。起動画面に名前シールが貼ってあります。', finder: '職員室の学年主任の先生に届けました' },
-];
+const INITIAL_LOST_AND_FOUND: LostAndFoundItem[] = [];
 
 // --- 📅 新機能：時間割データ定義 ---
 const MOCK_TIMETABLE_DATA = {
@@ -1889,6 +1885,7 @@ useEffect(() => {
       const { data: lostData, error: lostError } = await supabase
       .from('lost_and_found')
       .select('*')
+      .eq('status', 'approved')
       .order('created_at', { ascending: false });
 
     if (lostError) {
@@ -2808,26 +2805,19 @@ useEffect(() => {
     try {
       const { data, error } = await supabase
         .from('lost_and_found')
-        .insert({
-          title,
-          location,
-          description,
-          finder,
-          // 日時はSupabaseの created_at default now() に任せる
-        })
+        .insert({ title, location, description, finder, status: 'pending' })
         .select('*')
         .single();
 
       if (error) throw error;
       if (!data) throw new Error('保存したデータが返されませんでした。');
 
-      setLostAndFoundList(prev => [normalizeLostAndFoundRow(data), ...prev]);
-      void updateContribution(12, '落とし物情報を共有');
+      // 未承認の投稿は公開一覧へ追加せず、貢献度も加算しない。Admin承認時に処理する。
       setNewLostTitle('');
       setNewLostLocation('');
       setNewLostDescription('');
       setNewLostFinder('');
-      alert('落とし物情報をSupabaseに保存して共有しました！貢献度+12pt！🎁');
+      alert('落とし物の報告を受け付けました。事務室で実物確認後に公開されます。公開までは貢献度は加算されません。');
     } catch (unexpectedError) {
       console.error('落とし物の保存に失敗:', unexpectedError);
       const detail = unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError);
@@ -4425,7 +4415,7 @@ Supabaseの設定を確認してください。
                     <textarea placeholder="その他詳細な特徴があれば記入してください..." value={newLostDescription} onChange={e => setNewLostDescription(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-14 resize-none" />
                   </div>
                   <button type="submit" disabled={lostSubmitting} className={`w-full py-2.5 text-white font-black text-xs rounded-xl shadow-xs disabled:opacity-60 ${themeCls.bg} ${themeCls.bgHover}`}>
-                    {lostSubmitting ? 'Supabaseに保存中...' : '掲示板に登録して学校貢献度を獲得'}
+                    {lostSubmitting ? 'Supabaseに保存中...' : '事務室に確認を依頼する'}
                   </button>
                 </form>
 
