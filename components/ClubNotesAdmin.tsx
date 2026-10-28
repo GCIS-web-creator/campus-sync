@@ -15,6 +15,10 @@ type ClubNote = {
   author?: string | null;
   author_name?: string | null;
   created_at: string;
+  line_delivery_status?: string | null;
+  line_delivery_error?: string | null;
+  line_sent_at?: string | null;
+  line_request_id?: string | null;
 };
 type Permission = {
   user_id: string;
@@ -34,7 +38,14 @@ type PostingCode = {
   status: "active" | "expired" | "used";
 };
 type Snapshot = { notes: ClubNote[]; permissions: Permission[]; codes: PostingCode[] };
-type ActionResult = { message?: string; code?: string; expiresAt?: string; note?: ClubNote };
+type ActionResult = {
+  message?: string;
+  code?: string;
+  expiresAt?: string;
+  note?: ClubNote;
+  success?: boolean;
+  lineDelivery?: { status: "sent" | "disabled" | "failed" | "already_sent"; message: string };
+};
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -109,11 +120,11 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
     setBusy(true);
     setMessage("");
     try {
-      await request("POST", { action: "post", clubName, title, content, authorName });
+      const result = await request("POST", { action: "post", clubName, title, content, authorName });
       setClubName(""); setTitle(""); setContent("");
-      setMessageKind("success");
-      setMessage("タイムラインに投稿しました。");
       await loadData();
+      setMessageKind(result.lineDelivery?.status === "failed" ? "error" : "success");
+      setMessage(result.lineDelivery?.message || "タイムラインに投稿しました。");
     } catch (error) {
       setMessageKind("error");
       setMessage(error instanceof Error ? error.message : "投稿できませんでした。");
@@ -164,6 +175,23 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
     } catch (error) {
       setMessageKind("error");
       setMessage(error instanceof Error ? error.message : "コードを発行できませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retryLine = async (note: ClubNote) => {
+    if (!window.confirm(`「${note.title}」のLINE配信を再試行しますか？送信状況によっては同じ内容の再送となる場合があります。`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await request("POST", { action: "retry-line", id: note.id });
+      await loadData();
+      setMessageKind(result.success ? "success" : "error");
+      setMessage(result.message || "LINE配信状態を確認しました。");
+    } catch (error) {
+      setMessageKind("error");
+      setMessage(error instanceof Error ? error.message : "LINE配信を再試行できませんでした。");
     } finally {
       setBusy(false);
     }
@@ -292,14 +320,40 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
         <h2 className="flex items-center gap-2 text-lg font-black"><ClipboardList size={19} /> タイムライン投稿管理</h2>
         {!loaded ? <p className="mt-3 text-sm text-slate-400">データを読み込むと投稿が表示されます。</p> : snapshot.notes.length === 0 ? <p className="mt-3 text-sm text-slate-400">投稿はありません。</p> : (
           <div className="mt-3 space-y-3">
-            {snapshot.notes.map(note => (
+            {snapshot.notes.map(note => {
+              const lineStatus = note.line_delivery_status || "not_sent";
+              const statusLabel = lineStatus === "sent" ? "LINE送信済み"
+                : lineStatus === "sending" ? "LINE送信中"
+                : lineStatus === "disabled" ? "自動配信OFF"
+                : lineStatus === "failed" ? "LINE送信失敗" : "未送信";
+              const statusClass = lineStatus === "sent" ? "bg-emerald-950 text-emerald-300"
+                : lineStatus === "failed" ? "bg-rose-950 text-rose-300"
+                : lineStatus === "sending" ? "bg-amber-950 text-amber-200"
+                : "bg-slate-800 text-slate-300";
+              return (
               <article key={String(note.id)} className="rounded-xl border border-slate-800 p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1"><p className="text-xs font-black text-violet-300">{note.club_name}</p><h3 className="mt-1 text-sm font-black">{note.title}</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">{note.content}</p><p className="mt-2 text-xs text-slate-400">発信者：{note.author_name || note.author || "学校からのお知らせ"} · {formatDate(note.created_at)}</p></div>
-                  <button type="button" disabled={busy} onClick={() => void deleteNote(note)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-800 px-3 py-2 text-xs font-bold text-rose-200 disabled:opacity-40"><Trash2 size={14} /> 削除</button>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-black text-violet-300">{note.club_name}</p>
+                    <h3 className="mt-1 text-sm font-black">{note.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">{note.content}</p>
+                    <p className="mt-2 text-xs text-slate-400">発信者：{note.author_name || note.author || "学校からのお知らせ"} · {formatDate(note.created_at)}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass}`}>{statusLabel}</span>
+                      {note.line_sent_at && <span className="text-[10px] text-slate-400">LINE送信日時：{formatDate(note.line_sent_at)}</span>}
+                    </div>
+                    {note.line_delivery_error && <p className="mt-1 text-xs text-rose-300">送信情報：{note.line_delivery_error}</p>}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {lineStatus !== "sent" && (
+                      <button type="button" disabled={busy} onClick={() => void retryLine(note)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-amber-700 px-3 py-2 text-xs font-bold text-amber-200 disabled:opacity-40"><RefreshCw size={14} /> LINE送信</button>
+                    )}
+                    <button type="button" disabled={busy} onClick={() => void deleteNote(note)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-800 px-3 py-2 text-xs font-bold text-rose-200 disabled:opacity-40"><Trash2 size={14} /> 削除</button>
+                  </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
