@@ -2795,7 +2795,7 @@ useEffect(() => {
     const finder = newLostFinder.trim() || '保管場所未入力';
     const cleanStudentId = studentId.trim();
 
-    if (!/^\\d{6}$/.test(cleanStudentId)) {
+    if (!/^\d{6}$/.test(cleanStudentId)) {
       alert('学校メールでログインし、6桁の学籍番号が認識されていることを確認してください。');
       return;
     }
