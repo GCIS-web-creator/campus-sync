@@ -6,6 +6,13 @@ alter table public.club_notes
   add column if not exists author_name text,
   add column if not exists author_user_id uuid references auth.users(id) on delete set null;
 
+alter table public.club_notes
+  add column if not exists line_delivery_status text not null default 'not_sent',
+  add column if not exists line_delivery_error text,
+  add column if not exists line_sent_at timestamptz,
+  add column if not exists line_retry_key uuid,
+  add column if not exists line_request_id text;
+
 -- Keep useful legacy names, but never expose a school email or bare student ID as author label.
 update public.club_notes
 set author_name = case
@@ -264,3 +271,8 @@ where (club_name = '硬式テニス部' and title = '雨天時の練習場所変
    or (club_name = '生徒会執行部' and title = '文化祭パンフレット校正確認')
    or (club_name in ('吹奏楽部（サンプル）', '吹奏楽部') and title = '今週の練習予定')
    or (club_name in ('図書委員会（サンプル）', '図書委員会') and title = 'おすすめ本コーナー');
+
+comment on column public.club_notes.line_delivery_status is
+  'LINE broadcast status: not_sent, sending, sent, failed, or disabled.';
+comment on column public.club_notes.line_delivery_error is
+  'Sanitized LINE delivery error, never an access token or full response body.';
