@@ -326,6 +326,8 @@ export default function CampusSyncAdmin() {
   const [lineHistoryLoading, setLineHistoryLoading] = useState(true);
   const [lineHistoryMessage, setLineHistoryMessage] = useState('');
   const [lineHistoryRefreshKey, setLineHistoryRefreshKey] = useState(0);
+  const [trainTimetableSending, setTrainTimetableSending] = useState(false);
+  const [trainTimetableMessage, setTrainTimetableMessage] = useState('');
 
   // Supabase共有の蔵書管理
   const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -830,6 +832,40 @@ export default function CampusSyncAdmin() {
     alert('事務室へ温度変更リクエストを送信しました。生徒の画面に「調整完了」が反映されます！');
   };
 
+  // Adminからボタン操作で、現在時刻から今後60分の時刻表をLINE Flex Messageとして送信
+  const handleSendTrainTimetableNow = async () => {
+    if (trainTimetableSending) return;
+    if (!adminApiPassword.trim()) {
+      setTrainTimetableMessage('管理用パスワードを入力してください。下の入力欄は課題・落とし物管理と共通です。');
+      return;
+    }
+
+    setTrainTimetableSending(true);
+    setTrainTimetableMessage('');
+    try {
+      const response = await fetch('/api/line-train-timetable', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ mode: 'manual' }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        setTrainTimetableMessage(result?.message || `時刻表のLINE送信に失敗しました（HTTP ${response.status}）。`);
+        return;
+      }
+      setTrainTimetableMessage(result.message || '今後1時間の時刻表をLINEへ送信しました。');
+    } catch (error) {
+      console.error('時刻表の手動LINE送信に失敗:', error);
+      setTrainTimetableMessage('時刻表を送信できませんでした。Vercel環境変数とLINE APIの設定を確認してください。');
+    } finally {
+      setTrainTimetableSending(false);
+    }
+  };
+
   // --- 学食メニューの公式売切状態をSupabaseへ保存 ---
   const toggleSoldOut = async (id: string) => {
     const item = menuItems.find(menu => menu.id === id);
@@ -1324,6 +1360,42 @@ export default function CampusSyncAdmin() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* 鷹の台駅の時刻表を手動でLINEへ送信 */}
+              <div className="rounded-2xl border border-cyan-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><Train size={22} /></div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-black text-white">鷹の台駅・今後1時間の時刻表</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">現在時刻から60分間の発車予定を、国分寺方面・東村山方面の2つに分けたFlex MessageでLINE公式アカウントへ送信します。毎時00分の自動配信とは別に、必要なとき手動送信できます。</p>
+                  </div>
+                </div>
+                <label className="block text-xs font-bold text-slate-300">
+                  Admin用パスワード
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={adminApiPassword}
+                    onChange={event => { setAdminApiPassword(event.target.value); setTrainTimetableMessage(''); }}
+                    placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleSendTrainTimetableNow()}
+                  disabled={trainTimetableSending}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Send size={16} />
+                  {trainTimetableSending ? '時刻表をLINE送信中...' : '今後1時間の時刻表をLINE送信'}
+                </button>
+                {trainTimetableMessage && (
+                  <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${trainTimetableMessage.includes('失敗') || trainTimetableMessage.includes('必要') || trainTimetableMessage.includes('確認してください') || trainTimetableMessage.includes('正しい') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+                    {trainTimetableMessage}
+                  </p>
+                )}
               </div>
 
               {/* LINEお知らせ作成・配信・履歴 */}
