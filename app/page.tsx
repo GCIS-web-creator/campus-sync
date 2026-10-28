@@ -697,12 +697,7 @@ const MOCK_BUS_STATIONS: {
   { id: 'akitsu', name: '新秋津駅シャトル', departures: ['16:05', '16:30', '17:00', '17:30', '18:10'] },
 ];
 
-// --- 🏸 新機能：部活動・委員会活動データ ---
-const INITIAL_CLUB_NOTES = [
-  { id: 1, clubName: '硬式テニス部', title: '雨天時の練習場所変更', date: '今日 14:00', content: '本日の放課後練習は雨天予報のため、オムニコートから雨天練習場（ピロティ）に変更します。トレーニングシューズを持参してください。', author: '主将 より' },
-  { id: 2, clubName: '吹奏楽部', title: 'コンクール前合同合奏の案内', date: '昨日', content: '今週土曜日の午前9時より、カレッジホールにて全パート合同の通し練習を行います。チューニングを8:45までに各自終わらせておくこと。', author: '顧問 より' },
-  { id: 3, clubName: '生徒会執行部', title: '文化祭パンフレット校正確認', date: '2日前', content: '各クラスの企画紹介文の最終校正データが届いています。担当委員は本日17時までに生徒会室に集まり、チェックを完了させてください。', author: '執行部書記 より' },
-];
+// Club notes are loaded only from the live database; no demo posts are seeded.
 
 type SchoolClub = { id: string; name: string; category: '文化クラブ' | '運動クラブ' | '同好会' | '研究会'; sprite: 1 | 2 | 3 | 4 };
 
@@ -938,7 +933,7 @@ function GuestPreviewApp({ onExit }: { onExit: () => void }) {
       case 'chat':
         return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">クラスチャット</h3><p className={mutedClass}>デモ用の架空メッセージのみ表示しています。</p></div>{sampleTag}</div><div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">ゲストモードでは実際のクラス・学年・全校チャットに接続しません。投稿、返信、リアクション、通報、添付ファイルも利用できません。</div><div className="space-y-3">{GUEST_PREVIEW_MESSAGES.map((message,i)=><div key={message.name+message.time} className={'flex gap-2 ' +(i===1?'flex-row-reverse':'')}><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-black text-cyan-900">{message.name.slice(0,1)}</div><div className={'max-w-[85%] rounded-2xl p-3 '+(i===1?'bg-cyan-50':'bg-slate-100')}><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-black text-slate-700">{message.name}</span><span className="text-[10px] text-slate-400">{message.className} ・ {message.time}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.body}</p></div></div>)}</div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-4"><input disabled value="" placeholder="ゲストはメッセージを送信できません" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-xs text-slate-400" /><button type="button" disabled className="rounded-xl bg-slate-200 px-4 text-xs font-black text-slate-400">送信</button></div></section>;
       case 'club':
-        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">部活動・委員会ノート</h3>{sampleTag}</div><div className="space-y-3">{[{club:'吹奏楽部（サンプル）',title:'今週の練習予定',body:'水曜・金曜は音楽室で基礎練習を行う想定です。これは架空の連絡です。',date:'今日 08:30'},{club:'図書委員会（サンプル）',title:'おすすめ本コーナー',body:'今月のテーマ展示を準備中というデモ投稿です。',date:'昨日 16:10'}].map(item=><article key={item.title} className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-black text-purple-700">{item.club}</p><h4 className="mt-1 text-sm font-black text-slate-800">{item.title}</h4><p className="mt-2 text-xs leading-5 text-slate-600">{item.body}</p><p className="mt-3 text-[10px] text-slate-400">{item.date}</p></article>)}</div><p className="mt-3 text-xs text-slate-400">ノートの投稿・返信はできません。</p></section>;
+        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">部活動・委員会ノート</h3>{sampleTag}</div><p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">表示できる投稿はありません。これはゲスト用プレビューのため、実際の投稿データは表示しません。</p></section>;
       case 'notifications':
         return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">通知・連絡</h3>{sampleTag}</div><div className="space-y-2">{[{title:'提出物リマインダー',body:'数学演習プリントの期限が近づいています（デモ通知）。',time:'今日 07:00'},{title:'学食メニューのお知らせ',body:'本日のメニューを更新しました（サンプル）。',time:'昨日 12:00'},{title:'CampusSyncからのお知らせ',body:'これは通知画面のプレビューです。',time:'10/20 09:00'}].map(item=><article key={item.title} className="flex gap-3 rounded-xl border border-slate-100 p-3"><span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-600" /><div><h4 className="text-sm font-black text-slate-800">{item.title}</h4><p className="mt-1 text-xs leading-5 text-slate-600">{item.body}</p><p className="mt-2 text-[10px] text-slate-400">{item.time}</p></div></article>)}</div></section>;
       case 'settings':
@@ -1551,11 +1546,14 @@ export default function CampusSyncApp() {
   const [busCongestionVote, setBusCongestionVote] = useState<Record<string, string>>({ hachioji: '普通', haijima: '空いている', akitsu: '混雑' });
   const [busDelayMinutes, setBusDelayMinutes] = useState<Record<string, number>>({ hachioji: 0, haijima: 5, akitsu: 0 });
 
-  // 部活動用状態
-  const [clubNotes, setClubNotes] = useState(INITIAL_CLUB_NOTES);
+  // 部活・委員会ノート：サンプル投稿は使用せず、DBからのみ表示する。
+  const [clubNotes, setClubNotes] = useState<any[]>([]);
   const [newClubName, setNewClubName] = useState('');
   const [newClubTitle, setNewClubTitle] = useState('');
   const [newClubContent, setNewClubContent] = useState('');
+  const [newClubAuthorName, setNewClubAuthorName] = useState('');
+  const [newClubPermissionCode, setNewClubPermissionCode] = useState('');
+  const [isAddingClubNote, setIsAddingClubNote] = useState(false);
 
   // 学食レビュー用状態
   const [cafeteriaReviews, setCafeteriaReviews] = useState<CafeteriaReview[]>(INITIAL_CAFETERIA_REVIEWS);
@@ -1933,13 +1931,18 @@ useEffect(() => {
           clubName: note.club_name,
           title: note.title,
           date: new Date(note.created_at).toLocaleString('ja-JP', {
-            month: 'numeric',
-            day: 'numeric',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Tokyo',
           }),
+          createdAt: note.created_at,
           content: note.content,
-          author: note.author || '匿名の投稿者',
+          author: note.author_name || note.author || '学校からのお知らせ',
         }))
       );
     }
@@ -2822,56 +2825,83 @@ Supabaseの設定を確認してください。
 
   const handleAddClubNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClubName.trim() || !newClubTitle.trim() || !newClubContent.trim()) {
-      alert("すべての項目を入力してください。");
+    if (isAddingClubNote) return;
+    if (!authUser) {
+      alert('学校メールでログインしてください。');
+      return;
+    }
+    if (!newClubName.trim() || !newClubTitle.trim() || !newClubContent.trim() || !newClubAuthorName.trim()) {
+      alert('部活・委員会名、件名、本文、発信者名をすべて入力してください。');
+      return;
+    }
+    if (newClubPermissionCode && !/^\d{8}$/.test(newClubPermissionCode.trim())) {
+      alert('許可コードは8桁の数字で入力してください。');
       return;
     }
 
-    const noteToInsert = {
-      club_name: newClubName.trim(),
-      title: newClubTitle.trim(),
-      content: newClubContent.trim(),
-      author: studentName.trim() ? `${studentName.trim()} より` : '匿名の投稿者',
-    };
+    setIsAddingClubNote(true);
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('ログインの有効期限が切れています。再ログインしてください。');
 
-    const { data, error } = await supabase
-      .from('club_notes')
-      .insert(noteToInsert)
-      .select()
-      .single();
+      const response = await fetch('/api/club-notes', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clubName: newClubName.trim(),
+          title: newClubTitle.trim(),
+          content: newClubContent.trim(),
+          authorName: newClubAuthorName.trim(),
+          permissionCode: newClubPermissionCode.trim(),
+        }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.note) {
+        throw new Error(result?.message || `投稿できませんでした（HTTP ${response.status}）。`);
+      }
 
-    if (error) {
-      console.error('部活・委員会ノートの保存に失敗:', error);
-      alert('部活・委員会ノートの保存に失敗しました。');
-      return;
-    }
-
-    if (data) {
+      const note = result.note;
       const newNote = {
-        id: data.id,
-        clubName: data.club_name,
-        title: data.title,
-        date: new Date(data.created_at).toLocaleString('ja-JP', {
-          month: 'numeric',
-          day: 'numeric',
+        id: note.id,
+        clubName: note.club_name,
+        title: note.title,
+        date: new Date(note.created_at).toLocaleString('ja-JP', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
           hour: '2-digit',
           minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZone: 'Asia/Tokyo',
         }),
-        content: data.content,
-        author: data.author || '匿名の投稿者',
+        createdAt: note.created_at,
+        content: note.content,
+        author: note.author_name || note.author || newClubAuthorName.trim(),
       };
-
       setClubNotes(prev => [newNote, ...prev]);
+      void updateContribution(15, '部活・委員会ノートを投稿');
+      setNewClubName('');
+      setNewClubTitle('');
+      setNewClubContent('');
+      setNewClubPermissionCode('');
+      // Keep the user-entered display name available for the next post.
+      alert('部活動・委員会連絡ノートに投稿しました。貢献度+15pt！');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '不明なエラー';
+      alert(message);
+    } finally {
+      setIsAddingClubNote(false);
     }
-
-    void updateContribution(15, '部活・委員会ノートを投稿');
-    setNewClubName('');
-    setNewClubTitle('');
-    setNewClubContent('');
-    alert("部活動・委員会連絡ノートに新規書き込みを行いました！貢献度+15pt！🏸");
   };
 
-  const handleAddReview = async (e: React.FormEvent) => {
+    const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReviewComment.trim()) {
       alert("コメントを入力してください。");
@@ -4458,11 +4488,16 @@ Supabaseの設定を確認してください。
                     <option value="その他の委員会" />
                   </datalist>
                 </div>
-                <input type="text" placeholder="件名・タイトル" value={newClubTitle} onChange={e => setNewClubTitle(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
-                <textarea placeholder="部員へ共有する詳細スケジュールや持参物、重要連絡事項を記載..." value={newClubContent} onChange={e => setNewClubContent(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-16 resize-none" />
+                <input type="text" required maxLength={160} placeholder="件名・タイトル" value={newClubTitle} onChange={e => setNewClubTitle(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                <textarea required maxLength={3000} placeholder="部員へ共有する詳細スケジュールや持参物、重要連絡事項を記載..." value={newClubContent} onChange={e => setNewClubContent(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none h-20 resize-y" />
+                <input type="text" required maxLength={50} autoComplete="nickname" placeholder="タイムラインに表示する発信者名（メールアドレスは表示されません）" value={newClubAuthorName} onChange={e => setNewClubAuthorName(e.target.value)} className="col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                <div className="col-span-2 space-y-1">
+                  <input type="password" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} autoComplete="off" placeholder="Adminから発行された8桁コード（投稿許可済みの場合は空欄）" value={newClubPermissionCode} onChange={e => setNewClubPermissionCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none" />
+                  <p className="text-[10px] leading-4 text-gray-500">Adminが投稿を許可したアカウントはコード不要です。許可されていない場合は、自分の学籍番号に対して発行された未使用コードが必要です。コードは1回のみ使用できます。</p>
+                </div>
               </div>
-              <button type="submit" className={`w-full py-2 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover} shadow-xs`}>
-                連絡事項をタイムラインに掲示 (+15pt)
+              <button type="submit" disabled={isAddingClubNote || !authUser} className={`w-full py-2 text-white text-xs font-black rounded-xl ${themeCls.bg} ${themeCls.bgHover} shadow-xs disabled:opacity-50`}>
+                {isAddingClubNote ? '投稿中…' : '連絡事項をタイムラインに掲示 (+15pt)'}
               </button>
             </form>
 
