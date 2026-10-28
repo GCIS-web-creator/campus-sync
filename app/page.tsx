@@ -4576,7 +4576,7 @@ Supabaseの設定を確認してください。
                     </div>
                     <span className={`text-[10px] ${subTextClass}`}>{note.date}</span>
                   </div>
-                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2.5 rounded-xl border border-gray-100 font-medium">
+                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2.5 rounded-xl border border-gray-100 font-medium whitespace-pre-wrap break-words">
                     {note.content}
                   </p>
                   <div className="text-right">
