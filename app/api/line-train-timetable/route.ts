@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   const higashimurayama = rows.filter(row => row.direction === 'higashimurayama').map(inWindow).filter((row): row is TimetableDeparture => row !== null);
   const flex = buildHourlyTrainTimetableFlex({
     startLabel: startDateLabel,
-    endLabel: endParts.hour + ':00',
+    endLabel: manualRequest ? (endParts.hour + ':' + endParts.minute) : (endParts.hour + ':00'),
     kokubunji,
     higashimurayama,
   });
