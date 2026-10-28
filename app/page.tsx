@@ -703,7 +703,7 @@ type SchoolClub = { id: string; name: string; category: '文化クラブ' | '運
 
 function formatClubAuthorLabel(value: unknown): string {
   const label = String(value || '').trim();
-  if (!label || label.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(label)) {
+  if (!label || label.includes('@') || /^[0-9]{6}(?:\s*より)?$/.test(label)) {
     return '学校からのお知らせ';
   }
   return label;
@@ -2867,7 +2867,7 @@ Supabaseの設定を確認してください。
       alert('部活・委員会名、件名、本文、発信者名をすべて入力してください。');
       return;
     }
-    if (newClubAuthorName.includes('@') || /^[0-9]{6}(?:\\s*より)?$/.test(newClubAuthorName.trim())) {
+    if (newClubAuthorName.includes('@') || /^[0-9]{6}(?:\s*より)?$/.test(newClubAuthorName.trim())) {
       alert('発信者名にメールアドレスや学籍番号は使えません。表示用の氏名・担当名を入力してください。');
       return;
     }
