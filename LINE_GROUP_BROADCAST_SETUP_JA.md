@@ -25,26 +25,28 @@ order by last_seen_at desc;
 ```sql
 update public.line_group_chats
 set receive_train_timetable = (chat_id = 'PASTE_GROUP_ID_HERE'),
+    receive_class_timetable = (chat_id = 'PASTE_GROUP_ID_HERE'),
     receive_general_notifications = false
 where chat_type in ('group', 'room');
 ```
 
-この設定は、登録されているグループのうち**指定した1つだけ**を時刻表の受信先にし、すべてのグループで一般通知の受信をOFFにします。LINEの個人の友だち向け配信は従来どおり維持されます。
+この設定は、登録されているグループのうち**指定した1つだけ**を、電車時刻表と7組・8組の翌日時間割の受信先にし、すべてのグループで一般通知の受信をOFFにします。LINEの個人の友だち向け配信は従来どおり維持されます。
 
 設定を確認するには、次を実行します。
 
 ```sql
-select chat_id, chat_type, active, receive_general_notifications, receive_train_timetable
+select chat_id, chat_type, active, receive_general_notifications,
+       receive_train_timetable, receive_class_timetable
 from public.line_group_chats
 order by last_seen_at desc;
 ```
 
-対象グループの行が `active = true`、`receive_train_timetable = true`、`receive_general_notifications = false` になっていれば設定完了です。
+対象グループの行が `active = true`、`receive_train_timetable = true`、`receive_class_timetable = true`、`receive_general_notifications = false` になっていれば設定完了です。
 
 ## 通知の送信先
 
-- **指定したグループ**：鷹の台駅の毎時発車案内だけを受信します。
-- **ほかのグループ**：一般通知も時刻表も受信しません（別途、受信設定を変更した場合を除く）。
+- **指定したグループ**：毎日16:00〜18:00の電車時刻表まとめと、毎日21:00の翌日時間割を受信します。
+- **ほかのグループ**：これら2種類を受信しません（別途、受信設定を変更した場合を除く）。
 - **LINE公式アカウントの友だち**：学校のお知らせ、課題、部活・委員会、学食の売切、承認済みの落とし物など、既存の配信を従来どおり受信します。
 
 グループ宛てのプッシュメッセージはメンバー全員に表示されます。送信通数も消費される場合があるため、公式アカウントのプランや通数上限を確認してください。
