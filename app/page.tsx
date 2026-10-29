@@ -6,6 +6,7 @@ import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
+import CountdownEventWidget from '@/components/CountdownEventWidget';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -3912,6 +3913,8 @@ Supabaseの設定を確認してください。
               </div>
             </div>
 
+            <CountdownEventWidget mode="dashboard" onViewAll={() => setActiveTab('countdowns')} />
+
             {/* TODOセクション */}
             <section>
               <h3 className={`text-[17px] font-black mb-3 flex items-center ${activeTextClass}`}>
@@ -4004,6 +4007,9 @@ Supabaseの設定を確認してください。
 
       case 'school-schedule':
         return <WeeklySchoolSchedule />;
+
+      case 'countdowns':
+        return <CountdownEventWidget mode="list" />;
 
       case 'timetable':
         return (
@@ -5246,6 +5252,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
               <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
               <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
+              <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
               <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
@@ -5309,6 +5316,7 @@ Supabaseの設定を確認してください。
           <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
           <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
           <NavItem icon={<Calendar size={20} />} label="学校予定" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
+          <NavItem icon={<Clock size={20} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
           <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
           <NavItem icon={<MessageCircle size={20} />} label="チャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
