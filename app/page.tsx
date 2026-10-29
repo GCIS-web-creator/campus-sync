@@ -1015,6 +1015,7 @@ export default function CampusSyncApp() {
   const [profileSetupBusy, setProfileSetupBusy] = useState(false);
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
+  const [chatDisplayName, setChatDisplayName] = useState('');
   const [showIdCardModal, setShowIdCardModal] = useState(false);
   const [showCardScanner, setShowCardScanner] = useState(false);
   const [cardScanDone, setCardScanDone] = useState(false);
@@ -1097,11 +1098,21 @@ export default function CampusSyncApp() {
     setStudentId(derivedStudentId);
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
-        .select('student_id, student_name, user_class, setup_completed_at')
+        .select('student_id, student_name, user_class, setup_completed_at, chat_display_name')
         .eq('student_id', derivedStudentId)
         .maybeSingle();
+      // 新しい列のSQL未適用時も、プロフィール全体の読み込みを壊さない。
+      if (error && /chat_display_name|schema cache|column .* does not exist/i.test(error.message)) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('student_id, student_name, user_class, setup_completed_at')
+          .eq('student_id', derivedStudentId)
+          .maybeSingle();
+        data = fallback.data as typeof data;
+        error = fallback.error;
+      }
       if (cancelled) return;
       if (error) {
         console.error('ログインプロフィールの取得に失敗:', error);
@@ -1115,12 +1126,14 @@ export default function CampusSyncApp() {
         const normalizedClass = normalizeSchoolClass(savedClass);
         const [savedGrade, savedClassNumber] = normalizedClass.split('-');
         setStudentName(savedName);
+        setChatDisplayName(String((data as { chat_display_name?: string | null } | null)?.chat_display_name || ''));
         setUserClass(normalizedClass);
         setProfileSetupGrade(savedGrade || '1');
         setProfileSetupClass(savedClassNumber || '1');
         setProfileSetupStatus(data.setup_completed_at && savedName.trim() && /^[1-3]-[1-8]$/.test(savedClass) ? 'complete' : 'required');
       } else {
         setStudentName('');
+        setChatDisplayName('');
         setUserClass('1-1');
         setProfileSetupGrade('1');
         setProfileSetupClass('1');
@@ -3443,6 +3456,7 @@ Supabaseの設定を確認してください。
     const email = String(authUser?.email || '').trim().toLowerCase();
     const cleanStudentId = getStudentIdFromSchoolEmail(email);
     const cleanStudentName = studentName.trim();
+    const cleanChatDisplayName = chatDisplayName.trim().slice(0, 40);
 
     if (!authUser || !cleanStudentId) {
       alert('学校メールでログインしてください。学籍番号はメールアドレスから自動設定されます。');
@@ -3455,21 +3469,45 @@ Supabaseの設定を確認してください。
 
     setProfileSaving(true);
     try {
-      const { error } = await supabase
+      const profileValues = {
+        student_id: cleanStudentId,
+        student_name: cleanStudentName,
+        chat_display_name: cleanChatDisplayName || null,
+        user_class: userClass,
+        email,
+        auth_user_id: authUser.id,
+        updated_at: new Date().toISOString(),
+      };
+      let { error } = await supabase
         .from('profiles')
-        .upsert({
-          student_id: cleanStudentId,
-          student_name: cleanStudentName,
-          user_class: userClass,
-          email,
-          auth_user_id: authUser.id,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'student_id' });
+        .upsert(profileValues, { onConflict: 'student_id' });
+      let chatNameColumnMissing = false;
+
+      // SQL未適用なら既存プロフィールは保存し、チャット名列の未設定を明確に知らせる。
+      if (error && /chat_display_name|schema cache|column .* does not exist/i.test(error.message)) {
+        chatNameColumnMissing = true;
+        const fallback = await supabase
+          .from('profiles')
+          .upsert({
+            student_id: cleanStudentId,
+            student_name: cleanStudentName,
+            user_class: userClass,
+            email,
+            auth_user_id: authUser.id,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'student_id' });
+        error = fallback.error;
+      }
 
       if (error) throw error;
       setStudentId(cleanStudentId);
       setStudentName(cleanStudentName);
-      alert('プロフィールを保存しました！');
+      setChatDisplayName(chatNameColumnMissing ? '' : cleanChatDisplayName);
+      if (chatNameColumnMissing && cleanChatDisplayName) {
+        alert('プロフィールは保存しましたが、クラスチャット表示名用のSQLがまだ適用されていません。Supabaseで supabase/class-chat-phase6-display-name.sql を実行してから、表示名をもう一度保存してください。');
+      } else {
+        alert('プロフィールを保存しました！');
+      }
       return true;
     } catch (error) {
       console.error('プロフィールの保存に失敗:', error);
@@ -4600,7 +4638,7 @@ Supabaseの設定を確認してください。
           <ClassChat
             authUser={authUser ? { id: authUser.id, email: authUser.email } : null}
             studentId={studentId}
-            studentName={studentName}
+            studentName={chatDisplayName.trim() || studentName}
             userClass={userClass}
             unreadCount={classChatUnreadCount}
           />
@@ -4767,6 +4805,19 @@ Supabaseの設定を確認してください。
                       ))}
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 block mb-1">クラスチャット表示名（任意）</label>
+                  <input
+                    type="text"
+                    value={chatDisplayName}
+                    onChange={e => setChatDisplayName(e.target.value.slice(0, 40))}
+                    maxLength={40}
+                    autoComplete="nickname"
+                    placeholder={studentName.trim() ? '未設定なら「' + studentName.trim() + '」を使用' : 'チャットに表示する名前'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-black outline-none"
+                  />
+                  <p className="mt-1 text-[10px] leading-4 text-gray-400">ここで設定した名前はクラスチャットに表示されます。空欄なら氏名設定を使用します。</p>
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 block mb-1">6桁学籍番号</label>
