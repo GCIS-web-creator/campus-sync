@@ -8,6 +8,7 @@ create table if not exists public.line_group_chats (
   active boolean not null default true,
   receive_general_notifications boolean not null default false,
   receive_train_timetable boolean not null default false,
+  receive_class_timetable boolean not null default false,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
   last_event_type text,
@@ -19,14 +20,18 @@ alter table public.line_group_chats
   add column if not exists receive_general_notifications boolean not null default false;
 alter table public.line_group_chats
   add column if not exists receive_train_timetable boolean not null default false;
+alter table public.line_group_chats
+  add column if not exists receive_class_timetable boolean not null default false;
 
 alter table public.line_group_chats enable row level security;
 revoke all on table public.line_group_chats from anon, authenticated;
 grant select, insert, update, delete on table public.line_group_chats to service_role;
 
+-- The delivery switches are independent. Keep class-timetable delivery OFF for a group that
+-- is reserved for the train timetable only.
 -- 1) Run after the bot is added to a group and the group sends/receives an event.
 -- This query lists IDs registered from LINE's verified webhook events.
-select chat_id, chat_type, active, receive_general_notifications, receive_train_timetable, last_seen_at, last_event_type
+select chat_id, chat_type, active, receive_general_notifications, receive_train_timetable, receive_class_timetable, last_seen_at, last_event_type
 from public.line_group_chats
 order by last_seen_at desc;
 

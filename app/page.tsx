@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
+import { CLASS_TIMETABLE_DATA, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
@@ -389,95 +390,6 @@ const getTokyoDayRange = (dateKey = getTokyoDateKey()) => {
 };
 
 const INITIAL_LOST_AND_FOUND: LostAndFoundItem[] = [];
-
-// --- 📅 新機能：時間割データ定義 ---
-const MOCK_TIMETABLE_DATA = {
-  A: {
-    Mon: [
-      { period: 1, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書, ノート' },
-      { period: 2, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'クリアー数学, 演習ノート' },
-      { period: 3, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: 'LL教室', materials: 'VisionQuest, 辞書' },
-      { period: 4, subject: '化学基礎', teacher: '鈴木 先生', room: '化学実験室', materials: 'プリント, 実験用眼鏡' },
-      { period: 5, subject: '体育', teacher: '渡辺 先生', room: '第一体育館', materials: '体操服, 体育館シューズ' },
-      { period: 6, subject: '総合的な探究', teacher: '学年主任', room: '大教室', materials: 'タブレット端末' },
-    ],
-    Tue: [
-      { period: 1, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: '図説, ノート' },
-      { period: 2, subject: '物理基礎', teacher: '小林 先生', room: '物理室', materials: '教科書, 電卓' },
-      { period: 3, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '演習プリント' },
-      { period: 4, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '便覧' },
-      { period: 5, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'ワークブック' },
-      { period: 6, subject: '家庭基礎', teacher: '伊東 先生', room: '被服室', materials: '裁縫セット' },
-    ],
-    Wed: [
-      { period: 1, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '教科書' },
-      { period: 2, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: 'プリント' },
-      { period: 3, subject: '地理総合', teacher: '中村 先生', room: '各教室', materials: '地図帳' },
-      { period: 4, subject: '生物基礎', teacher: '山本 先生', room: '生物室', materials: '教科書, ノート' },
-      { period: 5, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '青チャート' },
-      { period: 6, subject: 'LHR', teacher: '担任 先生', room: '各教室', materials: '筆記用具' },
-    ],
-    Thu: [
-      { period: 1, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: '教科書' },
-      { period: 2, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'プリント' },
-      { period: 3, subject: '体育', teacher: '渡辺 先生', room: 'グラウンド', materials: '体操服, 帽子' },
-      { period: 4, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: 'ノート' },
-      { period: 5, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '古語辞典' },
-      { period: 6, subject: '情報Ⅰ', teacher: '斉藤 先生', room: '情報処理室', materials: 'イヤホン' },
-    ],
-    Fri: [
-      { period: 1, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '問題集' },
-      { period: 2, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: 'ワーク' },
-      { period: 3, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
-      { period: 4, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '単語帳' },
-      { period: 5, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: '資料集' },
-      { period: 6, subject: '音楽Ⅰ', teacher: '山田 先生', room: '音楽室', materials: '歌集, ファイル' },
-    ]
-  },
-  B: {
-    Mon: [
-      { period: 1, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'ノート' },
-      { period: 2, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
-      { period: 3, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: 'プリント' },
-      { period: 4, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: '教科書' },
-      { period: 5, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: 'ノート' },
-      { period: 6, subject: '総合的な探究', teacher: '学年主任', room: '大教室', materials: '端末' },
-    ],
-    // 省略のない完全コードのため各曜日を構造化して定義
-    Tue: [
-      { period: 1, subject: '物理基礎', teacher: '小林 先生', room: '物理室', materials: '教科書' },
-      { period: 2, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: 'ノート' },
-      { period: 3, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: 'ワーク' },
-      { period: 4, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: 'プリント' },
-      { period: 5, subject: '家庭基礎', teacher: '伊東 先生', room: '調理室', materials: 'エプロン, 三角巾' },
-      { period: 6, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '教科書' },
-    ],
-    Wed: [
-      { period: 1, subject: '地理総合', teacher: '中村 先生', room: '各教室', materials: '地図帳' },
-      { period: 2, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: 'ノート' },
-      { period: 3, subject: '生物基礎', teacher: '山本 先生', room: '生物室', materials: 'プリント' },
-      { period: 4, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '教科書' },
-      { period: 5, subject: '歴史総合', teacher: '田中 先生', room: '各教室', materials: '図説' },
-      { period: 6, subject: 'LHR', teacher: '担任 先生', room: '各教室', materials: 'なし' },
-    ],
-    Thu: [
-      { period: 1, subject: '体育', teacher: '渡辺 先生', room: 'グラウンド', materials: '体操服' },
-      { period: 2, subject: '化学基礎', teacher: '鈴木 先生', room: '各教室', materials: 'ノート' },
-      { period: 3, subject: '数学A', teacher: '加藤 先生', room: '各教室', materials: '青チャート' },
-      { period: 4, subject: '論理・表現', teacher: 'Brown 先生', room: '各教室', materials: '教科書' },
-      { period: 5, subject: '情報Ⅰ', teacher: '斉藤 先生', room: '情報処理室', materials: '筆記用具' },
-      { period: 6, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: 'ノート' },
-    ],
-    Fri: [
-      { period: 1, subject: '古典探究', teacher: '木村 先生', room: '各教室', materials: '便覧' },
-      { period: 2, subject: '数学Ⅰ', teacher: '高橋 先生', room: '各教室', materials: '演習プリント' },
-      { period: 3, subject: '英語コミュニケーション', teacher: 'Smith 先生', room: '各教室', materials: 'ワーク' },
-      { period: 4, subject: '現代文', teacher: '佐藤 先生', room: '各教室', materials: '教科書' },
-      { period: 5, subject: '音楽Ⅰ', teacher: '山田 先生', room: '音楽室', materials: 'ファイル' },
-      { period: 6, subject: '公共', teacher: '吉田 先生', room: '各教室', materials: 'プリント' },
-    ]
-  }
-};
 
 // --- 🚃 鷹の台駅：発車案内（ユーザー提供の2026年10月3日時刻表） ---
 const TAKANODAI_TIMETABLE = {
@@ -1560,14 +1472,19 @@ export default function CampusSyncApp() {
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
-  // タイムテーブル用状態
-  const [selectedWeekType, setSelectedWeekType] = useState<'A' | 'B'>('A');
-  const [selectedDay, setSelectedDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
-  const [timetableData, setTimetableData] = useState(MOCK_TIMETABLE_DATA);
+  // 添付された7組・8組の時間割。プロフィールが7組・8組なら対応する表示を初期選択する。
+  const [selectedTimetableGroup, setSelectedTimetableGroup] = useState<ClassTimetableGroup>('7組');
+  const [selectedDay, setSelectedDay] = useState<ClassTimetableDayKey>('Mon');
+  const timetableData = CLASS_TIMETABLE_DATA;
   const [menuItems, setMenuItems] = useState<CafeteriaMenuItem[]>([]);
   const [cafeteriaMenuLoading, setCafeteriaMenuLoading] = useState(true);
   const [cafeteriaMenuLoadMessage, setCafeteriaMenuLoadMessage] = useState('本日の献立を読み込んでいます…');
   const [reportingSoldOutMenuId, setReportingSoldOutMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (userClass.endsWith('-8')) setSelectedTimetableGroup('8組');
+    else if (userClass.endsWith('-7')) setSelectedTimetableGroup('7組');
+  }, [userClass]);
 
   // バス用状態
   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
@@ -2229,13 +2146,6 @@ useEffect(() => {
       setNotificationLoadError('');
     }
 
-    fetchStep = '時間割取得（timetable）';
-    const { data: timetableRows, error: timetableError } = await supabase
-      .from('timetable')
-      .select('*')
-      .order('week_type', { ascending: true })
-      .order('day_of_week', { ascending: true })
-      .order('period', { ascending: true });
     fetchStep = '鷹の台駅時刻表取得（takanodai_timetable）';
     const { data: trainRows, error: trainError } = await supabase
       .from('takanodai_timetable')
@@ -2322,28 +2232,6 @@ useEffect(() => {
       }
     }
 
-    if (timetableError) {
-      console.error('時間割の取得に失敗:', timetableError);
-    } else if (timetableRows && timetableRows.length > 0) {
-      const nextTimetable = {
-        A: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
-        B: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
-      } as typeof MOCK_TIMETABLE_DATA;
-
-      timetableRows.forEach(row => {
-        const weekKey = row.week_type as 'A' | 'B';
-        const dayKey = row.day_of_week as 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri';
-        nextTimetable[weekKey][dayKey].push({
-          period: row.period,
-          subject: row.subject,
-          teacher: row.teacher,
-          room: row.room,
-          materials: row.materials,
-        });
-      });
-
-      setTimetableData(nextTimetable);
-    }
     } catch (unexpectedError) {
       console.error('Supabase共有データ取得中に例外が発生しました:', {
         step: fetchStep,
@@ -4114,20 +4002,17 @@ Supabaseの設定を確認してください。
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
               <h2 className={`text-xl font-black ${activeTextClass}`}>時間割スケジュール</h2>
-              {/* A週B週セレクター */}
+              {/* 7組・8組セレクター */}
               <div className="bg-gray-200/80 p-1 rounded-xl flex gap-1 text-xs font-bold">
-                <button 
-                  onClick={() => setSelectedWeekType('A')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${selectedWeekType === 'A' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-                >
-                  A週ダイヤ
-                </button>
-                <button 
-                  onClick={() => setSelectedWeekType('B')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${selectedWeekType === 'B' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-                >
-                  B週ダイヤ
-                </button>
+                {(['7組', '8組'] as const).map(group => (
+                  <button
+                    key={group}
+                    onClick={() => setSelectedTimetableGroup(group)}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${selectedTimetableGroup === group ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                  >
+                    {group}時間割
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -4156,21 +4041,17 @@ Supabaseの設定を確認してください。
 
             {/* 時間割リスト表示 */}
             <div className="space-y-2">
-              {timetableData[selectedWeekType][selectedDay].length === 0 ? (
+              {timetableData[selectedTimetableGroup][selectedDay].length === 0 ? (
                 <EmptyStateIllustration kind="empty-no-class" caption="選択した曜日の授業はありません。" />
-              ) : timetableData[selectedWeekType][selectedDay].map((slot) => (
+              ) : timetableData[selectedTimetableGroup][selectedDay].map((slot) => (
                 <div key={slot.period} className={`${cardBgClass} p-4 rounded-2xl border shadow-sm flex items-center gap-4`}>
                   <div className={`w-9 h-9 rounded-xl ${themeCls.lightBg} flex flex-col items-center justify-center font-black ${themeCls.text} text-sm flex-shrink-0`}>
                     {slot.period}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-0.5">
-                      <h4 className="text-sm font-black text-gray-800 tracking-wide">{slot.subject}</h4>
-                      <span className={`text-[11px] font-bold ${subTextClass}`}>{slot.teacher}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] text-gray-500 font-medium">
-                      <span className="flex items-center gap-0.5"><MapPin size={12} /> {getSchoolRoomDisplay(slot.room, userClass)}</span>
-                      <span className="flex items-center gap-0.5"><BookOpenCheck size={12} /> 持参: {slot.materials}</span>
+                    <h4 className="text-sm font-black text-gray-800 tracking-wide">{slot.subject}</h4>
+                    <div className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${subTextClass}`}>
+                      <BookOpenCheck size={12} /> 担当: {slot.teacher}
                     </div>
                   </div>
                 </div>
@@ -4178,7 +4059,7 @@ Supabaseの設定を確認してください。
             </div>
             <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100/50 text-blue-800 text-xs flex gap-2">
               <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
-              <p className="leading-relaxed">時間割データは学年別マスターデータと同期しています。特設授業や考査期間等の特別ダイヤは自動的に優先反映されます。</p>
+              <p className="leading-relaxed">添付された7組・8組の時間割を表示しています。特別授業や変更がある場合は、学校からの最新連絡を確認してください。</p>
             </div>
           </div>
         );

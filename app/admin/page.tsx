@@ -358,6 +358,8 @@ export default function CampusSyncAdmin() {
 
   const [trainTimetableSending, setTrainTimetableSending] = useState(false);
   const [trainTimetableMessage, setTrainTimetableMessage] = useState('');
+  const [classTimetableSending, setClassTimetableSending] = useState(false);
+  const [classTimetableMessage, setClassTimetableMessage] = useState('');
 
   useEffect(() => {
     if (!schoolNotificationImage) {
@@ -1080,6 +1082,40 @@ export default function CampusSyncAdmin() {
       setTrainTimetableMessage('時刻表を送信できませんでした。Vercel環境変数とLINE APIの設定を確認してください。');
     } finally {
       setTrainTimetableSending(false);
+    }
+  };
+
+  // 管理画面から翌日の7組・8組の時間割をFlex Messageでテスト送信する。
+  const handleSendClassTimetableTest = async () => {
+    if (classTimetableSending) return;
+    if (!adminApiPassword.trim()) {
+      setClassTimetableMessage('管理用パスワードを入力してください。上の共通Admin用パスワード欄を使用します。');
+      return;
+    }
+
+    setClassTimetableSending(true);
+    setClassTimetableMessage('');
+    try {
+      const response = await fetch('/api/line-class-timetable', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ mode: 'manual' }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        setClassTimetableMessage(result?.message || `翌日の時間割の送信に失敗しました（HTTP ${response.status}）。`);
+        return;
+      }
+      setClassTimetableMessage(result.message || '翌日の7組・8組時間割をLINEへ送信しました。');
+    } catch (error) {
+      console.error('翌日の時間割の手動LINE送信に失敗:', error);
+      setClassTimetableMessage('翌日の時間割を送信できませんでした。Vercel環境変数とLINE APIの設定を確認してください。');
+    } finally {
+      setClassTimetableSending(false);
     }
   };
 
@@ -1838,6 +1874,31 @@ export default function CampusSyncAdmin() {
                 {trainTimetableMessage && (
                   <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${trainTimetableMessage.includes('失敗') || trainTimetableMessage.includes('必要') || trainTimetableMessage.includes('確認してください') || trainTimetableMessage.includes('正しい') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
                     {trainTimetableMessage}
+                  </p>
+                )}
+              </div>
+
+              {/* 翌日の7組・8組時間割を21時自動配信／Adminからテスト送信 */}
+              <div className="rounded-2xl border border-violet-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-violet-500/15 p-3 text-violet-300"><CalendarDays size={22} /></div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-black text-white">翌日の7組・8組時間割（21:00自動配信）</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">日本時間で翌日の曜日を判定し、7組・8組の時間割を1つのFlex Message（2枚のカルーセル）でLINEへ送信します。金曜・土曜の夜は、翌日が土日で授業がないため自動スキップします。テスト送信も実際にLINE配信されるため、LINE公式アカウントの友だちと「時間割配信をON」にしたグループへ届きます。</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleSendClassTimetableTest()}
+                  disabled={classTimetableSending}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-black text-white transition hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Send size={16} />
+                  {classTimetableSending ? '翌日の時間割をLINE送信中...' : '翌日の時間割をテスト送信'}
+                </button>
+                {classTimetableMessage && (
+                  <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${classTimetableMessage.includes('失敗') || classTimetableMessage.includes('必要') || classTimetableMessage.includes('確認してください') || classTimetableMessage.includes('正しい') || classTimetableMessage.includes('時間割がない') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+                    {classTimetableMessage}
                   </p>
                 )}
               </div>

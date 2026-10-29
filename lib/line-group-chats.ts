@@ -8,8 +8,10 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable';
 
 export type LineGroupDeliveryResult = {
+  kind: LineGroupDeliveryKind;
   registered: number;
   sent: number;
   failed: number;
@@ -80,16 +82,23 @@ export async function pushLineMessagesToRegisteredChats(
   accessToken: string,
   messages: unknown[],
   retryKeyBase?: string,
+  kind: LineGroupDeliveryKind = 'general',
 ): Promise<LineGroupDeliveryResult> {
   const admin = getAdminClient();
-  if (!admin) return { registered: 0, sent: 0, failed: 0, lookupError: 'Supabaseのサーバー設定がありません。' };
+  if (!admin) return { kind, registered: 0, sent: 0, failed: 0, lookupError: 'Supabaseのサーバー設定がありません。' };
 
+  const preferenceColumn = kind === 'train_timetable'
+    ? 'receive_train_timetable'
+    : kind === 'class_timetable'
+      ? 'receive_class_timetable'
+      : 'receive_general_notifications';
   const { data, error } = await admin.from('line_group_chats')
     .select('chat_id,chat_type')
-    .eq('active', true);
+    .eq('active', true)
+    .eq(preferenceColumn, true);
   if (error) {
     console.error('LINEグループ配信先の取得に失敗:', error.message);
-    return { registered: 0, sent: 0, failed: 0, lookupError: error.message };
+    return { kind, registered: 0, sent: 0, failed: 0, lookupError: error.message };
   }
 
   const chats = (data || []) as RegisteredChat[];
@@ -117,12 +126,20 @@ export async function pushLineMessagesToRegisteredChats(
   }));
 
   const sent = outcomes.filter(Boolean).length;
-  return { registered: chats.length, sent, failed: chats.length - sent };
+  return { kind, registered: chats.length, sent, failed: chats.length - sent };
 }
 
 export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): string {
   if (result.lookupError) return 'グループ配信先を確認できませんでした。Supabaseのグループ用SQL設定を確認してください。';
-  if (result.registered === 0) return '配信先LINEグループはまだ登録されていません。Botをグループに招待すると自動登録されます。';
+  if (result.registered === 0) return result.kind === 'train_timetable'
+    ? '時刻表専用に設定されたLINEグループはありません（receive_train_timetable を確認してください）。'
+    : result.kind === 'class_timetable'
+      ? '時間割専用に設定されたLINEグループはありません（receive_class_timetable は初期状態でOFFです）。'
+      : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
   if (result.failed > 0) return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed + '件失敗しました。';
-  return '登録済みLINEグループ' + result.sent + '件にも配信しました。';
+  return result.kind === 'train_timetable'
+    ? '時刻表専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
+    : result.kind === 'class_timetable'
+      ? '時間割専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
+      : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
 }
