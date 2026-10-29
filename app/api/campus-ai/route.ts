@@ -63,14 +63,7 @@ const DEFAULT_ROOMS = [
   { room_id: '111', room_name: '家庭科室', status: '未取得', temp: null },
   { room_id: '112', room_name: '普通教室（1-1）', status: '未取得', temp: null },
 ];
-// 現在のCampusSync画面にある通知サンプルと同一内容。通知テーブルが導入されたら共通テーブルに置き換える。
-const FALLBACK_MENUS = [
-  { id: 'snack', name: 'スナック（唐揚げポテト）', calorie: '450kcal', allergy: '小麦・鶏肉' },
-  { id: 'soka', name: '創価ランチ（日替わりA）', calorie: '680kcal', allergy: '小麦・卵・乳' },
-  { id: 'noodles', name: '情熱ラーメン / うどん', calorie: '520kcal', allergy: '小麦・大豆' },
-  { id: 'curry', name: '栄光カレーライス', calorie: '710kcal', allergy: '小麦・豚肉・リンゴ' },
-  { id: 'healthy', name: 'ヘルシーバリューランチ', calorie: '540kcal', allergy: 'さば・大豆・ごま' },
-];
+
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as {
@@ -98,6 +91,28 @@ export async function POST(req: Request) {
     question = `${followDirection}方面の次の電車は何時ですか`;
   }
   const normalizedQuestion = normalize(question);
+  if (/(あなたができること|何ができる|何を聞ける|何ができるの|何を手伝える|機能一覧|できること一覧)/.test(question)) {
+    return NextResponse.json({
+      answer: 'CampusSync AIで対応できる主な機能です。実際の登録データがある機能は、データベースの内容を参照して回答します。',
+      table: {
+        headers: ['機能', '質問例'],
+        rows: [
+          ['今日の学食・メニュー', '今日の学食を教えて／売り切れは？'],
+          ['学食の混雑・行列', '学食は混んでる？／カレーの列は？'],
+          ['電車の時刻表', '国分寺方面の次の電車は？'],
+          ['課題・提出期限', '自分の課題と締切を教えて'],
+          ['教室・室温', '教室の状況や温度を教えて'],
+          ['学校イベント・週間予定', '今週の学校予定やカウントダウンは？'],
+          ['部活・委員会ノート', '部活の最新連絡を教えて'],
+          ['図書館の蔵書', 'この本は図書館にある？'],
+          ['落とし物', '届けられた落とし物はある？'],
+          ['キャリアセンター自習室', '自習室の空席は？'],
+          ['学校からのお知らせ', '最近のお知らせを教えて'],
+          ['貢献度・プロフィール', '自分の貢献度や所属クラスは？'],
+        ],
+      },
+    });
+  }
   const isGreeting = /^(こんにちは|こんにちわ|おはよう|こんばんは|やあ|どうも)[!！。?？]*$/.test(normalizedQuestion);
   const isFarewell = /^(さようなら|さよなら|またね|バイバイ|ばいばい|失礼します)[!！。?？]*$/.test(normalizedQuestion);
   if (isGreeting) return NextResponse.json({ answer: 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。' });
@@ -125,6 +140,11 @@ export async function POST(req: Request) {
   const nowDate = new Date();
   const jst = new Date(nowDate.getTime() + 9 * 60 * 60 * 1000);
   const jstHour = jst.getUTCHours();
+  const tokyoDateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(nowDate);
+  const tokyoDateValues = Object.fromEntries(tokyoDateParts.map(part => [part.type, part.value]));
+  const todayDateKey = String(tokyoDateValues.year) + '-' + String(tokyoDateValues.month) + '-' + String(tokyoDateValues.day);
   const now = (jstHour < 4 ? jstHour + 24 : jstHour) * 60 + jst.getUTCMinutes();
 
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') || '')?.[1] || '';
@@ -202,7 +222,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const [menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
+  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
+    db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'higashimurayama'),
@@ -258,6 +279,46 @@ export async function POST(req: Request) {
   if (wantsCrowd && voteRes.error) return NextResponse.json({ answer: '学食の混雑情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsSold && soldRes.error) return NextResponse.json({ answer: '売り切れ情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsMenu && menuRes.error) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
+  if (wantsMenu && /今日|本日|現在|学食教えて|メニュー教えて|何がある/.test(question) && !wantsCrowd && !wantsReviews) {
+    if (todayMenuRes.error) {
+      console.error('今日の学食メニュー取得エラー:', todayMenuRes.error.message);
+      return NextResponse.json({ answer: '今日の献立データを読み込めませんでした。Adminの月間献立表とSupabaseの設定を確認してください。' });
+    }
+    const daily = todayMenuRes.data as Record<string, unknown> | null;
+    if (!daily) {
+      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立はデータベースに登録されていません。サンプルメニューではなく、実際の献立データが登録されるとここに表示されます。' });
+    }
+    if (daily.is_closed === true) {
+      return NextResponse.json({ answer: '今日（' + todayDateKey + '）は学食の営業休止として登録されています。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
+    }
+    const categories = [
+      { key: 'soka_lunch', label: '創価ランチ', price: 'soka_lunch_price', calorie: 'soka_lunch_calorie', allergy: 'soka_lunch_allergy' },
+      { key: 'healthy_lunch', label: 'ヘルシーランチ', price: 'healthy_lunch_price', calorie: 'healthy_lunch_calorie', allergy: 'healthy_lunch_allergy' },
+      { key: 'snack_lunch', label: 'スナックランチ', price: 'snack_lunch_price', calorie: 'snack_lunch_calorie', allergy: 'snack_lunch_allergy' },
+      { key: 'curry', label: 'カレー', price: 'curry_price', calorie: 'curry_calorie', allergy: 'curry_allergy' },
+      { key: 'noodles', label: '麺類', price: 'noodles_price', calorie: 'noodles_calorie', allergy: 'noodles_allergy' },
+    ];
+    const dailyRows = categories
+      .filter(item => String(daily[item.key] || '').trim())
+      .map(item => [
+        item.label,
+        String(daily[item.key]).trim(),
+        String(daily[item.price] || '').trim() || '未登録',
+        String(daily[item.calorie] || '').trim() || '未登録',
+        String(daily[item.allergy] || '').trim() || '未登録',
+      ]);
+    if (!dailyRows.length) {
+      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立レコードはありますが、メニュー名がまだ入力されていません。Adminの月間献立表を確認してください。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
+    }
+    return NextResponse.json({
+      answer: '今日（' + todayDateKey + '）のAdmin月間献立表に登録されている実際のメニューです。',
+      table: {
+        headers: ['カテゴリ', 'メニュー', '価格', 'カロリー', 'アレルギー'],
+        rows: dailyRows,
+      },
+    });
+  }
+
   if (trainQuestion && (kokubunjiRes.error || eastRes.error)) return NextResponse.json({ answer: '電車の時刻表を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsClub && clubRes.error) return NextResponse.json({ answer: '部活ノートを読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsLibrary && booksRes.error) return NextResponse.json({ answer: '蔵書情報を読み込めませんでした。少し待ってからもう一度試してください。' });
@@ -303,8 +364,8 @@ export async function POST(req: Request) {
   type Menu = { id: string | number; name: string; calorie: string | number | null; allergy: string | null; is_active?: boolean | null };
   const liveMenus = ((menuRes.data ?? []) as Menu[]).filter(m => m.is_active !== false);
   // app/page.tsxと同じく、DBに有効メニューがない場合は画面内の初期メニューを使う。
-  const allMenus: Menu[] = liveMenus.length ? liveMenus : FALLBACK_MENUS;
-  const menuDataIsLive = liveMenus.length > 0;
+  const allMenus: Menu[] = liveMenus;
+  const menuDataIsLive = !menuRes.error && liveMenus.length > 0;
   const menuForList = allMenus.slice(0, 5); // v3は5件まで {N1}〜{N5}
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
@@ -716,14 +777,14 @@ export async function POST(req: Request) {
   if (wantsMenu && !wantsSold && !targetMenu && /今日|現在|一覧|何がある|メニューは|メニュー教えて/.test(question)) {
     return NextResponse.json({
       answer: menuDataIsLive
-        ? 'データベースに登録されている学食メニューです。'
-        : 'データベースにメニューがないため、サンプルメニューを表示しています。販売状況は未確認です。',
-      table: table(['メニュー', 'カロリー', 'アレルギー', '販売状況'], allMenus.map(m => [
+        ? 'データベースに登録されている有効な学食メニューです。今日の献立を確認したい場合は「今日の学食を教えて」と聞いてください。'
+        : '有効な学食メニューがデータベースに登録されていません。サンプルメニューは実際の献立と誤認されるため表示しません。',
+      table: allMenus.length ? table(['メニュー', 'カロリー', 'アレルギー', '販売状況'], allMenus.map(m => [
         str(m.name),
         str(m.calorie),
         str(m.allergy),
-        menuDataIsLive ? (soldIds.has(String(m.id)) ? '売り切れ' : '販売中') : '未確認'
-      ]))
+        soldIds.has(String(m.id)) ? '売り切れ' : '販売中'
+      ])) : undefined
     });
   }
 
