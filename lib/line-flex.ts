@@ -43,8 +43,11 @@ export function buildNoticeFlexMessage(title: string, message: string, imageUrl?
         ],
       },
       footer: {
-        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
-        contents: [{ type: 'text', text: 'SOKA HIGH SCHOOL  •  CampusSync', color: '#64748B', size: 'xs', align: 'center' }],
+        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', color: '#64748B', size: 'xs', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', color: '#64748B', size: 'xs', align: 'center', wrap: true },
+        ],
       },
     },
   };
@@ -86,8 +89,11 @@ export function buildClubNoteFlexMessage(input: {
         ],
       },
       footer: {
-        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
-        contents: [{ type: 'text', text: 'CAMPUSSYNC  •  SCHOOL COMMUNITY', color: '#64748B', size: 'xs', align: 'center' }],
+        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', color: '#64748B', size: 'xs', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', color: '#64748B', size: 'xs', align: 'center', wrap: true },
+        ],
       },
     },
   };
@@ -149,10 +155,11 @@ export function buildHourlyTrainTimetableFlex(input: {
         ],
       },
       footer: {
-        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
+        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
         contents: [
           { type: 'text', text: '時刻表データ登録時点の発車予定です。遅延・運休情報は含みません。', size: 'xs', color: '#64748B', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC  •  SOKA HIGH SCHOOL', size: 'xs', color: '#94A3B8', align: 'center', margin: 'sm' },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
         ],
       },
     },
@@ -211,10 +218,11 @@ export function buildLostFoundApprovedFlexMessage(input: {
       },
       body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: details },
       footer: {
-        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
+        type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
         contents: [
           { type: 'text', text: '心当たりがある場合は、事務室へお問い合わせください。', size: 'xs', color: '#475569', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC  •  SOKA HIGH SCHOOL', size: 'xs', color: '#94A3B8', align: 'center', margin: 'sm' },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
         ],
       },
     },
@@ -255,10 +263,11 @@ export function buildCafeteriaSoldOutFlexMessage(input: {
       },
       body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: bodyContents },
       footer: {
-        type: 'box', layout: 'vertical', backgroundColor: '#FFF7F7', paddingAll: '12px',
+        type: 'box', layout: 'vertical', backgroundColor: '#FFF7F7', paddingAll: '12px', spacing: 'xs',
         contents: [
           { type: 'text', text: '次回の販売状況はCampusSyncでご確認ください。', size: 'xs', color: '#7F1D1D', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC  •  SOKA HIGH SCHOOL', size: 'xs', color: '#94A3B8', align: 'center', margin: 'sm' },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
         ],
       },
     },
@@ -274,6 +283,7 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
     dayLabel: string;
     isHoliday?: boolean;
     holidayName?: string;
+    isWeekendSchool?: boolean;
     items?: Array<{ id?: string; time?: string; title?: string; location?: string; details?: string }>;
   }>;
 }): FlexMessage {
@@ -284,6 +294,8 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
   const heading = input.title.trim().slice(0, 100) || '学校予定表';
   const bubbles = input.days.slice(0, 7).map((day, index) => {
     const holiday = day.isHoliday === true;
+    const weekend = day.dayLabel === '土' || day.dayLabel === '日';
+    const weekendSchool = weekend && day.isWeekendSchool === true;
     const allItems = Array.isArray(day.items) ? day.items : [];
     const items = allItems.filter(item => String(item.title || item.details || item.time || item.location || '').trim());
     const bodyContents: Record<string, unknown>[] = [];
@@ -296,7 +308,15 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
         ],
       });
     }
-    if (items.length === 0 && !holiday) {
+    }
+    if (weekend && !holiday) {
+      bodyContents.push({
+        type: 'box', layout: 'vertical', paddingAll: '10px', cornerRadius: '9px',
+        backgroundColor: weekendSchool ? '#D1FAE5' : '#E2E8F0',
+        contents: [{ type: 'text', text: weekendSchool ? '休日登校日' : '基本休日', size: 'sm', weight: 'bold', color: weekendSchool ? '#065F46' : '#334155', wrap: true }],
+      });
+    }
+    if (items.length === 0 && !holiday && !(weekend && !weekendSchool)) {
       bodyContents.push({ type: 'text', text: 'この日の予定はありません。', size: 'sm', color: '#64748B', wrap: true });
     }
     for (const item of items.slice(0, 7)) {
@@ -329,10 +349,12 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
       },
       body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: bodyContents },
       footer: {
-        type: 'box', layout: 'vertical', paddingAll: '10px', backgroundColor: '#F1F5F9',
+        type: 'box', layout: 'vertical', paddingAll: '10px', backgroundColor: '#F1F5F9', spacing: 'xs',
         contents: [
           { type: 'text', text: heading + '  •  ' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd), size: 'xs', color: '#475569', wrap: true },
-          { type: 'text', text: (index + 1) + ' / 7  日曜日の週予定配信', size: 'xs', color: '#64748B', align: 'center', margin: 'xs' },
+          { type: 'text', text: (index + 1) + ' / 7  日曜日の週予定配信', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
         ],
       },
     };
@@ -399,10 +421,11 @@ export function buildSchoolEventCountdownFlexMessages(input: Array<{
         },
         body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: bodyContents },
         footer: {
-          type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
+          type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
           contents: [
             { type: 'text', text: '開催日までのカウントダウン通知です。', size: 'xs', color: '#475569', wrap: true },
-            { type: 'text', text: 'CAMPUSSYNC  •  SOKA HIGH SCHOOL', size: 'xs', color: '#94A3B8', align: 'center', margin: 'sm' },
+            { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+            { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
           ],
         },
       };
