@@ -345,3 +345,70 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
   };
 }
 
+
+
+/** イベントの指定日カウントダウンを、12イベントずつのLINE Flex carouselに分割して構築します。 */
+export function buildSchoolEventCountdownFlexMessages(input: Array<{
+  title: string;
+  summary?: string | null;
+  eventDate: string;
+  daysRemaining: number;
+}>): FlexMessage[] {
+  const items = input.filter(item => item && String(item.title || '').trim()).map(item => ({
+    title: String(item.title || '学校イベント').trim().slice(0, 120),
+    summary: String(item.summary || '').trim().slice(0, 1200),
+    eventDate: String(item.eventDate || ''),
+    daysRemaining: Math.max(0, Math.floor(Number(item.daysRemaining) || 0)),
+  }));
+  const dateLabel = (value: string) => value.slice(0, 10).replace(/-/g, '/');
+  const messages: FlexMessage[] = [];
+
+  for (let offset = 0; offset < items.length; offset += 12) {
+    const chunk = items.slice(offset, offset + 12);
+    const contents = chunk.map(event => {
+      const remainingColor = event.daysRemaining <= 3 ? '#B91C1C' : event.daysRemaining <= 7 ? '#C2410C' : '#4338CA';
+      const countdownLabel = event.daysRemaining === 1 ? 'あと1日' : 'あと' + event.daysRemaining + '日';
+      const bodyContents: Record<string, unknown>[] = [
+        { type: 'text', text: event.title, size: 'xl', weight: 'bold', color: '#0F172A', wrap: true },
+        { type: 'box', layout: 'horizontal', spacing: 'sm', margin: 'md', contents: [
+          { type: 'text', text: '開催日', size: 'sm', color: '#64748B', flex: 2 },
+          { type: 'text', text: dateLabel(event.eventDate), size: 'sm', color: '#1E293B', weight: 'bold', flex: 5, wrap: true },
+        ] },
+      ];
+      if (event.summary) bodyContents.push({
+        type: 'box', layout: 'vertical', spacing: 'xs', margin: 'md', backgroundColor: '#F1F5F9', cornerRadius: '10px', paddingAll: '12px',
+        contents: [{ type: 'text', text: 'イベント概要', size: 'xs', weight: 'bold', color: '#64748B' },
+          { type: 'text', text: event.summary, size: 'sm', color: '#334155', wrap: true }],
+      });
+      return {
+        type: 'bubble',
+        size: 'mega',
+        header: {
+          type: 'box', layout: 'vertical', backgroundColor: '#0F172A', paddingAll: '18px', spacing: 'sm',
+          contents: [
+            { type: 'text', text: 'CAMPUSSYNC  /  EVENT COUNTDOWN', size: 'xs', color: '#67E8F9', weight: 'bold' },
+            { type: 'text', text: '学校イベントのお知らせ', size: 'lg', color: '#FFFFFF', weight: 'bold', wrap: true },
+          ],
+        },
+        hero: {
+          type: 'box', layout: 'vertical', backgroundColor: remainingColor, paddingAll: '16px', spacing: 'xs',
+          contents: [
+            { type: 'text', text: countdownLabel, size: '3xl', color: '#FFFFFF', weight: 'bold', align: 'center', wrap: true },
+            { type: 'text', text: 'EVENT COUNTDOWN', size: 'xs', color: '#FFFFFF', align: 'center', weight: 'bold' },
+          ],
+        },
+        body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: bodyContents },
+        footer: {
+          type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC',
+          contents: [
+            { type: 'text', text: '開催日までのカウントダウン通知です。', size: 'xs', color: '#475569', wrap: true },
+            { type: 'text', text: 'CAMPUSSYNC  •  SOKA HIGH SCHOOL', size: 'xs', color: '#94A3B8', align: 'center', margin: 'sm' },
+          ],
+        },
+      };
+    });
+    const altText = ('CampusSync｜学校イベントのカウントダウン｜' + chunk.map(item => item.title + ' あと' + item.daysRemaining + '日').join('、')).slice(0, 400);
+    messages.push({ type: 'flex', altText, contents: { type: 'carousel', contents } });
+  }
+  return messages;
+}
