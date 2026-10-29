@@ -12,6 +12,10 @@ create table if not exists public.class_chat_messages (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+ 
+-- Optional nickname shown in class chat; official student_name remains unchanged.
+alter table public.profiles
+  add column if not exists chat_display_name text;
 
 create index if not exists class_chat_messages_class_created_idx
   on public.class_chat_messages (class_name, created_at desc);
@@ -45,7 +49,7 @@ set search_path = public, auth
 as $function$
   select
     p.student_id::text as student_id,
-    btrim(coalesce(p.student_name::text, '')) as student_name,
+    coalesce(nullif(btrim(p.chat_display_name::text), ''), btrim(coalesce(p.student_name::text, ''))) as student_name,
     case
       when p.user_class::text ~ '^[1-3]-[1-8]$'
         then p.user_class::text
@@ -65,6 +69,45 @@ $function$;
 revoke all on function public.current_class_chat_profile() from public;
 revoke all on function public.current_class_chat_profile() from anon;
 grant execute on function public.current_class_chat_profile() to authenticated;
+
+-- Keep the author's older messages consistent with their latest chat display name.
+create or replace function public.sync_class_chat_display_name_to_messages()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  effective_name text;
+begin
+  effective_name := coalesce(
+    nullif(btrim(new.chat_display_name::text), ''),
+    btrim(coalesce(new.student_name::text, ''))
+  );
+
+  if new.auth_user_id is not null then
+    update public.class_chat_messages
+    set student_name = effective_name
+    where user_id = new.auth_user_id
+      and student_id = new.student_id::text
+      and student_name is distinct from effective_name;
+  end if;
+
+  return new;
+end
+$function$;
+
+revoke all on function public.sync_class_chat_display_name_to_messages() from public;
+
+drop trigger if exists sync_class_chat_display_name_to_messages on public.profiles;
+create trigger sync_class_chat_display_name_to_messages
+after update of student_name, chat_display_name on public.profiles
+for each row
+when (
+  old.student_name is distinct from new.student_name
+  or old.chat_display_name is distinct from new.chat_display_name
+)
+execute function public.sync_class_chat_display_name_to_messages();
 
 alter table public.class_chat_messages enable row level security;
 alter table public.class_chat_reactions enable row level security;
