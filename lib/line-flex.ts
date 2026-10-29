@@ -308,7 +308,6 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
         ],
       });
     }
-    }
     if (weekend && !holiday) {
       bodyContents.push({
         type: 'box', layout: 'vertical', paddingAll: '10px', cornerRadius: '9px',
