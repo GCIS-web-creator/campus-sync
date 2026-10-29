@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { buildLostFoundApprovedFlexMessage } from '@/lib/line-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -129,6 +130,7 @@ export async function PATCH(request: Request) {
   const row = existing as LostFoundRow;
   let updated = row;
   if (body.action === 'approve') {
+    let newlyApproved = false;
     if (row.status === 'pending') {
       const { data, error } = await admin.from('lost_and_found')
         .update({ status: 'approved', approved_at: new Date().toISOString() })
@@ -137,6 +139,7 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ success: false, message: error?.message || '状態が更新されました。一覧を再読み込みしてください。' }, { status: 409 });
       }
       updated = data as LostFoundRow;
+      newlyApproved = true;
     } else if (row.status !== 'approved') {
       return NextResponse.json({ success: false, message: '返却済みの落とし物は再公開できません。' }, { status: 409 });
     }
@@ -203,9 +206,63 @@ export async function PATCH(request: Request) {
     } else if (!contributionAwarded) {
       contributionMessage = '投稿者の学籍番号が記録されていないため、貢献度は加算していません。';
     }
+    let lineNotificationMessage = '';
+    if (newlyApproved) {
+      const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+      if (!accessToken) {
+        lineNotificationMessage = 'LINE通知は未送信です。VercelのLINE_CHANNEL_ACCESS_TOKENを確認してください。';
+      } else {
+        const approvedAt = String((updated as any).approved_at || new Date().toISOString());
+        const approvedJst = new Intl.DateTimeFormat('ja-JP', {
+          timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        }).format(new Date(approvedAt));
+        const flex = buildLostFoundApprovedFlexMessage({
+          title: updated.title,
+          location: updated.location,
+          storage: updated.finder,
+          description: updated.description,
+          approvedAt: approvedJst,
+        });
+        const digest = createHash('sha256')
+          .update('campussync-lost-found-approved:' + String(updated.id) + ':' + approvedAt)
+          .digest('hex')
+          .slice(0, 32)
+          .split('');
+        digest[12] = '4';
+        digest[16] = ((parseInt(digest[16], 16) & 3) | 8).toString(16);
+        const hex = digest.join('');
+        const retryKey = hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+        try {
+          const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + accessToken,
+              'Content-Type': 'application/json',
+              'X-Line-Retry-Key': retryKey,
+            },
+            body: JSON.stringify({ messages: [flex] }),
+            cache: 'no-store',
+          });
+          if (response.ok || response.status === 409) {
+            lineNotificationMessage = 'LINEにも公開のお知らせをFlex Messageで送信しました。';
+          } else {
+            console.error('落とし物公開のLINE通知に失敗:', response.status);
+            lineNotificationMessage = 'ただし、LINE通知は失敗しました（HTTP ' + response.status + '）。LINEのトークン・送信上限を確認してください。';
+          }
+        } catch (error) {
+          console.error('落とし物公開のLINE通知通信エラー:', error instanceof Error ? error.message : 'unknown error');
+          lineNotificationMessage = 'ただし、LINE通知の接続に失敗しました。Vercelのログを確認してください。';
+        }
+      }
+    }
+
+    const summaryMessage = '実物確認済みとして全体公開しました。'
+      + (contributionMessage || (contributionAwarded ? '投稿者に貢献度を加算しました。' : ''))
+      + (lineNotificationMessage ? ' ' + lineNotificationMessage : '');
     return NextResponse.json({
       success: true, item: updated, contributionAwarded,
-      message: '実物確認済みとして全体公開しました。' + (contributionMessage || (contributionAwarded ? '投稿者に貢献度を加算しました。' : '')),
+      lineNotification: newlyApproved ? (lineNotificationMessage.startsWith('LINEにも') ? 'sent' : 'failed') : 'not-needed',
+      message: summaryMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
