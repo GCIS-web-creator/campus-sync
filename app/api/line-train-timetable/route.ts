@@ -33,7 +33,7 @@ function minutesFromTimetableTime(value: string): number | null {
 }
 
 function stableRetryKey(windowStart: string): string {
-  const hex = createHash('sha256').update('campussync-hourly-train:' + windowStart).digest('hex').slice(0, 32).split('');
+  const hex = createHash('sha256').update('campussync-afternoon-train:' + windowStart).digest('hex').slice(0, 32).split('');
   hex[12] = '4';
   hex[16] = ((parseInt(hex[16], 16) & 3) | 8).toString(16);
   const value = hex.join('');
@@ -72,15 +72,20 @@ export async function POST(request: Request) {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const now = new Date();
+  const nowParts = tokyoParts(now);
+  // Scheduled run: one daily slot at 15:30 JST. Manual sends retain the existing rolling-hour behavior.
   const windowStartDate = manualRequest
     ? new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 30_000)
-    : new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
-  // Manual sends are tracked in a minute slot distinct from the scheduled hourly slot.
+    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 6, 30));
   const windowStart = windowStartDate.toISOString();
-  const rangeStartDate = manualRequest ? now : windowStartDate;
+  const rangeStartDate = manualRequest
+    ? now
+    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 6, 40));
   const parts = tokyoParts(rangeStartDate);
   const startMinute = Number(parts.hour) * 60 + Number(parts.minute);
-  const endDate = new Date(rangeStartDate.getTime() + 60 * 60_000);
+  const endDate = manualRequest
+    ? new Date(rangeStartDate.getTime() + 60 * 60_000)
+    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 9, 0));
   const endParts = tokyoParts(endDate);
   const startLabel = parts.hour + ':' + parts.minute;
   const endLabel = endParts.hour + ':' + endParts.minute;
@@ -102,9 +107,8 @@ export async function POST(request: Request) {
     const minutes = minutesFromTimetableTime(row.departure_time);
     if (minutes === null) return null;
     const offset = (minutes - startMinute + 1440) % 1440;
-    // Scheduled sends cover the current clock hour; Admin manual sends cover
-    // the next 60 minutes starting from the current minute (including midnight wrap).
-    if (offset >= 60 || (!manualRequest && (minutes < startMinute || minutes >= startMinute + 60))) return null;
+    // Daily scheduled summary covers 15:40–18:00 JST; manual sends cover the next 60 minutes.
+    if (manualRequest ? offset >= 60 : (minutes < 15 * 60 + 40 || minutes >= 18 * 60)) return null;
     return { time: String(row.departure_time).slice(0, 5), service: row.service || '各駅停車' };
   };
   const sortFromRangeStart = (left: TimetableDeparture, right: TimetableDeparture) => {
@@ -116,7 +120,7 @@ export async function POST(request: Request) {
   const higashimurayama = rows.filter(row => row.direction === 'higashimurayama').map(inWindow).filter((row): row is TimetableDeparture => row !== null).sort(sortFromRangeStart);
   const flex = buildHourlyTrainTimetableFlex({
     startLabel: startDateLabel,
-    endLabel: manualRequest ? (endParts.hour + ':' + endParts.minute) : (endParts.hour + ':00'),
+    endLabel: endParts.hour + ':' + endParts.minute,
     kokubunji,
     higashimurayama,
   });
@@ -176,7 +180,7 @@ export async function POST(request: Request) {
         alreadyAccepted: response.status === 409,
         windowStart,
         departures: kokubunji.length + higashimurayama.length,
-        message: (manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の今後1時間の発車案内をFlex Messageで配信しました。') + ' ' + groupSummary,
+        message: (manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の15:40〜18:00の発車案内をFlex Messageで配信しました。') + ' ' + groupSummary,
       });
     }
     const { error: savedError } = await admin.from('line_train_timetable_sends').update({
