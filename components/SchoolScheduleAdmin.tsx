@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { CalendarDays, Plus, Trash2, Send, Save, CalendarCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ScheduleItem = { id: string; time: string; title: string; location: string; details: string };
-type ScheduleDay = { date: string; dayLabel: string; isHoliday: boolean; holidayName: string; items: ScheduleItem[] };
+type ScheduleDay = { date: string; dayLabel: string; isHoliday: boolean; holidayName: string; isWeekendSchool?: boolean; items: ScheduleItem[] };
 type SchedulePayload = { week_start: string; title: string; days: ScheduleDay[] };
 type Props = { adminPassword: string; onAdminPasswordChange: (value: string) => void };
 
@@ -45,6 +45,7 @@ function emptyDays(weekStart: string): ScheduleDay[] {
     dayLabel: label,
     isHoliday: false,
     holidayName: '',
+    isWeekendSchool: false,
     items: [newItem()],
   }));
 }
@@ -196,7 +197,7 @@ export default function SchoolScheduleAdmin({ adminPassword, onAdminPasswordChan
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-black"><CalendarCheck className="text-cyan-400" /> 週間学校予定表</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">月曜日〜日曜日を1週間として保存します。予定は日ごとに追加でき、祝日設定もできます。保存内容は生徒用サイトとLINE配信で共有されます。</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">月曜日〜日曜日を1週間として保存します。土日は基本休日として表示され、休日登校がある場合は切り替えられます。祝日設定や日ごとの予定追加もできます。</p>
         </div>
       </div>
 
@@ -225,15 +226,21 @@ export default function SchoolScheduleAdmin({ adminPassword, onAdminPasswordChan
       {loading ? <p className="rounded-xl bg-slate-950 p-5 text-sm text-slate-400">予定表を読み込み中...</p> : (
         <div className="space-y-4">
           {days.map((day, dayIndex) => (
-            <section key={day.date} className={'rounded-2xl border p-4 sm:p-5 ' + (day.isHoliday ? 'border-rose-800/70 bg-rose-950/20' : 'border-slate-800 bg-slate-950')}>
+            <section key={day.date} className={'rounded-2xl border p-4 sm:p-5 ' + (day.isHoliday ? 'border-rose-800/70 bg-rose-950/20' : dayIndex >= 5 && !day.isWeekendSchool ? 'border-slate-700 bg-slate-900/70' : 'border-slate-800 bg-slate-950')}>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-black text-white">{day.dayLabel}曜日 <span className="ml-1 text-xs font-medium text-slate-400">{day.date}</span></h3>
                   {day.isHoliday && <span className="mt-1 inline-flex rounded-full bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-300">祝日・休校日</span>}
+                  {dayIndex >= 5 && !day.isHoliday && <span className={'mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black ' + (day.isWeekendSchool ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300')}>{day.isWeekendSchool ? '休日登校日' : '基本休日'}</span>}
                 </div>
-                <button type="button" onClick={() => updateDay(dayIndex, { isHoliday: !day.isHoliday, holidayName: day.isHoliday ? '' : day.holidayName })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isHoliday ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
-                  {day.isHoliday ? '祝日設定を解除' : '祝日にする'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => updateDay(dayIndex, { isHoliday: !day.isHoliday, holidayName: day.isHoliday ? '' : day.holidayName })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isHoliday ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
+                    {day.isHoliday ? '祝日設定を解除' : '祝日にする'}
+                  </button>
+                  {dayIndex >= 5 && !day.isHoliday && <button type="button" onClick={() => updateDay(dayIndex, { isWeekendSchool: !day.isWeekendSchool })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isWeekendSchool ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
+                    {day.isWeekendSchool ? '休日登校を解除' : '休日登校にする'}
+                  </button>}
+                </div>
               </div>
               {day.isHoliday && (
                 <label className="mb-4 block text-xs font-bold text-slate-300">
