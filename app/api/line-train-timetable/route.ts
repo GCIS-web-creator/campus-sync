@@ -73,6 +73,10 @@ export async function POST(request: Request) {
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const now = new Date();
   const nowParts = tokyoParts(now);
+  // Ignore any legacy hourly Cron calls; scheduled delivery is valid only at 15:30 JST.
+  if (!manualRequest && (Number(nowParts.hour) !== 15 || Number(nowParts.minute) < 30 || Number(nowParts.minute) >= 40)) {
+    return NextResponse.json({ success: true, skipped: true, message: '定期配信は毎日15:30（日本時間）のみ実行します。' });
+  }
   // Scheduled run: one daily slot at 15:30 JST. Manual sends retain the existing rolling-hour behavior.
   const windowStartDate = manualRequest
     ? new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 30_000)
