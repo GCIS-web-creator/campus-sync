@@ -1,6 +1,6 @@
 -- CampusSync: LINEグループ配信先と通知種別ごとの受信設定
 -- Group IDはLINE Webhookから自動登録できます。列追加は何度実行しても安全です。
--- 時間割・電車時刻表は配信設定に従い、週間学校予定表は既存の時間割配信先を初期値にコピーします。新規登録グループの週間予定表は初期状態OFFです。
+-- 時間割・電車時刻表は配信設定に従います。週間学校予定表は別のUPDATEで配信対象を明示的にONにしてください。
 
 create table if not exists public.line_group_chats (
   chat_id text primary key,
