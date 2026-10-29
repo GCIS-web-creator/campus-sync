@@ -377,8 +377,7 @@ export default function CampusSyncAdmin() {
             updatedAt: row.updated_at
               ? new Date(row.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
               : '日時不明',
-          }))
-          .sort((a, b) => b.id.localeCompare(a.id, 'ja'));
+          }));
         setAcReports(reports);
         setAcReportsMessage('');
       }
