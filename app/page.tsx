@@ -353,13 +353,14 @@ const INITIAL_ROOMS = [
   { id: 112, name: '普通教室（1-1）', status: '快適', temp: '30℃', icon: ThermometerSnowflake, color: 'text-green-500', bg: 'bg-green-50' },
 ];
 
-const MOCK_NOTIFICATIONS = [
-  { id: 1, title: '明日の体育はグラウンドです（熱中症対策を万全に）', time: '10分前', isRead: false },
-  { id: 2, title: '図書室の新着おすすめ本が入荷しました！', time: '1時間前', isRead: false },
-  { id: 3, title: '【重要】鷹の台駅の電車発車時刻について', time: '昨日', isRead: true },
-  { id: 4, title: '食堂の期間限定「栄光フェス丼」メニュー開始のお知らせ', time: '昨日', isRead: true },
-  { id: 5, title: '定期考査の範囲表がClassroomにアップロードされました', time: '3日前', isRead: true },
-];
+type AppSchoolNotification = {
+  id: string | number;
+  title: string;
+  body: string;
+  createdAt: string;
+  time: string;
+  isRead: boolean;
+};
 
 type CafeteriaMenuItem = {
   id: string;
@@ -1660,7 +1661,9 @@ export default function CampusSyncApp() {
   const [lostSubmitting, setLostSubmitting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [scoreSaving, setScoreSaving] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppSchoolNotification[]>([]);
+  const [notificationLoadError, setNotificationLoadError] = useState('');
+  const [selectedNotification, setSelectedNotification] = useState<AppSchoolNotification | null>(null);
   const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
   const [libraryBooksLoading, setLibraryBooksLoading] = useState(true);
@@ -2173,21 +2176,36 @@ useEffect(() => {
 
     if (notificationError) {
       console.error('学校通知の取得に失敗:', notificationError);
-    } else if (notificationData) {
-      setNotifications(
-        notificationData.map(note => ({
-          id: note.id,
-          title: note.title,
-          time: new Date(note.created_at).toLocaleString('ja-JP', {
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          // 既読管理は後で生徒ごとに分離する。現段階では新着扱い。
+      setNotifications([]);
+      setNotificationLoadError('学校通知を読み込めませんでした。通信状態とSupabaseの設定を確認してください。');
+    } else {
+      const rows = Array.isArray(notificationData) ? notificationData : [];
+      setNotifications(rows.map((note): AppSchoolNotification => {
+        const bodyValue = [note.body, note.message, note.content, note.description]
+          .find(value => typeof value === 'string' && value.trim());
+        const createdAt = typeof note.created_at === 'string' ? note.created_at : '';
+        const parsedDate = createdAt ? new Date(createdAt) : null;
+        const time = parsedDate && !Number.isNaN(parsedDate.getTime())
+          ? parsedDate.toLocaleString('ja-JP', {
+              timeZone: 'Asia/Tokyo',
+              year: 'numeric',
+              month: 'numeric',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '日時不明';
+        return {
+          id: note.id as string | number,
+          title: typeof note.title === 'string' && note.title.trim() ? note.title : '学校からのお知らせ',
+          body: typeof bodyValue === 'string' ? bodyValue : '',
+          createdAt,
+          time,
+          // 既読管理は生徒ごとに保存できるようになるまでセッション内の新着として扱う。
           isRead: false,
-        }))
-      );
+        };
+      }));
+      setNotificationLoadError('');
     }
 
     fetchStep = '時間割取得（timetable）';
@@ -4743,21 +4761,40 @@ Supabaseの設定を確認してください。
         return (
           <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <h2 className={`text-xl font-black ${activeTextClass} px-1`}>学園総合通知</h2>
-            {notifications.length === 0 && <EmptyStateIllustration kind="empty-notifications" caption="新しい通知はありません。" />}
-          {notifications.map(note => (
-              <div key={note.id} className={`p-4 rounded-2xl border ${note.isRead ? 'bg-transparent border-gray-200' : 'bg-white border-blue-200 shadow-sm'} flex gap-3.5 items-start`}>
-                <div className="mt-1">
+            {notificationLoadError && (
+              <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold leading-5 text-rose-700">
+                {notificationLoadError}
+              </p>
+            )}
+            {notifications.length === 0 && !notificationLoadError && (
+              <EmptyStateIllustration kind="empty-notifications" caption="現在、公開中のお知らせはありません。" />
+            )}
+            {notifications.map(note => (
+              <button
+                type="button"
+                key={note.id}
+                onClick={() => setSelectedNotification(note)}
+                aria-label={`通知の詳細を開く：${note.title}`}
+                className={`flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors ${note.isRead ? 'border-gray-200 bg-transparent' : 'border-blue-200 bg-white shadow-sm'} hover:border-blue-300 hover:bg-blue-50/40`}
+              >
+                <div className="mt-1 shrink-0">
                   {note.isRead ? (
-                    <Bell size={18} className="text-gray-300"/>
+                    <Bell size={18} className="text-gray-300" />
                   ) : (
-                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shadow-xs ${themeCls.bg} ${themeCls.shadow}`}></div>
+                    <div className={`mt-1.5 h-2.5 w-2.5 rounded-full shadow-xs ${themeCls.bg} ${themeCls.shadow}`} />
                   )}
                 </div>
-                <div>
-                  <h4 className={`text-xs leading-normal mb-1 ${note.isRead ? 'text-gray-500 font-medium' : 'text-gray-800 font-black'}`}>{note.title}</h4>
-                  <p className="text-[10px] text-gray-400 font-medium">{note.time}</p>
+                <div className="min-w-0 flex-1">
+                  <h4 className={`mb-1 break-words text-xs leading-normal ${note.isRead ? 'font-medium text-gray-500' : 'font-black text-gray-800'}`}>{note.title}</h4>
+                  {note.body && (
+                    <p className="mb-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-gray-600">
+                      {note.body.length > 120 ? `${note.body.slice(0, 120)}…` : note.body}
+                    </p>
+                  )}
+                  <p className="text-[10px] font-medium text-gray-400">{note.time}</p>
                 </div>
-              </div>
+                <ChevronRight size={16} className="mt-1 shrink-0 text-gray-400" />
+              </button>
             ))}
           </div>
         );
@@ -5283,7 +5320,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
               <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
               <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
-              <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={3} themeCls={themeCls} />
+              <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
               <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
             </nav>
           </div>
@@ -5699,6 +5736,43 @@ Supabaseの設定を確認してください。
               設定温度と室内体感を報告
             </button>
           </div>
+        </div>
+      )}
+
+      {selectedNotification && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="school-notification-detail-title"
+          onClick={() => setSelectedNotification(null)}
+        >
+          <section
+            className="w-full max-w-lg rounded-3xl border border-gray-200 bg-white p-5 shadow-2xl sm:p-6"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${themeCls.lightBg} ${themeCls.text}`}>
+                <BellRing size={22} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[10px] font-black tracking-widest ${themeCls.text}`}>CAMPUSSYNC / SCHOOL NOTICE</p>
+                <h2 id="school-notification-detail-title" className="mt-1 break-words text-base font-black leading-6 text-gray-900">
+                  {selectedNotification.title}
+                </h2>
+                <p className="mt-2 text-[10px] font-medium text-gray-400">{selectedNotification.time}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedNotification(null)} aria-label="通知の詳細を閉じる" className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 max-h-[55vh] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
+              <p className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
+            </div>
+            <button type="button" onClick={() => setSelectedNotification(null)} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white transition ${themeCls.bg} ${themeCls.bgHover}`}>
+              閉じる
+            </button>
+          </section>
         </div>
       )}
 

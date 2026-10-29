@@ -251,6 +251,13 @@ type LineBroadcastHistoryRow = {
   sent_at: string;
 };
 
+type AdminSchoolNotification = {
+  id: string | number;
+  title: string;
+  body: string;
+  created_at: string;
+};
+
 const uploadLibraryCoverImage = async (file: File): Promise<string> => {
   const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
@@ -333,6 +340,16 @@ export default function CampusSyncAdmin() {
   const [lineHistoryLoading, setLineHistoryLoading] = useState(true);
   const [lineHistoryMessage, setLineHistoryMessage] = useState('');
   const [lineHistoryRefreshKey, setLineHistoryRefreshKey] = useState(0);
+
+  // 学園総合通知：アプリの通知一覧へ本文付きで全校公開する。
+  const [schoolNotificationTitle, setSchoolNotificationTitle] = useState('');
+  const [schoolNotificationBody, setSchoolNotificationBody] = useState('');
+  const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
+  const [schoolNotificationMessage, setSchoolNotificationMessage] = useState('');
+  const [schoolNotificationHistory, setSchoolNotificationHistory] = useState<AdminSchoolNotification[]>([]);
+  const [schoolNotificationHistoryLoading, setSchoolNotificationHistoryLoading] = useState(false);
+  const [schoolNotificationHistoryMessage, setSchoolNotificationHistoryMessage] = useState('');
+
   const [trainTimetableSending, setTrainTimetableSending] = useState(false);
   const [trainTimetableMessage, setTrainTimetableMessage] = useState('');
 
@@ -872,6 +889,83 @@ export default function CampusSyncAdmin() {
     }
   };
 
+  // Adminから公開済みの学園総合通知を読み込む。
+  const handleLoadSchoolNotificationHistory = async () => {
+    if (!adminApiPassword.trim()) {
+      setSchoolNotificationHistoryMessage('Admin用パスワードを入力してください。');
+      return;
+    }
+    setSchoolNotificationHistoryLoading(true);
+    setSchoolNotificationHistoryMessage('');
+    try {
+      const response = await fetch('/api/admin/school-notifications', {
+        method: 'GET',
+        headers: { 'x-admin-password': adminApiPassword },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result || !Array.isArray(result.notifications)) {
+        throw new Error(result?.message || `公開履歴を読み込めませんでした（HTTP ${response.status}）。`);
+      }
+      setSchoolNotificationHistory(result.notifications as AdminSchoolNotification[]);
+      setSchoolNotificationHistoryMessage(result.notifications.length ? '' : 'まだ学園総合通知は公開されていません。');
+    } catch (error) {
+      setSchoolNotificationHistory([]);
+      setSchoolNotificationHistoryMessage(error instanceof Error ? error.message : '公開履歴の取得に失敗しました。');
+    } finally {
+      setSchoolNotificationHistoryLoading(false);
+    }
+  };
+
+  // 重要な操作なので確認してから、全校のCampusSync通知一覧へ公開する。
+  const handlePublishSchoolNotification = async () => {
+    if (schoolNotificationSaving) return;
+    if (!adminApiPassword.trim()) {
+      setSchoolNotificationMessage('Admin用パスワードを入力してください。');
+      return;
+    }
+    const title = schoolNotificationTitle.trim();
+    const body = schoolNotificationBody.trim();
+    if (!title || !body) {
+      setSchoolNotificationMessage('タイトルと本文の両方を入力してください。');
+      return;
+    }
+    if (Array.from(title).length > 100 || Array.from(body).length > 1800) {
+      setSchoolNotificationMessage('タイトルは100文字以内、本文は1,800文字以内にしてください。');
+      return;
+    }
+    if (!window.confirm(`「${title}」をCampusSyncの「学園総合通知」に全校公開しますか？`)) return;
+
+    setSchoolNotificationSaving(true);
+    setSchoolNotificationMessage('');
+    try {
+      const response = await fetch('/api/admin/school-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ title, body }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.notification) {
+        throw new Error(result?.message || `公開に失敗しました（HTTP ${response.status}）。`);
+      }
+
+      const published = result.notification as AdminSchoolNotification;
+      setSchoolNotificationHistory(previous => [published, ...previous.filter(item => item.id !== published.id)].slice(0, 20));
+      setSchoolNotificationTitle('');
+      setSchoolNotificationBody('');
+      setSchoolNotificationMessage(result.message || '学園総合通知を全校公開しました。');
+      setSchoolNotificationHistoryMessage('');
+    } catch (error) {
+      setSchoolNotificationMessage(error instanceof Error ? error.message : '学園総合通知の公開に失敗しました。');
+    } finally {
+      setSchoolNotificationSaving(false);
+    }
+  };
+
   // 生徒の実際のroom_statusを快適へ更新し、解決状態を生徒画面にも反映する。
   const handleResolveAC = async (id: string) => {
     const report = acReports.find(item => item.id === id);
@@ -1394,6 +1488,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
             </button>
+            <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
+            </button>
             <button aria-label="チャット管理・監査ログ" title="チャット管理・監査ログ" onClick={() => setActiveTab('chat-moderation')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'chat-moderation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
             </button>
@@ -1433,6 +1530,108 @@ export default function CampusSyncAdmin() {
       {/* 🚀 メインコンテンツ */}
       <main className="min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
+        {activeTab === 'school-notifications' && (
+          <div className="max-w-5xl space-y-6">
+            <div>
+              <h2 className="flex items-center gap-2 text-2xl font-black"><BellRing className="text-cyan-400" /> 学園総合通知</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">ここで公開したタイトルと本文は、生徒用CampusSyncの「学園総合通知」に実データとして表示されます。生徒が通知カードを押すと、本文と公開日時の詳細が開きます。LINE公式アカウントへの配信とは別の機能です。</p>
+            </div>
+
+            <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
+              <div>
+                <h3 className="text-base font-black text-white">新しい通知を作成・全校公開</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-400">全校の生徒に公開する前に内容を確認してください。公開後の通知は生徒画面に残ります。</p>
+              </div>
+              <label className="block text-xs font-bold text-slate-300">
+                Admin用パスワード
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={adminApiPassword}
+                  onChange={event => { setAdminApiPassword(event.target.value); setSchoolNotificationMessage(''); }}
+                  placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-300">
+                通知タイトル
+                <input
+                  value={schoolNotificationTitle}
+                  onChange={event => { setSchoolNotificationTitle(event.target.value); setSchoolNotificationMessage(''); }}
+                  maxLength={100}
+                  placeholder="例：明日の全校集会について"
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500 placeholder:text-slate-600"
+                />
+                <span className="mt-1 block text-right text-[10px] text-slate-500">{Array.from(schoolNotificationTitle).length} / 100文字</span>
+              </label>
+              <label className="block text-xs font-bold text-slate-300">
+                詳細本文
+                <textarea
+                  value={schoolNotificationBody}
+                  onChange={event => { setSchoolNotificationBody(event.target.value); setSchoolNotificationMessage(''); }}
+                  maxLength={1800}
+                  rows={7}
+                  placeholder="日時、場所、対象者、必要な持ち物、注意事項などを入力してください。"
+                  className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm leading-6 text-white outline-none focus:border-cyan-500 placeholder:text-slate-600"
+                />
+                <span className="mt-1 block text-right text-[10px] text-slate-500">{Array.from(schoolNotificationBody).length.toLocaleString()} / 1,800文字</span>
+              </label>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <p className="text-[10px] font-black tracking-widest text-cyan-300">生徒画面プレビュー</p>
+                <h4 className="mt-2 break-words text-sm font-black text-white">{schoolNotificationTitle || '通知タイトル'}</h4>
+                <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-slate-300">{schoolNotificationBody || '入力した本文がここに表示されます。'}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handlePublishSchoolNotification()}
+                disabled={schoolNotificationSaving || !schoolNotificationTitle.trim() || !schoolNotificationBody.trim() || !adminApiPassword.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Send size={16} /> {schoolNotificationSaving ? '全校公開中...' : '確認して学園総合通知を全校公開'}
+              </button>
+              {schoolNotificationMessage && (
+                <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${schoolNotificationMessage.includes('公開しました') || schoolNotificationMessage.includes('全校公開しました') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
+                  {schoolNotificationMessage}
+                </p>
+              )}
+            </section>
+
+            <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-black text-white">公開済みの学園総合通知</h3>
+                  <p className="mt-1 text-xs text-slate-400">最新20件を表示します。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleLoadSchoolNotificationHistory()}
+                  disabled={schoolNotificationHistoryLoading || !adminApiPassword.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-900 disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={schoolNotificationHistoryLoading ? 'animate-spin' : ''} />
+                  {schoolNotificationHistoryLoading ? '読み込み中...' : '履歴を更新'}
+                </button>
+              </div>
+              {schoolNotificationHistoryMessage && (
+                <p role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-200">{schoolNotificationHistoryMessage}</p>
+              )}
+              {schoolNotificationHistory.length > 0 && (
+                <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+                  {schoolNotificationHistory.map(item => (
+                    <article key={String(item.id)} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                      <h4 className="break-words text-sm font-black text-white">{item.title}</h4>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{item.body || '本文は空です。'}</p>
+                      <p className="mt-2 text-[10px] text-slate-500">{item.created_at ? new Date(item.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明'}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
         {/* ================= タブ1: ダッシュボード（リアルタイム不満・アラート） ================= */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
