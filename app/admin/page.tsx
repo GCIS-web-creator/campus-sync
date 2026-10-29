@@ -1027,7 +1027,7 @@ export default function CampusSyncAdmin() {
     }
   };
 
-  const changeLostItemStatus = async (id: string | number, action: 'approve' | 'return') => {
+  const changeLostItemStatus = async (id: string | number, action: 'approve' | 'return' | 'notify') => {
     if (!adminApiPassword.trim()) {
       setLostMessage('先に管理用パスワードを入力してください。');
       return;
@@ -1043,7 +1043,7 @@ export default function CampusSyncAdmin() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result?.message || `保存に失敗しました（HTTP ${response.status}）。`);
       setLostItems(prev => prev.map(item => item.id === result.item.id ? { ...item, ...result.item, date: item.date } : item));
-      setLostMessage(result.message || (action === 'approve' ? '全体公開しました。' : '返却完了にしました。'));
+      setLostMessage(result.message || (action === 'approve' ? '全体公開しました。' : action === 'notify' ? 'LINE通知を再送しました。' : '返却完了にしました。'));
     } catch (error) {
       setLostMessage(error instanceof Error ? error.message : '落とし物の状態を保存できませんでした。');
     } finally {
@@ -2102,9 +2102,19 @@ export default function CampusSyncAdmin() {
                         </button>
                       )}
                       {item.status === 'approved' && (
-                        <button disabled={lostLoading} onClick={() => handleReturnLostItem(item.id)} className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
-                          本人に返却したので完了にする
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            disabled={lostLoading}
+                            onClick={() => void changeLostItemStatus(item.id, 'notify')}
+                            className="px-3.5 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1 disabled:opacity-50"
+                          >
+                            LINE通知を再送
+                          </button>
+                          <button disabled={lostLoading} onClick={() => handleReturnLostItem(item.id)} className="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1">
+                            本人に返却したので完了にする
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
