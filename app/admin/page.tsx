@@ -1467,6 +1467,12 @@ export default function CampusSyncAdmin() {
                 )}
                 {acReportsLoading ? (
                   <p className="py-5 text-center text-sm text-slate-500">生徒からのエアコン報告を読み込み中...</p>
+                ) : acReportsMessage.includes('読み込めません') ? (
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-center">
+                    <AlertCircle size={22} className="mx-auto mb-2 text-rose-300" />
+                    <p className="text-sm font-bold text-rose-200">実際の報告データを読み込めませんでした。</p>
+                    <p className="mt-1 text-xs text-rose-200/80">Supabaseのroom_statusテーブルとRLS設定を確認してから「更新」を押してください。</p>
+                  </div>
                 ) : acReports.length === 0 ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-center">
                     <CheckCircle2 size={24} className="mx-auto mb-2 text-emerald-400" />
