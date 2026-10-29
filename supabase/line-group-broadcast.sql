@@ -9,6 +9,7 @@ create table if not exists public.line_group_chats (
   receive_general_notifications boolean not null default false,
   receive_train_timetable boolean not null default true,
   receive_class_timetable boolean not null default true,
+  receive_school_schedule boolean not null default true,
   receive_cafeteria_sold_out boolean not null default false,
   receive_assignment_updates boolean not null default false,
   receive_quick_notices boolean not null default false,
@@ -26,6 +27,8 @@ alter table public.line_group_chats
 alter table public.line_group_chats
   add column if not exists receive_class_timetable boolean not null default true;
 alter table public.line_group_chats
+  add column if not exists receive_school_schedule boolean not null default true;
+alter table public.line_group_chats
   add column if not exists receive_cafeteria_sold_out boolean not null default false;
 alter table public.line_group_chats
   add column if not exists receive_assignment_updates boolean not null default false;
@@ -35,6 +38,7 @@ alter table public.line_group_chats
 -- New LINE groups receive both timetable categories by default; unrelated categories remain opt-in.
 alter table public.line_group_chats alter column receive_train_timetable set default true;
 alter table public.line_group_chats alter column receive_class_timetable set default true;
+alter table public.line_group_chats alter column receive_school_schedule set default true;
 
 alter table public.line_group_chats enable row level security;
 revoke all on table public.line_group_chats from anon, authenticated;
@@ -48,6 +52,7 @@ select
   receive_general_notifications,
   receive_train_timetable,
   receive_class_timetable,
+  receive_school_schedule,
   receive_cafeteria_sold_out,
   receive_assignment_updates,
   receive_quick_notices,
@@ -62,6 +67,7 @@ order by last_seen_at desc;
 -- set active = true,
 --     receive_train_timetable = true,
 --     receive_class_timetable = true,
+--     receive_school_schedule = true,
 --     receive_cafeteria_sold_out = true,
 --     receive_assignment_updates = true,
 --     receive_quick_notices = true,
