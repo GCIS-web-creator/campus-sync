@@ -1,7 +1,8 @@
 -- CampusSync: Supabase pg_cronから鷹の台駅の時刻表を毎時00分にLINE配信
 -- Vercel HobbyのCronは毎時実行に対応していないため、Supabase側で実行します。
--- 実行前に REPLACE_WITH_CRON_SECRET だけを、Vercel環境変数CRON_SECRETと同じ値へ置き換えてください。
--- 実際のSecretをGitHubへコミットしないでください。
+-- 5分おきのPush Cronですでに認証成功しているSupabase VaultのSecretを再利用します。
+-- VercelのCRON_SECRETを見直したり、SQLへ秘密値を直接書いたりする必要はありません。
+-- Vault secret name: campussync_push_reminders_cron_secret
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 select cron.unschedule(jobid) from cron.job where jobname = 'campussync-hourly-train-timetable';
@@ -11,7 +12,7 @@ select cron.schedule(
   $cron$
     select net.http_post(
       url := 'https://campus-sync-mocha.vercel.app/api/line-train-timetable',
-      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'campussync_push_reminders_cron_secret')),
       body := '{}'::jsonb,
       timeout_milliseconds := 15000
     );
