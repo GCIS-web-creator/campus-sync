@@ -121,7 +121,7 @@ function timetableDirectionBox(title: string, accent: string, rows: TimetableDep
   return { type: 'box', layout: 'vertical', spacing: 'sm', contents };
 }
 
-/** 鷹の台駅の毎時配信Flex Message */
+/** 鷹の台駅の時刻表まとめ配信用Flex Message */
 export function buildHourlyTrainTimetableFlex(input: {
   startLabel: string; endLabel: string; kokubunji: TimetableDeparture[]; higashimurayama: TimetableDeparture[];
 }): FlexMessage {
@@ -137,7 +137,7 @@ export function buildHourlyTrainTimetableFlex(input: {
         contents: [
           { type: 'text', text: 'CAMPUSSYNC  /  TRANSIT', size: 'xs', color: '#67E8F9', weight: 'bold' },
           { type: 'text', text: '鷹の台駅 発車案内', size: 'xl', color: '#FFFFFF', weight: 'bold' },
-          { type: 'text', text: 'NEXT 60 MINUTES  •  ' + input.startLabel + ' – ' + input.endLabel, size: 'xs', color: '#CBD5E1', wrap: true },
+          { type: 'text', text: 'AFTERNOON TIMETABLE  •  ' + input.startLabel + ' – ' + input.endLabel, size: 'xs', color: '#CBD5E1', wrap: true },
         ],
       },
       body: {
