@@ -47,12 +47,16 @@ export async function GET(request: Request) {
   const passwordProvided = request.headers.has('x-admin-password');
   const admin = isAdmin(request);
   if (passwordProvided && !admin) return jsonError('Admin用パスワードが正しくありません。', 401);
-  let query = supabase.from('school_event_countdowns')
-    .select('id,title,summary,event_date,is_active,created_at,updated_at')
-    .order('event_date', { ascending: true });
-  if (!admin) query = query.eq('is_active', true).gte('event_date', tokyoToday());
-
-  const { data, error } = await query;
+  const result = admin
+    ? await supabase.from('school_event_countdowns')
+        .select('id,title,summary,event_date,is_active,created_at,updated_at')
+        .order('event_date', { ascending: true })
+    : await supabase.from('school_event_countdowns')
+        .select('id,title,summary,event_date,is_active,created_at,updated_at')
+        .eq('is_active', true)
+        .gte('event_date', tokyoToday())
+        .order('event_date', { ascending: true });
+  const { data, error } = result;
   if (error) {
     console.error('学校イベント・カウントダウン取得エラー:', error.message);
     return jsonError('イベントを取得できません。先に supabase/school-event-countdowns.sql を実行してください。', 500);
