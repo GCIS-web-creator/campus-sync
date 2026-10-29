@@ -73,18 +73,18 @@ export async function POST(request: Request) {
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const now = new Date();
   const nowParts = tokyoParts(now);
-  // Ignore any legacy hourly Cron calls; scheduled delivery is valid only at 15:30 JST.
-  if (!manualRequest && (Number(nowParts.hour) !== 15 || Number(nowParts.minute) < 30 || Number(nowParts.minute) >= 40)) {
-    return NextResponse.json({ success: true, skipped: true, message: '定期配信は毎日15:30（日本時間）のみ実行します。' });
+  // Ignore legacy Cron calls outside the daily 16:00 JST delivery window.
+  if (!manualRequest && (Number(nowParts.hour) !== 16 || Number(nowParts.minute) >= 10)) {
+    return NextResponse.json({ success: true, skipped: true, message: '定期配信は毎日16:00（日本時間）のみ実行します。' });
   }
-  // Scheduled run: one daily slot at 15:30 JST. Manual sends retain the existing rolling-hour behavior.
+  // Scheduled run: one daily slot at 16:00 JST. Manual sends retain the existing rolling-hour behavior.
   const windowStartDate = manualRequest
     ? new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 30_000)
-    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 6, 30));
+    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 7, 0));
   const windowStart = windowStartDate.toISOString();
   const rangeStartDate = manualRequest
     ? now
-    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 6, 40));
+    : new Date(Date.UTC(Number(nowParts.year), Number(nowParts.month) - 1, Number(nowParts.day), 7, 0));
   const parts = tokyoParts(rangeStartDate);
   const startMinute = Number(parts.hour) * 60 + Number(parts.minute);
   const endDate = manualRequest
@@ -111,8 +111,8 @@ export async function POST(request: Request) {
     const minutes = minutesFromTimetableTime(row.departure_time);
     if (minutes === null) return null;
     const offset = (minutes - startMinute + 1440) % 1440;
-    // Daily scheduled summary covers 15:40–18:00 JST; manual sends cover the next 60 minutes.
-    if (manualRequest ? offset >= 60 : (minutes < 15 * 60 + 40 || minutes >= 18 * 60)) return null;
+    // Daily scheduled summary covers 16:00–18:00 JST; manual sends cover the next 60 minutes.
+    if (manualRequest ? offset >= 60 : (minutes < 16 * 60 || minutes >= 18 * 60)) return null;
     return { time: String(row.departure_time).slice(0, 5), service: row.service || '各駅停車' };
   };
   const sortFromRangeStart = (left: TimetableDeparture, right: TimetableDeparture) => {
@@ -183,8 +183,10 @@ export async function POST(request: Request) {
         success: true,
         alreadyAccepted: response.status === 409,
         windowStart,
+        groupDelivery,
+        groupSummary,
         departures: kokubunji.length + higashimurayama.length,
-        message: (manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の15:40〜18:00の発車案内をFlex Messageで配信しました。') + ' ' + groupSummary,
+        message: (manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の16:00〜18:00の発車案内をFlex Messageで配信しました。') + ' ' + groupSummary,
       });
     }
     const { error: savedError } = await admin.from('line_train_timetable_sends').update({
