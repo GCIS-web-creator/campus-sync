@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Plus, Save, Trash2, RefreshCw, X, Pencil, CalendarCheck } from 'lucide-react';
 
 type CountdownEvent = {
@@ -41,7 +41,7 @@ export default function SchoolEventCountdownAdmin({ adminPassword, onAdminPasswo
     setIsActive(true);
   };
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     if (!adminPassword.trim()) {
       setEvents([]);
       setMessage('Admin用パスワードを入力すると、登録済みイベントを読み込めます。');
@@ -63,11 +63,9 @@ export default function SchoolEventCountdownAdmin({ adminPassword, onAdminPasswo
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (adminPassword.trim()) void loadEvents();
   }, [adminPassword]);
+
+  useEffect(() => { void loadEvents(); }, [loadEvents]);
 
   const startEdit = (event: CountdownEvent) => {
     setEditingId(event.id);
