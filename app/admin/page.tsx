@@ -7,6 +7,7 @@ import ChatModerationAdmin from '@/components/ChatModerationAdmin';
 import StudentProfileExportAdmin from '@/components/StudentProfileExportAdmin';
 import ClubNotesAdmin from '@/components/ClubNotesAdmin';
 import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
+import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -1600,6 +1601,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="週間学校予定表" title="週間学校予定表" onClick={() => setActiveTab('school-schedule')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-schedule' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">週間学校予定表</span>
             </button>
+            <button aria-label="学校イベント・カウントダウン" title="学校イベント・カウントダウン" onClick={() => setActiveTab('event-countdowns')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'event-countdowns' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">学校イベント・カウントダウン</span>
+            </button>
             <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
             </button>
@@ -1632,6 +1636,10 @@ export default function CampusSyncAdmin() {
         
         {activeTab === 'school-schedule' && (
           <SchoolScheduleAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
+        )}
+
+        {activeTab === 'event-countdowns' && (
+          <SchoolEventCountdownAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
         )}
 
         {activeTab === 'school-notifications' && (
