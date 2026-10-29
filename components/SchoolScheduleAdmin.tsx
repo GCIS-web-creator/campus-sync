@@ -234,7 +234,7 @@ export default function SchoolScheduleAdmin({ adminPassword, onAdminPasswordChan
                   {dayIndex >= 5 && !day.isHoliday && <span className={'mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black ' + (day.isWeekendSchool ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300')}>{day.isWeekendSchool ? '休日登校日' : '基本休日'}</span>}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => updateDay(dayIndex, { isHoliday: !day.isHoliday, holidayName: day.isHoliday ? '' : day.holidayName })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isHoliday ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
+                  <button type="button" onClick={() => updateDay(dayIndex, { isHoliday: !day.isHoliday, holidayName: day.isHoliday ? '' : day.holidayName, isWeekendSchool: false })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isHoliday ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
                     {day.isHoliday ? '祝日設定を解除' : '祝日にする'}
                   </button>
                   {dayIndex >= 5 && !day.isHoliday && <button type="button" onClick={() => updateDay(dayIndex, { isWeekendSchool: !day.isWeekendSchool })} className={'rounded-xl border px-3 py-2 text-xs font-black ' + (day.isWeekendSchool ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-300 hover:bg-slate-900')}>
