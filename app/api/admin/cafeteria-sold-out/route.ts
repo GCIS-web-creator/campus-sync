@@ -1,6 +1,7 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildCafeteriaSoldOutFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
   }).format(new Date());
 
   try {
+    const messages = [buildCafeteriaSoldOutFlexMessage({ menuName, price, updatedAt })];
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
@@ -53,9 +55,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
         'X-Line-Retry-Key': randomUUID(),
       },
-      body: JSON.stringify({
-        messages: [buildCafeteriaSoldOutFlexMessage({ menuName, price, updatedAt })],
-      }),
+      body: JSON.stringify({ messages }),
       cache: 'no-store',
     });
 
@@ -70,9 +70,10 @@ export async function POST(request: Request) {
       return jsonError('売切状態は保存されましたが、LINE通知に失敗しました（HTTP ' + response.status + '）。', 502);
     }
 
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages);
     return NextResponse.json({
       success: true,
-      message: 'LINE公式アカウントへ売切のお知らせをFlex Messageで送信しました。',
+      message: 'LINE公式アカウントへ売切のお知らせをFlex Messageで送信しました。 ' + summarizeLineGroupDelivery(groupDelivery),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学食売切LINE通知の接続エラー:', error instanceof Error ? error.message : 'unknown error');

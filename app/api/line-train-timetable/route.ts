@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildHourlyTrainTimetableFlex, type TimetableDeparture } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -163,6 +164,8 @@ export async function POST(request: Request) {
       cache: 'no-store',
     });
     if (response.ok || response.status === 409) {
+      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey);
+      const groupSummary = summarizeLineGroupDelivery(groupDelivery);
       const requestId = response.headers.get('x-line-request-id') || response.headers.get('x-line-accepted-request-id');
       const { error: savedError } = await admin.from('line_train_timetable_sends').update({
         status: 'sent', sent_at: new Date().toISOString(), request_id: requestId, error_message: null,
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
         alreadyAccepted: response.status === 409,
         windowStart,
         departures: kokubunji.length + higashimurayama.length,
-        message: manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の今後1時間の発車案内をFlex Messageで配信しました。',
+        message: (manualRequest ? '鷹の台駅の現在時刻から今後1時間の発車案内をFlex MessageでLINEへ送信しました。' : '鷹の台駅の今後1時間の発車案内をFlex Messageで配信しました。') + ' ' + groupSummary,
       });
     }
     const { error: savedError } = await admin.from('line_train_timetable_sends').update({

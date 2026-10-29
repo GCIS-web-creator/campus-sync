@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildLostFoundApprovedFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -261,9 +262,11 @@ export async function PATCH(request: Request) {
             responseBody = null;
           }
           if (response.ok || response.status === 409) {
-            lineNotificationMessage = manualNotify
+            const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey);
+            const groupSummary = summarizeLineGroupDelivery(groupDelivery);
+            lineNotificationMessage = (manualNotify
               ? 'LINEに落とし物のお知らせを再送しました。'
-              : 'LINEにも公開のお知らせをFlex Messageで送信しました。';
+              : 'LINEにも公開のお知らせをFlex Messageで送信しました。') + ' ' + groupSummary;
           } else {
             const apiMessage = String(responseBody?.message || '').trim();
             const detailMessages = Array.isArray(responseBody?.details)

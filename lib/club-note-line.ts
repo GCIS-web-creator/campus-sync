@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { buildClubNoteFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 type ClubNoteLineRow = {
   id: string | number;
@@ -138,6 +139,8 @@ export async function broadcastClubNoteToLine(
 
     // LINE returns 409 when the same retry key was already accepted.
     if (response.ok || response.status === 409) {
+      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flexMessage], retryKey);
+      const groupSummary = summarizeLineGroupDelivery(groupDelivery);
       const requestId = response.headers.get('x-line-request-id')
         || response.headers.get('x-line-accepted-request-id')
         || null;
@@ -149,7 +152,7 @@ export async function broadcastClubNoteToLine(
       });
       return {
         status: response.status === 409 ? 'already_sent' : 'sent',
-        message: '投稿を保存し、LINE公式アカウントの友だちへ配信しました。',
+        message: '投稿を保存し、LINE公式アカウントの友だちへ配信しました。 ' + groupSummary,
       };
     }
 

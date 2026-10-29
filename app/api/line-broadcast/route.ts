@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { buildNoticeFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,13 +74,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    const messages = [buildNoticeFlexMessage(title, message)];
     const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ messages: [buildNoticeFlexMessage(title, message)] }),
+      body: JSON.stringify({ messages }),
       cache: 'no-store',
     });
 
@@ -119,9 +121,11 @@ export async function POST(request: Request) {
       }
     }
 
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages);
+    const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const responseMessage = historySaved
-      ? `「${title}」をLINE公式アカウントの友だちへ配信しました。配信履歴にも保存しました。`
-      : `「${title}」をLINE公式アカウントの友だちへ配信しました。ただし、配信履歴の保存には失敗しました。SupabaseのSQL設定を確認してください。`;
+      ? '「' + title + '」をLINE公式アカウントの友だちへ配信し、配信履歴にも保存しました。 ' + groupSummary
+      : '「' + title + '」をLINE公式アカウントの友だちへ配信しました。ただし、配信履歴の保存には失敗しました。SupabaseのSQL設定を確認してください。 ' + groupSummary;
 
     return NextResponse.json(
       { success: true, historySaved, message: responseMessage },

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildNoticeFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -126,23 +127,24 @@ export async function POST(request: Request) {
     ].filter(Boolean).join('\n\n').slice(0, 1800);
 
     try {
+      const retryKey = randomUUID();
+      const messages = [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)];
       const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + accessToken,
           'Content-Type': 'application/json',
-          'X-Line-Retry-Key': randomUUID(),
+          'X-Line-Retry-Key': retryKey,
         },
-        body: JSON.stringify({
-          messages: [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)],
-        }),
+        body: JSON.stringify({ messages }),
         cache: 'no-store',
       });
 
       if (lineResponse.ok) {
+        const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey);
         lineNotification = {
           status: 'sent',
-          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。',
+          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。 ' + summarizeLineGroupDelivery(groupDelivery),
         };
       } else {
         console.error('課題公開のLINE通知に失敗:', lineResponse.status);

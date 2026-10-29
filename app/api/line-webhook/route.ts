@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
+import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const maxDuration = 60;
 type LineTextMessageEvent = {
   type?: string;
   replyToken?: string;
+  source?: LineChatSource;
   message?: {
     type?: string;
     text?: string;
@@ -123,6 +125,9 @@ async function replyToLine(replyToken: string, text: string, channelAccessToken:
 
 async function handleLineEvents(events: LineTextMessageEvent[], channelAccessToken: string): Promise<void> {
   await Promise.all(events.map(async event => {
+    if (event.source?.type === 'group' || event.source?.type === 'room') {
+      await rememberLineChatEvent(event.source, event.type || 'unknown');
+    }
     if (event.type !== 'message' || event.message?.type !== 'text') return;
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
     const question = typeof event.message.text === 'string' ? event.message.text.trim() : '';

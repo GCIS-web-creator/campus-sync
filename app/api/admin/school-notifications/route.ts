@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildNoticeFlexMessage } from '@/lib/line-flex';
+import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 
 export const runtime = 'nodejs';
@@ -84,15 +85,14 @@ async function sendLineNotification(
   }
 
   try {
+    const messages = [buildNoticeFlexMessage(notification.title, notification.body, notification.image_url)];
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messages: [buildNoticeFlexMessage(notification.title, notification.body, notification.image_url)],
-      }),
+      body: JSON.stringify({ messages }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
@@ -112,6 +112,8 @@ async function sendLineNotification(
       return { sent: false, message, notification: updated || { ...notification, line_sent: false, line_error: message } };
     }
 
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages);
+    const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const sentAt = new Date().toISOString();
     const { data: updated, error } = await admin
       .from('notifications')
@@ -122,7 +124,7 @@ async function sendLineNotification(
     if (error) console.error('LINE送信済み状態の保存に失敗:', error.message);
     return {
       sent: true,
-      message: 'LINE公式アカウントへ送信しました。',
+      message: 'LINE公式アカウントへ送信しました。 ' + groupSummary,
       notification: updated || { ...notification, line_sent: true, line_sent_at: sentAt, line_error: null },
     };
   } catch (error) {
