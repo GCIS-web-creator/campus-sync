@@ -276,6 +276,7 @@ export default function CampusSyncAdmin() {
   const [acReportsLoading, setAcReportsLoading] = useState(false);
   const [acReportsMessage, setAcReportsMessage] = useState('');
   const [acReportSavingId, setAcReportSavingId] = useState<string | null>(null);
+  const [acReportsRefreshKey, setAcReportsRefreshKey] = useState(0);
   const [menuItems, setMenuItems] = useState<AdminCafeteriaMenuItem[]>([]);
   const [cafeteriaControlLoading, setCafeteriaControlLoading] = useState(false);
   const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
@@ -386,7 +387,7 @@ export default function CampusSyncAdmin() {
 
     void loadACReports();
     return () => { cancelled = true; };
-  }, [activeTab]);
+  }, [activeTab, acReportsRefreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1445,9 +1446,19 @@ export default function CampusSyncAdmin() {
             <div className="grid grid-cols-1 gap-6">
               {/* エアコン不満リアルタイムアラート */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
-                <h3 className="text-base font-bold text-slate-300 mb-4 flex items-center gap-2">
-                  <Thermometer className="text-red-400 animate-pulse" size={20} /> 生徒からのエアコン苦情一覧
-                </h3>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-base font-bold text-slate-300 flex items-center gap-2">
+                    <Thermometer className="text-red-400 animate-pulse" size={20} /> 生徒からのエアコン苦情一覧
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setAcReportsRefreshKey(key => key + 1)}
+                    disabled={acReportsLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={acReportsLoading ? 'animate-spin' : ''} /> 更新
+                  </button>
+                </div>
                 {acReportsMessage && (
                   <p role="status" className={`mb-3 rounded-lg border p-3 text-xs leading-relaxed ${acReportsMessage.includes('できません') || acReportsMessage.includes('確認してください') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>{acReportsMessage}</p>
                 )}
