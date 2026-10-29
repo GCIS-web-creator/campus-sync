@@ -196,10 +196,7 @@ export function buildLostFoundApprovedFlexMessage(input: {
         contents: [
           { type: 'text', text: 'CAMPUSSYNC  /  LOST & FOUND', size: 'xs', color: '#67E8F9', weight: 'bold' },
           { type: 'text', text: '落とし物のお知らせ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-          { type: 'box', layout: 'horizontal', spacing: 'xs', alignItems: 'center', contents: [
-            { type: 'icon', url: 'https://scdn.line-apps.com/n/channel_devcenter/img/fx/01_1_cafe.png', size: 'xs' },
-            { type: 'text', text: '事務室で実物確認済み・公開中', size: 'xs', color: '#A7F3D0', weight: 'bold', wrap: true },
-          ] },
+          { type: 'text', text: '✓ 事務室で実物確認済み・公開中', size: 'xs', color: '#A7F3D0', weight: 'bold', wrap: true },
         ],
       },
       body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: details },
