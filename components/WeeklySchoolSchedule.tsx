@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Clock, CalendarCheck } from 'lucide-react';
 
 type ScheduleItem = { id: string; time: string; title: string; location: string; details: string };
-type ScheduleDay = { date: string; dayLabel: string; isHoliday: boolean; holidayName: string; items: ScheduleItem[] };
+type ScheduleDay = { date: string; dayLabel: string; isHoliday: boolean; holidayName: string; isWeekendSchool?: boolean; items: ScheduleItem[] };
 type SchedulePayload = { week_start: string; title: string; days: ScheduleDay[] };
 
 function addDays(dateKey: string, amount: number): string {
@@ -89,13 +89,14 @@ export default function WeeklySchoolSchedule() {
             const day = schedule.days?.find(item => item.date === date);
             const items = (day?.items || []).filter(item => item.title || item.details || item.time || item.location);
             return (
-              <section key={date} className={'overflow-hidden rounded-2xl border bg-white shadow-sm ' + (day?.isHoliday ? 'border-rose-200' : 'border-slate-200')}>
-                <div className={'flex items-center justify-between gap-3 px-4 py-3 ' + (day?.isHoliday ? 'bg-rose-50' : 'bg-slate-50')}>
+              <section key={date} className={'overflow-hidden rounded-2xl border bg-white shadow-sm ' + (day?.isHoliday ? 'border-rose-200' : (label === '土' || label === '日') ? day?.isWeekendSchool ? 'border-emerald-200' : 'border-slate-300' : 'border-slate-200')}>
+                <div className={'flex items-center justify-between gap-3 px-4 py-3 ' + (day?.isHoliday ? 'bg-rose-50' : (label === '土' || label === '日') ? day?.isWeekendSchool ? 'bg-emerald-50' : 'bg-slate-100' : 'bg-slate-50')}>
                   <div className="min-w-0">
                     <h3 className="text-sm font-black text-slate-900">{label}曜日 <span className="ml-1 text-[10px] font-medium text-slate-500">{date}</span></h3>
                     {day?.isHoliday && <p className="mt-1 text-[10px] font-black text-rose-700">祝日・休校日{day.holidayName ? '：' + day.holidayName : ''}</p>}
+                    {!day?.isHoliday && (label === '土' || label === '日') && <p className={'mt-1 text-[10px] font-black ' + (day?.isWeekendSchool ? 'text-emerald-700' : 'text-slate-600')}>{day?.isWeekendSchool ? '休日登校日' : '基本休日'}</p>}
                   </div>
-                  {day?.isHoliday && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">祝日</span>}
+                  {day?.isHoliday ? <span className="shrink-0 rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">祝日</span> : (label === '土' || label === '日') ? <span className={'shrink-0 rounded-full px-2 py-1 text-[10px] font-black ' + (day?.isWeekendSchool ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700')}>{day?.isWeekendSchool ? '登校' : '休日'}</span> : null}
                 </div>
                 <div className="space-y-2 p-3">
                   {items.length ? items.map(item => (
@@ -107,7 +108,7 @@ export default function WeeklySchoolSchedule() {
                       {item.location ? <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500"><MapPin size={11} />{item.location}</p> : null}
                       {item.details ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{item.details}</p> : null}
                     </div>
-                  )) : <p className="py-2 text-center text-xs text-slate-400">{day?.isHoliday ? '祝日・休校日です。' : '登録された予定はありません。'}</p>}
+                  )) : <p className="py-2 text-center text-xs text-slate-400">{day?.isHoliday ? '祝日・休校日です。' : (label === '土' || label === '日') && !day?.isWeekendSchool ? '基本休日です。' : '登録された予定はありません。'}</p>}
                 </div>
               </section>
             );
