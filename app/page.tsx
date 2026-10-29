@@ -5,6 +5,7 @@ import { ContributionRankWidget } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
+import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -3892,7 +3893,7 @@ Supabaseの設定を確認してください。
             </div>
 
             {/* クイックリンク・本日のショートカット */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div onClick={() => setActiveTab('timetable')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
                 <Calendar className={`mx-auto mb-1.5 ${themeCls.text}`} size={22} />
                 <span className="text-xs font-black block">時間割</span>
@@ -3904,6 +3905,10 @@ Supabaseの設定を確認してください。
               <div onClick={() => setActiveTab('club')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
                 <MessageSquare className="mx-auto mb-1.5 text-purple-500" size={22} />
                 <span className="text-xs font-black block">部活連絡</span>
+              </div>
+              <div onClick={() => setActiveTab('school-schedule')} className={`${cardBgClass} p-3.5 rounded-2xl border text-center cursor-pointer hover:scale-[1.02] transition-transform`}>
+                <Calendar className="mx-auto mb-1.5 text-cyan-600" size={22} />
+                <span className="text-xs font-black block">学校予定表</span>
               </div>
             </div>
 
@@ -3996,6 +4001,9 @@ Supabaseの設定を確認してください。
             </section>
           </div>
         );
+
+      case 'school-schedule':
+        return <WeeklySchoolSchedule />;
 
       case 'timetable':
         return (
@@ -5237,6 +5245,7 @@ Supabaseの設定を確認してください。
             <nav className="space-y-1">
               <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
               <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
+              <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
               <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
@@ -5299,6 +5308,7 @@ Supabaseの設定を確認してください。
         <nav className="campus-theme-mobile-nav md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-16 pb-2 px-1 z-20 overflow-x-auto">
           <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
           <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
+          <NavItem icon={<Calendar size={20} />} label="学校予定" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
           <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
           <NavItem icon={<MessageCircle size={20} />} label="チャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
