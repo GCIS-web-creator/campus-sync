@@ -275,6 +275,7 @@ export default function CampusSyncAdmin() {
   const [cafeteriaControlLoading, setCafeteriaControlLoading] = useState(false);
   const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
   const [cafeteriaControlMessage, setCafeteriaControlMessage] = useState('');
+  const [cafeteriaLineRetryItem, setCafeteriaLineRetryItem] = useState<AdminCafeteriaMenuItem | null>(null);
   const [lostItems, setLostItems] = useState<AdminLostReport[]>(INITIAL_LOST_REPORTS);
   const [lostLoading, setLostLoading] = useState(false);
   const [lostMessage, setLostMessage] = useState('');
@@ -866,12 +867,52 @@ export default function CampusSyncAdmin() {
     }
   };
 
-  // --- 学食メニューの公式売切状態をSupabaseへ保存 ---
+  // 売切になったときはSupabase保存後にLINEへFlex Messageを配信する。
+  const notifyCafeteriaSoldOutOnLine = async (item: AdminCafeteriaMenuItem): Promise<boolean> => {
+    if (!adminApiPassword.trim()) {
+      setCafeteriaLineRetryItem(item);
+      setCafeteriaControlMessage('売切状態は保存されましたが、LINE通知にはAdmin用パスワードが必要です。入力後に「LINE通知を再送」を押してください。');
+      return false;
+    }
+
+    setCafeteriaControlMessage(`${item.name}の売切をLINEへ通知中...`);
+    try {
+      const response = await fetch('/api/admin/cafeteria-sold-out', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ menuName: item.name, price: item.price }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        setCafeteriaLineRetryItem(item);
+        setCafeteriaControlMessage(result?.message || `${item.name}は売切にしましたが、LINE通知に失敗しました（HTTP ${response.status}）。`);
+        return false;
+      }
+      setCafeteriaLineRetryItem(null);
+      setCafeteriaControlMessage(`${item.name}を売切中に更新し、LINE公式アカウントへFlex Messageで通知しました。`);
+      return true;
+    } catch (error) {
+      console.error('学食売切のLINE通知に失敗:', error);
+      setCafeteriaLineRetryItem(item);
+      setCafeteriaControlMessage(`${item.name}は売切にしましたが、LINE通知の接続に失敗しました。「LINE通知を再送」から再試行できます。`);
+      return false;
+    }
+  };
+
   const toggleSoldOut = async (id: string) => {
     const item = menuItems.find(menu => menu.id === id);
     if (!item || cafeteriaControlSavingId) return;
 
     const nextSoldOut = !item.isSoldOut;
+    if (nextSoldOut && !adminApiPassword.trim()) {
+      setCafeteriaControlMessage('LINEへの売切通知を行うため、先にAdmin用パスワードを入力してください。');
+      return;
+    }
+
     setCafeteriaControlSavingId(id);
     setCafeteriaControlMessage('');
     const { error } = await supabase
@@ -882,15 +923,21 @@ export default function CampusSyncAdmin() {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'menu_id' });
 
-    setCafeteriaControlSavingId(null);
     if (error) {
       console.error('学食の売切状態保存に失敗:', error);
       setCafeteriaControlMessage(`売切状態を保存できませんでした: ${error.message}`);
+      setCafeteriaControlSavingId(null);
       return;
     }
 
     setMenuItems(prev => prev.map(menu => menu.id === id ? { ...menu, isSoldOut: nextSoldOut } : menu));
-    setCafeteriaControlMessage(`${item.name}を${nextSoldOut ? '売切中' : '販売中'}に更新しました。生徒側にも反映されます。`);
+    if (nextSoldOut) {
+      await notifyCafeteriaSoldOutOnLine(item);
+    } else {
+      setCafeteriaLineRetryItem(null);
+      setCafeteriaControlMessage(`${item.name}を販売中に戻しました。生徒側にも反映されます。LINE通知は送信していません。`);
+    }
+    setCafeteriaControlSavingId(null);
   };
 
   // 落とし物はAdmin APIを通してSupabaseへ保存。画面ローカルだけでは状態を変更しない。
@@ -1788,6 +1835,29 @@ export default function CampusSyncAdmin() {
                 <h3 className="text-sm font-bold text-slate-400">本日のメニュー一覧（売切操作スイッチ）</h3>
                 {cafeteriaControlMessage && (
                   <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">{cafeteriaControlMessage}</p>
+                )}
+                <label className="block rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs font-bold text-slate-300">
+                  LINE通知用 Adminパスワード
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={adminApiPassword}
+                    onChange={event => setAdminApiPassword(event.target.value)}
+                    placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
+                  />
+                  <span className="mt-1 block font-normal text-slate-500">売切にしたとき、LINE公式アカウントへ自動通知します。</span>
+                </label>
+                {cafeteriaLineRetryItem && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
+                    <p className="text-xs leading-relaxed text-rose-200">{cafeteriaLineRetryItem.name}のLINE通知が未完了です。</p>
+                    <button
+                      type="button"
+                      onClick={() => void notifyCafeteriaSoldOutOnLine(cafeteriaLineRetryItem)}
+                      disabled={!adminApiPassword.trim() || Boolean(cafeteriaControlSavingId)}
+                      className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white hover:bg-rose-500 disabled:opacity-50"
+                    >LINE通知を再送</button>
+                  </div>
                 )}
                 {cafeteriaControlLoading && <p className="text-xs text-slate-500">本日の献立・売切状態・報告件数を読み込み中...</p>}
                 <div className="space-y-2">
