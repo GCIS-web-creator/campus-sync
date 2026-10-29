@@ -122,8 +122,8 @@ export async function POST(request: Request) {
       '課題名：' + data.title,
       '種類：' + typeLabel,
       '提出期限：' + dueLabel,
-      data.details?.trim() ? '指示事項：\\n' + data.details.trim() : '',
-    ].filter(Boolean).join('\\n\\n').slice(0, 1800);
+      data.details?.trim() ? '指示事項：\n' + data.details.trim() : '',
+    ].filter(Boolean).join('\n\n').slice(0, 1800);
 
     try {
       const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
