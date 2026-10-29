@@ -37,6 +37,7 @@ function normalizeDays(weekStart: string, input: unknown): Array<Record<string, 
     const value = input[index] as any;
     if (!value || typeof value !== 'object') return null;
     if (value.isHoliday !== undefined && typeof value.isHoliday !== 'boolean') return null;
+    if (value.isWeekendSchool !== undefined && typeof value.isWeekendSchool !== 'boolean') return null;
     const holidayName = String(value.holidayName || '').trim();
     if (holidayName.length > 100 || !Array.isArray(value.items) || value.items.length > 12) return null;
     const items: Array<Record<string, string>> = [];
@@ -53,7 +54,7 @@ function normalizeDays(weekStart: string, input: unknown): Array<Record<string, 
       if (item.title || item.time || item.location || item.details) items.push(item);
     }
     const date = addDays(weekStart, index);
-    days.push({ date, dayLabel: WEEKDAY_LABELS[new Date(date + 'T00:00:00Z').getUTCDay()], isHoliday: value.isHoliday === true, holidayName, items });
+    days.push({ date, dayLabel: WEEKDAY_LABELS[new Date(date + 'T00:00:00Z').getUTCDay()], isHoliday: value.isHoliday === true, holidayName, isWeekendSchool: value.isWeekendSchool === true, items });
   }
   return days;
 }
