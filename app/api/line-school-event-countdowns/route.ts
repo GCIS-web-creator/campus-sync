@@ -131,12 +131,16 @@ export async function POST(request: Request) {
   }
 
   const failures = broadcastResults.filter(result => !result.sent);
-  const groupResults = await Promise.all(flexMessages.reduce<Array<Promise<ReturnType<typeof pushLineMessagesToRegisteredChats>>>>((all, flex, index) => {
-    if (index % 5 === 0) {
-      all.push(pushLineMessagesToRegisteredChats(accessToken, flexMessages.slice(index, index + 5), manualRequest ? randomUUID() : 'countdown:' + today + ':' + Math.floor(index / 5), 'school_schedule'));
-    }
-    return all;
-  }, []));
+  const groupResults = await Promise.all(
+    Array.from({ length: Math.ceil(flexMessages.length / 5) }, (_, batch) =>
+      pushLineMessagesToRegisteredChats(
+        accessToken,
+        flexMessages.slice(batch * 5, batch * 5 + 5),
+        manualRequest ? randomUUID() : 'countdown:' + today + ':' + batch,
+        'school_schedule',
+      ),
+    ),
+  );
   const groupSummary = groupResults.map(summarizeLineGroupDelivery).join(' ');
 
   return NextResponse.json({
