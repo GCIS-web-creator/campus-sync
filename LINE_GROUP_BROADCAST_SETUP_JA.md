@@ -1,4 +1,4 @@
-# CampusSync: 特定のLINEグループへ時刻表だけを配信
+# CampusSync: LINEグループへ時間割・電車・週間学校予定表を配信
 
 ## 最初に行う設定
 
@@ -8,7 +8,7 @@
 4. LINE DevelopersのWebhook URLが `https://campus-sync-mocha.vercel.app/api/line-webhook` であり、Webhook利用がONであることを確認します。
 5. Botが参加できたら、グループ内でメッセージを1回送信します。WebhookからGroup IDが自動保存されます。
 
-## Group IDを確認して、時刻表専用に指定する
+## Group IDを確認して、予定表の配信先を指定する
 
 SupabaseのSQL Editorで次のクエリを実行します。
 
@@ -26,27 +26,28 @@ order by last_seen_at desc;
 update public.line_group_chats
 set receive_train_timetable = (chat_id = 'PASTE_GROUP_ID_HERE'),
     receive_class_timetable = (chat_id = 'PASTE_GROUP_ID_HERE'),
+    receive_school_schedule = (chat_id = 'PASTE_GROUP_ID_HERE'),
     receive_general_notifications = false
 where chat_type in ('group', 'room');
 ```
 
-この設定は、登録されているグループのうち**指定した1つだけ**を、電車時刻表と7組・8組の翌日時間割の受信先にし、すべてのグループで一般通知の受信をOFFにします。LINEの個人の友だち向け配信は従来どおり維持されます。
+この設定は、登録されているグループのうち**指定した1つだけ**を、電車時刻表、7組・8組の翌日時間割、週間学校予定表の受信先にし、すべてのグループで一般通知の受信をOFFにします。LINEの個人の友だち向け配信は従来どおり維持されます。
 
 設定を確認するには、次を実行します。
 
 ```sql
 select chat_id, chat_type, active, receive_general_notifications,
-       receive_train_timetable, receive_class_timetable
+       receive_train_timetable, receive_class_timetable, receive_school_schedule
 from public.line_group_chats
 order by last_seen_at desc;
 ```
 
-対象グループの行が `active = true`、`receive_train_timetable = true`、`receive_class_timetable = true`、`receive_general_notifications = false` になっていれば設定完了です。
+対象グループの行が `active = true`、`receive_train_timetable = true`、`receive_class_timetable = true`、`receive_school_schedule = true`、`receive_general_notifications = false` になっていれば設定完了です。
 
 ## 通知の送信先
 
-- **指定したグループ**：毎日16:00〜18:00の電車時刻表まとめと、毎日21:00の翌日時間割を受信します。
-- **ほかのグループ**：これら2種類を受信しません（別途、受信設定を変更した場合を除く）。
+- **指定したグループ**：毎日16:00〜18:00の電車時刻表まとめ、毎日21:00の翌日時間割、毎週日曜9:00の週間学校予定表を受信します。
+- **ほかのグループ**：これら3種類を受信しません（別途、受信設定を変更した場合を除く）。
 - **LINE公式アカウントの友だち**：学校のお知らせ、課題、部活・委員会、学食の売切、承認済みの落とし物など、既存の配信を従来どおり受信します。
 
 グループ宛てのプッシュメッセージはメンバー全員に表示されます。送信通数も消費される場合があるため、公式アカウントのプランや通数上限を確認してください。
