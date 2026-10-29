@@ -434,3 +434,192 @@ export function buildSchoolEventCountdownFlexMessages(input: Array<{
   }
   return messages;
 }
+
+
+const AI_PURPLE = '#4C1D95';
+const AI_ACCENT = '#C4B5FD';
+const AI_TEXT = '#1E1B4B';
+
+function campusAiCell(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  const text = String(value).trim();
+  return (text || '—').slice(0, 240);
+}
+
+/**
+ * LINEのCampusSync AI専用Flex Message。
+ * 通常のお知らせと見分けやすい紫系ヘッダーを使い、表データは端末幅に合わせて配置する。
+ */
+export function buildCampusAiFlexMessage(input: {
+  question?: string;
+  answer: string;
+  headers?: string[];
+  rows?: unknown[][];
+}): FlexMessage {
+  const question = String(input.question || '').trim().slice(0, 100);
+  const answer = String(input.answer || '').trim().slice(0, 1800)
+    || '回答を取得できませんでした。少し待ってからもう一度質問してください。';
+  const headers = Array.isArray(input.headers)
+    ? input.headers.filter((value): value is string => typeof value === 'string').slice(0, 6)
+    : [];
+  const rows = Array.isArray(input.rows)
+    ? input.rows.filter((row): row is unknown[] => Array.isArray(row)).slice(0, 8)
+    : [];
+  const contents: Record<string, unknown>[] = [
+    { type: 'text', text: answer, size: 'sm', color: '#1E293B', wrap: true },
+  ];
+
+  if (question) {
+    contents.unshift({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F5F3FF',
+      cornerRadius: '10px',
+      paddingAll: '10px',
+      contents: [
+        { type: 'text', text: 'YOUR QUESTION', size: 'xxs', color: '#7C3AED', weight: 'bold' },
+        { type: 'text', text: question, size: 'sm', color: AI_TEXT, wrap: true },
+      ],
+    });
+  }
+
+  if (headers.length > 0 && rows.length > 0) {
+    contents.push({ type: 'separator', color: '#DDD6FE', margin: 'md' });
+    contents.push({
+      type: 'box',
+      layout: 'horizontal',
+      alignItems: 'center',
+      backgroundColor: '#EDE9FE',
+      cornerRadius: '8px',
+      paddingAll: '10px',
+      contents: [
+        { type: 'text', text: '▦ DATA TABLE', size: 'xs', weight: 'bold', color: '#5B21B6', wrap: true },
+        { type: 'text', text: rows.length + '件', size: 'xs', color: '#6D28D9', align: 'end', flex: 1 },
+      ],
+    });
+
+    if (headers.length <= 3) {
+      const columnFlex = headers.map((header, index) => {
+        const length = Math.max(header.length, ...rows.map(row => campusAiCell(row[index]).length));
+        return Math.max(1, Math.min(3, Math.ceil(length / 12)));
+      });
+      contents.push({
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'xs',
+        margin: 'sm',
+        contents: headers.map((header, index) => ({
+          type: 'text',
+          text: header.slice(0, 45),
+          size: 'xs',
+          weight: 'bold',
+          color: '#5B21B6',
+          flex: columnFlex[index],
+          wrap: true,
+        })),
+      });
+      rows.forEach((row, rowIndex) => {
+        contents.push({
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'xs',
+          paddingAll: '8px',
+          backgroundColor: rowIndex % 2 === 0 ? '#F8FAFC' : '#FFFFFF',
+          contents: headers.map((_, index) => ({
+            type: 'text',
+            text: campusAiCell(row[index]),
+            size: 'xs',
+            color: '#1E293B',
+            flex: columnFlex[index],
+            wrap: true,
+          })),
+        });
+        if (rowIndex < rows.length - 1) contents.push({ type: 'separator', color: '#E2E8F0' });
+      });
+    } else {
+      rows.forEach((row, rowIndex) => {
+        const pairContents: Record<string, unknown>[] = [
+          { type: 'text', text: 'レコード ' + (rowIndex + 1), size: 'xs', color: '#7C3AED', weight: 'bold', margin: 'none' },
+        ];
+        headers.forEach((header, index) => {
+          pairContents.push({
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: header.slice(0, 50), size: 'xs', color: '#64748B', flex: 2, wrap: true },
+              { type: 'text', text: campusAiCell(row[index]), size: 'xs', color: '#1E293B', flex: 5, wrap: true },
+            ],
+          });
+        });
+        contents.push({
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'xs',
+          paddingAll: '10px',
+          backgroundColor: rowIndex % 2 === 0 ? '#F8FAFC' : '#FFFFFF',
+          cornerRadius: '8px',
+          contents: pairContents,
+        });
+      });
+    }
+
+    if ((input.rows?.length ?? rows.length) > rows.length) {
+      contents.push({
+        type: 'text',
+        text: '表示は先頭8件までです。続きはCampusSyncサイトのAIで確認してください。',
+        size: 'xs',
+        color: '#64748B',
+        wrap: true,
+        margin: 'md',
+      });
+    }
+  }
+
+  contents.push({
+    type: 'separator',
+    color: '#E2E8F0',
+    margin: 'md',
+  });
+
+  return {
+    type: 'flex',
+    altText: ('CampusSync AI｜' + (question ? question + '｜' : '') + answer).slice(0, 400),
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: AI_PURPLE,
+        paddingAll: '18px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: '✦ CAMPUSSYNC AI', size: 'xs', color: AI_ACCENT, weight: 'bold' },
+          { type: 'text', text: 'AIアシスタントの回答', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+          { type: 'text', text: 'SMART ANSWER  /  DATA ASSISTANT', size: 'xxs', color: '#DDD6FE', wrap: true },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'md',
+        contents,
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        backgroundColor: '#F5F3FF',
+        spacing: 'xs',
+        contents: [
+          { type: 'text', text: '✦ このメッセージはCampusSync AIが回答しました', size: 'xs', color: '#6D28D9', align: 'center', wrap: true },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+        ],
+      },
+    },
+  };
+}
