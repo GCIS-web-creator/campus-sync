@@ -265,3 +265,83 @@ export function buildCafeteriaSoldOutFlexMessage(input: {
   };
 }
 
+/** 月曜〜日曜の週間学校予定表。LINE上で曜日ごとのカードを切り替えて確認できる。 */
+export function buildWeeklySchoolScheduleFlexMessage(input: {
+  title: string;
+  weekStart: string;
+  days: Array<{
+    date: string;
+    dayLabel: string;
+    isHoliday?: boolean;
+    holidayName?: string;
+    items?: Array<{ id?: string; time?: string; title?: string; location?: string; details?: string }>;
+  }>;
+}): FlexMessage {
+  const weekEndDate = new Date(input.weekStart + 'T00:00:00Z');
+  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+  const weekEnd = weekEndDate.toISOString().slice(0, 10);
+  const dateLabel = (value: string) => value.slice(5).replace('-', '/');
+  const heading = input.title.trim().slice(0, 100) || '学校予定表';
+  const bubbles = input.days.slice(0, 7).map((day, index) => {
+    const holiday = day.isHoliday === true;
+    const allItems = Array.isArray(day.items) ? day.items : [];
+    const items = allItems.filter(item => String(item.title || item.details || item.time || item.location || '').trim());
+    const bodyContents: Record<string, unknown>[] = [];
+    if (holiday) {
+      bodyContents.push({
+        type: 'box', layout: 'vertical', paddingAll: '10px', cornerRadius: '9px',
+        backgroundColor: '#FFF1F2', contents: [
+          { type: 'text', text: '祝日・休校日', size: 'sm', weight: 'bold', color: '#BE123C', wrap: true },
+          ...(day.holidayName ? [{ type: 'text', text: String(day.holidayName).slice(0, 100), size: 'xs', color: '#9F1239', wrap: true, margin: 'xs' }] : []),
+        ],
+      });
+    }
+    if (items.length === 0 && !holiday) {
+      bodyContents.push({ type: 'text', text: 'この日の予定はありません。', size: 'sm', color: '#64748B', wrap: true });
+    }
+    for (const item of items.slice(0, 7)) {
+      const contents: Record<string, unknown>[] = [];
+      if (item.time) contents.push({ type: 'text', text: String(item.time).slice(0, 30), size: 'xs', color: '#0E7490', weight: 'bold', wrap: true });
+      contents.push({ type: 'text', text: String(item.title || '予定').slice(0, 120), size: 'sm', color: '#0F172A', weight: 'bold', wrap: true });
+      if (item.location) contents.push({ type: 'text', text: '場所：' + String(item.location).slice(0, 100), size: 'xs', color: '#475569', wrap: true });
+      if (item.details) contents.push({ type: 'text', text: String(item.details).slice(0, 220), size: 'xs', color: '#475569', wrap: true });
+      bodyContents.push({
+        type: 'box', layout: 'vertical', spacing: 'xs', paddingAll: '10px',
+        cornerRadius: '9px', backgroundColor: '#F8FAFC', contents,
+      });
+    }
+    if (items.length > 7) bodyContents.push({
+      type: 'text', text: 'ほか' + (items.length - 7) + '件の予定があります。CampusSyncで確認してください。',
+      size: 'xs', color: '#64748B', wrap: true,
+    });
+
+    return {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm',
+        backgroundColor: holiday ? '#881337' : '#0F172A',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC  /  WEEKLY SCHEDULE', size: 'xs', color: '#67E8F9', weight: 'bold', wrap: true },
+          { type: 'text', text: String(day.dayLabel || ['月', '火', '水', '木', '金', '土', '日'][index]) + '曜日の予定', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+          { type: 'text', text: dateLabel(day.date), size: 'sm', color: '#CBD5E1', wrap: true },
+        ],
+      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: bodyContents },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '10px', backgroundColor: '#F1F5F9',
+        contents: [
+          { type: 'text', text: heading + '  •  ' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd), size: 'xs', color: '#475569', wrap: true },
+          { type: 'text', text: (index + 1) + ' / 7  日曜日の週予定配信', size: 'xs', color: '#64748B', align: 'center', margin: 'xs' },
+        ],
+      },
+    };
+  });
+
+  return {
+    type: 'flex',
+    altText: ('CampusSync｜' + heading + '｜' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd) + 'の学校予定表').slice(0, 400),
+    contents: { type: 'carousel', contents: bubbles },
+  };
+}
+
