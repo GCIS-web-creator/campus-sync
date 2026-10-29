@@ -1,14 +1,14 @@
 -- CampusSync: LINEグループ配信先と通知種別ごとの受信設定
 -- Group IDはLINE Webhookから自動登録できます。列追加は何度実行しても安全です。
--- 各種通知の受信スイッチは初期状態OFFです。送信したいグループだけをONにします。
+-- 時間割・電車時刻表は新規登録グループでON、その他の通知は初期状態OFFです。既存グループは下記の設定SQLで選択します。
 
 create table if not exists public.line_group_chats (
   chat_id text primary key,
   chat_type text not null check (chat_type in ('group', 'room')),
   active boolean not null default true,
   receive_general_notifications boolean not null default false,
-  receive_train_timetable boolean not null default false,
-  receive_class_timetable boolean not null default false,
+  receive_train_timetable boolean not null default true,
+  receive_class_timetable boolean not null default true,
   receive_cafeteria_sold_out boolean not null default false,
   receive_assignment_updates boolean not null default false,
   receive_quick_notices boolean not null default false,
@@ -22,15 +22,19 @@ create table if not exists public.line_group_chats (
 alter table public.line_group_chats
   add column if not exists receive_general_notifications boolean not null default false;
 alter table public.line_group_chats
-  add column if not exists receive_train_timetable boolean not null default false;
+  add column if not exists receive_train_timetable boolean not null default true;
 alter table public.line_group_chats
-  add column if not exists receive_class_timetable boolean not null default false;
+  add column if not exists receive_class_timetable boolean not null default true;
 alter table public.line_group_chats
   add column if not exists receive_cafeteria_sold_out boolean not null default false;
 alter table public.line_group_chats
   add column if not exists receive_assignment_updates boolean not null default false;
 alter table public.line_group_chats
   add column if not exists receive_quick_notices boolean not null default false;
+
+-- New LINE groups receive both timetable categories by default; unrelated categories remain opt-in.
+alter table public.line_group_chats alter column receive_train_timetable set default true;
+alter table public.line_group_chats alter column receive_class_timetable set default true;
 
 alter table public.line_group_chats enable row level security;
 revoke all on table public.line_group_chats from anon, authenticated;
