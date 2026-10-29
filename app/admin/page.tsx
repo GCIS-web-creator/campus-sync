@@ -1327,15 +1327,18 @@ export default function CampusSyncAdmin() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || `保存に失敗しました（HTTP ${response.status}）。`);
+      let savedMessage = '';
       if (editingAssignmentId) {
-        setAssignmentMessage('課題を更新しました。学生側にも反映されます。');
+        savedMessage = '課題を更新しました。学生側にも反映されます。';
       } else if (result?.lineNotification?.status === 'sent') {
-        setAssignmentMessage('課題を追加して学生側に公開しました。LINEにもFlex Messageで通知しました。');
+        savedMessage = '課題を追加して学生側に公開しました。LINEにもFlex Messageで通知しました。';
       } else {
-        setAssignmentMessage(`課題を追加して学生側に公開しました。LINE通知の状況：${result?.lineNotification?.message || '通知結果を確認できませんでした。'}`);
+        savedMessage = `課題を追加して学生側に公開しました。LINE通知の状況：${result?.lineNotification?.message || '通知結果を確認できませんでした。'}`;
       }
       resetAssignmentForm();
       await loadAssignments();
+      // loadAssignments also sets its own status text, so restore the publish/LINE result.
+      setAssignmentMessage(savedMessage);
     } catch (error) {
       console.error('共通課題の保存に失敗:', error);
       setAssignmentMessage(error instanceof Error ? error.message : '課題を保存できませんでした。');
