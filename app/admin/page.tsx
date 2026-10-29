@@ -1566,7 +1566,7 @@ export default function CampusSyncAdmin() {
     <div className="flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
       
       {/* 🚀 サイドバーナビゲーション */}
-      <aside className="w-16 shrink-0 bg-slate-950 border-r border-slate-800 p-2 md:w-64 md:p-6 flex flex-col justify-between">
+      <aside className="h-screen min-h-0 w-16 shrink-0 overflow-y-auto overscroll-contain bg-slate-950 border-r border-slate-800 p-2 md:w-64 md:p-6 flex flex-col justify-between">
         <div>
           <div className="mb-8 flex min-w-0 flex-col items-center gap-2 md:items-start">
             <div className="hidden max-w-full items-center gap-2 md:flex">
