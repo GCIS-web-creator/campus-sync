@@ -1,6 +1,6 @@
 -- CampusSync: LINEグループ配信先と通知種別ごとの受信設定
 -- Group IDはLINE Webhookから自動登録できます。列追加は何度実行しても安全です。
--- 時間割・電車時刻表は新規登録グループでON、その他の通知は初期状態OFFです。既存グループは下記の設定SQLで選択します。
+-- 時間割・電車時刻表・週間学校予定表は新規登録グループでON、その他の通知は初期状態OFFです。既存グループは下記の設定SQLで選択します。
 
 create table if not exists public.line_group_chats (
   chat_id text primary key,
