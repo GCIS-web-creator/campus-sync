@@ -278,7 +278,7 @@ export async function POST(req: Request) {
   if (wantsRoom && roomRes.error) return NextResponse.json({ answer: '教室の状況を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsCrowd && voteRes.error) return NextResponse.json({ answer: '学食の混雑情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsSold && soldRes.error) return NextResponse.json({ answer: '売り切れ情報を読み込めませんでした。少し待ってからもう一度試してください。' });
-  if (wantsMenu && menuRes.error) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
+  if (wantsMenu && menuRes.error && !/今日|本日|現在|学食教えて|メニュー教えて|何がある/.test(question)) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsMenu && /今日|本日|現在|学食教えて|メニュー教えて|何がある/.test(question) && !wantsCrowd && !wantsReviews) {
     if (todayMenuRes.error) {
       console.error('今日の学食メニュー取得エラー:', todayMenuRes.error.message);
