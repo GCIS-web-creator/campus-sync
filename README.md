@@ -36,6 +36,7 @@ Before enabling the first-login profile setup or exporting profile snapshots, fo
 - [部活・委員会ノートのLINE自動配信](docs/club-posting-and-permissions.md#LINE公式アカウントへの自動配信)
 - [部活・委員会投稿のSupabase SQL](supabase/club-posting-permissions.sql)
 - [学食の献立栄養情報・実際の売切報告のSupabase SQL](supabase/cafeteria-menu-metadata.sql)
+- [CampusSync AIとLINE公式アカウントの連携手順](LINE_CAMPUS_AI_SETUP_JA.md)
 
 ## Learn More
 

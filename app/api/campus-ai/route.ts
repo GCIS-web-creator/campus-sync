@@ -70,13 +70,6 @@ const FALLBACK_MENUS = [
   { id: 'curry', name: '栄光カレーライス', calorie: '710kcal', allergy: '小麦・豚肉・リンゴ' },
   { id: 'healthy', name: 'ヘルシーバリューランチ', calorie: '540kcal', allergy: 'さば・大豆・ごま' },
 ];
-const CURRENT_UI_NOTIFICATIONS = [
-  { title: '明日の体育はグラウンドです（熱中症対策を万全に）', time: '10分前' },
-  { title: '図書室の新着おすすめ本が入荷しました！', time: '1時間前' },
-  { title: '【重要】鷹の台駅の電車発車時刻について', time: '昨日' },
-  { title: '食堂の期間限定「栄光フェス丼」メニュー開始のお知らせ', time: '昨日' },
-  { title: '定期考査の範囲表がClassroomにアップロードされました', time: '3日前' },
-];
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as {
@@ -208,7 +201,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const [menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes] = await Promise.all([
+  const [menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'higashimurayama'),
@@ -227,6 +220,7 @@ export async function POST(req: Request) {
     db.from('lost_and_found').select('*').order('created_at', { ascending: false }).limit(100),
     db.from('cafeteria_reviews').select('menu_id, user_name, rating, comment, created_at').order('created_at', { ascending: false }).limit(200),
     db.from('cafeteria_votes').select('menu_id, scope_key, status, voter_id').not('menu_id', 'is', null),
+    db.from('notifications').select('id, title, created_at').order('created_at', { ascending: false }).limit(100),
   ]);
 
   // 共通課題の完了状態を生徒ごとに読み、完了済みを未完了一覧から除外する。
@@ -301,6 +295,7 @@ export async function POST(req: Request) {
   }
   if (wantsLost && lostRes.error) return NextResponse.json({ answer: '落とし物情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsReviews && reviewsRes.error) return NextResponse.json({ answer: '口コミを読み込めませんでした。少し待ってからもう一度試してください。' });
+  if (wantsNotifications && notificationsRes.error) return NextResponse.json({ answer: '学園総合通知を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsContribution && !authed) return NextResponse.json({ answer: '貢献度を確認するには学校アカウントでログインしてください。' });
   if (wantsContribution && contributionError) return NextResponse.json({ answer: '貢献度を読み込めませんでした。少し待ってからもう一度試してください。' });
 
@@ -557,7 +552,17 @@ export async function POST(req: Request) {
   const reviewRows = (reviewsRes.data ?? []) as Array<{ menu_id: string | number | null; user_name: string | null; rating: number | null; comment: string | null; created_at: string | null }>;
   const menuById = new Map(allMenus.map(m => [String(m.id), m.name]));
   const reviewList = reviewRows.slice(0, 6).map(r => `${menuById.get(String(r.menu_id)) ?? '学食'}｜★${Number(r.rating) || 0}/5｜${str(r.comment, 'コメントなし')}（${str(r.user_name, '匿名')}）`).join('\n');
-  const notificationList = CURRENT_UI_NOTIFICATIONS.map(r => `${r.time}｜${r.title}`).join('\n');
+  const schoolNotificationRows = (notificationsRes.data ?? []) as Array<{ title?: string | null; created_at?: string | null }>;
+  const schoolNotificationTime = (value?: string | null) => {
+    if (!value) return '日時不明';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime())
+      ? '日時不明'
+      : parsed.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const notificationList = schoolNotificationRows.slice(0, 20)
+    .map(row => `${schoolNotificationTime(row.created_at)}｜${str(row.title, '学校からのお知らせ')}`)
+    .join('\n');
 
   const slots: Record<string, string | number> = {};
   menuForList.forEach((r, i) => {
@@ -675,7 +680,7 @@ export async function POST(req: Request) {
     lost: lostRows.length ? 'あり' : 'なし',
     reviews: reviewRows.length ? 'あり' : 'なし',
     contribution: authed && studentId ? 'あり' : 'なし',
-    notifications: CURRENT_UI_NOTIFICATIONS.length ? 'あり' : 'なし',
+    notifications: schoolNotificationRows.length ? 'あり' : 'なし',
   };
 
   const table = (headers: string[], rows: string[][]) => ({ headers, rows });
@@ -1142,13 +1147,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ answer: genericLost ? '現在登録されている落とし物です。' : '該当する落とし物が見つかりました。', table: table(['品名', '場所', '詳細', '保管先', '登録日時'], matchingLost.map(r => [str(r.title ?? r.item_name), str(r.location ?? r.found_location), str(r.description ?? r.details), str(r.finder ?? r.storage_location ?? r.storage ?? r.found_by), r.created_at ? new Date(String(r.created_at)).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明'])) });
   }
 
-  // 通知表示はアプリの現在の通知サンプルと同じ内容で、指定件数に絞る。
+  // 学園総合通知は生徒画面と同じnotificationsテーブルの実データを返す。
   if (wantsNotifications) {
     const amountMatch = /([1-9１-９])件/.exec(question);
     const digit = amountMatch?.[1] ?? '';
     const requested = digit ? (/^[１-９]$/.test(digit) ? '１２３４５６７８９'.indexOf(digit) + 1 : Number(digit)) : 5;
-    const notifications = CURRENT_UI_NOTIFICATIONS.slice(0, Math.min(20, requested));
-    return NextResponse.json({ answer: '現在サイトに表示している通知です。', table: table(['時刻', '通知内容'], notifications.map(n => [n.time, n.title])) });
+    const notifications = schoolNotificationRows.slice(0, Math.min(20, requested));
+    if (!notifications.length) {
+      return NextResponse.json({ answer: '現在、公開中の学園総合通知はありません。' });
+    }
+    return NextResponse.json({
+      answer: '現在公開中の学園総合通知です。',
+      table: table(['日時', '通知内容'], notifications.map(n => [schoolNotificationTime(n.created_at), str(n.title, '学校からのお知らせ')])),
+    });
   }
 
   // 貢献度は、電車など他カテゴリの回答へ流れないよう直接返す。
