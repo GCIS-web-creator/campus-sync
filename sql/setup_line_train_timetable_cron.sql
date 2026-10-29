@@ -1,5 +1,5 @@
--- CampusSync: 毎日15:30 JSTに、15:40〜18:00の鷹の台駅時刻表をLINEへまとめて配信
--- Supabase pg_cron uses UTC here: 06:30 UTC = 15:30 JST.
+-- CampusSync: 毎日16:00 JSTに、16:00〜18:00の鷹の台駅時刻表をLINEへまとめて配信
+-- Supabase pg_cron uses UTC here: 07:00 UTC = 16:00 JST.
 -- 5分おきのPush Cronですでに認証成功しているSupabase VaultのSecretを再利用します。
 -- VercelのCRON_SECRETを見直したり、SQLへ秘密値を直接書いたりする必要はありません。
 -- Vault secret name: campussync_push_reminders_cron_secret
@@ -11,7 +11,7 @@ select cron.unschedule(jobid) from cron.job where jobname in (
 );
 select cron.schedule(
   'campussync-afternoon-train-timetable',
-  '30 6 * * *',
+  '0 7 * * *',
   $cron$
     select net.http_post(
       url := 'https://campus-sync-mocha.vercel.app/api/line-train-timetable',
