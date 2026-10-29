@@ -35,9 +35,12 @@ select chat_id, chat_type, active, receive_general_notifications, receive_train_
 from public.line_group_chats
 order by last_seen_at desc;
 
--- 2) After identifying the one group that should receive hourly train timetables,
--- replace PASTE_GROUP_ID_HERE with that exact chat_id and run the following UPDATE separately:
+-- 2) To enable all four requested notification categories for one specific group,
+-- replace PASTE_GROUP_ID_HERE with the exact chat_id and run the following UPDATE separately:
 -- update public.line_group_chats
--- set receive_train_timetable = (chat_id = 'PASTE_GROUP_ID_HERE'),
+-- set receive_train_timetable = true,
+--     receive_class_timetable = true,
+--     receive_cafeteria_sold_out = true,
+--     receive_assignment_updates = true,
 --     receive_general_notifications = false
--- where chat_type in ('group', 'room');
+-- where chat_id = 'PASTE_GROUP_ID_HERE' and active = true;

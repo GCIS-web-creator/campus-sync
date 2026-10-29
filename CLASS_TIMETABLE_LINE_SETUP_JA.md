@@ -1,62 +1,69 @@
-# 翌日の7組・8組時間割をLINEに送信する設定
+# LINEグループへの時間割・電車・学食売切・課題通知
 
-## 実装内容
+## 配信する内容
 
-- CampusSyncの時間割画面は、A週／B週から7組／8組の時間割表示に変更しました。
-- 7組・8組の時間割を2枚のFlex Messageカルーセルとして1つのメッセージで送信します。
-- 毎日21:00（日本時間）に翌日の曜日を計算して配信します。
-- 翌日が土曜または日曜になる金曜・土曜の夜は自動スキップします。日曜21:00は翌月曜日分を送信します。
-- Adminの「翌日の時間割をテスト送信」ボタンも、当日ではなく翌日の曜日の時間割を送信します。実際のLINE配信になるため、LINE公式アカウントの友だちと、時間割受信をONにしたグループへ送信されます。
+設定したグループには次の4種類を配信できます。
+
+1. **7組・8組の時間割**：毎日21:00（日本時間）に翌日の曜日の時間割をFlex Messageで配信。翌日が土日なら送信しません。
+2. **鷹の台駅の時刻表**：既存の毎時配信を維持します。
+3. **学食売切通知**：Adminで売切を実行したときに即時配信します。
+4. **課題通知**：新しい課題が公開されたときに配信し、さらに毎日21:00に提出期限が今後48時間以内に迫っている公開中の課題をまとめて配信します。
+
+一般の学校のお知らせ、部活・委員会、落とし物などは別の設定です。指定グループでは `receive_general_notifications = false` にすれば混ざりません。
 
 ## 1. Supabaseのグループ受信設定を更新
 
-Supabase Dashboard → SQL Editorで `supabase/line-group-broadcast.sql` をもう一度実行してください。既存のテーブルを壊さず、`receive_class_timetable` 列を追加します。
+Supabase Dashboard → SQL Editorで `supabase/line-group-broadcast.sql` を再実行してください。既存のGroup IDを保持したまま、配信種類の設定列を追加します。
 
-グループごとに3種類の受信設定を分離しています。
+## 2. 対象グループを選ぶ
 
-- `receive_train_timetable`: 鷹の台駅の毎時発車案内
-- `receive_class_timetable`: 7組・8組の翌日時間割
-- `receive_general_notifications`: 学校のお知らせ、課題、部活・委員会、学食、落とし物などの一般通知
-
-すべての設定は既定値OFFです。電車時刻表専用のグループに授業時間割が届くことはありません。
-
-## 2. 時間割を受け取りたいグループを設定（任意）
-
-WebhookでGroup IDが保存されたら、次で確認します。
+WebhookでグループIDが保存されたら、SQL Editorで次を実行します。
 
 ```sql
-select chat_id, chat_type, active, last_seen_at,
-       receive_general_notifications, receive_train_timetable, receive_class_timetable
+select chat_id, chat_type, active, last_seen_at, last_event_type,
+       receive_train_timetable, receive_class_timetable,
+       receive_cafeteria_sold_out, receive_assignment_updates,
+       receive_general_notifications
 from public.line_group_chats
 order by last_seen_at desc;
 ```
 
-授業時間割を受信するグループの `chat_id` を確認し、次のSQLの `PASTE_GROUP_ID_HERE` をその値に置き換えて実行します。
+対象グループの `chat_id` をコピーします。Botはそのグループに参加中で、`active = true` である必要があります。
+
+## 3. 指定したグループで4種類をONにする
+
+次のSQLの `PASTE_GROUP_ID_HERE` を対象の `chat_id` に置き換えて実行します。
 
 ```sql
 update public.line_group_chats
-set receive_class_timetable = (chat_id = 'PASTE_GROUP_ID_HERE')
-where chat_type in ('group', 'room');
+set receive_train_timetable = true,
+    receive_class_timetable = true,
+    receive_cafeteria_sold_out = true,
+    receive_assignment_updates = true,
+    receive_general_notifications = false
+where chat_id = 'PASTE_GROUP_ID_HERE'
+  and active = true;
 ```
 
-このSQLはクラス時間割受信を指定グループだけONにし、それ以外のグループはOFFにします。他の通知設定は変更しません。時間割をLINE公式アカウントの友だちだけに送り、グループ配信を使わない場合は、この操作は不要です。
+これで1つのグループが4種類を受信します。他のグループの設定は変わりません。ほかのグループには送られません（そのグループ自身の受信設定を別途変更した場合を除く）。
 
-## 3. 21:00のCronを設定
+## 4. 毎日21:00の時間割・課題期限通知を有効にする
 
-Vercel Project Settings → Environment Variablesで `CRON_SECRET` を確認します。その後、`sql/setup_next_day_class_timetable_cron.sql` を開き、`REPLACE_WITH_CRON_SECRET` の箇所だけを同じ値に置き換え、SQLをSupabase SQL Editorへ直接貼り付けて実行してください。実際の秘密値はGitHubへ保存しないでください。
+Vercelの環境変数 `CRON_SECRET` を確認し、`sql/setup_next_day_class_timetable_cron.sql` 内の **2箇所**の `REPLACE_WITH_CRON_SECRET` をその値に置き換え、Supabase SQL Editorで実行してください。実際の秘密値をGitHubへコミットしないでください。
 
-Supabaseデータベースは標準でUTCなので、Cronは `0 12 * * *`（UTC 12:00 = 日本時間21:00）です。既存の電車時刻表の毎時Cronは変更しません。
+このSQLは以下の2つを日本時間21:00にスケジュールします。
 
-実行後、以下で `active = true` と `0 12 * * *` を確認します。
+- 翌日の7組・8組時間割
+- 提出期限が今後48時間以内に迫っている課題一覧
+
+既存の鷹の台駅の毎時Cronは変更しません。実行後、次で有効化状態を確認できます。
 
 ```sql
-select jobid, jobname, schedule, active
+select jobname, schedule, active
 from cron.job
-where jobname = 'campussync-next-day-class-timetable';
+where jobname in ('campussync-next-day-class-timetable', 'campussync-assignment-deadline-reminder');
 ```
 
-## 4. Adminからテスト送信
+## 5. 確認
 
-Admin画面の「翌日の7組・8組時間割」欄にある「翌日の時間割をテスト送信」を押します。上にある共通のAdmin用パスワード欄を使用します。翌日が土日なら、送信せず時間割がない旨を表示します。
-
-送信は本当のLINE配信です。送信テストは平日で行い、実際の受信先やLINE公式アカウントの送信通数を確認してください。
+設定したグループが4種類の列を `true`、`receive_general_notifications` を `false` にしていることを確認してください。Adminから学食売切をテストした場合と新規課題を公開した場合は実際にLINEに配信されるため、公開前に内容とグループを確認してください。

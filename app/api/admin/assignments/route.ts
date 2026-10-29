@@ -129,6 +129,8 @@ export async function POST(request: Request) {
     try {
       const retryKey = randomUUID();
       const messages = [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)];
+      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'assignment_updates');
+      const groupSummary = summarizeLineGroupDelivery(groupDelivery);
       const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
         method: 'POST',
         headers: {
@@ -141,10 +143,9 @@ export async function POST(request: Request) {
       });
 
       if (lineResponse.ok) {
-        const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey);
         lineNotification = {
           status: 'sent',
-          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。 ' + summarizeLineGroupDelivery(groupDelivery),
+          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。 ' + groupSummary,
         };
       } else {
         console.error('課題公開のLINE通知に失敗:', lineResponse.status);
@@ -152,14 +153,14 @@ export async function POST(request: Request) {
           status: 'failed',
           message: lineResponse.status === 429
             ? '課題は公開されましたが、LINEの送信上限に達した可能性があります。'
-            : `課題は公開されましたが、LINE通知に失敗しました（HTTP ${lineResponse.status}）。LINE_CHANNEL_ACCESS_TOKENを確認してください。`,
+            : `課題は公開されましたが、LINE友だち向け通知に失敗しました（HTTP ${lineResponse.status}）。グループ配信結果：${groupSummary}`,
         };
       }
     } catch (lineError) {
       console.error('課題公開のLINE通知接続エラー:', lineError instanceof Error ? lineError.message : 'unknown error');
       lineNotification = {
         status: 'failed',
-        message: '課題は公開されましたが、LINE通知の接続に失敗しました。Vercelのログを確認してください。',
+        message: '課題は公開されましたが、LINE友だち向け通知の接続に失敗しました。グループ配信結果：' + groupSummary + ' Vercelのログを確認してください。',
       };
     }
   }

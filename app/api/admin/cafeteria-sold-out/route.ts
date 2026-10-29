@@ -48,12 +48,15 @@ export async function POST(request: Request) {
 
   try {
     const messages = [buildCafeteriaSoldOutFlexMessage({ menuName, price, updatedAt })];
+    const retryKey = randomUUID();
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'cafeteria_sold_out');
+    const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
         Authorization: 'Bearer ' + accessToken,
         'Content-Type': 'application/json',
-        'X-Line-Retry-Key': randomUUID(),
+        'X-Line-Retry-Key': retryKey,
       },
       body: JSON.stringify({ messages }),
       cache: 'no-store',
@@ -62,18 +65,17 @@ export async function POST(request: Request) {
     if (!response.ok) {
       console.error('学食売切LINE通知失敗:', response.status);
       if (response.status === 429) {
-        return jsonError('売切状態は保存されましたが、LINEの送信上限に達した可能性があります。公式アカウントの通数を確認してください。', 502);
+        return jsonError('LINEの送信上限に達した可能性があります。グループ配信結果：' + groupSummary, 502);
       }
       if (response.status === 401 || response.status === 403) {
-        return jsonError('売切状態は保存されましたが、LINE_CHANNEL_ACCESS_TOKENを確認してください。', 502);
+        return jsonError('LINE_CHANNEL_ACCESS_TOKENを確認してください。グループ配信結果：' + groupSummary, 502);
       }
-      return jsonError('売切状態は保存されましたが、LINE通知に失敗しました（HTTP ' + response.status + '）。', 502);
+      return jsonError('LINE友だち向け通知に失敗しました（HTTP ' + response.status + '）。グループ配信結果：' + groupSummary, 502);
     }
 
-    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages);
     return NextResponse.json({
       success: true,
-      message: 'LINE公式アカウントへ売切のお知らせをFlex Messageで送信しました。 ' + summarizeLineGroupDelivery(groupDelivery),
+      message: 'LINE公式アカウントへ売切のお知らせをFlex Messageで送信しました。 ' + groupSummary,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学食売切LINE通知の接続エラー:', error instanceof Error ? error.message : 'unknown error');
