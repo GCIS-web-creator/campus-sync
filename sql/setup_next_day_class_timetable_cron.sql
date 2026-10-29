@@ -1,7 +1,8 @@
 -- CampusSync: 翌日の7組・8組時間割を毎日21:00（日本時間）にLINE配信
 -- Supabaseの標準UTCタイムゾーンを前提に、12:00 UTC = 21:00 JSTでスケジュールします。
--- 実行前に、両方の REPLACE_WITH_CRON_SECRET をVercelのCRON_SECRETと同じ値に置き換えてください。
--- 秘密値を含むSQLはGitHubにコミットせず、Supabase SQL Editorへ直接貼り付けてください。
+-- 5分おきのPush Cronで認証成功しているSupabase VaultのSecretを再利用します。
+-- VercelのCRON_SECRETを再表示したり、秘密値をSQLへ直接書いたりする必要はありません。
+-- Vault secret name: campussync_push_reminders_cron_secret
 
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
@@ -18,7 +19,7 @@ select cron.schedule(
       url := 'https://campus-sync-mocha.vercel.app/api/line-class-timetable',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'campussync_push_reminders_cron_secret')
       ),
       body := '{}'::jsonb,
       timeout_milliseconds := 15000
@@ -34,7 +35,7 @@ select cron.schedule(
       url := 'https://campus-sync-mocha.vercel.app/api/line-assignment-deadlines',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'campussync_push_reminders_cron_secret')
       ),
       body := '{}'::jsonb,
       timeout_milliseconds := 15000
