@@ -1327,7 +1327,13 @@ export default function CampusSyncAdmin() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || `保存に失敗しました（HTTP ${response.status}）。`);
-      setAssignmentMessage(editingAssignmentId ? '課題を更新しました。学生側にも反映されます。' : '課題を追加しました。学生側にも反映されます。');
+      if (editingAssignmentId) {
+        setAssignmentMessage('課題を更新しました。学生側にも反映されます。');
+      } else if (result?.lineNotification?.status === 'sent') {
+        setAssignmentMessage('課題を追加して学生側に公開しました。LINEにもFlex Messageで通知しました。');
+      } else {
+        setAssignmentMessage(`課題を追加して学生側に公開しました。LINE通知の状況：${result?.lineNotification?.message || '通知結果を確認できませんでした。'}`);
+      }
       resetAssignmentForm();
       await loadAssignments();
     } catch (error) {
