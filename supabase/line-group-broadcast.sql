@@ -1,6 +1,6 @@
 -- CampusSync: LINEグループ配信先と通知種別ごとの受信設定
 -- Group IDはLINE Webhookから自動登録できます。列追加は何度実行しても安全です。
--- 時間割・電車時刻表・週間学校予定表は新規登録グループでON、その他の通知は初期状態OFFです。既存グループは下記の設定SQLで選択します。
+-- 時間割・電車時刻表は配信設定に従い、週間学校予定表は既存の時間割配信先を初期値にコピーします。新規登録グループの週間予定表は初期状態OFFです。
 
 create table if not exists public.line_group_chats (
   chat_id text primary key,
@@ -9,7 +9,7 @@ create table if not exists public.line_group_chats (
   receive_general_notifications boolean not null default false,
   receive_train_timetable boolean not null default true,
   receive_class_timetable boolean not null default true,
-  receive_school_schedule boolean not null default true,
+  receive_school_schedule boolean not null default false,
   receive_cafeteria_sold_out boolean not null default false,
   receive_assignment_updates boolean not null default false,
   receive_quick_notices boolean not null default false,
@@ -26,8 +26,21 @@ alter table public.line_group_chats
   add column if not exists receive_train_timetable boolean not null default true;
 alter table public.line_group_chats
   add column if not exists receive_class_timetable boolean not null default true;
-alter table public.line_group_chats
-  add column if not exists receive_school_schedule boolean not null default true;
+-- 既存環境では週間予定表の初期配信先を、すでに選択されている時間割配信先と揃えます。
+do $
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'line_group_chats'
+      and column_name = 'receive_school_schedule'
+  ) then
+    alter table public.line_group_chats
+      add column receive_school_schedule boolean not null default false;
+    update public.line_group_chats
+      set receive_school_schedule = receive_class_timetable;
+  end if;
+end $;
 alter table public.line_group_chats
   add column if not exists receive_cafeteria_sold_out boolean not null default false;
 alter table public.line_group_chats
@@ -38,7 +51,7 @@ alter table public.line_group_chats
 -- New LINE groups receive both timetable categories by default; unrelated categories remain opt-in.
 alter table public.line_group_chats alter column receive_train_timetable set default true;
 alter table public.line_group_chats alter column receive_class_timetable set default true;
-alter table public.line_group_chats alter column receive_school_schedule set default true;
+alter table public.line_group_chats alter column receive_school_schedule set default false;
 
 alter table public.line_group_chats enable row level security;
 revoke all on table public.line_group_chats from anon, authenticated;
