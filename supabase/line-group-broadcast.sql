@@ -26,21 +26,10 @@ alter table public.line_group_chats
   add column if not exists receive_train_timetable boolean not null default true;
 alter table public.line_group_chats
   add column if not exists receive_class_timetable boolean not null default true;
--- 既存環境では週間予定表の初期配信先を、すでに選択されている時間割配信先と揃えます。
-do $
-begin
-  if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public'
-      and table_name = 'line_group_chats'
-      and column_name = 'receive_school_schedule'
-  ) then
-    alter table public.line_group_chats
-      add column receive_school_schedule boolean not null default false;
-    update public.line_group_chats
-      set receive_school_schedule = receive_class_timetable;
-  end if;
-end $;
+-- 週間学校予定表のグループ受信設定を追加（初期値OFF）。
+-- 初回設定後、配信したいグループを別のUPDATEで明示的にONにしてください。
+alter table public.line_group_chats
+  add column if not exists receive_school_schedule boolean not null default false;
 alter table public.line_group_chats
   add column if not exists receive_cafeteria_sold_out boolean not null default false;
 alter table public.line_group_chats
