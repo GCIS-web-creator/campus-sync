@@ -8,7 +8,7 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
-type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'cafeteria_sold_out' | 'assignment_updates';
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice';
 
 export type LineGroupDeliveryResult = {
   kind: LineGroupDeliveryKind;
@@ -95,7 +95,9 @@ export async function pushLineMessagesToRegisteredChats(
         ? 'receive_cafeteria_sold_out'
         : kind === 'assignment_updates'
           ? 'receive_assignment_updates'
-          : 'receive_general_notifications';
+          : kind === 'quick_notice'
+            ? 'receive_quick_notices'
+            : 'receive_general_notifications';
   const { data, error } = await admin.from('line_group_chats')
     .select('chat_id,chat_type')
     .eq('active', true)
@@ -143,7 +145,9 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
         ? '学食売切通知を受信するLINEグループはありません（receive_cafeteria_sold_out を確認してください）。'
         : result.kind === 'assignment_updates'
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
-          : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
+          : result.kind === 'quick_notice'
+            ? 'クイックお知らせ・パトロールを受信するLINEグループはありません（receive_quick_notices を確認してください）。'
+            : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
   if (result.failed > 0) return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed + '件失敗しました。';
   return result.kind === 'train_timetable'
     ? '時刻表専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
@@ -153,5 +157,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
         ? '学食売切通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
         : result.kind === 'assignment_updates'
           ? '課題通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
-          : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
+          : result.kind === 'quick_notice'
+            ? 'クイックお知らせ・パトロールを受信するLINEグループ' + result.sent + '件にも配信しました。'
+            : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
 }

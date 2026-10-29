@@ -40,6 +40,7 @@ set receive_train_timetable = true,
     receive_class_timetable = true,
     receive_cafeteria_sold_out = true,
     receive_assignment_updates = true,
+    receive_quick_notices = true,
     receive_general_notifications = false
 where chat_id = 'PASTE_GROUP_ID_HERE'
   and active = true;

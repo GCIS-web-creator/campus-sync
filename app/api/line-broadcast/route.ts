@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { buildNoticeFlexMessage } from '@/lib/line-flex';
@@ -75,11 +76,13 @@ export async function POST(request: Request) {
 
   try {
     const messages = [buildNoticeFlexMessage(title, message)];
+    const retryKey = randomUUID();
     const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'X-Line-Retry-Key': retryKey,
       },
       body: JSON.stringify({ messages }),
       cache: 'no-store',
@@ -121,7 +124,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages);
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'quick_notice');
     const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const responseMessage = historySaved
       ? '「' + title + '」をLINE公式アカウントの友だちへ配信し、配信履歴にも保存しました。 ' + groupSummary
