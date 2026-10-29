@@ -8,6 +8,7 @@ import ClassChat from '@/components/ClassChat';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
+import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
@@ -357,6 +358,7 @@ type AppSchoolNotification = {
   id: string | number;
   title: string;
   body: string;
+  imageUrl: string | null;
   createdAt: string;
   time: string;
   isRead: boolean;
@@ -2179,7 +2181,26 @@ useEffect(() => {
       setNotifications([]);
       setNotificationLoadError('学校通知を読み込めませんでした。通信状態とSupabaseの設定を確認してください。');
     } else {
-      const rows = Array.isArray(notificationData) ? notificationData : [];
+      const rows = (Array.isArray(notificationData) ? notificationData : [])
+        .filter(note => !LEGACY_SAMPLE_NOTIFICATION_TITLES.has(String(note.title || '').trim()));
+      let readIds = new Set<string>();
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (accessToken) {
+          const readResponse = await fetch('/api/notifications/read', {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: 'no-store',
+          });
+          const readResult = await readResponse.json().catch(() => null) as { readIds?: unknown } | null;
+          if (readResponse.ok && Array.isArray(readResult?.readIds)) {
+            readIds = new Set(readResult.readIds.filter((id): id is string => typeof id === 'string'));
+          }
+        }
+      } catch (readError) {
+        console.warn('通知の既読状態を取得できませんでした。未読表示を続けます。', readError);
+      }
       setNotifications(rows.map((note): AppSchoolNotification => {
         const bodyValue = [note.body, note.message, note.content, note.description]
           .find(value => typeof value === 'string' && value.trim());
@@ -2199,10 +2220,10 @@ useEffect(() => {
           id: note.id as string | number,
           title: typeof note.title === 'string' && note.title.trim() ? note.title : '学校からのお知らせ',
           body: typeof bodyValue === 'string' ? bodyValue : '',
+          imageUrl: typeof note.image_url === 'string' && /^https:\/\//i.test(note.image_url) ? note.image_url : null,
           createdAt,
           time,
-          // 既読管理は生徒ごとに保存できるようになるまでセッション内の新着として扱う。
-          isRead: false,
+          isRead: readIds.has(String(note.id)),
         };
       }));
       setNotificationLoadError('');
@@ -4773,9 +4794,28 @@ Supabaseの設定を確認してください。
               <button
                 type="button"
                 key={note.id}
-                onClick={() => setSelectedNotification(note)}
+                onClick={() => {
+                  setSelectedNotification(note);
+                  if (note.isRead) return;
+                  setNotifications(current => current.map(item => String(item.id) === String(note.id) ? { ...item, isRead: true } : item));
+                  void (async () => {
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession();
+                      const accessToken = sessionData.session?.access_token;
+                      if (!accessToken) return;
+                      await fetch('/api/notifications/read', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                        body: JSON.stringify({ notificationId: String(note.id) }),
+                        cache: 'no-store',
+                      });
+                    } catch (readError) {
+                      console.warn('通知の既読状態を保存できませんでした。', readError);
+                    }
+                  })();
+                }}
                 aria-label={`通知の詳細を開く：${note.title}`}
-                className={`flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors ${note.isRead ? 'border-gray-200 bg-transparent' : 'border-blue-200 bg-white shadow-sm'} hover:border-blue-300 hover:bg-blue-50/40`}
+                className={`flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors ${note.isRead ? 'border-gray-200 bg-gray-50/80 opacity-80' : 'border-blue-200 bg-white shadow-sm'} hover:border-blue-300 hover:bg-blue-50/40`}
               >
                 <div className="mt-1 shrink-0">
                   {note.isRead ? (
@@ -4786,8 +4826,9 @@ Supabaseの設定を確認してください。
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className={`mb-1 break-words text-xs leading-normal ${note.isRead ? 'font-medium text-gray-500' : 'font-black text-gray-800'}`}>{note.title}</h4>
+                  {note.imageUrl && <img src={note.imageUrl} alt="" loading="lazy" className="mb-2 max-h-32 max-w-36 rounded-lg object-cover" />}
                   {note.body && (
-                    <p className="mb-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-gray-600">
+                    <p className={`mb-2 whitespace-pre-wrap break-words text-[11px] leading-5 ${note.isRead ? 'text-gray-500' : 'text-gray-600'}`}>
                       {note.body.length > 120 ? `${note.body.slice(0, 120)}…` : note.body}
                     </p>
                   )}
@@ -5767,6 +5808,7 @@ Supabaseの設定を確認してください。
               </button>
             </div>
             <div className="mt-5 max-h-[55vh] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
+              {selectedNotification.imageUrl && <img src={selectedNotification.imageUrl} alt={selectedNotification.title} className="mb-4 max-h-72 w-full rounded-xl object-contain" />}
               <p className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
             </div>
             <button type="button" onClick={() => setSelectedNotification(null)} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white transition ${themeCls.bg} ${themeCls.bgHover}`}>

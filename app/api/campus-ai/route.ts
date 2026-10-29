@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 import { answerDetailed, isTaskTemplate, type Availability, type Counts, type Direction, type Target } from '@/lib/campus-ai/answer';
 
 export const runtime = 'nodejs';
@@ -552,7 +553,8 @@ export async function POST(req: Request) {
   const reviewRows = (reviewsRes.data ?? []) as Array<{ menu_id: string | number | null; user_name: string | null; rating: number | null; comment: string | null; created_at: string | null }>;
   const menuById = new Map(allMenus.map(m => [String(m.id), m.name]));
   const reviewList = reviewRows.slice(0, 6).map(r => `${menuById.get(String(r.menu_id)) ?? '学食'}｜★${Number(r.rating) || 0}/5｜${str(r.comment, 'コメントなし')}（${str(r.user_name, '匿名')}）`).join('\n');
-  const schoolNotificationRows = (notificationsRes.data ?? []) as Array<{ title?: string | null; created_at?: string | null }>;
+  const schoolNotificationRows = ((notificationsRes.data ?? []) as Array<{ title?: string | null; created_at?: string | null }>)
+    .filter(row => !LEGACY_SAMPLE_NOTIFICATION_TITLES.has(String(row.title || '').trim()));
   const schoolNotificationTime = (value?: string | null) => {
     if (!value) return '日時不明';
     const parsed = new Date(value);

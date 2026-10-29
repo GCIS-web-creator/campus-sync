@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -255,6 +255,10 @@ type AdminSchoolNotification = {
   id: string | number;
   title: string;
   body: string;
+  image_url?: string | null;
+  line_sent?: boolean;
+  line_sent_at?: string | null;
+  line_error?: string | null;
   created_at: string;
 };
 
@@ -344,6 +348,8 @@ export default function CampusSyncAdmin() {
   // 学園総合通知：アプリの通知一覧へ本文付きで全校公開する。
   const [schoolNotificationTitle, setSchoolNotificationTitle] = useState('');
   const [schoolNotificationBody, setSchoolNotificationBody] = useState('');
+  const [schoolNotificationImage, setSchoolNotificationImage] = useState<File | null>(null);
+  const [schoolNotificationImagePreview, setSchoolNotificationImagePreview] = useState('');
   const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
   const [schoolNotificationMessage, setSchoolNotificationMessage] = useState('');
   const [schoolNotificationHistory, setSchoolNotificationHistory] = useState<AdminSchoolNotification[]>([]);
@@ -352,6 +358,16 @@ export default function CampusSyncAdmin() {
 
   const [trainTimetableSending, setTrainTimetableSending] = useState(false);
   const [trainTimetableMessage, setTrainTimetableMessage] = useState('');
+
+  useEffect(() => {
+    if (!schoolNotificationImage) {
+      setSchoolNotificationImagePreview('');
+      return;
+    }
+    const objectUrl = URL.createObjectURL(schoolNotificationImage);
+    setSchoolNotificationImagePreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [schoolNotificationImage]);
 
   // Supabase共有の蔵書管理
   const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -939,13 +955,30 @@ export default function CampusSyncAdmin() {
     setSchoolNotificationSaving(true);
     setSchoolNotificationMessage('');
     try {
+      let imageUrl: string | null = null;
+      if (schoolNotificationImage) {
+        const imageForm = new FormData();
+        imageForm.append('file', schoolNotificationImage);
+        const imageResponse = await fetch('/api/admin/school-notifications/image', {
+          method: 'POST',
+          headers: { 'x-admin-password': adminApiPassword },
+          body: imageForm,
+          cache: 'no-store',
+        });
+        const imageResult = await imageResponse.json().catch(() => null) as { imageUrl?: string; message?: string } | null;
+        if (!imageResponse.ok || !imageResult?.imageUrl) {
+          throw new Error(imageResult?.message || `画像をアップロードできませんでした（HTTP ${imageResponse.status}）。`);
+        }
+        imageUrl = imageResult.imageUrl;
+      }
+
       const response = await fetch('/api/admin/school-notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-admin-password': adminApiPassword,
         },
-        body: JSON.stringify({ title, body }),
+        body: JSON.stringify({ title, body, imageUrl }),
         cache: 'no-store',
       });
       const result = await response.json().catch(() => null);
@@ -957,12 +990,39 @@ export default function CampusSyncAdmin() {
       setSchoolNotificationHistory(previous => [published, ...previous.filter(item => item.id !== published.id)].slice(0, 20));
       setSchoolNotificationTitle('');
       setSchoolNotificationBody('');
-      setSchoolNotificationMessage(result.message || '学園総合通知を全校公開しました。');
+      setSchoolNotificationImage(null);
+      setSchoolNotificationMessage(result.message || '学園総合通知を公開しました。');
       setSchoolNotificationHistoryMessage('');
     } catch (error) {
       setSchoolNotificationMessage(error instanceof Error ? error.message : '学園総合通知の公開に失敗しました。');
     } finally {
       setSchoolNotificationSaving(false);
+    }
+  };
+
+  const handleRetrySchoolNotificationLine = async (item: AdminSchoolNotification) => {
+    if (!adminApiPassword.trim()) {
+      setSchoolNotificationMessage('LINE通知の再送にはAdmin用パスワードが必要です。');
+      return;
+    }
+    if (!window.confirm(`「${item.title}」をLINE公式アカウントへ再送しますか？`)) return;
+    setSchoolNotificationMessage('');
+    try {
+      const response = await fetch('/api/admin/school-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ action: 'retry-line', notificationId: String(item.id) }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null) as { notification?: AdminSchoolNotification; message?: string } | null;
+      if (result?.notification) {
+        const updated = result.notification;
+        setSchoolNotificationHistory(previous => previous.map(row => String(row.id) === String(updated.id) ? updated : row));
+      }
+      if (!response.ok || !result?.notification) throw new Error(result?.message || `LINE再送に失敗しました（HTTP ${response.status}）。`);
+      setSchoolNotificationMessage(result.message || 'LINE公式アカウントへ再送しました。');
+    } catch (error) {
+      setSchoolNotificationMessage(error instanceof Error ? error.message : 'LINE再送に失敗しました。');
     }
   };
 
@@ -1534,7 +1594,7 @@ export default function CampusSyncAdmin() {
           <div className="max-w-5xl space-y-6">
             <div>
               <h2 className="flex items-center gap-2 text-2xl font-black"><BellRing className="text-cyan-400" /> 学園総合通知</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">ここで公開したタイトルと本文は、生徒用CampusSyncの「学園総合通知」に実データとして表示されます。生徒が通知カードを押すと、本文と公開日時の詳細が開きます。LINE公式アカウントへの配信とは別の機能です。</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">ここで公開すると、生徒用CampusSyncの「学園総合通知」に掲載され、LINE公式アカウントの友だち全員にも同時送信します。画像は任意で添付でき、通知を押すと詳細が開きます。</p>
             </div>
 
             <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
@@ -1577,6 +1637,40 @@ export default function CampusSyncAdmin() {
                 <span className="mt-1 block text-right text-[10px] text-slate-500">{Array.from(schoolNotificationBody).length.toLocaleString()} / 1,800文字</span>
               </label>
 
+              <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <label className="block text-xs font-bold text-slate-300">
+                  <span className="inline-flex items-center gap-2"><ImagePlus size={15} /> 通知に添付する画像（任意）</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                    onChange={event => {
+                      const file = event.target.files?.[0] || null;
+                      if (file && (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+                        setSchoolNotificationMessage('画像はJPGまたはPNG形式、5MB以下のものを選んでください。');
+                        event.currentTarget.value = '';
+                        return;
+                      }
+                      setSchoolNotificationImage(file);
+                      setSchoolNotificationMessage('');
+                    }}
+                    className="mt-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white"
+                  />
+                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">JPG/PNG・5MB以下。画像はCampusSyncとLINE公式アカウントの両方に表示されます。</span>
+                </label>
+                {schoolNotificationImage && (
+                  <div className="flex items-start gap-3 rounded-lg bg-slate-950 p-3">
+                    {schoolNotificationImagePreview && <img src={schoolNotificationImagePreview} alt="通知画像のプレビュー" className="h-20 w-24 rounded-lg object-cover" />}
+                    <div className="min-w-0 flex-1">
+                      <p className="break-all text-xs font-bold text-slate-200">{schoolNotificationImage.name}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{(schoolNotificationImage.size / 1024).toFixed(0)} KB</p>
+                      <button type="button" onClick={() => setSchoolNotificationImage(null)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-slate-800">
+                        <X size={11} /> 画像を削除
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
                 <p className="text-[10px] font-black tracking-widest text-cyan-300">生徒画面プレビュー</p>
                 <h4 className="mt-2 break-words text-sm font-black text-white">{schoolNotificationTitle || '通知タイトル'}</h4>
@@ -1589,10 +1683,10 @@ export default function CampusSyncAdmin() {
                 disabled={schoolNotificationSaving || !schoolNotificationTitle.trim() || !schoolNotificationBody.trim() || !adminApiPassword.trim()}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send size={16} /> {schoolNotificationSaving ? '全校公開中...' : '確認して学園総合通知を全校公開'}
+                <Send size={16} /> {schoolNotificationSaving ? '全校公開・LINE送信中...' : '確認して全校公開・LINE送信'}
               </button>
               {schoolNotificationMessage && (
-                <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${schoolNotificationMessage.includes('公開しました') || schoolNotificationMessage.includes('全校公開しました') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
+                <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${/失敗|できません|必要です|正しくありません/.test(schoolNotificationMessage) ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
                   {schoolNotificationMessage}
                 </p>
               )}
@@ -1622,8 +1716,17 @@ export default function CampusSyncAdmin() {
                   {schoolNotificationHistory.map(item => (
                     <article key={String(item.id)} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
                       <h4 className="break-words text-sm font-black text-white">{item.title}</h4>
+                      {item.image_url && <img src={item.image_url} alt="" className="mt-2 max-h-36 rounded-lg object-contain" />}
                       <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{item.body || '本文は空です。'}</p>
-                      <p className="mt-2 text-[10px] text-slate-500">{item.created_at ? new Date(item.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明'}</p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[10px] text-slate-500">{item.created_at ? new Date(item.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '日時不明'}</p>
+                        {item.line_sent ? <span className="text-[10px] font-bold text-emerald-400">LINE送信済み</span> : (
+                          <button type="button" onClick={() => void handleRetrySchoolNotificationLine(item)} className="rounded-lg border border-amber-700/70 px-2.5 py-1.5 text-[10px] font-bold text-amber-300 hover:bg-amber-950/50">
+                            <span className="inline-flex items-center gap-1"><Send size={11} /> LINE再送</span>
+                          </button>
+                        )}
+                      </div>
+                      {!item.line_sent && item.line_error && <p className="mt-1 text-[10px] leading-4 text-rose-300">前回の送信結果: {item.line_error}</p>}
                     </article>
                   ))}
                 </div>

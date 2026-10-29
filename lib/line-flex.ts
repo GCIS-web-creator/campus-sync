@@ -8,9 +8,10 @@ const NAVY = '#0F172A';
 const SLATE = '#475569';
 
 /** CampusSync共通デザインのAdminお知らせFlex Message */
-export function buildNoticeFlexMessage(title: string, message: string): FlexMessage {
+export function buildNoticeFlexMessage(title: string, message: string, imageUrl?: string | null): FlexMessage {
   const safeTitle = title.trim().slice(0, 100) || '学校からのお知らせ';
-  const safeMessage = message.trim().slice(0, 1900);
+  const safeMessage = message.trim().slice(0, 1800);
+  const safeImageUrl = typeof imageUrl === 'string' && /^https:\/\//i.test(imageUrl) ? imageUrl : '';
   return {
     type: 'flex',
     altText: ('CampusSync｜' + safeTitle + '｜' + safeMessage).slice(0, 400),
@@ -24,6 +25,15 @@ export function buildNoticeFlexMessage(title: string, message: string): FlexMess
           { type: 'text', text: safeTitle, color: '#FFFFFF', size: 'xl', weight: 'bold', wrap: true },
         ],
       },
+      ...(safeImageUrl ? {
+        hero: {
+          type: 'image',
+          url: safeImageUrl,
+          size: 'full',
+          aspectRatio: '20:13',
+          aspectMode: 'cover',
+        },
+      } : {}),
       body: {
         type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'md',
         contents: [

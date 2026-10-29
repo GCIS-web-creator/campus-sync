@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type Props = {
@@ -12,7 +12,13 @@ type Props = {
 
 function renderFormattedText(body: string) {
   const token = /(\*\*[^*\n]+\*\*|(?<!\*)\*[^*\n]+\*(?!\*)|\[color=\#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\][\s\S]*?\[\/color\])/g;
-  return body.split(token).map((part, index) => {
+  const normalizedBody = body
+    .replace(/(?:\[color=\#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\]){2,}/g, tags => {
+      const matches = tags.match(/\[color=(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})\]/g) || [];
+      return matches[matches.length - 1] || tags;
+    })
+    .replace(/(?:\[\/color\]){2,}/g, '[/color]');
+  return normalizedBody.split(token).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
     }
@@ -34,6 +40,34 @@ export function ChatFormattingToolbar({
   onChange: (value: string) => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
 }) {
+  const [selectedColor, setSelectedColor] = useState('#ef4444');
+  const colorSelection = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  function rememberTextSelection() {
+    const input = inputRef.current;
+    if (!input) return;
+    colorSelection.current = { start: input.selectionStart, end: input.selectionEnd };
+  }
+
+  function applyColorToSelection() {
+    const input = inputRef.current;
+    if (!input) return;
+    const start = Math.max(0, Math.min(value.length, colorSelection.current.start));
+    const end = Math.max(start, Math.min(value.length, colorSelection.current.end));
+    const selected = value.slice(start, end);
+    const existingColor = selected.match(/^\[color=\#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\]([\s\S]*)\[\/color\]$/);
+    const innerText = existingColor ? existingColor[1] : (selected || 'テキスト');
+    const openingTag = `[color=${selectedColor}]`;
+    const next = value.slice(0, start) + openingTag + innerText + '[/color]' + value.slice(end);
+    onChange(next);
+    const selectionStart = start + openingTag.length;
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(selectionStart, selectionStart + innerText.length);
+      colorSelection.current = { start: selectionStart, end: selectionStart + innerText.length };
+    });
+  }
+
   function wrapSelection(before: string, after = before) {
     const input = inputRef.current;
     if (!input) {
@@ -56,12 +90,18 @@ export function ChatFormattingToolbar({
       <button type="button" title="選択した文字をイタリック" onClick={() => wrapSelection('*')} className="rounded-lg border px-2.5 py-1.5 text-xs italic">I</button>
       <label className="flex items-center gap-2 rounded-lg border px-2 py-1 text-xs">
         <span>文字色</span>
-        <input aria-label="文字色" type="color" defaultValue="#ef4444" onChange={event => {
-          const color = event.target.value;
-          wrapSelection('[color=' + color + ']', '[/color]');
-        }} className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0" />
+        <input
+          aria-label="文字色"
+          type="color"
+          value={selectedColor}
+          onMouseDown={rememberTextSelection}
+          onFocus={rememberTextSelection}
+          onChange={event => setSelectedColor(event.target.value)}
+          className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0"
+        />
       </label>
-      <span className="text-[10px] text-slate-500">文字を選択してからボタンを押してください</span>
+      <button type="button" title="選択した文字に色を適用" onMouseDown={event => event.preventDefault()} onClick={applyColorToSelection} className="rounded-lg border px-2.5 py-1.5 text-xs font-bold">色を適用</button>
+      <span className="text-[10px] text-slate-500">文字を選択 → 色を選ぶ →「色を適用」を1回押してください</span>
     </div>
   );
 }
