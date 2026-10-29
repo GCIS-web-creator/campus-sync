@@ -1,4 +1,4 @@
-# LINEグループへの時間割・電車・学食売切・課題通知
+# LINEグループへの時間割・週間学校予定表・電車・学食売切・課題通知
 
 ## 配信する内容
 
@@ -6,8 +6,9 @@
 
 1. **7組・8組の時間割**：毎日21:00（日本時間）に翌日の曜日の時間割をFlex Messageで配信。翌日が土日なら送信しません。
 2. **鷹の台駅の時刻表**：毎日16:00（日本時間）に16:00〜18:00の発車案内をまとめて配信します。
-3. **学食売切通知**：Adminで売切を実行したときに即時配信します。
-4. **課題通知**：新しい課題が公開されたときに配信し、さらに毎日21:00に提出期限が今後48時間以内に迫っている公開中の課題をまとめて配信します。
+3. **週間学校予定表**：毎週日曜日9:00（日本時間）に、翌月曜日〜日曜日の予定表をFlex Messageで配信します。予定表が未登録・空の場合は自動配信をスキップします。
+4. **学食売切通知**：Adminで売切を実行したときに即時配信します。
+5. **課題通知**：新しい課題が公開されたときに配信し、さらに毎日21:00に提出期限が今後48時間以内に迫っている公開中の課題をまとめて配信します。
 
 一般の学校のお知らせ、部活・委員会、落とし物などは別の設定です。指定グループでは `receive_general_notifications = false` にすれば混ざりません。
 
@@ -21,7 +22,7 @@ WebhookでグループIDが保存されたら、SQL Editorで次を実行しま�
 
 ```sql
 select chat_id, chat_type, active, last_seen_at, last_event_type,
-       receive_train_timetable, receive_class_timetable,
+       receive_train_timetable, receive_class_timetable, receive_school_schedule,
        receive_cafeteria_sold_out, receive_assignment_updates,
        receive_general_notifications
 from public.line_group_chats
@@ -38,6 +39,7 @@ order by last_seen_at desc;
 update public.line_group_chats
 set receive_train_timetable = true,
     receive_class_timetable = true,
+    receive_school_schedule = true,
     receive_cafeteria_sold_out = true,
     receive_assignment_updates = true,
     receive_quick_notices = true,
@@ -56,6 +58,8 @@ where chat_id = 'PASTE_GROUP_ID_HERE'
 
 - 翌日の7組・8組時間割
 - 提出期限が今後48時間以内に迫っている課題一覧
+
+週間学校予定表は別の `sql/setup_weekly_school_schedule_cron.sql` で毎週日曜日9:00（日本時間）に配信登録します。`supabase/school-weekly-schedule.sql` でデータテーブルを作成し、`sql/setup_weekly_school_schedule_cron.sql` で自動配信を登録してください。
 
 電車時刻表の配信時刻を16:00へ変更するには、`sql/setup_line_train_timetable_cron.sql` もSupabase SQL Editorで実行してください（毎日16:00に16:00〜18:00をまとめて配信）。実行後、次で有効化状態を確認できます。
 
