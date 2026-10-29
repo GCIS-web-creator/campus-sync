@@ -132,12 +132,12 @@ async function handleLineEvents(events: LineTextMessageEvent[], channelAccessTok
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
     const messageText = typeof event.message.text === 'string' ? event.message.text.trim() : '';
 
-    // Respond only when the user's message starts with the explicit CampusSync AI prefix.
-    // Remove the prefix before forwarding the actual question to the AI endpoint.
-    const trigger = 'CSAIへ';
-    if (!messageText.startsWith(trigger)) return;
+    // Respond when the message begins with "CSAI". A separator is optional.
+    // Strip the prefix and any immediately following spaces/punctuation before asking CampusSync AI.
+    const trigger = 'CSAI';
+    if (!messageText.toUpperCase().startsWith(trigger)) return;
 
-    const question = messageText.slice(trigger.length).trim();
+    const question = messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim();
     if (!question) return;
 
     const answer = await getCampusAiAnswer(question);
