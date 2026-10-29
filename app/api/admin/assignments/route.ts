@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { buildNoticeFlexMessage } from '@/lib/line-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -91,7 +92,77 @@ export async function POST(request: Request) {
   };
   const { data, error } = await supabase.from('assignments').insert(record).select('*').single();
   if (error) return NextResponse.json({ message: `課題の保存に失敗しました: ${error.message}` }, { status: 500 });
-  return NextResponse.json({ assignment: data }, { status: 201 });
+
+  // Newly published assignments are announced to LINE friends as Flex Message.
+  // The database write remains successful if LINE is temporarily unavailable.
+  let lineNotification: { status: 'sent' | 'failed'; message: string } = {
+    status: 'failed',
+    message: '課題は保存しましたが、LINE通知を送信できませんでした。',
+  };
+  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!accessToken) {
+    lineNotification = {
+      status: 'failed',
+      message: '課題は公開されましたが、LINE_CHANNEL_ACCESS_TOKENが未設定のためLINE通知は送信されていません。',
+    };
+  } else {
+    const typeLabel = data.type === 'paper'
+      ? '紙プリント・ノート'
+      : data.type === 'classroom'
+        ? 'Google Classroom'
+        : '連絡・アンケート';
+    const dueLabel = data.due_at
+      ? new Intl.DateTimeFormat('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric', month: 'numeric', day: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        }).format(new Date(data.due_at))
+      : '期限未設定';
+    const noticeBody = [
+      '課題名：' + data.title,
+      '種類：' + typeLabel,
+      '提出期限：' + dueLabel,
+      data.details?.trim() ? '指示事項：\\n' + data.details.trim() : '',
+    ].filter(Boolean).join('\\n\\n').slice(0, 1800);
+
+    try {
+      const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + accessToken,
+          'Content-Type': 'application/json',
+          'X-Line-Retry-Key': randomUUID(),
+        },
+        body: JSON.stringify({
+          messages: [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)],
+        }),
+        cache: 'no-store',
+      });
+
+      if (lineResponse.ok) {
+        lineNotification = {
+          status: 'sent',
+          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。',
+        };
+      } else {
+        console.error('課題公開のLINE通知に失敗:', lineResponse.status);
+        lineNotification = {
+          status: 'failed',
+          message: lineResponse.status === 429
+            ? '課題は公開されましたが、LINEの送信上限に達した可能性があります。'
+            : `課題は公開されましたが、LINE通知に失敗しました（HTTP ${lineResponse.status}）。LINE_CHANNEL_ACCESS_TOKENを確認してください。`,
+        };
+      }
+    } catch (lineError) {
+      console.error('課題公開のLINE通知接続エラー:', lineError instanceof Error ? lineError.message : 'unknown error');
+      lineNotification = {
+        status: 'failed',
+        message: '課題は公開されましたが、LINE通知の接続に失敗しました。Vercelのログを確認してください。',
+      };
+    }
+  }
+
+  return NextResponse.json({ assignment: data, lineNotification }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
