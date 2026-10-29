@@ -2,11 +2,23 @@
 
 ## 最初に行う設定
 
-1. Supabase Dashboard → SQL Editor で `supabase/line-group-broadcast.sql` を実行します。
+1. Supabase Dashboard → SQL Editor で `supabase/line-group-broadcast.sql` を実行します。週間学校予定表は初期状態OFFです。時間割と同じグループに送るなら、列追加の成功後に下記の初期設定SQLを1回実行します。
 2. LINE Developers ConsoleでCampusSyncのMessaging APIチャネルを開き、「グループトーク・複数人トークへの参加を許可する」を有効にします。
 3. Botを対象のLINEグループに招待します。Botが退出せず参加中であることを確認してください。グループに別のLINE公式アカウントが参加している場合は、LINEの制約で追加できないことがあります。
 4. LINE DevelopersのWebhook URLが `https://campus-sync-mocha.vercel.app/api/line-webhook` であり、Webhook利用がONであることを確認します。
 5. Botが参加できたら、グループ内でメッセージを1回送信します。WebhookからGroup IDが自動保存されます。
+
+## 週間学校予定表の受信設定（初回のみ）
+
+時間割を受信する有効なグループと同じグループへ週間予定表を配信する場合は、上のテーブル追加SQLが成功した後に次を1回実行してください。
+
+```sql
+update public.line_group_chats
+set receive_school_schedule = receive_class_timetable
+where active = true;
+```
+
+既存グループの `receive_school_schedule` を時間割の設定に揃えます。後からグループごとに切り替える場合は、この一括更新を再実行せず、対象の `chat_id` だけを指定して更新してください。
 
 ## Group IDを確認して、予定表の配信先を指定する
 
