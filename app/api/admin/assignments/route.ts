@@ -126,11 +126,12 @@ export async function POST(request: Request) {
       data.details?.trim() ? '指示事項：\n' + data.details.trim() : '',
     ].filter(Boolean).join('\n\n').slice(0, 1800);
 
+    let groupSummary = 'グループ配信結果を確認できませんでした。';
     try {
       const retryKey = randomUUID();
       const messages = [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)];
       const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'assignment_updates');
-      const groupSummary = summarizeLineGroupDelivery(groupDelivery);
+      groupSummary = summarizeLineGroupDelivery(groupDelivery);
       const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
         method: 'POST',
         headers: {
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
         lineNotification = {
           status: 'failed',
           message: lineResponse.status === 429
-            ? '課題は公開されましたが、LINEの送信上限に達した可能性があります。'
+            ? '課題は公開されましたが、LINEの送信上限に達した可能性があります。グループ配信結果：' + groupSummary
             : `課題は公開されましたが、LINE友だち向け通知に失敗しました（HTTP ${lineResponse.status}）。グループ配信結果：${groupSummary}`,
         };
       }
