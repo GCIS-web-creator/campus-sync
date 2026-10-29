@@ -123,7 +123,14 @@ export async function pushLineMessagesToRegisteredChats(
         signal: AbortSignal.timeout(15000),
       });
       if (response.ok || response.status === 409) return true;
-      console.error('LINEグループへの送信に失敗:', { chatType: chat.chat_type, status: response.status });
+      // Preserve LINE's error message for diagnosing 429 quota/rate-limit failures.
+      const errorBody = await response.text().catch(() => '');
+      console.error('LINEグループへの送信に失敗:', {
+        chatType: chat.chat_type,
+        status: response.status,
+        requestId: response.headers.get('x-line-request-id') || response.headers.get('x-line-accepted-request-id') || undefined,
+        error: errorBody.slice(0, 500) || undefined,
+      });
       return false;
     } catch (error) {
       console.error('LINEグループ送信の通信エラー:', error instanceof Error ? error.message : 'unknown error');
