@@ -39,9 +39,15 @@ export async function rememberLineChatEvent(source: LineChatSource | undefined, 
 
   const now = new Date().toISOString();
   if (eventType === 'leave') {
-    const { error } = await admin.from('line_group_chats')
-      .update({ active: false, last_seen_at: now, last_event_type: eventType })
-      .eq('chat_id', chatId);
+    // Keep the ID for troubleshooting even if the bot leaves before a prior join
+    // event could be saved. Inactive chats are never used as delivery targets.
+    const { error } = await admin.from('line_group_chats').upsert({
+      chat_id: chatId,
+      chat_type: source.type,
+      active: false,
+      last_seen_at: now,
+      last_event_type: eventType,
+    }, { onConflict: 'chat_id' });
     if (error) console.error('LINEグループの退出状態を保存できません:', error.message);
     return;
   }

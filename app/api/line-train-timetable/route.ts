@@ -164,7 +164,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
     });
     if (response.ok || response.status === 409) {
-      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey);
+      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'train_timetable');
       const groupSummary = summarizeLineGroupDelivery(groupDelivery);
       const requestId = response.headers.get('x-line-request-id') || response.headers.get('x-line-accepted-request-id');
       const { error: savedError } = await admin.from('line_train_timetable_sends').update({
