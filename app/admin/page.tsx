@@ -20,14 +20,16 @@ import {
   OfficeDeskIcon as ShieldAlert, MenuCalendarIcon as CalendarDays, StudyRoomIcon as Monitor
 } from '@/components/CampusIcons';
 
-// === モックデータ（学生側のアプリデータと対になるもの） ===
-
-// 1. 学生から報告されたエアコンの苦情リスト
-const INITIAL_AC_REPORTS = [
-  { id: 1, room: '3-C教室', issue: '激暑', count: 12, temp: '30℃', status: 'pending' },
-  { id: 2, room: '2-A教室', issue: 'やや寒い', count: 4, temp: '23℃', status: 'pending' },
-  { id: 3, room: '図書室', issue: '寒い', count: 1, temp: '21℃', status: 'resolved' },
-];
+// 生徒が実際に保存したroom_statusから、現在未解決の暑さ・寒さ報告を表示する。
+type AdminACReport = {
+  id: string;
+  roomId: string;
+  room: string;
+  issue: string;
+  temp: string;
+  status: 'pending';
+  updatedAt: string;
+};
 
 // 学食メニュー名・価格・栄養情報は、月間献立表の当日分から取得する。
 type AdminCafeteriaMenuItem = {
@@ -270,7 +272,10 @@ export default function CampusSyncAdmin() {
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // 各種ステート管理
-  const [acReports, setAcReports] = useState(INITIAL_AC_REPORTS);
+  const [acReports, setAcReports] = useState<AdminACReport[]>([]);
+  const [acReportsLoading, setAcReportsLoading] = useState(false);
+  const [acReportsMessage, setAcReportsMessage] = useState('');
+  const [acReportSavingId, setAcReportSavingId] = useState<string | null>(null);
   const [menuItems, setMenuItems] = useState<AdminCafeteriaMenuItem[]>([]);
   const [cafeteriaControlLoading, setCafeteriaControlLoading] = useState(false);
   const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
@@ -341,6 +346,48 @@ export default function CampusSyncAdmin() {
   const [bookRegistering, setBookRegistering] = useState(false);
   const [updatingCoverBookId, setUpdatingCoverBookId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    let cancelled = false;
+
+    const loadACReports = async () => {
+      setAcReportsLoading(true);
+      setAcReportsMessage('');
+      const { data, error } = await supabase
+        .from('room_status')
+        .select('room_id, room_name, status, temp, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (cancelled) return;
+      if (error) {
+        console.error('生徒のエアコン報告を取得できません:', error);
+        setAcReports([]);
+        setAcReportsMessage('エアコン報告を読み込めません。Supabaseのroom_statusテーブルとRLS設定を確認してください。');
+      } else {
+        const reports: AdminACReport[] = (data || [])
+          .filter((row: any) => ['寒い', 'やや寒い', '暑い', '激暑'].includes(String(row.status || '')))
+          .map((row: any) => ({
+            id: String(row.room_id),
+            roomId: String(row.room_id),
+            room: String(row.room_name || `教室 ${row.room_id}`),
+            issue: String(row.status),
+            temp: String(row.temp || '未記録'),
+            status: 'pending' as const,
+            updatedAt: row.updated_at
+              ? new Date(row.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '日時不明',
+          }))
+          .sort((a, b) => b.id.localeCompare(a.id, 'ja'));
+        setAcReports(reports);
+        setAcReportsMessage('');
+      }
+      setAcReportsLoading(false);
+    };
+
+    void loadACReports();
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -825,12 +872,27 @@ export default function CampusSyncAdmin() {
     }
   };
 
-  // --- 介入アクション1: エアコンの設定温度変更（解決処理） ---
-  const handleResolveAC = (id: number) => {
-    setAcReports(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'resolved' } : item
-    ));
-    alert('事務室へ温度変更リクエストを送信しました。生徒の画面に「調整完了」が反映されます！');
+  // 生徒の実際のroom_statusを快適へ更新し、解決状態を生徒画面にも反映する。
+  const handleResolveAC = async (id: string) => {
+    const report = acReports.find(item => item.id === id);
+    if (!report || acReportSavingId) return;
+
+    setAcReportSavingId(id);
+    setAcReportsMessage('');
+    const { error } = await supabase
+      .from('room_status')
+      .update({ status: '快適', updated_at: new Date().toISOString() })
+      .eq('room_id', report.roomId);
+
+    setAcReportSavingId(null);
+    if (error) {
+      console.error('エアコン報告の解決状態を保存できません:', error);
+      setAcReportsMessage('解決状態を保存できませんでした。Supabaseのroom_statusのUPDATE権限を確認してください。');
+      return;
+    }
+
+    setAcReports(prev => prev.filter(item => item.id !== id));
+    setAcReportsMessage(`${report.room}を「快適」に更新しました。生徒用サイトにも反映されます。`);
   };
 
   // Adminからボタン操作で、現在時刻から今後60分の時刻表をLINE Flex Messageとして送信
@@ -1381,32 +1443,40 @@ export default function CampusSyncAdmin() {
                 <h3 className="text-base font-bold text-slate-300 mb-4 flex items-center gap-2">
                   <Thermometer className="text-red-400 animate-pulse" size={20} /> 生徒からのエアコン苦情一覧
                 </h3>
-                <div className="space-y-3">
-                  {acReports.map(report => (
-                    <div key={report.id} className="flex justify-between items-center p-4 bg-slate-900 border border-slate-800 rounded-xl">
-                      <div>
-                        <span className="text-xs font-mono text-slate-400 font-bold">{report.room}（現在目安: {report.temp}）</span>
-                        <p className="text-sm font-black text-red-400 flex items-center gap-1.5 mt-0.5">
-                          <AlertCircle size={14} /> 【{report.issue}】の報告多数！
-                        </p>
+                {acReportsMessage && (
+                  <p role="status" className={`mb-3 rounded-lg border p-3 text-xs leading-relaxed ${acReportsMessage.includes('できません') || acReportsMessage.includes('確認してください') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>{acReportsMessage}</p>
+                )}
+                {acReportsLoading ? (
+                  <p className="py-5 text-center text-sm text-slate-500">生徒からのエアコン報告を読み込み中...</p>
+                ) : acReports.length === 0 ? (
+                  <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-center">
+                    <CheckCircle2 size={24} className="mx-auto mb-2 text-emerald-400" />
+                    <p className="text-sm font-bold text-slate-300">現在、未解決のエアコン報告はありません。</p>
+                    <p className="mt-1 text-xs text-slate-500">生徒が「暑い」または「寒い」と報告すると、ここに実際の状況が表示されます。</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {acReports.map(report => (
+                      <div key={report.id} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <span className="text-xs font-mono font-bold text-slate-400">{report.room}（報告された設定温度: {report.temp}）</span>
+                          <p className="mt-1 flex items-center gap-1.5 text-sm font-black text-red-400">
+                            <AlertCircle size={14} /> 【{report.issue}】の報告
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-500">最終更新: {report.updatedAt}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={acReportSavingId === report.id || Boolean(acReportSavingId)}
+                          onClick={() => void handleResolveAC(report.id)}
+                          className="flex shrink-0 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Check size={12} /> {acReportSavingId === report.id ? '保存中...' : '解決済みにする'}
+                        </button>
                       </div>
-                      <div className="text-right">
-                        {report.status === 'pending' ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full font-bold">報告 {report.count}件</span>
-                            <button onClick={() => handleResolveAC(report.id)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1">
-                              <Check size={12} /> 解決済みにする
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs bg-green-500/10 text-green-400 px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
-                            <CheckCircle2 size={12} /> 調整指示 完了
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 鷹の台駅の時刻表を手動でLINEへ送信 */}
