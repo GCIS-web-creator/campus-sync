@@ -5,7 +5,7 @@
 設定したグループには次の4種類を配信できます。
 
 1. **7組・8組の時間割**：毎日21:00（日本時間）に翌日の曜日の時間割をFlex Messageで配信。翌日が土日なら送信しません。
-2. **鷹の台駅の時刻表**：既存の毎時配信を維持します。
+2. **鷹の台駅の時刻表**：毎日16:00（日本時間）に16:00〜18:00の発車案内をまとめて配信します。
 3. **学食売切通知**：Adminで売切を実行したときに即時配信します。
 4. **課題通知**：新しい課題が公開されたときに配信し、さらに毎日21:00に提出期限が今後48時間以内に迫っている公開中の課題をまとめて配信します。
 
@@ -50,14 +50,14 @@ where chat_id = 'PASTE_GROUP_ID_HERE'
 
 ## 4. 毎日21:00の時間割・課題期限通知を有効にする
 
-Vercelの環境変数 `CRON_SECRET` を確認し、`sql/setup_next_day_class_timetable_cron.sql` 内の **2箇所**の `REPLACE_WITH_CRON_SECRET` をその値に置き換え、Supabase SQL Editorで実行してください。実際の秘密値をGitHubへコミットしないでください。
+`sql/setup_next_day_class_timetable_cron.sql` はSupabase Vaultに登録済みの `campussync_push_reminders_cron_secret` を使用します。秘密値をSQLファイルへ書き込まず、Supabase SQL Editorで実行してください。
 
 このSQLは以下の2つを日本時間21:00にスケジュールします。
 
 - 翌日の7組・8組時間割
 - 提出期限が今後48時間以内に迫っている課題一覧
 
-既存の鷹の台駅の毎時Cronは変更しません。実行後、次で有効化状態を確認できます。
+電車時刻表の配信時刻を16:00へ変更するには、`sql/setup_line_train_timetable_cron.sql` もSupabase SQL Editorで実行してください（毎日16:00に16:00〜18:00をまとめて配信）。実行後、次で有効化状態を確認できます。
 
 ```sql
 select jobname, schedule, active
