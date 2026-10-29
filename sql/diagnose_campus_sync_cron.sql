@@ -34,7 +34,7 @@ select
   end as target
 from cron.job
 where jobname in (
-  'campussync-hourly-train-timetable',
+  'campussync-afternoon-train-timetable',
   'campussync-next-day-class-timetable',
   'campussync-assignment-deadline-reminder',
   'campussync-push-reminders-every-five-minutes'
@@ -52,7 +52,7 @@ select
 from cron.job_run_details r
 join cron.job j on j.jobid = r.jobid
 where j.jobname in (
-  'campussync-hourly-train-timetable',
+  'campussync-afternoon-train-timetable',
   'campussync-next-day-class-timetable',
   'campussync-assignment-deadline-reminder',
   'campussync-push-reminders-every-five-minutes'
