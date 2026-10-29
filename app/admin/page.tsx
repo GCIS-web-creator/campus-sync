@@ -1702,6 +1702,7 @@ export default function CampusSyncAdmin() {
                 </label>
               </div>
               <p className="text-xs text-slate-500">時刻まで設定すると、自動リマインダーの期限として使えます。期限が決まっていない場合は空欄のまま保存できます。</p>
+              {!editingAssignmentId && <p className="rounded-lg border border-cyan-900/70 bg-cyan-950/30 px-3 py-2 text-xs leading-5 text-cyan-200">新しい課題を公開すると、LINE公式アカウントの友だち全員へFlex Messageで課題名・指示事項・提出期限を通知します。LINE通知の成否は保存後に表示されます。</p>}
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => void saveAssignment()} disabled={assignmentSaving} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:opacity-50">{assignmentSaving ? '保存中…' : editingAssignmentId ? '変更を保存' : '学生全員に課題を公開'}</button>
                 {editingAssignmentId && <button type="button" onClick={resetAssignmentForm} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-800">編集をキャンセル</button>}
