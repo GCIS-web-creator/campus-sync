@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildLostFoundApprovedFlexMessage } from '@/lib/line-flex';
 
@@ -112,7 +112,7 @@ export async function PATCH(request: Request) {
   if (!admin) return configError();
 
   const body = await request.json().catch(() => null) as { id?: string | number; action?: string } | null;
-  if ((typeof body?.id !== 'string' && typeof body?.id !== 'number') || !['approve', 'return'].includes(String(body?.action))) {
+  if ((typeof body?.id !== 'string' && typeof body?.id !== 'number') || !['approve', 'return', 'notify'].includes(String(body?.action))) {
     return NextResponse.json({ success: false, message: '対象IDまたは操作が不正です。' }, { status: 400 });
   }
 
@@ -128,10 +128,15 @@ export async function PATCH(request: Request) {
   if (!existing) return NextResponse.json({ success: false, message: '対象の落とし物が見つかりません。' }, { status: 404 });
 
   const row = existing as LostFoundRow;
+  const manualNotify = body.action === 'notify';
   let updated = row;
-  if (body.action === 'approve') {
+  if (body.action === 'approve' || manualNotify) {
     let newlyApproved = false;
-    if (row.status === 'pending') {
+    if (manualNotify) {
+      if (row.status !== 'approved') {
+        return NextResponse.json({ success: false, message: '公開済みの落とし物だけLINE通知を再送できます。' }, { status: 409 });
+      }
+    } else if (row.status === 'pending') {
       const { data, error } = await admin.from('lost_and_found')
         .update({ status: 'approved', approved_at: new Date().toISOString() })
         .eq('id', body.id).eq('status', 'pending').select('*').maybeSingle();
@@ -146,6 +151,7 @@ export async function PATCH(request: Request) {
 
     let contributionAwarded = Boolean(updated.contribution_awarded_at);
     let contributionMessage = '';
+    if (!manualNotify) {
     const studentId = String(updated.student_id || '').trim();
     if (!contributionAwarded && /^\d{6}$/.test(studentId)) {
       const { data: current, error: scoreReadError } = await admin
@@ -206,8 +212,10 @@ export async function PATCH(request: Request) {
     } else if (!contributionAwarded) {
       contributionMessage = '投稿者の学籍番号が記録されていないため、貢献度は加算していません。';
     }
+    }
+
     let lineNotificationMessage = '';
-    if (newlyApproved) {
+    if (newlyApproved || manualNotify) {
       const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
       if (!accessToken) {
         lineNotificationMessage = 'LINE通知は未送信です。VercelのLINE_CHANNEL_ACCESS_TOKENを確認してください。';
@@ -231,7 +239,9 @@ export async function PATCH(request: Request) {
         digest[12] = '4';
         digest[16] = ((parseInt(digest[16], 16) & 3) | 8).toString(16);
         const hex = digest.join('');
-        const retryKey = hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+        const retryKey = manualNotify
+          ? randomUUID()
+          : hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
         try {
           const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
             method: 'POST',
@@ -243,11 +253,29 @@ export async function PATCH(request: Request) {
             body: JSON.stringify({ messages: [flex] }),
             cache: 'no-store',
           });
+          const responseText = await response.text();
+          let responseBody: any = null;
+          try {
+            responseBody = responseText ? JSON.parse(responseText) : null;
+          } catch {
+            responseBody = null;
+          }
           if (response.ok || response.status === 409) {
-            lineNotificationMessage = 'LINEにも公開のお知らせをFlex Messageで送信しました。';
+            lineNotificationMessage = manualNotify
+              ? 'LINEに落とし物のお知らせを再送しました。'
+              : 'LINEにも公開のお知らせをFlex Messageで送信しました。';
           } else {
-            console.error('落とし物公開のLINE通知に失敗:', response.status);
-            lineNotificationMessage = 'ただし、LINE通知は失敗しました（HTTP ' + response.status + '）。LINEのトークン・送信上限を確認してください。';
+            const apiMessage = String(responseBody?.message || '').trim();
+            const detailMessages = Array.isArray(responseBody?.details)
+              ? responseBody.details.map((detail: any) => String(detail?.message || '')).filter(Boolean).join(' / ')
+              : '';
+            const detail = [apiMessage, detailMessages].filter(Boolean).join('：').slice(0, 240);
+            console.error('落とし物公開のLINE通知に失敗:', {
+              status: response.status,
+              message: apiMessage || undefined,
+              details: detailMessages || undefined,
+            });
+            lineNotificationMessage = 'LINE通知に失敗しました（HTTP ' + response.status + (detail ? '：' + detail : '') + '）。Adminで通知を再送できます。';
           }
         } catch (error) {
           console.error('落とし物公開のLINE通知通信エラー:', error instanceof Error ? error.message : 'unknown error');
@@ -256,12 +284,16 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const summaryMessage = '実物確認済みとして全体公開しました。'
-      + (contributionMessage || (contributionAwarded ? '投稿者に貢献度を加算しました。' : ''))
-      + (lineNotificationMessage ? ' ' + lineNotificationMessage : '');
+    const summaryMessage = manualNotify
+      ? lineNotificationMessage || 'LINE通知を再送できませんでした。'
+      : '実物確認済みとして全体公開しました。'
+        + (contributionMessage || (contributionAwarded ? '投稿者に貢献度を加算しました。' : ''))
+        + (lineNotificationMessage ? ' ' + lineNotificationMessage : '');
     return NextResponse.json({
       success: true, item: updated, contributionAwarded,
-      lineNotification: newlyApproved ? (lineNotificationMessage.startsWith('LINEにも') ? 'sent' : 'failed') : 'not-needed',
+      lineNotification: (newlyApproved || manualNotify)
+        ? (lineNotificationMessage.startsWith('LINEにも') || lineNotificationMessage.startsWith('LINEに落とし物') ? 'sent' : 'failed')
+        : 'not-needed',
       message: summaryMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
