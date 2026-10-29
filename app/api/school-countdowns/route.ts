@@ -44,7 +44,9 @@ export async function GET(request: Request) {
   const supabase = getAdminSupabase();
   if (!supabase) return jsonError('Supabaseのサーバー設定が不足しています。', 503);
 
+  const passwordProvided = request.headers.has('x-admin-password');
   const admin = isAdmin(request);
+  if (passwordProvided && !admin) return jsonError('Admin用パスワードが正しくありません。', 401);
   let query = supabase.from('school_event_countdowns')
     .select('id,title,summary,event_date,is_active,created_at,updated_at')
     .order('event_date', { ascending: true });
