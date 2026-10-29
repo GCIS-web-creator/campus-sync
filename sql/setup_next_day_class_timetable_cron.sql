@@ -20,7 +20,8 @@ select cron.schedule(
         'Content-Type', 'application/json',
         'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'
       ),
-      body := '{}'::jsonb
+      body := '{}'::jsonb,
+      timeout_milliseconds := 15000
     );
   $cron$
 );
@@ -35,7 +36,8 @@ select cron.schedule(
         'Content-Type', 'application/json',
         'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'
       ),
-      body := '{}'::jsonb
+      body := '{}'::jsonb,
+      timeout_milliseconds := 15000
     );
   $cron$
 );
@@ -48,7 +50,8 @@ where jobname in ('campussync-next-day-class-timetable', 'campussync-assignment-
 select r.jobid, r.start_time, r.end_time, r.status, r.return_message
 from cron.job_run_details r
 where r.jobid in (
-  select jobid from cron.job where jobname = 'campussync-next-day-class-timetable'
+  select jobid from cron.job
+  where jobname in ('campussync-next-day-class-timetable', 'campussync-assignment-deadline-reminder')
 )
 order by r.start_time desc
 limit 10;

@@ -68,3 +68,16 @@ where jobname in ('campussync-next-day-class-timetable', 'campussync-assignment-
 ## 5. 確認
 
 設定したグループが4種類の列を `true`、`receive_general_notifications` を `false` にしていることを確認してください。Adminから学食売切をテストした場合と新規課題を公開した場合は実際にLINEに配信されるため、公開前に内容とグループを確認してください。
+
+
+## Cronが動かない場合の診断
+
+最初に `sql/diagnose_campus_sync_cron.sql` をSupabase SQL Editorで実行し、次を確認します。
+
+- `cron_jobs` の結果に対象ジョブがあり、`active = true` か。
+- `secret_placeholder_left = true` なら、登録したCronコマンドに `REPLACE_WITH_CRON_SECRET` が残っているため、Vercelの `CRON_SECRET` と一致せずHTTP 401になります。正しい秘密値で該当SQLを再登録してください。
+- `cron.job_run_details` で `status` / `return_message` を確認します。
+- `net._http_response` でHTTPステータスとエラーを確認します。401は認証、404はURL/デプロイ、5xxはAPI側、`timed_out = true` は通信時間の可能性があります。
+- `pg_cron scheduler` の結果が0行なら、SupabaseのDatabase → General SettingsからデータベースのFast Rebootを検討してください。
+
+時刻表・時間割・課題通知のCronはSupabase SQL Editorで登録した後にはじめて動きます。GitHubにコードを反映しただけではCronジョブは作成されません。

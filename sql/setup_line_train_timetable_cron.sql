@@ -12,7 +12,8 @@ select cron.schedule(
     select net.http_post(
       url := 'https://campus-sync-mocha.vercel.app/api/line-train-timetable',
       headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET'),
-      body := '{}'::jsonb
+      body := '{}'::jsonb,
+      timeout_milliseconds := 15000
     );
   $cron$
 );
