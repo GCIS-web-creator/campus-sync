@@ -252,7 +252,7 @@ export async function POST(request: Request) {
       line_sent: false,
       line_error: null,
     })
-    .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+    .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
     .single();
 
   if (error || !data) {
