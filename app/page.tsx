@@ -5673,6 +5673,78 @@ Supabaseの設定を確認してください。
     );
   }
 
+  const globalSearchItems: CampusSearchItem[] = [
+    ...visibleTodos.map((todo: any) => ({
+      id: 'todo-' + String(todo.id),
+      title: String(todo.title || '課題・提出物'),
+      description: [todo.details, todo.due, todo.source].filter(Boolean).join(' ・ '),
+      keywords: ['課題', '提出物', '期限', '宿題'],
+      tab: 'home',
+      scrollTarget: 'tasks',
+      kind: '課題',
+    })),
+    ...notifications.map(note => ({
+      id: 'notice-' + String(note.id),
+      title: note.title,
+      description: note.body,
+      keywords: ['お知らせ', '通知', note.category],
+      tab: 'notifications',
+      kind: note.priority === 'emergency' ? '緊急連絡' : 'お知らせ',
+    })),
+    ...lostAndFoundList.map(item => ({
+      id: 'lost-' + String(item.id),
+      title: item.title,
+      description: [item.location, item.description].filter(Boolean).join(' ・ '),
+      keywords: ['落とし物', '忘れ物', item.finder],
+      tab: 'facilities',
+      scrollTarget: 'lost',
+      kind: '落とし物',
+    })),
+    ...campusFacilities.map(item => ({
+      id: 'facility-' + item.id,
+      title: item.name,
+      description: [item.building, item.floor_label, item.location_description, item.description].filter(Boolean).join(' ・ '),
+      keywords: item.keywords || [],
+      tab: 'facilities',
+      scrollTarget: 'map',
+      kind: '校内施設',
+    })),
+    ...rooms.map(room => ({
+      id: 'room-' + String(room.id),
+      title: room.name,
+      description: room.status + ' ・ ' + room.temp,
+      keywords: ['教室', '空調', '室温'],
+      tab: 'home',
+      kind: '教室状況',
+    })),
+    ...libraryBooks.map(book => ({
+      id: 'book-' + String(book.id),
+      title: book.title,
+      description: [book.author, book.code, book.status].filter(Boolean).join(' ・ '),
+      keywords: ['図書館', '蔵書', '本'],
+      tab: 'facilities',
+      scrollTarget: 'status',
+      kind: '蔵書',
+    })),
+    ...menuItems.map(item => ({
+      id: 'menu-' + item.id,
+      title: item.name,
+      description: [item.price, item.calorie, item.allergy].filter(Boolean).join(' ・ '),
+      keywords: ['学食', 'メニュー', '昼食'],
+      tab: 'cafeteria',
+      kind: '学食メニュー',
+    })),
+  ];
+
+  const handleGlobalSearchSelect = (item: CampusSearchItem) => {
+    setShowGlobalSearch(false);
+    if (item.tab === 'facilities') {
+      setFacilitiesSubTab(item.scrollTarget === 'lost' ? 'lost' : item.scrollTarget === 'map' ? 'map' : 'status');
+    }
+    if (item.scrollTarget === 'tasks') setHashScrollTarget('tasks');
+    setActiveTab(item.tab);
+  };
+
   return (
     <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
       
@@ -5683,6 +5755,7 @@ Supabaseの設定を確認してください。
             <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
           </div>
           <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
+            <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
             <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
@@ -5714,6 +5787,9 @@ Supabaseの設定を確認してください。
             <div className={`rounded-full px-2.5 py-1.5 text-[10px] font-black ${themeCls.lightBg} ${themeCls.text}`}>
               ★ {score} pt
             </div>
+            <button type="button" aria-label="CampusSync全体検索を開く" onClick={() => setShowGlobalSearch(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50">
+              <GlobalSearchIcon size={20} className="h-5 w-5 shrink-0"/>
+            </button>
             <button
               type="button"
               aria-label="メニューを開く"
@@ -5757,6 +5833,7 @@ Supabaseの設定を確認してください。
                 </button>
               </header>
               <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
+                <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => { setShowGlobalSearch(true); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
@@ -5811,6 +5888,12 @@ Supabaseの設定を確認してください。
       </div>
 
       {/* --- アプリケーションモーダルUIコンポーネント群 --- */}
+      <CampusGlobalSearch
+        open={showGlobalSearch}
+        items={globalSearchItems}
+        onClose={() => setShowGlobalSearch(false)}
+        onSelect={handleGlobalSearchSelect}
+      />
 
       {/* 図書室の蔵書詳細ポップアップ */}
       {selectedLibraryBook && (
