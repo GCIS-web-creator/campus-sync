@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import webpush from 'web-push';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildLostFoundApprovedFlexMessage } from '@/lib/line-flex';
@@ -65,6 +66,121 @@ function getTokyoDateKey(): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+
+
+
+async function notifyMatchingLostFoundWatches(
+  admin: ReturnType<typeof getAdminClient> & {},
+  item: LostFoundRow,
+): Promise<{ matchedUsers: number; pushSent: number; message: string }> {
+  const { data: watches, error } = await admin
+    .from('lost_found_watches')
+    .select('user_id, keyword')
+    .eq('is_active', true);
+
+  if (error) {
+    console.error('落とし物通知キーワードを取得できません:', error.message);
+    return { matchedUsers: 0, pushSent: 0, message: '落とし物通知キーワードを読み込めませんでした。' };
+  }
+
+  const searchable = [item.title, item.location, item.description || '']
+    .join(' ')
+    .normalize('NFKC')
+    .toLocaleLowerCase();
+  const matchedByUser = new Map<string, string[]>();
+  for (const watch of watches || []) {
+    const keyword = String(watch.keyword || '').trim();
+    if (keyword.length < 2) continue;
+    if (!searchable.includes(keyword.normalize('NFKC').toLocaleLowerCase())) continue;
+    const list = matchedByUser.get(String(watch.user_id)) || [];
+    if (!list.includes(keyword)) list.push(keyword);
+    matchedByUser.set(String(watch.user_id), list);
+  }
+
+  if (matchedByUser.size === 0) {
+    return { matchedUsers: 0, pushSent: 0, message: '' };
+  }
+
+  const itemTitle = String(item.title || '落とし物').slice(0, 100);
+  const itemLocation = String(item.location || '場所不明').slice(0, 100);
+  const targetRows = Array.from(matchedByUser.entries()).map(([userId, keywords]) => ({
+    target_user_id: userId,
+    title: '探している物に一致する可能性があります',
+    body: '事務室で確認・公開された「' + itemTitle + '」が、登録したキーワード（' +
+      keywords.slice(0, 4).join('、') + '）に一致しました。場所：' + itemLocation +
+      '。本人の物かどうか、詳細を確認してください。',
+    category: 'lost_found_match',
+    priority: 'important',
+    is_pinned: false,
+  }));
+
+  const { error: insertError } = await admin.from('notifications').insert(targetRows);
+  if (insertError) {
+    console.error('落とし物の個別通知を保存できません:', insertError.message);
+    return { matchedUsers: 0, pushSent: 0, message: '一致した通知を保存できませんでした。' };
+  }
+
+  let pushSent = 0;
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT;
+
+  if (vapidPublicKey && vapidPrivateKey && vapidSubject) {
+    try {
+      const userIds = Array.from(matchedByUser.keys());
+      const [{ data: subscriptions, error: subscriptionError }, { data: preferences, error: preferenceError }] = await Promise.all([
+        admin.from('push_subscriptions').select('user_id, endpoint, subscription').in('user_id', userIds),
+        admin.from('push_reminder_preferences').select('user_id, notification_settings').in('user_id', userIds),
+      ]);
+
+      if (subscriptionError) {
+        console.error('落とし物一致通知のPush登録を取得できません:', subscriptionError.message);
+      } else if (!preferenceError) {
+        const preferenceByUser = new Map<string, Record<string, unknown>>();
+        for (const preference of preferences || []) {
+          preferenceByUser.set(String(preference.user_id), preference.notification_settings || {});
+        }
+        webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+
+        const results = await Promise.allSettled((subscriptions || []).filter(subscription => {
+          const settings = preferenceByUser.get(String(subscription.user_id));
+          return settings?.activity_updates !== false;
+        }).map(subscription => webpush.sendNotification(
+          subscription.subscription,
+          JSON.stringify({
+            title: 'CampusSync｜探している物に一致する可能性があります',
+            body: '登録したキーワードに一致する落とし物が公開されました。CampusSyncの通知を確認してください。',
+            url: '/#notifications',
+            tag: 'lost-found-match-' + String(item.id),
+          }),
+          { TTL: 60 * 60 * 24 * 3, urgency: 'normal' },
+        )));
+        pushSent = results.filter(result => result.status === 'fulfilled').length;
+        results.forEach((result, index) => {
+          if (result.status !== 'rejected') return;
+          const statusCode = (result.reason as { statusCode?: number } | undefined)?.statusCode;
+          if (statusCode === 404 || statusCode === 410) {
+            const subscription = (subscriptions || [])[index];
+            if (subscription?.endpoint) void admin.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+          } else {
+            console.error('落とし物一致通知のPush送信に失敗:', result.reason);
+          }
+        });
+      } else {
+        console.error('落とし物一致通知のPush設定を取得できません:', preferenceError.message);
+      }
+    } catch (pushError) {
+      console.error('落とし物一致通知のPush処理に失敗:', pushError instanceof Error ? pushError.message : 'unknown error');
+    }
+  }
+
+  return {
+    matchedUsers: matchedByUser.size,
+    pushSent,
+    message: '登録キーワードに一致した生徒' + matchedByUser.size + '名へ個別通知を作成しました。' +
+      (pushSent ? ' ブラウザーPush ' + pushSent + '件を送信しました。' : ''),
+  };
+}
 
 export async function GET(request: Request) {
   if (!process.env.CAMPUS_SYNC_ADMIN_PASSWORD || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return configError();
@@ -287,11 +403,19 @@ export async function PATCH(request: Request) {
       }
     }
 
+    let lostWatchMessage = '';
+    if (newlyApproved) {
+      const matching = await notifyMatchingLostFoundWatches(admin, updated);
+      lostWatchMessage = matching.message;
+      if (matching.message) console.info('落とし物一致通知:', matching);
+    }
+
     const summaryMessage = manualNotify
       ? lineNotificationMessage || 'LINE通知を再送できませんでした。'
       : '実物確認済みとして全体公開しました。'
         + (contributionMessage || (contributionAwarded ? '投稿者に貢献度を加算しました。' : ''))
-        + (lineNotificationMessage ? ' ' + lineNotificationMessage : '');
+        + (lineNotificationMessage ? ' ' + lineNotificationMessage : '')
+        + (lostWatchMessage ? ' ' + lostWatchMessage : '');
     return NextResponse.json({
       success: true, item: updated, contributionAwarded,
       lineNotification: (newlyApproved || manualNotify)
