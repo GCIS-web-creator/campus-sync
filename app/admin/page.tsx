@@ -8,6 +8,7 @@ import StudentProfileExportAdmin from '@/components/StudentProfileExportAdmin';
 import ClubNotesAdmin from '@/components/ClubNotesAdmin';
 import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
 import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
+import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -257,6 +258,9 @@ type AdminSchoolNotification = {
   id: string | number;
   title: string;
   body: string;
+  category?: string;
+  priority?: string;
+  expires_at?: string | null;
   image_url?: string | null;
   line_sent?: boolean;
   line_sent_at?: string | null;
@@ -350,6 +354,8 @@ export default function CampusSyncAdmin() {
   // 学園総合通知：アプリの通知一覧へ本文付きで全校公開する。
   const [schoolNotificationTitle, setSchoolNotificationTitle] = useState('');
   const [schoolNotificationBody, setSchoolNotificationBody] = useState('');
+  const [schoolNotificationCategory, setSchoolNotificationCategory] = useState('general');
+  const [schoolNotificationPriority, setSchoolNotificationPriority] = useState('normal');
   const [schoolNotificationImage, setSchoolNotificationImage] = useState<File | null>(null);
   const [schoolNotificationImagePreview, setSchoolNotificationImagePreview] = useState('');
   const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
@@ -982,7 +988,7 @@ export default function CampusSyncAdmin() {
           'Content-Type': 'application/json',
           'x-admin-password': adminApiPassword,
         },
-        body: JSON.stringify({ title, body, imageUrl }),
+        body: JSON.stringify({ title, body, imageUrl, category: schoolNotificationCategory, priority: schoolNotificationPriority }),
         cache: 'no-store',
       });
       const result = await response.json().catch(() => null);
@@ -994,6 +1000,8 @@ export default function CampusSyncAdmin() {
       setSchoolNotificationHistory(previous => [published, ...previous.filter(item => item.id !== published.id)].slice(0, 20));
       setSchoolNotificationTitle('');
       setSchoolNotificationBody('');
+      setSchoolNotificationCategory('general');
+      setSchoolNotificationPriority('normal');
       setSchoolNotificationImage(null);
       setSchoolNotificationMessage(result.message || '学園総合通知を公開しました。');
       setSchoolNotificationHistoryMessage('');
@@ -1589,6 +1597,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
             </button>
+            <button aria-label="校内マップ・施設案内管理" title="校内マップ・施設案内管理" onClick={() => setActiveTab('campus-facilities')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'campus-facilities' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <MapPin size={18} /><span className="sr-only md:not-sr-only">校内マップ管理</span>
+            </button>
             <button aria-label="チャット管理・監査ログ" title="チャット管理・監査ログ" onClick={() => setActiveTab('chat-moderation')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'chat-moderation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
             </button>
@@ -1665,6 +1676,32 @@ export default function CampusSyncAdmin() {
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500"
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-bold text-slate-300">
+                  通知の種類
+                  <select value={schoolNotificationCategory} onChange={event => setSchoolNotificationCategory(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500">
+                    <option value="general">通常のお知らせ</option>
+                    <option value="school_closure">休校・登校時間変更</option>
+                    <option value="class_change">授業変更・休講</option>
+                    <option value="early_dismissal">緊急下校</option>
+                    <option value="disaster">災害・気象情報</option>
+                    <option value="emergency">その他の緊急連絡</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-bold text-slate-300">
+                  重要度
+                  <select value={schoolNotificationPriority} onChange={event => setSchoolNotificationPriority(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500">
+                    <option value="normal">通常</option>
+                    <option value="important">重要</option>
+                    <option value="emergency">緊急（最上位表示）</option>
+                  </select>
+                </label>
+              </div>
+              {schoolNotificationPriority === 'emergency' && (
+                <p className="rounded-xl border border-rose-800 bg-rose-950/50 p-3 text-xs leading-5 text-rose-200">
+                  緊急通知は生徒画面の最上部に強調表示され、LINEにも緊急デザインで配信されます。対象範囲・発信元・時刻・行動内容を必ず明記してください。
+                </p>
+              )}
               <label className="block text-xs font-bold text-slate-300">
                 通知タイトル
                 <input
@@ -1785,6 +1822,10 @@ export default function CampusSyncAdmin() {
               )}
             </section>
           </div>
+        )}
+
+        {activeTab === 'campus-facilities' && (
+          <CampusFacilityAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
         )}
 
         {/* ================= タブ1: ダッシュボード（リアルタイム不満・アラート） ================= */}
