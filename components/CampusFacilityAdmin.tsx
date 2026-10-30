@@ -44,13 +44,7 @@ const EMPTY_FORM = {
   map_y: '',
 };
 
-export default function CampusFacilityAdmin({
-  adminPassword,
-  onAdminPasswordChange,
-}: {
-  adminPassword: string;
-  onAdminPasswordChange: (value: string) => void;
-}) {
+export default function CampusFacilityAdmin({ adminPassword }: { adminPassword: string }) {
   const [facilities, setFacilities] = useState<FacilityRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -182,7 +176,7 @@ export default function CampusFacilityAdmin({
 
       <section className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
         <label className="block text-xs font-bold text-slate-300">Admin用パスワード
-          <input type="password" autoComplete="current-password" value={adminPassword} onChange={event => onAdminPasswordChange(event.target.value)} placeholder="CAMPUS_SYNC_ADMIN_PASSWORD" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500"/>
+          <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
         </label>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" onClick={() => void load()} disabled={loading} className="rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">{loading ? '読み込み中…' : '施設一覧を読み込む'}</button>

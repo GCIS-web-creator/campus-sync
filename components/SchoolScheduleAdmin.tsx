@@ -6,7 +6,7 @@ import { CalendarDays, Plus, Trash2, Send, Save, CalendarCheck, ChevronLeft, Che
 type ScheduleItem = { id: string; time: string; title: string; location: string; details: string };
 type ScheduleDay = { date: string; dayLabel: string; isHoliday: boolean; holidayName: string; isWeekendSchool?: boolean; items: ScheduleItem[] };
 type SchedulePayload = { week_start: string; title: string; days: ScheduleDay[] };
-type Props = { adminPassword: string; onAdminPasswordChange: (value: string) => void };
+type Props = { adminPassword: string };
 
 const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
@@ -77,7 +77,7 @@ function formatRange(weekStart: string): string {
   return weekStart.replace(/-/g, '/') + ' 〜 ' + end.replace(/-/g, '/');
 }
 
-export default function SchoolScheduleAdmin({ adminPassword, onAdminPasswordChange }: Props) {
+export default function SchoolScheduleAdmin({ adminPassword }: Props) {
   const [weekStart, setWeekStart] = useState(nextMonday);
   const [weekTitle, setWeekTitle] = useState('学校予定表');
   const [days, setDays] = useState<ScheduleDay[]>(() => emptyDays(nextMonday()));
@@ -204,7 +204,7 @@ export default function SchoolScheduleAdmin({ adminPassword, onAdminPasswordChan
       <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
         <label className="block text-xs font-bold text-slate-300">
           Admin用パスワード
-          <input type="password" autoComplete="current-password" value={adminPassword} onChange={event => onAdminPasswordChange(event.target.value)} placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500" />
+          <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
         </label>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
           <label className="block text-xs font-bold text-slate-300">

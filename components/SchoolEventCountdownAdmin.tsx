@@ -13,7 +13,7 @@ type CountdownEvent = {
   updated_at?: string;
 };
 
-type Props = { adminPassword: string; onAdminPasswordChange: (value: string) => void };
+type Props = { adminPassword: string };
 
 function formatDate(dateKey: string): string {
   const parts = dateKey.split('-').map(Number);
@@ -21,7 +21,7 @@ function formatDate(dateKey: string): string {
     .format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])));
 }
 
-export default function SchoolEventCountdownAdmin({ adminPassword, onAdminPasswordChange }: Props) {
+export default function SchoolEventCountdownAdmin({ adminPassword }: Props) {
   const [events, setEvents] = useState<CountdownEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -147,7 +147,7 @@ export default function SchoolEventCountdownAdmin({ adminPassword, onAdminPasswo
       <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
         <label className="block text-xs font-bold text-slate-300">
           Admin用パスワード
-          <input type="password" autoComplete="current-password" value={adminPassword} onChange={event => onAdminPasswordChange(event.target.value)} placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-indigo-500" />
+          <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
         </label>
 
         <form onSubmit={saveEvent} className="space-y-4">

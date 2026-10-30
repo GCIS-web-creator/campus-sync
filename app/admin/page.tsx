@@ -356,7 +356,7 @@ export default function CampusSyncAdmin() {
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
-  const [adminApiPassword, setAdminApiPassword] = useState('');
+  const adminApiPassword = 'CAMPUSSYNC_SESSION';
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [assignmentDetails, setAssignmentDetails] = useState('');
@@ -447,7 +447,7 @@ export default function CampusSyncAdmin() {
     if (activeTab !== 'dashboard') return;
     if (!adminApiPassword.trim()) {
       setLineBotRotation(null);
-      setLineBotRotationMessage('Admin用パスワードを入力すると、現在のBOTと次回切替予定を確認できます。');
+      setLineBotRotationMessage('管理者認証を入力すると、現在のBOTと次回切替予定を確認できます。');
       return;
     }
     let cancelled = false;
@@ -557,7 +557,7 @@ export default function CampusSyncAdmin() {
     if (!adminApiPassword.trim()) {
       setLineGroupRows([]);
       setLineGroupLogs([]);
-      setLineGroupMessage('Admin用パスワードを入力すると、グループ設定を表示できます。');
+      setLineGroupMessage('管理者認証を入力すると、グループ設定を表示できます。');
       return;
     }
     let cancelled = false;
@@ -594,7 +594,7 @@ export default function CampusSyncAdmin() {
     changes: { active?: boolean } & Partial<Record<LineGroupPreferenceKey, boolean>>,
   ) => {
     if (!adminApiPassword.trim()) {
-      setLineGroupMessage('先にAdmin用パスワードを入力してください。');
+      setLineGroupMessage('先に管理者認証を入力してください。');
       return;
     }
     setLineGroupSaving(chatId);
@@ -1092,7 +1092,7 @@ export default function CampusSyncAdmin() {
   // Adminから公開済みの学園総合通知を読み込む。
   const handleLoadSchoolNotificationHistory = async () => {
     if (!adminApiPassword.trim()) {
-      setSchoolNotificationHistoryMessage('Admin用パスワードを入力してください。');
+      setSchoolNotificationHistoryMessage('管理者認証を入力してください。');
       return;
     }
     setSchoolNotificationHistoryLoading(true);
@@ -1121,7 +1121,7 @@ export default function CampusSyncAdmin() {
   const handlePublishSchoolNotification = async () => {
     if (schoolNotificationSaving) return;
     if (!adminApiPassword.trim()) {
-      setSchoolNotificationMessage('Admin用パスワードを入力してください。');
+      setSchoolNotificationMessage('管理者認証を入力してください。');
       return;
     }
     const title = schoolNotificationTitle.trim();
@@ -1188,7 +1188,7 @@ export default function CampusSyncAdmin() {
 
   const handleRetrySchoolNotificationLine = async (item: AdminSchoolNotification) => {
     if (!adminApiPassword.trim()) {
-      setSchoolNotificationMessage('LINE通知の再送にはAdmin用パスワードが必要です。');
+      setSchoolNotificationMessage('LINE通知の再送には管理者認証が必要です。');
       return;
     }
     if (!window.confirm(`「${item.title}」をLINE公式アカウントへ再送しますか？`)) return;
@@ -1273,7 +1273,7 @@ export default function CampusSyncAdmin() {
   const handleSendClassTimetableTest = async () => {
     if (classTimetableSending) return;
     if (!adminApiPassword.trim()) {
-      setClassTimetableMessage('管理用パスワードを入力してください。上の共通Admin用パスワード欄を使用します。');
+      setClassTimetableMessage('管理用パスワードを入力してください。上の共通管理者認証欄を使用します。');
       return;
     }
 
@@ -1307,7 +1307,7 @@ export default function CampusSyncAdmin() {
   const notifyCafeteriaSoldOutOnLine = async (item: AdminCafeteriaMenuItem, groupOnly = false): Promise<boolean> => {
     if (!adminApiPassword.trim()) {
       setCafeteriaLineRetryItem(item);
-      setCafeteriaControlMessage('売切状態は保存されましたが、LINE通知にはAdmin用パスワードが必要です。入力後に「LINE通知を再送」を押してください。');
+      setCafeteriaControlMessage('売切状態は保存されましたが、LINE通知には管理者認証が必要です。入力後に「LINE通知を再送」を押してください。');
       return false;
     }
 
@@ -1362,7 +1362,7 @@ export default function CampusSyncAdmin() {
 
     const nextSoldOut = !item.isSoldOut;
     if (nextSoldOut && !adminApiPassword.trim()) {
-      setCafeteriaControlMessage('LINEへの売切通知を行うため、先にAdmin用パスワードを入力してください。');
+      setCafeteriaControlMessage('LINEへの売切通知を行うため、先に管理者認証を入力してください。');
       return;
     }
 
@@ -1743,7 +1743,7 @@ export default function CampusSyncAdmin() {
     const pendingEvent = lineBotRotation?.pendingEvent;
     if (!pendingEvent) return;
     if (!adminApiPassword.trim()) {
-      setLineBotRotationMessage('Admin用パスワードを入力してください。');
+      setLineBotRotationMessage('管理者認証を入力してください。');
       return;
     }
     if (!lineBotRotationAckChecked) {
@@ -1797,6 +1797,12 @@ export default function CampusSyncAdmin() {
       setAssignmentMessage(error instanceof Error ? error.message : '課題を削除できませんでした。');
     }
   };
+
+  const handleAdminLogout = async () => {
+    try { await fetch('/api/admin/auth',{method:'DELETE',cache:'no-store',credentials:'same-origin'}); }
+    finally { window.location.replace('/admin-login'); }
+  };
+
 
   return (
     <div className="flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
@@ -1865,8 +1871,9 @@ export default function CampusSyncAdmin() {
           <div className="w-9 h-9 bg-slate-800 rounded-full flex items-center justify-center font-bold text-sm text-blue-400">校</div>
           <div className="hidden md:block">
             <p className="text-xs font-bold">校務部 事務室窓口</p>
-            <p className="text-[10px] text-slate-500">ログイン中</p>
+            <p className="text-[10px] text-emerald-400">管理者認証済み</p>
           </div>
+          <button type="button" onClick={() => void handleAdminLogout()} className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:border-rose-500/50 hover:bg-rose-950/30 hover:text-rose-200" aria-label="管理者ログアウト" title="ログアウト"><LogOut size={15}/><span className="hidden md:inline">ログアウト</span></button>
         </div>
       </aside>
 
@@ -1874,11 +1881,11 @@ export default function CampusSyncAdmin() {
       <main className="min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
         {activeTab === 'school-schedule' && (
-          <SchoolScheduleAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
+          <SchoolScheduleAdmin adminPassword={adminApiPassword} />
         )}
 
         {activeTab === 'event-countdowns' && (
-          <SchoolEventCountdownAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
+          <SchoolEventCountdownAdmin adminPassword={adminApiPassword} />
         )}
 
         {activeTab === 'school-notifications' && (
@@ -1894,15 +1901,8 @@ export default function CampusSyncAdmin() {
                 <p className="mt-1 text-xs leading-5 text-slate-400">全校の生徒に公開する前に内容を確認してください。公開後の通知は生徒画面に残ります。</p>
               </div>
               <label className="block text-xs font-bold text-slate-300">
-                Admin用パスワード
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={adminApiPassword}
-                  onChange={event => { setAdminApiPassword(event.target.value); setSchoolNotificationMessage(''); }}
-                  placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500"
-                />
+                管理者認証
+                <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-xs font-bold text-slate-300">
@@ -2053,7 +2053,7 @@ export default function CampusSyncAdmin() {
         )}
 
         {activeTab === 'campus-facilities' && (
-          <CampusFacilityAdmin adminPassword={adminApiPassword} onAdminPasswordChange={setAdminApiPassword} />
+          <CampusFacilityAdmin adminPassword={adminApiPassword} />
         )}
 
         {/* ================= タブ1: ダッシュボード（リアルタイム不満・アラート） ================= */}
@@ -2086,15 +2086,8 @@ export default function CampusSyncAdmin() {
                 </button>
               </div>
               <label className="block text-xs font-bold text-slate-300">
-                Admin用パスワード（他の管理操作と共通）
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={adminApiPassword}
-                  onChange={event => setAdminApiPassword(event.target.value)}
-                  placeholder="CAMPUS_SYNC_ADMIN_PASSWORD"
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
-                />
+                管理者認証（他の管理操作と共通）
+                <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
               </label>
               {lineBotRotationLoading ? (
                 <p className="text-xs text-slate-400">ローテーション設定を確認しています...</p>
@@ -2177,7 +2170,7 @@ export default function CampusSyncAdmin() {
                 </>
               ) : (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
-                  {lineBotRotationMessage || 'Admin用パスワードを入力してください。'}
+                  {lineBotRotationMessage || '管理者認証を入力してください。'}
                 </div>
               )}
               {lineBotRotationMessage && lineBotRotation && (
@@ -2255,15 +2248,8 @@ export default function CampusSyncAdmin() {
                   </div>
                 </div>
                 <label className="block text-xs font-bold text-slate-300">
-                  Admin用パスワード
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    value={adminApiPassword}
-                    onChange={event => { setAdminApiPassword(event.target.value); setTrainTimetableMessage(''); }}
-                    placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
-                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
-                  />
+                  管理者認証
+                  <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
                 </label>
                 <button
                   type="button"
@@ -2497,9 +2483,9 @@ export default function CampusSyncAdmin() {
 
             <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-4 space-y-2">
               <h3 className="text-sm font-black text-amber-200">管理用パスワード</h3>
-              <p className="text-xs leading-relaxed text-amber-100/80">サーバーの環境変数 CAMPUS_SYNC_ADMIN_PASSWORD に設定した値を入力してください。これはコードに直接書かず、Vercelの環境変数で管理します。</p>
+              <p className="text-xs leading-relaxed text-amber-100/80">サーバーの環境変数 管理者セッション に設定した値を入力してください。これはコードに直接書かず、Vercelの環境変数で管理します。</p>
               <div className="flex flex-col sm:flex-row gap-2">
-                <input type="password" autoComplete="current-password" value={adminApiPassword} onChange={e => setAdminApiPassword(e.target.value)} placeholder="管理用パスワード" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
                 <button type="button" onClick={() => void loadAssignments()} disabled={assignmentLoading} className="rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-black hover:bg-slate-600 disabled:opacity-50">{assignmentLoading ? '読み込み中…' : '課題一覧を読み込む'}</button>
               </div>
             </div>
@@ -2751,14 +2737,7 @@ export default function CampusSyncAdmin() {
                 )}
                 <label className="block rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs font-bold text-slate-300">
                   LINE通知用 Adminパスワード
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    value={adminApiPassword}
-                    onChange={event => setAdminApiPassword(event.target.value)}
-                    placeholder="VercelのCAMPUS_SYNC_ADMIN_PASSWORD"
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
-                  />
+                  <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
                   <span className="mt-1 block font-normal text-slate-500">売切にしたとき、使用中のBOTからLINE公式アカウントの友だちと登録済みグループへ通知します。</span>
                 </label>
                 {cafeteriaLineRetryItem && (
@@ -2890,9 +2869,9 @@ export default function CampusSyncAdmin() {
 
             <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-4 space-y-2">
               <h3 className="text-sm font-black text-amber-200">管理用パスワード</h3>
-              <p className="text-xs leading-relaxed text-amber-100/80">CAMPUS_SYNC_ADMIN_PASSWORDに設定した値を入力し、Supabaseの実データを読み込んでください。承認・返却はサーバーAPI経由で保存します。</p>
+              <p className="text-xs leading-relaxed text-amber-100/80">管理者セッションに設定した値を入力し、Supabaseの実データを読み込んでください。承認・返却はサーバーAPI経由で保存します。</p>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input type="password" autoComplete="current-password" value={adminApiPassword} onChange={e => setAdminApiPassword(e.target.value)} placeholder="管理用パスワード" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
                 <button type="button" onClick={() => void loadLostItems()} disabled={lostLoading} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:opacity-50">{lostLoading ? '読み込み中…' : '落とし物一覧を読み込む'}</button>
               </div>
               {lostMessage && <p role="status" className={`text-xs leading-5 ${lostMessage.includes('失敗') || lostMessage.includes('入力') || lostMessage.includes('設定') || lostMessage.includes('正しく') ? 'text-rose-300' : 'text-emerald-300'}`}>{lostMessage}</p>}
@@ -3133,21 +3112,21 @@ export default function CampusSyncAdmin() {
         {activeTab === 'chat-moderation' && (
           <ChatModerationAdmin
             adminPassword={adminApiPassword}
-            onAdminPasswordChange={setAdminApiPassword}
+           
           />
         )}
 
         {activeTab === 'club-posts' && (
           <ClubNotesAdmin
             adminPassword={adminApiPassword}
-            onAdminPasswordChange={setAdminApiPassword}
+           
           />
         )}
 
         {activeTab === 'student-profile-export' && (
           <StudentProfileExportAdmin
             adminPassword={adminApiPassword}
-            onAdminPasswordChange={setAdminApiPassword}
+           
           />
         )}
 
