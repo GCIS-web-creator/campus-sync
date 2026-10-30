@@ -10,7 +10,7 @@ create table if not exists public.line_group_chats (
   receive_train_timetable boolean not null default true,
   receive_class_timetable boolean not null default true,
   receive_school_schedule boolean not null default false,
-  receive_cafeteria_sold_out boolean not null default false,
+  receive_cafeteria_sold_out boolean not null default true,
   receive_assignment_updates boolean not null default false,
   receive_quick_notices boolean not null default false,
   first_seen_at timestamptz not null default now(),
@@ -31,7 +31,7 @@ alter table public.line_group_chats
 alter table public.line_group_chats
   add column if not exists receive_school_schedule boolean not null default false;
 alter table public.line_group_chats
-  add column if not exists receive_cafeteria_sold_out boolean not null default false;
+  add column if not exists receive_cafeteria_sold_out boolean not null default true;
 alter table public.line_group_chats
   add column if not exists receive_assignment_updates boolean not null default false;
 alter table public.line_group_chats
@@ -41,6 +41,12 @@ alter table public.line_group_chats
 alter table public.line_group_chats alter column receive_train_timetable set default true;
 alter table public.line_group_chats alter column receive_class_timetable set default true;
 alter table public.line_group_chats alter column receive_school_schedule set default false;
+alter table public.line_group_chats alter column receive_cafeteria_sold_out set default true;
+
+-- Existing registered active groups are included in cafeteria sold-out alerts.
+update public.line_group_chats
+set receive_cafeteria_sold_out = true
+where active = true;
 
 alter table public.line_group_chats enable row level security;
 revoke all on table public.line_group_chats from anon, authenticated;

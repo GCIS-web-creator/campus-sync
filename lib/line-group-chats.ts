@@ -16,6 +16,7 @@ export type LineGroupDeliveryResult = {
   sent: number;
   failed: number;
   lookupError?: string;
+  failureStatuses?: Record<string, number>;
 };
 
 function getAdminClient() {
@@ -103,11 +104,15 @@ export async function pushLineMessagesToRegisteredChats(
   const activeChatsQuery = admin.from('line_group_chats')
     .select('chat_id,chat_type')
     .eq('active', true);
+  // Cafeteria sold-out notices are operational alerts: send them to every active
+  // registered chat. Other notification categories continue to respect opt-in flags.
   const { data, error } = kind === 'daily_digest'
     ? await activeChatsQuery.or(
         'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true,receive_assignment_updates.eq.true',
       )
-    : await activeChatsQuery.eq(preferenceColumn, true);
+    : kind === 'cafeteria_sold_out'
+      ? await activeChatsQuery
+      : await activeChatsQuery.eq(preferenceColumn, true);
   if (error) {
     console.error('LINEグループ配信先の取得に失敗:', error.message);
     return { kind, registered: 0, sent: 0, failed: 0, lookupError: error.message };
@@ -128,8 +133,8 @@ export async function pushLineMessagesToRegisteredChats(
         cache: 'no-store',
         signal: AbortSignal.timeout(15000),
       });
-      if (response.ok || response.status === 409) return true;
-      // Preserve LINE's error message for diagnosing 429 quota/rate-limit failures.
+      if (response.ok || response.status === 409) return { success: true as const };
+      // Preserve LINE's error message for diagnosing 400 membership and 429 rate-limit failures.
       const errorBody = await response.text().catch(() => '');
       console.error('LINEグループへの送信に失敗:', {
         chatType: chat.chat_type,
@@ -137,15 +142,28 @@ export async function pushLineMessagesToRegisteredChats(
         requestId: response.headers.get('x-line-request-id') || response.headers.get('x-line-accepted-request-id') || undefined,
         error: errorBody.slice(0, 500) || undefined,
       });
-      return false;
+      return { success: false as const, status: response.status };
     } catch (error) {
       console.error('LINEグループ送信の通信エラー:', error instanceof Error ? error.message : 'unknown error');
-      return false;
+      return { success: false as const, status: 0 };
     }
   }));
 
-  const sent = outcomes.filter(Boolean).length;
-  return { kind, registered: chats.length, sent, failed: chats.length - sent };
+  const sent = outcomes.filter(outcome => outcome.success).length;
+  const failureStatuses = outcomes.reduce<Record<string, number>>((counts, outcome) => {
+    if (!outcome.success) {
+      const status = String(outcome.status);
+      counts[status] = (counts[status] || 0) + 1;
+    }
+    return counts;
+  }, {});
+  return {
+    kind,
+    registered: chats.length,
+    sent,
+    failed: chats.length - sent,
+    ...(Object.keys(failureStatuses).length > 0 ? { failureStatuses } : {}),
+  };
 }
 
 export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): string {
@@ -157,7 +175,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
       : result.kind === 'school_schedule'
         ? '週間学校予定表を受信するLINEグループはありません（receive_school_schedule を確認してください）。'
         : result.kind === 'cafeteria_sold_out'
-        ? '学食売切通知を受信するLINEグループはありません（receive_cafeteria_sold_out を確認してください）。'
+        ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
         : result.kind === 'assignment_updates'
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
           : result.kind === 'quick_notice'
@@ -165,7 +183,14 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
             : result.kind === 'daily_digest'
               ? '日次まとめを受信する設定のLINEグループはありません（時間割・時刻表・課題・学校予定の受信設定を確認してください）。'
               : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
-  if (result.failed > 0) return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed + '件失敗しました。';
+  if (result.failed > 0) {
+    const statusSummary = Object.entries(result.failureStatuses || {})
+      .map(([status, count]) => (status === '0' ? '通信エラー' : 'HTTP ' + status) + ' ' + count + '件')
+      .join('、');
+    return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed
+      + '件失敗しました。' + (statusSummary ? '（' + statusSummary + '）' : '')
+      + ' 現在使用中のBOTが対象グループに参加しているか確認してください。';
+  }';
   return result.kind === 'train_timetable'
     ? '時刻表専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
     : result.kind === 'class_timetable'
