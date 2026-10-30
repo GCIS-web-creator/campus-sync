@@ -1,6 +1,6 @@
 -- CampusSync: 3 LINE公式アカウントの10日ごとの切替管理
 -- BOT 1: 毎月1日〜10日 / BOT 2: 11日〜20日 / BOT 3: 21日〜月末
--- Supabase pg_cron (UTC): 00:00 UTC = 09:00 JST on days 1, 11, 21.
+-- Supabase pg_cron (UTC): 23:55 UTC = 08:55 JST. The function changes slots only on JST dates 1, 11, and 21, before the Sunday 09:00 weekly schedule.
 -- Tokens and Channel Secrets are stored only in Vercel environment variables.
 -- Admin UI receives slot/status only; no credential values are ever stored in Supabase.
 
@@ -117,7 +117,7 @@ where jobname = 'campussync-line-bot-rotation';
 
 select cron.schedule(
   'campussync-line-bot-rotation',
-  '0 0 1,11,21 * *',
+  '55 23 * * *',
   $cron$
     select public.campussync_refresh_line_bot_rotation();
   $cron$
