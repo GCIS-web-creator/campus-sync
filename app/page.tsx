@@ -5,6 +5,7 @@ import { ContributionRankWidget } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
+import CampusAIChat from '@/components/CampusAIChat';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import CountdownEventWidget from '@/components/CountdownEventWidget';
 import React, { useState, useEffect, useRef } from 'react';
@@ -912,6 +913,7 @@ export default function CampusSyncApp() {
 
   const [activeTab, setActiveTab] = useState('home');
   const [hashScrollTarget, setHashScrollTarget] = useState('');
+  const activeTabHashSyncRef = useRef(false);
   const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
@@ -1034,9 +1036,9 @@ export default function CampusSyncApp() {
       if (!hash) return;
 
       if (hash === 'ai') {
-        setActiveTab('home');
+        setActiveTab('ai');
         setHashScrollTarget('');
-        return; // CampusAIChatが #ai を検知してチャットを自動で開く。
+        return;
       }
 
       const route = hashRoutes[hash];
@@ -1049,6 +1051,32 @@ export default function CampusSyncApp() {
     window.addEventListener('hashchange', applyHashRoute);
     return () => window.removeEventListener('hashchange', applyHashRoute);
   }, []);
+
+  // アプリ内でタブを切り替えた場合もURLを同期し、LINE共有リンクを正しい画面に保つ。
+  useEffect(() => {
+    if (!activeTabHashSyncRef.current) {
+      activeTabHashSyncRef.current = true;
+      return;
+    }
+    const hashes: Record<string, string> = {
+      home: 'home',
+      cafeteria: 'food',
+      ai: 'ai',
+      bus: 'transit',
+      chat: 'chat',
+      facilities: 'campus',
+      timetable: 'timetable',
+      'school-schedule': 'schedule',
+      notifications: 'notices',
+    };
+    const nextHash = hashes[activeTab] || '';
+    const currentHash = window.location.hash.replace(/^#/, '').toLowerCase();
+    if (currentHash === nextHash) return;
+
+    const nextUrl = window.location.pathname + window.location.search + (nextHash ? '#' + nextHash : '');
+    window.history.replaceState(null, '', nextUrl);
+    window.dispatchEvent(new Event('campus-sync-ai-route'));
+  }, [activeTab]);
 
   // 課題はホーム内の提出物セクションにあるため、ホーム描画後に該当位置まで移動する。
   useEffect(() => {
@@ -3961,6 +3989,9 @@ Supabaseの設定を確認してください。
     const subTextClass = isDarkMode ? 'text-slate-400' : 'text-gray-400';
 
     switch (activeTab) {
+      case 'ai':
+        return <CampusAIChat mode="full" />;
+
       case 'home':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -5370,6 +5401,7 @@ Supabaseの設定を確認してください。
               <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
               <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
               <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+              <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
               <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
               <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
               <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
@@ -5383,7 +5415,7 @@ Supabaseの設定を確認してください。
       </aside>
 
       {/* メインビューポートエリア */}
-      <div className="flex-1 flex flex-col relative w-full max-w-2xl mx-auto shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden">
+      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
@@ -5396,10 +5428,10 @@ Supabaseの設定を確認してください。
         </header>
 
         {/* スクロールコンテンツコンテナ */}
-        <main className={activeTab === 'chat' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-16 md:pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6"}>
+        <main className={activeTab === 'chat' || activeTab === 'ai' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-16 md:pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6"}>
           <div
             key={activeTab}
-            className={activeTab === 'chat'
+            className={activeTab === 'chat' || activeTab === 'ai'
               ? 'campus-page-transition campus-page-transition--chat flex min-h-0 flex-1 flex-col'
               : 'campus-page-transition'}
           >
@@ -5433,6 +5465,7 @@ Supabaseの設定を確認してください。
           <NavItem icon={<Clock size={20} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
           <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
           <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+          <NavItem icon={<Sparkles size={20} />} label="AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
           <NavItem icon={<MessageCircle size={20} />} label="チャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
           <NavItem icon={<Settings size={20} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
         </nav>
