@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildClassTimetableFlexMessage, getTokyoTomorrowTimetableInfo } from '@/lib/class-timetable';
@@ -55,8 +56,9 @@ export async function POST(request: Request) {
     }
   }
 
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!accessToken) return jsonError('VercelのLINE_CHANNEL_ACCESS_TOKENが設定されていません。', 503);
+  const activeLineBot = await getActiveLineBot();
+      const accessToken = activeLineBot?.accessToken || null;
+  if (!accessToken) return jsonError('Vercelの現在使用中のLINE BOTのアクセストークンが設定されていません。', 503);
 
   const tomorrow = getTokyoTomorrowTimetableInfo();
   if (!tomorrow.dayKey) {
