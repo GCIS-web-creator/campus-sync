@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -336,9 +337,10 @@ export async function PATCH(request: Request) {
 
     let lineNotificationMessage = '';
     if (newlyApproved || manualNotify) {
-      const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+      const activeLineBot = await getActiveLineBot();
+      const accessToken = activeLineBot?.accessToken || null;
       if (!accessToken) {
-        lineNotificationMessage = 'LINE通知は未送信です。VercelのLINE_CHANNEL_ACCESS_TOKENを確認してください。';
+        lineNotificationMessage = 'LINE通知は未送信です。Vercelの現在使用中のLINE BOT設定を確認してください。';
       } else {
         const approvedAt = String((updated as any).approved_at || new Date().toISOString());
         const approvedJst = new Intl.DateTimeFormat('ja-JP', {
