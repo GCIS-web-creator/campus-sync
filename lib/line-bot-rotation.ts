@@ -42,6 +42,10 @@ export async function getActiveLineBot(): Promise<LineBotCredential | null> {
       .eq('id', 1)
       .maybeSingle();
 
+    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
+      console.error('LINE BOTの有効スロットを取得できません:', error.message);
+      return null;
+    }
     if (!error && data) {
       const slot = Number(data.active_bot_slot);
       if (slot === 1 || slot === 2 || slot === 3) {
@@ -87,7 +91,7 @@ export function getLineWebhookCredentials(): LineBotCredential[] {
 export function getLineBotEnvironmentStatus() {
   return ([1, 2, 3] as const).map(slot => ({
     slot,
-    channelSecretConfigured: Boolean(process.env[`LINE_CHANNEL_SECRET_${slot}`]),
-    accessTokenConfigured: Boolean(process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`]),
+    channelSecretConfigured: Boolean(process.env[`LINE_CHANNEL_SECRET_${slot}`] || (slot === 1 && process.env.LINE_CHANNEL_SECRET)),
+    accessTokenConfigured: Boolean(process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`] || (slot === 1 && process.env.LINE_CHANNEL_ACCESS_TOKEN)),
   }));
 }
