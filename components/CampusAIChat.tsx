@@ -169,6 +169,15 @@ export default function CampusAIChat() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const openForAiHash = () => {
+      if (window.location.hash.toLowerCase() === '#ai') setOpen(true);
+    };
+    openForAiHash();
+    window.addEventListener('hashchange', openForAiHash);
+    return () => window.removeEventListener('hashchange', openForAiHash);
+  }, []);
+
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [msgs, open]);
   if (pathname?.startsWith('/admin')) return null;
 
