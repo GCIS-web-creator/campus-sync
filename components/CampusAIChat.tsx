@@ -301,14 +301,23 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
   const deleteConversation = (conversation: SavedConversation) => {
     if (!window.confirm('「' + conversation.title + '」を削除しますか？')) return;
     const remaining = conversations.filter(item => item.id !== conversation.id);
-    if (conversation.id === activeConversationId) {
-      if (remaining.length) {
-        openConversation(remaining[0]);
-      } else {
-        startNewChat();
-      }
+
+    if (conversation.id !== activeConversationId) {
+      setConversations(remaining);
+      return;
     }
-    setConversations(remaining);
+
+    if (remaining.length) {
+      setConversations(remaining);
+      openConversation(remaining[0]);
+      return;
+    }
+
+    const id = 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    setConversations([{ id, title: '新しい会話', updatedAt: Date.now(), messages: [] }]);
+    setActiveConversationId(id);
+    setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }]);
+    setInput('');
   };
 
   async function send(raw: string) {
