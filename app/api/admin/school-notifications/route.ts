@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 import { timingSafeEqual } from 'node:crypto';
@@ -79,9 +80,10 @@ async function sendLineNotification(
   admin: ReturnType<typeof getAdminClient> & {},
   notification: SchoolNotification,
 ) {
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const activeLineBot = await getActiveLineBot();
+  const accessToken = activeLineBot?.accessToken || null;
   if (!accessToken) {
-    const message = 'VercelにLINE_CHANNEL_ACCESS_TOKENが設定されていません。';
+    const message = 'Vercelに現在使用中のLINE BOTのアクセストークンが設定されていません。';
     const { data: updated, error } = await admin
       .from('notifications')
       .update({ line_sent: false, line_error: message })
