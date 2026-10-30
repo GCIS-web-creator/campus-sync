@@ -2170,7 +2170,7 @@ export default function CampusSyncAdmin() {
                   {lineBotRotationMessage || '管理者認証を入力してください。'}
                 </div>
               )}
-              {lineBotRotation.history.length > 0 && (
+              {lineBotRotation && lineBotRotation.history.length > 0 && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
                   <h4 className="text-sm font-black text-white">直近のBOT切替履歴</h4>
                   <div className="space-y-2">
