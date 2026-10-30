@@ -52,6 +52,13 @@ function retryKey(date: string, index: number): string {
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown };
   const manualRequest = payload.mode === 'manual';
+  if (!manualRequest) {
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      message: '学校行事カウントダウンの個別定期配信は16:00の日次まとめへ統合されました。',
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   if (manualRequest) {
     const expected = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
     const received = request.headers.get('x-admin-password') || '';
