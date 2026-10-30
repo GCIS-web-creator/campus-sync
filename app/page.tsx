@@ -817,7 +817,7 @@ export default function CampusSyncApp() {
 
   // --- 🎨 テーマカラー＆モード管理 ---
   const [theme, setTheme] = useState<ThemeKey>('blue');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [customPrimaryColor, setCustomPrimaryColor] = useState('#00A9FF');
   const [customSecondaryColor, setCustomSecondaryColor] = useState('#A855F7');
   const [customGradientEnabled, setCustomGradientEnabled] = useState(true);
@@ -838,9 +838,8 @@ export default function CampusSyncApp() {
     : THEMES[theme];
 
   const selectTheme = (nextTheme: ThemeKey) => {
+    // テーマ色と表示モードは独立。色を変えてもライト／ダーク設定は維持する。
     setTheme(nextTheme);
-    // ネオン・サイバーは暗い表示、それ以外のプリセットに戻したら黒背景も解除。
-    setIsDarkMode(nextTheme === 'neon' || nextTheme === 'cyber');
     try { window.localStorage.setItem('campus-sync-theme', nextTheme); } catch {}
   };
 
@@ -867,6 +866,7 @@ export default function CampusSyncApp() {
         primary: customPrimaryColor, secondary: customSecondaryColor, gradient: customGradientEnabled,
       }));
       window.localStorage.setItem('campus-sync-dark-mode', String(isDarkMode));
+      window.localStorage.setItem('campus-sync-display-mode-v2', isDarkMode ? 'dark' : 'light');
     } catch {}
   }, [theme, customPrimaryColor, customSecondaryColor, customGradientEnabled, isDarkMode, themeSettingsReady]);
 
@@ -1816,10 +1816,10 @@ useEffect(() => {
       if (typeof saved.gradient === 'boolean') setCustomGradientEnabled(saved.gradient);
     }
 
-    const savedDarkMode = window.localStorage.getItem('campus-sync-dark-mode');
-    if (savedDarkMode === 'true') setIsDarkMode(true);
-    else if (savedDarkMode === 'false') setIsDarkMode(false);
-    if (restoredTheme === 'neon' || restoredTheme === 'cyber') setIsDarkMode(true);
+    const savedDisplayMode = window.localStorage.getItem('campus-sync-display-mode-v2');
+    // 初回はダークを標準にし、以後の選択はこのブラウザーに保存する。
+    if (savedDisplayMode === 'light') setIsDarkMode(false);
+    else setIsDarkMode(true);
 
     const savedRoomId = Number(window.localStorage.getItem('campus-sync-favorite-room-id'));
     if (Number.isInteger(savedRoomId) && INITIAL_ROOMS.some(room => room.id === savedRoomId)) setFavoriteRoomId(savedRoomId);
@@ -3484,7 +3484,7 @@ Supabaseの設定を確認してください。
               return;
             }
             setCustomPrimaryColor(customHex);
-            setTheme('custom'); setIsDarkMode(false);
+            setTheme('custom');
             detail.resolve!({ success: true, message: `テーマカラーを${requestedTheme}（${customHex}）に変更しました。` });
             return;
           }
@@ -4113,6 +4113,27 @@ Supabaseの設定を確認してください。
                 <ChevronRight size={18} className="mt-1 shrink-0 text-rose-500"/>
               </button>
             ))}
+            <section className="campus-school-hero relative isolate min-h-[190px] overflow-hidden rounded-[28px] border border-white/15 shadow-xl sm:min-h-[230px]" aria-label="創価高等学校の校舎">
+              <img
+                src="https://www.minkou.jp/images/school_img/2493/6d5cb19fe35a03f7815f5f57a3ddfaf46a1e2223.jpg"
+                alt="創価高等学校の校舎"
+                className="campus-school-hero__image absolute inset-0 h-full w-full object-cover"
+                loading="eager"
+                referrerPolicy="strict-origin-when-cross-origin"
+                draggable={false}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/55 to-slate-900/10" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-transparent to-slate-950/10" />
+              <div className="relative z-10 flex min-h-[190px] flex-col justify-end p-5 sm:min-h-[230px] sm:p-7">
+                <p className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-[0.22em] text-cyan-100 sm:text-xs">
+                  <span className="rounded-full border border-cyan-200/40 bg-cyan-300/15 px-2.5 py-1">CAMPUSSYNC</span>
+                  SOKA HIGH SCHOOL
+                </p>
+                <h1 className="text-2xl font-black leading-tight tracking-tight text-white drop-shadow-lg sm:text-3xl">学校生活を、ひとつにつなぐ。</h1>
+                <p className="mt-2 max-w-xl text-xs font-semibold leading-5 text-white/85 sm:text-sm">時間割も、学校予定も、移動も。毎日のキャンパスライフをCampusSyncで。</p>
+              </div>
+            </section>
+
             {/* ダッシュボード上部・スコアシステム */}
             <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-3xl p-6 shadow-xl text-white relative overflow-hidden transition-all duration-300`}>
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -5196,13 +5217,13 @@ Supabaseの設定を確認してください。
                   <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
                     メインカラー
                     <div className="mt-1 flex gap-2">
-                      <input aria-label="メインカラーを選ぶ" type="color" value={customPrimaryColor} onChange={event => { setCustomPrimaryColor(event.target.value.toUpperCase()); setTheme('custom'); setIsDarkMode(false); }} className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                      <input aria-label="メインカラーを選ぶ" type="color" value={customPrimaryColor} onChange={event => { setCustomPrimaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
                       <input aria-label="色名またはHEXコード" value={themeColorInput} onChange={event => setThemeColorInput(event.target.value)} placeholder="#FF66AA / coral / 青藍" className="min-w-0 flex-1 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-2 text-xs text-gray-800 dark:text-white" />
                     </div>
                   </label>
                   <label className="block text-[10px] font-bold text-gray-600 dark:text-slate-300">
                     グラデーションの終点
-                    <input aria-label="グラデーションの終点カラー" type="color" value={customSecondaryColor} onChange={event => { setCustomSecondaryColor(event.target.value.toUpperCase()); setTheme('custom'); setIsDarkMode(false); }} className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
+                    <input aria-label="グラデーションの終点カラー" type="color" value={customSecondaryColor} onChange={event => { setCustomSecondaryColor(event.target.value.toUpperCase()); setTheme('custom'); }} className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-1" />
                   </label>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -5210,13 +5231,13 @@ Supabaseの設定を確認してください。
                     const color = normalizeThemeColorInput(themeColorInput);
                     if (!color) { setThemeColorMessage('色名またはHEXコードを確認してね。例：#FF66AA、coral、青藍。'); return; }
                     setCustomPrimaryColor(color);
-                    setTheme('custom'); setIsDarkMode(false);
+                    setTheme('custom');
                     setThemeColorMessage(`カラーを ${color} に変更しました。`);
                   }} className="rounded-lg px-3 py-2 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-700">
                     色名・HEXを適用
                   </button>
                   <label className="flex items-center gap-2 text-[10px] font-bold text-gray-600 dark:text-slate-300">
-                    <input type="checkbox" checked={customGradientEnabled} onChange={event => { setCustomGradientEnabled(event.target.checked); setTheme('custom'); setIsDarkMode(false); }} />
+                    <input type="checkbox" checked={customGradientEnabled} onChange={event => { setCustomGradientEnabled(event.target.checked); setTheme('custom'); }} />
                     グラデーションを有効にする
                   </label>
                 </div>
@@ -5231,7 +5252,7 @@ Supabaseの設定を確認してください。
                     {COLOR_DIC_PRESETS.map(color => (
                       <button key={color.hex} type="button" onClick={() => {
                         setCustomPrimaryColor(color.hex);
-                        setTheme('custom'); setIsDarkMode(false);
+                        setTheme('custom');
                         setThemeColorInput(color.name);
                         setThemeColorMessage(`${color.name}（${color.hex}）を適用しました。`);
                       }} title={`${color.name} ${color.hex}`} className="min-w-0 rounded-lg border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-950 p-1.5 text-left hover:scale-[1.02] transition-transform">
@@ -5247,7 +5268,7 @@ Supabaseの設定を確認してください。
 
               {/* 新機能：ダークモード風切り替え */}
               <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                <span className="text-xs font-black text-gray-700">ダークテーマ（省電力表示モード）</span>
+                <span className="text-xs font-black text-gray-700">表示モード</span>
                 <button
                   type="button"
                   onClick={() => setIsDarkMode(!isDarkMode)}
@@ -5685,7 +5706,7 @@ Supabaseの設定を確認してください。
   };
 
   return (
-    <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
+    <div data-campus-mode={isDarkMode ? 'dark' : 'light'} className={`campus-student-shell flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
       
       {/* デスクトップ用 左側固定サイドバーレイアウト */}
       <aside className="campus-theme-sidebar sticky top-0 hidden h-dvh w-64 shrink-0 overflow-hidden border-r border-gray-100 bg-white shadow-xs z-30 md:flex md:flex-col">
@@ -5693,6 +5714,16 @@ Supabaseの設定を確認してください。
           <div className="mb-5 min-w-0 max-w-full shrink-0">
             <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
           </div>
+          <button
+            type="button"
+            aria-label={isDarkMode ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+            aria-pressed={isDarkMode}
+            onClick={() => setIsDarkMode(current => !current)}
+            className="campus-mode-switch mb-4 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-black transition"
+          >
+            <span className="flex items-center gap-2">{isDarkMode ? <Sun size={16} /> : <Moon size={16} />}{isDarkMode ? 'ライトモード' : 'ダークモード'}</span>
+            <span className="text-[10px] opacity-70">{isDarkMode ? 'ON' : 'OFF'}</span>
+          </button>
           <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
             <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
             <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
@@ -5727,6 +5758,15 @@ Supabaseの設定を確認してください。
             <div className={`rounded-full px-2.5 py-1.5 text-[10px] font-black ${themeCls.lightBg} ${themeCls.text}`}>
               ★ {score} pt
             </div>
+            <button
+              type="button"
+              aria-label={isDarkMode ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+              aria-pressed={isDarkMode}
+              onClick={() => setIsDarkMode(current => !current)}
+              className="campus-mode-switch flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition"
+            >
+              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
             <button type="button" aria-label="CampusSync全体検索を開く" onClick={() => setShowGlobalSearch(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50">
               <GlobalSearchIcon size={20} className="h-5 w-5 shrink-0"/>
             </button>
@@ -5797,7 +5837,7 @@ Supabaseの設定を確認してください。
 
 
         {/* スクロールコンテンツコンテナ */}
-        <main className={activeTab === 'chat' || activeTab === 'ai' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
+        <main className={activeTab === 'chat' || activeTab === 'ai' ? "campus-student-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "campus-student-main flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
           <div
             key={activeTab}
             className={activeTab === 'chat' || activeTab === 'ai'

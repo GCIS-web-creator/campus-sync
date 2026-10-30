@@ -27,41 +27,41 @@ body {
 
 
 /* CampusSync theme presets: Neon (black + glow) and Cyber (console grid). */
-.campus-theme-neon {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon {
   background-color: #000 !important;
   background-image:
     radial-gradient(ellipse at 50% 0%, rgba(0, 245, 255, 0.12), transparent 48%),
     radial-gradient(ellipse at 100% 100%, rgba(255, 0, 229, 0.08), transparent 40%);
   color: #c9ffff;
 }
-.campus-theme-neon .bg-white,
-.campus-theme-neon .bg-gray-50,
-.campus-theme-neon .bg-gray-100,
-.campus-theme-neon .bg-slate-50,
-.campus-theme-neon .bg-slate-100 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .bg-white,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .bg-gray-50,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .bg-gray-100,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .bg-slate-50,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .bg-slate-100 {
   background-color: #020809 !important;
 }
-.campus-theme-neon .text-gray-900,
-.campus-theme-neon .text-gray-800,
-.campus-theme-neon .text-gray-700,
-.campus-theme-neon .text-gray-600,
-.campus-theme-neon .text-slate-900 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-gray-900,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-gray-800,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-gray-700,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-gray-600,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-slate-900 {
   color: #baffff !important;
   text-shadow: 0 0 7px rgba(0, 245, 255, 0.28);
 }
-.campus-theme-neon [class*="border"] {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon [class*="border"] {
   border-color: rgba(0, 245, 255, 0.3) !important;
 }
-.campus-theme-neon button:not([disabled]) {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon button:not([disabled]) {
   box-shadow: 0 0 9px rgba(0, 245, 255, 0.2);
 }
-.campus-theme-neon h1,
-.campus-theme-neon h2,
-.campus-theme-neon h3 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h1,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h2,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h3 {
   text-shadow: 0 0 9px rgba(0, 245, 255, 0.38);
 }
 
-.campus-theme-cyber {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber {
   background-color: #03101a !important;
   background-image:
     linear-gradient(rgba(0, 229, 255, 0.09) 1px, transparent 1px),
@@ -71,73 +71,73 @@ body {
   color: #c8f7ff;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
-.campus-theme-cyber .bg-white,
-.campus-theme-cyber .bg-gray-50,
-.campus-theme-cyber .bg-gray-100,
-.campus-theme-cyber .bg-slate-50,
-.campus-theme-cyber .bg-slate-100 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .bg-white,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .bg-gray-50,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .bg-gray-100,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .bg-slate-50,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .bg-slate-100 {
   background-color: #041520 !important;
 }
-.campus-theme-cyber .text-gray-900,
-.campus-theme-cyber .text-gray-800,
-.campus-theme-cyber .text-gray-700,
-.campus-theme-cyber .text-gray-600,
-.campus-theme-cyber .text-slate-900 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .text-gray-900,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .text-gray-800,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .text-gray-700,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .text-gray-600,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .text-slate-900 {
   color: #c8f7ff !important;
 }
-.campus-theme-cyber [class*="border"] {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber [class*="border"] {
   border-color: rgba(0, 229, 255, 0.32) !important;
 }
-.campus-theme-cyber button:not([disabled]) {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber button:not([disabled]) {
   box-shadow: 0 0 7px rgba(0, 229, 255, 0.13);
   border-radius: 5px;
 }
 
 
 /* Strong neon/cyber overrides for navigation shells. */
-.campus-theme-neon .campus-theme-sidebar,
-.campus-theme-neon .campus-theme-mobile-header,
-.campus-theme-neon .campus-theme-mobile-nav {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-sidebar,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-mobile-header,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-mobile-nav {
   background-color: #000 !important;
   background-image: linear-gradient(135deg, rgba(0, 255, 255, 0.10), rgba(255, 0, 229, 0.06)) !important;
   color: #00ffff !important;
   border-color: #00ffff !important;
   box-shadow: 0 0 24px rgba(0, 255, 255, 0.28), inset 0 0 18px rgba(0, 255, 255, 0.06) !important;
 }
-.campus-theme-neon .campus-theme-sidebar button {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-sidebar button {
   background-color: rgba(0, 12, 16, 0.98) !important;
   color: #00ffff !important;
   border: 1px solid rgba(0, 255, 255, 0.52) !important;
   text-shadow: 0 0 6px #00ffff, 0 0 15px rgba(0, 255, 255, 0.85);
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.22), inset 0 0 8px rgba(0, 255, 255, 0.08) !important;
 }
-.campus-theme-neon .campus-theme-sidebar button:hover,
-.campus-theme-neon .campus-theme-sidebar button[class*="bg-cyan-950"] {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-sidebar button:hover,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-sidebar button[class*="bg-cyan-950"] {
   background-color: #00353b !important;
   color: #ffffff !important;
   border-color: #ff00e5 !important;
   box-shadow: 0 0 14px rgba(0, 255, 255, 0.75), 0 0 20px rgba(255, 0, 229, 0.30) !important;
 }
-.campus-theme-neon h1,
-.campus-theme-neon h2,
-.campus-theme-neon h3,
-.campus-theme-neon h4,
-.campus-theme-neon .text-cyan-300,
-.campus-theme-neon .text-cyan-400 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h1,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h2,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h3,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon h4,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-cyan-300,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .text-cyan-400 {
   color: #00ffff !important;
   text-shadow: 0 0 5px #00ffff, 0 0 12px #00ffff, 0 0 25px rgba(0, 255, 255, 0.85) !important;
 }
-.campus-theme-neon button:not([disabled]) {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon button:not([disabled]) {
   box-shadow: 0 0 12px rgba(0, 255, 255, 0.42), 0 0 22px rgba(0, 255, 255, 0.16);
 }
-.campus-theme-neon .campus-theme-mobile-nav button {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-mobile-nav button {
   color: #00ffff !important;
   text-shadow: 0 0 7px #00ffff;
 }
 
-.campus-theme-cyber .campus-theme-sidebar,
-.campus-theme-cyber .campus-theme-mobile-header,
-.campus-theme-cyber .campus-theme-mobile-nav {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-sidebar,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-mobile-header,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-mobile-nav {
   background-color: #020b12 !important;
   background-image:
     linear-gradient(rgba(0, 229, 255, 0.13) 1px, transparent 1px),
@@ -148,7 +148,7 @@ body {
   border-color: #00e5ff !important;
   box-shadow: 0 0 22px rgba(0, 229, 255, 0.25), inset 0 0 18px rgba(0, 229, 255, 0.08) !important;
 }
-.campus-theme-cyber .campus-theme-sidebar button {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-sidebar button {
   background-color: rgba(0, 17, 27, 0.97) !important;
   color: #00e5ff !important;
   border: 1px solid rgba(0, 229, 255, 0.42) !important;
@@ -157,21 +157,21 @@ body {
   box-shadow: 0 0 8px rgba(0, 229, 255, 0.18) !important;
   border-radius: 5px !important;
 }
-.campus-theme-cyber .campus-theme-sidebar button:hover,
-.campus-theme-cyber .campus-theme-sidebar button[class*="bg-slate-900"] {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-sidebar button:hover,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-sidebar button[class*="bg-slate-900"] {
   background-color: #17330e !important;
   color: #d6ff00 !important;
   border-color: #d6ff00 !important;
   box-shadow: 0 0 14px rgba(214, 255, 0, 0.44), 0 0 20px rgba(0, 229, 255, 0.18) !important;
 }
-.campus-theme-cyber h1,
-.campus-theme-cyber h2,
-.campus-theme-cyber h3,
-.campus-theme-cyber h4 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber h1,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber h2,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber h3,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber h4 {
   color: #00e5ff !important;
   text-shadow: 0 0 6px #00e5ff, 0 0 16px rgba(0, 229, 255, 0.8) !important;
 }
-.campus-theme-cyber .campus-theme-mobile-nav button {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-mobile-nav button {
   color: #00e5ff !important;
   text-shadow: 0 0 6px rgba(0, 229, 255, 0.9);
 }
@@ -243,74 +243,74 @@ body {
 
 
 /* High contrast theme editor panels: keep the neon look without sacrificing readability. */
-.campus-theme-neon .campus-theme-settings-card,
-.campus-theme-cyber .campus-theme-settings-card {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card {
   background: rgba(2, 13, 22, .98) !important;
   color: #f4fdff !important;
   border-color: rgba(0, 229, 255, .62) !important;
   box-shadow: 0 0 18px rgba(0, 229, 255, .12), inset 0 0 18px rgba(0, 229, 255, .035) !important;
 }
-.campus-theme-neon .campus-theme-color-editor,
-.campus-theme-cyber .campus-theme-color-editor {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor {
   background: #06141e !important;
   color: #f4fdff !important;
   border: 1px solid rgba(0, 229, 255, .58) !important;
   box-shadow: inset 0 0 16px rgba(0, 229, 255, .055), 0 0 13px rgba(0, 229, 255, .10) !important;
 }
-.campus-theme-neon .campus-theme-settings-card h3,
-.campus-theme-neon .campus-theme-color-editor h4,
-.campus-theme-neon .campus-theme-color-editor h5,
-.campus-theme-cyber .campus-theme-settings-card h3,
-.campus-theme-cyber .campus-theme-color-editor h4,
-.campus-theme-cyber .campus-theme-color-editor h5 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card h3,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor h4,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor h5,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card h3,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor h4,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor h5 {
   color: #8ffaff !important;
   text-shadow: 0 0 5px rgba(0, 245, 255, .5), 0 0 12px rgba(0, 245, 255, .22) !important;
 }
-.campus-theme-neon .campus-theme-settings-card p,
-.campus-theme-neon .campus-theme-settings-card label,
-.campus-theme-neon .campus-theme-settings-card span,
-.campus-theme-cyber .campus-theme-settings-card p,
-.campus-theme-cyber .campus-theme-settings-card label,
-.campus-theme-cyber .campus-theme-settings-card span {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card p,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card label,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card span,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card p,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card label,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card span {
   color: #e0f7ff !important;
   text-shadow: none !important;
 }
-.campus-theme-neon .campus-theme-settings-card .text-gray-400,
-.campus-theme-neon .campus-theme-settings-card .text-gray-500,
-.campus-theme-neon .campus-theme-settings-card .text-gray-600,
-.campus-theme-neon .campus-theme-settings-card .text-gray-700,
-.campus-theme-cyber .campus-theme-settings-card .text-gray-400,
-.campus-theme-cyber .campus-theme-settings-card .text-gray-500,
-.campus-theme-cyber .campus-theme-settings-card .text-gray-600,
-.campus-theme-cyber .campus-theme-settings-card .text-gray-700 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card .text-gray-400,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card .text-gray-500,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card .text-gray-600,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-settings-card .text-gray-700,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card .text-gray-400,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card .text-gray-500,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card .text-gray-600,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-settings-card .text-gray-700 {
   color: #c1dce8 !important;
 }
-.campus-theme-neon .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]),
-.campus-theme-cyber .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]) {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]),
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor input:not([type="color"]):not([type="checkbox"]) {
   background: #020a10 !important;
   color: #f4fdff !important;
   border-color: #168da7 !important;
 }
-.campus-theme-neon .campus-theme-color-editor input::placeholder,
-.campus-theme-cyber .campus-theme-color-editor input::placeholder {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor input::placeholder,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor input::placeholder {
   color: #9abac8 !important;
   opacity: 1 !important;
 }
-.campus-theme-neon .campus-theme-color-editor button:not([disabled]),
-.campus-theme-cyber .campus-theme-color-editor button:not([disabled]) {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor button:not([disabled]),
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor button:not([disabled]) {
   text-shadow: none !important;
 }
-.campus-theme-neon .campus-theme-color-editor a,
-.campus-theme-cyber .campus-theme-color-editor a {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor a,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor a {
   color: #75eaff !important;
 }
-.campus-theme-neon .campus-theme-color-editor .bg-white,
-.campus-theme-cyber .campus-theme-color-editor .bg-white {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor .bg-white,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor .bg-white {
   background-color: #071823 !important;
   border-color: rgba(0, 229, 255, .4) !important;
 }
-.campus-theme-neon .campus-theme-color-editor .text-emerald-600,
-.campus-theme-cyber .campus-theme-color-editor .text-emerald-600 {
+.campus-student-shell[data-campus-mode="dark"].campus-theme-neon .campus-theme-color-editor .text-emerald-600,
+.campus-student-shell[data-campus-mode="dark"].campus-theme-cyber .campus-theme-color-editor .text-emerald-600 {
   color: #72f7c5 !important;
 }
 
@@ -479,3 +479,83 @@ body {
     animation: none !important;
   }
 }
+
+/* CampusSync student UI refresh: accent palettes remain independent from light/dark mode. */
+.campus-student-shell{--cs-bg:#f3f7fc;--cs-text:#17243a;min-width:0;background:var(--cs-bg);color:var(--cs-text);transition:background-color .24s ease,color .24s ease}
+.campus-student-shell[data-campus-mode="dark"]{--cs-bg:#071321;--cs-text:#e7f1fc;color-scheme:dark;background:radial-gradient(ellipse at 75% -10%,color-mix(in srgb,var(--campus-theme-primary,#0ea5e9) 18%,transparent),transparent 44%),radial-gradient(ellipse at 0% 65%,rgba(14,165,233,.08),transparent 34%),linear-gradient(155deg,#071321,#091a2c 48%,#06111e)!important;color:var(--cs-text)}
+.campus-student-shell[data-campus-mode="light"]{color-scheme:light;background:linear-gradient(155deg,#f8fbff,#eef4fb)!important;color:var(--cs-text)}
+.campus-student-shell .campus-theme-sidebar{border-color:#e2eaf4;background:rgba(255,255,255,.94);backdrop-filter:blur(18px);box-shadow:10px 0 36px rgba(15,36,64,.045)}
+.campus-student-shell .campus-theme-mobile-header{background:rgba(255,255,255,.92);backdrop-filter:blur(18px)}
+.campus-student-shell .campus-student-main{background:transparent;scrollbar-color:rgba(100,116,139,.45) transparent;scrollbar-width:thin}
+.campus-student-shell .campus-school-hero{isolation:isolate;background:#0a1c31}
+.campus-student-shell .campus-school-hero__image{object-position:center 48%;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
+.campus-student-shell .campus-school-hero:hover .campus-school-hero__image{transform:scale(1.025)}
+.campus-student-shell .campus-mode-switch{border-color:#dbe5f0;background:rgba(255,255,255,.78);color:#334155;box-shadow:0 3px 12px rgba(15,23,42,.045)}
+.campus-student-shell .campus-mode-switch:hover{border-color:var(--campus-theme-primary,#0ea5e9);color:var(--campus-theme-primary,#0ea5e9);transform:translateY(-1px)}
+.campus-student-shell[data-campus-mode="light"] .campus-theme-sidebar{border-color:#e3ebf4;background:rgba(255,255,255,.94)}
+.campus-student-shell[data-campus-mode="light"] .campus-theme-mobile-header{border-color:#e3ebf4;background:rgba(255,255,255,.93)}
+.campus-student-shell[data-campus-mode="dark"] .campus-theme-sidebar{border-color:rgba(112,151,190,.16)!important;background:linear-gradient(180deg,rgba(13,31,51,.98),rgba(8,22,37,.97))!important;box-shadow:14px 0 42px rgba(0,0,0,.18)}
+.campus-student-shell[data-campus-mode="dark"] .campus-theme-mobile-header{border-color:rgba(112,151,190,.18)!important;background:rgba(8,23,39,.9)!important;color:#e5f1ff}
+.campus-student-shell[data-campus-mode="dark"] .campus-theme-mobile-header .bg-white{background:#132943!important;border-color:rgba(122,164,204,.24)!important;color:#d7e9fb!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-mobile-drawer-nav,.campus-student-shell[data-campus-mode="dark"] #campus-mobile-menu{border-color:rgba(112,151,190,.2);background:#0b1b2d!important;color:#e5f1ff}
+.campus-student-shell[data-campus-mode="dark"] .campus-mobile-drawer-nav button{color:#c4d5e7}
+.campus-student-shell[data-campus-mode="dark"] .campus-mobile-drawer-nav button:hover{background:rgba(35,77,116,.38)}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main{background:transparent!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-white,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-gray-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-gray-100,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-slate-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-slate-100{background-color:rgba(16,34,56,.92)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-slate-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-slate-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-slate-700{color:#e5effb!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-600,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-500,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-slate-600,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-slate-500,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-gray-400{color:#a8bbcf!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .border-gray-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .border-gray-100,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .border-gray-200,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .border-slate-100,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .border-slate-200{border-color:rgba(139,169,199,.2)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main input:not([type=checkbox]):not([type=radio]):not([type=color]),.campus-student-shell[data-campus-mode="dark"] .campus-student-main select,.campus-student-shell[data-campus-mode="dark"] .campus-student-main textarea{border-color:rgba(139,169,199,.28);background:#091a2d;color:#edf6ff}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main input::placeholder,.campus-student-shell[data-campus-mode="dark"] .campus-student-main textarea::placeholder{color:#8299b1}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main table th{background:rgba(15,35,57,.98);color:#dcecff}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main table td{color:#d0deee;border-color:rgba(139,169,199,.18)}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-blue-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-indigo-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-cyan-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-sky-50{background-color:rgba(14,116,144,.18)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-emerald-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-green-50{background-color:rgba(5,150,105,.17)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-amber-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-yellow-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-orange-50{background-color:rgba(180,83,9,.19)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-rose-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-red-50,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .bg-pink-50{background-color:rgba(190,24,93,.17)!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-blue-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-blue-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-blue-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-indigo-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-indigo-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-indigo-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-cyan-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-cyan-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-cyan-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-sky-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-sky-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-sky-700{color:#9ee7ff!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-emerald-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-emerald-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-emerald-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-green-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-green-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-green-700{color:#86efc4!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-amber-950,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-amber-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-amber-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-amber-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-orange-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-orange-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-orange-700{color:#fcd27a!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-rose-950,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-rose-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-rose-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-rose-700,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-red-900,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-red-800,.campus-student-shell[data-campus-mode="dark"] .campus-student-main .text-red-700{color:#fda4af!important}
+.campus-student-shell[data-campus-mode="dark"] .campus-mode-switch{border-color:rgba(122,164,204,.24);background:rgba(18,40,63,.92);color:#d7e9fb;box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 22px rgba(0,0,0,.14)}
+.campus-student-shell[data-campus-mode="dark"] .campus-mode-switch:hover{border-color:var(--campus-theme-primary,#22d3ee);color:var(--campus-theme-primary,#22d3ee)}
+.campus-student-shell[data-campus-mode="dark"] .campus-theme-sidebar nav button{transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
+.campus-student-shell[data-campus-mode="dark"] .campus-theme-sidebar nav button:hover{border-color:rgba(104,169,223,.2);background-color:rgba(38,79,116,.24);color:#f0f8ff}
+.campus-student-shell[data-campus-mode="dark"] [role=dialog] .bg-white,.campus-student-shell[data-campus-mode="dark"] [role=alertdialog] .bg-white{background:#102238!important;color:#e5effb}
+.campus-student-shell button:focus-visible,.campus-student-shell a:focus-visible,.campus-admin-console button:focus-visible,.campus-admin-console a:focus-visible{outline:2px solid var(--campus-theme-primary,#38bdf8);outline-offset:3px}
+.campus-student-shell[data-campus-mode="light"] .campus-student-main .campus-page-transition>section{box-shadow:0 8px 26px rgba(31,54,82,.055)}
+
+/* Unified, dark management UI across every Admin tab and nested tab component. */
+.campus-admin-console{--admin-border:rgba(125,162,198,.18);color:#e6f0fc;color-scheme:dark;background:radial-gradient(ellipse at 78% -12%,rgba(14,165,233,.17),transparent 38%),radial-gradient(ellipse at 0% 80%,rgba(37,99,235,.09),transparent 35%),linear-gradient(150deg,#071321,#09192b 55%,#06111d)!important}
+.campus-admin-console .campus-admin-sidebar{border-color:rgba(129,165,198,.17)!important;background:linear-gradient(180deg,#0b1b2d,#071525)!important;box-shadow:14px 0 40px rgba(0,0,0,.2)}
+.campus-admin-console .campus-admin-sidebar nav{display:flex;flex-direction:column;gap:5px}
+.campus-admin-console .campus-admin-sidebar nav button{min-height:44px;border:1px solid transparent;border-radius:13px!important;padding-top:10px;padding-bottom:10px;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
+.campus-admin-console .campus-admin-sidebar nav button[class*="bg-blue-600"]{border-color:rgba(70,190,238,.3)!important;background:linear-gradient(135deg,#087eaf,#2457c7)!important;color:#fff!important;box-shadow:0 9px 23px rgba(13,126,190,.24)!important}
+.campus-admin-console .campus-admin-sidebar nav button:not([class*="bg-blue-600"]){color:#a8bdd2!important}
+.campus-admin-console .campus-admin-sidebar nav button:not([class*="bg-blue-600"]):hover{border-color:rgba(112,170,210,.18);background:rgba(35,68,99,.42)!important;color:#f4f9ff!important;transform:translateX(2px)}
+.campus-admin-console .campus-admin-main{background:radial-gradient(ellipse at 90% 0%,rgba(17,107,161,.11),transparent 34%),transparent!important;scrollbar-color:rgba(112,151,184,.42) transparent;scrollbar-width:thin}
+.campus-admin-console .campus-admin-main .bg-white,.campus-admin-console .campus-admin-main .bg-gray-50,.campus-admin-console .campus-admin-main .bg-gray-100,.campus-admin-console .campus-admin-main .bg-slate-50,.campus-admin-console .campus-admin-main .bg-slate-100{background-color:rgba(16,35,57,.92)!important}
+.campus-admin-console .campus-admin-main .bg-slate-950{background:#091827!important}
+.campus-admin-console .campus-admin-main .text-gray-900,.campus-admin-console .campus-admin-main .text-gray-800,.campus-admin-console .campus-admin-main .text-gray-700,.campus-admin-console .campus-admin-main .text-slate-900,.campus-admin-console .campus-admin-main .text-slate-800,.campus-admin-console .campus-admin-main .text-slate-700{color:#e6f0fc!important}
+.campus-admin-console .campus-admin-main .text-gray-600,.campus-admin-console .campus-admin-main .text-gray-500,.campus-admin-console .campus-admin-main .text-slate-600,.campus-admin-console .campus-admin-main .text-slate-500,.campus-admin-console .campus-admin-main .text-slate-400{color:#9fb4ca!important}
+.campus-admin-console .campus-admin-main .border-gray-50,.campus-admin-console .campus-admin-main .border-gray-100,.campus-admin-console .campus-admin-main .border-gray-200,.campus-admin-console .campus-admin-main .border-slate-50,.campus-admin-console .campus-admin-main .border-slate-100,.campus-admin-console .campus-admin-main .border-slate-200,.campus-admin-console .campus-admin-main .border-gray-300{border-color:rgba(133,169,202,.2)!important}
+.campus-admin-console .campus-admin-main [class*="rounded-2xl"][class*="border"],.campus-admin-console .campus-admin-main [class*="rounded-3xl"][class*="border"]{box-shadow:0 10px 28px rgba(0,0,0,.1)}
+.campus-admin-console .campus-admin-main input:not([type=checkbox]):not([type=radio]):not([type=color]),.campus-admin-console .campus-admin-main select,.campus-admin-console .campus-admin-main textarea{border-color:rgba(133,169,202,.28);background:#091a2b;color:#eff6ff}
+.campus-admin-console .campus-admin-main input::placeholder,.campus-admin-console .campus-admin-main textarea::placeholder{color:#8399b0}
+.campus-admin-console .campus-admin-main table{border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:13px}
+.campus-admin-console .campus-admin-main table th{background:#10263d;color:#dbeafe;border-color:rgba(133,169,202,.2)}
+.campus-admin-console .campus-admin-main table td{border-color:rgba(133,169,202,.16)}
+.campus-admin-console .campus-admin-main .bg-blue-50,.campus-admin-console .campus-admin-main .bg-indigo-50,.campus-admin-console .campus-admin-main .bg-cyan-50,.campus-admin-console .campus-admin-main .bg-sky-50{background-color:rgba(14,116,144,.18)!important}
+.campus-admin-console .campus-admin-main .bg-emerald-50,.campus-admin-console .campus-admin-main .bg-green-50{background-color:rgba(5,150,105,.17)!important}
+.campus-admin-console .campus-admin-main .bg-amber-50,.campus-admin-console .campus-admin-main .bg-yellow-50,.campus-admin-console .campus-admin-main .bg-orange-50{background-color:rgba(180,83,9,.19)!important}
+.campus-admin-console .campus-admin-main .bg-rose-50,.campus-admin-console .campus-admin-main .bg-red-50,.campus-admin-console .campus-admin-main .bg-pink-50{background-color:rgba(190,24,93,.17)!important}
+.campus-admin-console .campus-admin-main .text-blue-900,.campus-admin-console .campus-admin-main .text-blue-800,.campus-admin-console .campus-admin-main .text-blue-700,.campus-admin-console .campus-admin-main .text-indigo-900,.campus-admin-console .campus-admin-main .text-indigo-800,.campus-admin-console .campus-admin-main .text-indigo-700,.campus-admin-console .campus-admin-main .text-cyan-900,.campus-admin-console .campus-admin-main .text-cyan-800,.campus-admin-console .campus-admin-main .text-cyan-700,.campus-admin-console .campus-admin-main .text-sky-900,.campus-admin-console .campus-admin-main .text-sky-800,.campus-admin-console .campus-admin-main .text-sky-700{color:#9ee7ff!important}
+.campus-admin-console .campus-admin-main .text-emerald-900,.campus-admin-console .campus-admin-main .text-emerald-800,.campus-admin-console .campus-admin-main .text-emerald-700,.campus-admin-console .campus-admin-main .text-green-900,.campus-admin-console .campus-admin-main .text-green-800,.campus-admin-console .campus-admin-main .text-green-700{color:#86efc4!important}
+.campus-admin-console .campus-admin-main .text-amber-950,.campus-admin-console .campus-admin-main .text-amber-900,.campus-admin-console .campus-admin-main .text-amber-800,.campus-admin-console .campus-admin-main .text-amber-700,.campus-admin-console .campus-admin-main .text-orange-900,.campus-admin-console .campus-admin-main .text-orange-800,.campus-admin-console .campus-admin-main .text-orange-700{color:#fcd27a!important}
+.campus-admin-console .campus-admin-main .text-rose-950,.campus-admin-console .campus-admin-main .text-rose-900,.campus-admin-console .campus-admin-main .text-rose-800,.campus-admin-console .campus-admin-main .text-rose-700,.campus-admin-console .campus-admin-main .text-red-900,.campus-admin-console .campus-admin-main .text-red-800,.campus-admin-console .campus-admin-main .text-red-700{color:#fda4af!important}
+.campus-admin-console .campus-admin-main a:not([class*="text-rose"]):not([class*="text-emerald"]){color:#67d7f7}
+.campus-admin-console .campus-admin-main button{transition:filter .16s ease,transform .16s ease,box-shadow .16s ease}
+.campus-admin-console .campus-admin-main button:active{transform:translateY(1px)}
+.campus-admin-console .campus-admin-sidebar>div:last-child{border-color:rgba(133,169,202,.18)}
+.campus-admin-console .campus-admin-sidebar .text-slate-500{color:#7892ab!important}
+@media(max-width:767px){.campus-admin-console .campus-admin-main{padding:14px 10px 24px!important}.campus-admin-console .campus-admin-sidebar nav button{min-height:50px;padding-inline:4px}}

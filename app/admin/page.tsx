@@ -1797,10 +1797,10 @@ export default function CampusSyncAdmin() {
 
 
   return (
-    <div className="flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
+    <div className="campus-admin-console flex h-screen bg-slate-900 font-sans text-slate-100 overflow-hidden">
       
       {/* 🚀 サイドバーナビゲーション */}
-      <aside className="h-screen min-h-0 w-16 shrink-0 overflow-y-auto overscroll-contain bg-slate-950 border-r border-slate-800 p-2 md:w-64 md:p-6 flex flex-col justify-between">
+      <aside className="campus-admin-sidebar h-screen min-h-0 w-16 shrink-0 overflow-y-auto overscroll-contain bg-slate-950 border-r border-slate-800 p-2 md:w-64 md:p-6 flex flex-col justify-between">
         <div>
           <div className="mb-8 flex min-w-0 flex-col items-center gap-2 md:items-start">
             <div className="hidden max-w-full items-center gap-2 md:flex">
@@ -1873,7 +1873,7 @@ export default function CampusSyncAdmin() {
       </aside>
 
       {/* 🚀 メインコンテンツ */}
-      <main className="min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
+      <main className="campus-admin-main min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
         {activeTab === 'class-timetable' && <ClassTimetableAdmin />}
 
