@@ -178,5 +178,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
           ? '課題通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
           : result.kind === 'quick_notice'
             ? 'クイックお知らせ・パトロールを受信するLINEグループ' + result.sent + '件にも配信しました。'
-            : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
+            : result.kind === 'daily_digest'
+              ? '日次まとめを受信する設定のLINEグループ' + result.sent + '件にも配信しました。'
+              : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
 }
