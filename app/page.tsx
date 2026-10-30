@@ -1072,6 +1072,7 @@ export default function CampusSyncApp() {
 
       const route = hashRoutes[hash];
       if (!route) return;
+      if (hash === 'campus') setFacilitiesSubTab('map');
       setActiveTab(route.tab);
       setHashScrollTarget(route.scrollTarget || '');
     };
@@ -5761,7 +5762,8 @@ Supabaseの設定を確認してください。
             <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
             <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
             <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-            <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
+            <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); }} themeCls={themeCls} />
+            <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); }} themeCls={themeCls} />
             <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
             <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
             <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
@@ -5839,7 +5841,8 @@ Supabaseの設定を確認してください。
                 <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => { setActiveTab('countdowns'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => { setActiveTab('cafeteria'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => { setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => { setActiveTab('bus'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); setMobileMenuOpen(false); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
