@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildCafeteriaSoldOutFlexMessage } from '@/lib/line-flex';
@@ -30,9 +31,10 @@ export async function POST(request: Request) {
     return jsonError('LINEの売切通知には正しいAdmin用パスワードが必要です。', 401);
   }
 
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const activeLineBot = await getActiveLineBot();
+  const accessToken = activeLineBot?.accessToken || null;
   if (!accessToken) {
-    return jsonError('VercelにLINE_CHANNEL_ACCESS_TOKENが設定されていません。', 503);
+    return jsonError('Vercelに現在使用中のLINE BOTのアクセストークンが設定されていません。', 503);
   }
 
   const body = await request.json().catch(() => null) as { menuName?: unknown; price?: unknown } | null;
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
         return jsonError('LINEの送信上限に達した可能性があります。グループ配信結果：' + groupSummary, 502);
       }
       if (response.status === 401 || response.status === 403) {
-        return jsonError('LINE_CHANNEL_ACCESS_TOKENを確認してください。グループ配信結果：' + groupSummary, 502);
+        return jsonError('現在使用中のLINE BOT設定を確認してください。グループ配信結果：' + groupSummary, 502);
       }
       return jsonError('LINE友だち向け通知に失敗しました（HTTP ' + response.status + '）。グループ配信結果：' + groupSummary, 502);
     }
