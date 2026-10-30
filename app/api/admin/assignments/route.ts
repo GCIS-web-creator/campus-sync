@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
@@ -100,11 +101,12 @@ export async function POST(request: Request) {
     status: 'failed',
     message: '課題は保存しましたが、LINE通知を送信できませんでした。',
   };
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const activeLineBot = await getActiveLineBot();
+  const accessToken = activeLineBot?.accessToken || null;
   if (!accessToken) {
     lineNotification = {
       status: 'failed',
-      message: '課題は公開されましたが、LINE_CHANNEL_ACCESS_TOKENが未設定のためLINE通知は送信されていません。',
+      message: '課題は公開されましたが、現在使用中のLINE BOTの認証情報が未設定のためLINE通知は送信されていません。',
     };
   } else {
     const typeLabel = data.type === 'paper'
