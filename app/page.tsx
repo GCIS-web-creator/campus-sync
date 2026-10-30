@@ -17,7 +17,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
   ThermometerSun, Info, Users, Check, X,
-  Plus, ChevronRight, AlertTriangle, Sparkles, Star,
+  Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
   Volume2, Coffee, Moon, Sun, HelpCircle
@@ -913,6 +913,7 @@ export default function CampusSyncApp() {
 
   const [activeTab, setActiveTab] = useState('home');
   const [hashScrollTarget, setHashScrollTarget] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeTabHashSyncRef = useRef(false);
   const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
@@ -5387,28 +5388,26 @@ Supabaseの設定を確認してください。
     <div className={`flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
       
       {/* デスクトップ用 左側固定サイドバーレイアウト */}
-      <aside className="campus-theme-sidebar hidden md:flex flex-col w-64 bg-white border-r border-gray-100 shadow-xs z-30 relative">
-        <div className="p-5 flex flex-col h-full justify-between">
-          <div>
-            <div className="mb-6 min-w-0 max-w-full">
-              <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
-            </div>
-            <nav className="space-y-1">
-              <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-              <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
-              <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
-              <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
-              <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-              <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
-              <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
-              <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
-              <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
-              <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
-              <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
-              <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
-            </nav>
+      <aside className="campus-theme-sidebar sticky top-0 hidden h-dvh w-64 shrink-0 overflow-hidden border-r border-gray-100 bg-white shadow-xs z-30 md:flex md:flex-col">
+        <div className="flex h-full min-h-0 flex-col p-5">
+          <div className="mb-5 min-w-0 max-w-full shrink-0">
+            <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
           </div>
-          <div className="text-[10px] text-gray-400 font-bold border-t pt-3">
+          <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
+            <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
+            <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
+            <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
+            <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
+            <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
+            <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} themeCls={themeCls} />
+            <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+            <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
+            <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
+            <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
+            <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
+            <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
+          </nav>
+          <div className="mt-3 shrink-0 border-t pt-3 text-[10px] font-bold text-gray-400">
             <span>© 2026 CampusSync Pro</span>
           </div>
         </div>
@@ -5418,17 +5417,80 @@ Supabaseの設定を確認してください。
       <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
-        <header className="campus-theme-mobile-header md:hidden flex justify-between items-center px-4 py-3 bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-100">
+        <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">
           <div className="min-w-0 max-w-[68%] shrink">
             <CampusSyncLogo variant="wordmark" height={23} theme="auto" />
           </div>
-          <div className={`text-xs font-black px-2.5 py-1 rounded-full ${themeCls.lightBg} ${themeCls.text}`}>
-            ★ {score} pt
+          <div className="flex shrink-0 items-center gap-2">
+            <div className={`rounded-full px-2.5 py-1.5 text-[10px] font-black ${themeCls.lightBg} ${themeCls.text}`}>
+              ★ {score} pt
+            </div>
+            <button
+              type="button"
+              aria-label="メニューを開く"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="campus-mobile-menu"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 active:scale-95"
+            >
+              <Menu size={22} className="h-[22px] w-[22px] shrink-0" />
+            </button>
           </div>
         </header>
 
+        {mobileMenuOpen && (
+          <div
+            className="fixed inset-0 z-[80] md:hidden"
+            role="presentation"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
+            <section
+              id="campus-mobile-menu"
+              role="dialog"
+              aria-modal="true"
+              aria-label="CampusSync 全機能メニュー"
+              className="absolute right-0 top-0 flex h-[100dvh] w-[min(88vw,370px)] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl animate-in slide-in-from-right duration-200"
+              onClick={event => event.stopPropagation()}
+            >
+              <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-4">
+                <div className="min-w-0">
+                  <CampusSyncLogo variant="wordmark" height={26} theme="auto" />
+                  <p className="mt-1 text-[9px] font-bold tracking-[0.16em] text-slate-400">ALL CAMPUS FEATURES</p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="メニューを閉じる"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  <X size={21} className="h-[21px] w-[21px] shrink-0" />
+                </button>
+              </header>
+              <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
+                <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => { setActiveTab('countdowns'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => { setActiveTab('cafeteria'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities'} onClick={() => { setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => { setActiveTab('bus'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); setMobileMenuOpen(false); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
+                <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => { setActiveTab('club'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => { setActiveTab('notifications'); setMobileMenuOpen(false); }} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
+                <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+              </nav>
+              <footer className="shrink-0 border-t border-slate-100 px-4 py-3 text-[10px] font-bold text-slate-400">
+                © 2026 CampusSync Pro
+              </footer>
+            </section>
+          </div>
+        )}
+
+
         {/* スクロールコンテンツコンテナ */}
-        <main className={activeTab === 'chat' || activeTab === 'ai' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-16 md:pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-24 md:pb-8 px-4 pt-4 md:pt-6"}>
+        <main className={activeTab === 'chat' || activeTab === 'ai' ? "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
           <div
             key={activeTab}
             className={activeTab === 'chat' || activeTab === 'ai'
@@ -5457,18 +5519,6 @@ Supabaseの設定を確認してください。
           ) : null}
         </main>
 
-        {/* モバイルスマートフォンスクリーン用ボトムナビゲーションバー */}
-        <nav className="campus-theme-mobile-nav md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center h-16 pb-2 px-1 z-20 overflow-x-auto">
-          <NavItem icon={<Home size={20} />} label="ホーム" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-          <NavItem icon={<Calendar size={20} />} label="時間割" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
-          <NavItem icon={<Calendar size={20} />} label="学校予定" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
-          <NavItem icon={<Clock size={20} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
-          <NavItem icon={<Utensils size={20} />} label="学食" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-          <NavItem icon={<Train size={20} />} label="電車" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
-          <NavItem icon={<Sparkles size={20} />} label="AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
-          <NavItem icon={<MessageCircle size={20} />} label="チャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
-          <NavItem icon={<Settings size={20} />} label="設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
-        </nav>
       </div>
 
       {/* --- アプリケーションモーダルUIコンポーネント群 --- */}
