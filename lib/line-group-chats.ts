@@ -109,7 +109,7 @@ export async function pushLineMessagesToRegisteredChats(
   // registered chat. Other notification categories continue to respect opt-in flags.
   const { data, error } = kind === 'daily_digest'
     ? await activeChatsQuery.or(
-        'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true,receive_assignment_updates.eq.true',
+        'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true',
       )
     : kind === 'cafeteria_sold_out' || kind === 'quick_notice'
       ? await activeChatsQuery
@@ -159,7 +159,7 @@ export async function pushLineMessagesToRegisteredChats(
   }));
 
   if (deliveryBatchId && outcomes.length > 0) {
-    const { error: logError } = await admin.from('line_group_delivery_logs').insert(
+    const { error: logError } = await admin.from('line_group_delivery_logs').upsert(
       outcomes.map(outcome => ({
         delivery_batch_id: deliveryBatchId,
         kind,
@@ -170,6 +170,7 @@ export async function pushLineMessagesToRegisteredChats(
         error_message: outcome.success ? null : ('errorMessage' in outcome ? outcome.errorMessage : '送信に失敗しました。'),
         sent_at: new Date().toISOString(),
       })),
+      { onConflict: 'delivery_batch_id,chat_id' },
     );
     if (logError) console.error('LINEグループ配信結果の保存に失敗:', logError.message);
   }
@@ -206,7 +207,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
           : result.kind === 'quick_notice'
             ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
             : result.kind === 'daily_digest'
-              ? '日次まとめを受信する設定のLINEグループはありません（時間割・時刻表・課題・学校予定の受信設定を確認してください）。'
+              ? '日次まとめを受信する設定のLINEグループはありません（電車時刻表・時間割・学校行事の受信設定を確認してください）。'
               : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
   if (result.failed > 0) {
     const statusSummary = Object.entries(result.failureStatuses || {})

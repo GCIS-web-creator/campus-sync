@@ -1,7 +1,8 @@
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
+import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { buildClassTimetableFlexMessage, getTokyoTomorrowTimetableInfo } from '@/lib/class-timetable';
+import { buildClassTimetableFlexMessage, getTokyoTomorrowTimetableInfo, mapClassTimetableRows, CLASS_TIMETABLE_DATA, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
@@ -69,7 +70,15 @@ export async function POST(request: Request) {
     });
   }
 
-  const flex = buildClassTimetableFlexMessage(tomorrow.dayKey, tomorrow.dateLabel);
+  let timetable = CLASS_TIMETABLE_DATA;
+  const url=process.env.NEXT_PUBLIC_SUPABASE_URL||process.env.SUPABASE_URL||'',key=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
+  if(url&&key){
+    const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+    const {data,error}=await db.from('class_timetable_slots').select('group_name,day_key,period,subject,teacher').order('group_name').order('day_key').order('period');
+    if(!error&&data?.length)timetable=mapClassTimetableRows(data as ClassTimetableRow[]);
+    else if(error)console.error('LINE手動時間割：DB取得エラー（初期データへフォールバック）',error.message);
+  }
+  const flex=buildClassTimetableFlexMessage(tomorrow.dayKey,tomorrow.dateLabel,timetable);
   const retryKey = manualRequest ? randomUUID() : stableRetryKey(tomorrow.dateKey);
 
   try {

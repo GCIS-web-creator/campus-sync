@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   const admin = getAdmin();
   if (!admin) return NextResponse.json({ success: false, message: 'Supabaseの設定が不足しています。' }, { status: 503 });
 
-  const [rotationResult, eventResult] = await Promise.all([
+  const [rotationResult, eventResult, historyResult] = await Promise.all([
     admin.from('line_bot_rotation')
       .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at')
       .eq('id', 1)
@@ -54,6 +54,10 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    admin.from('line_bot_rotation_events')
+      .select('id,previous_bot_slot,new_bot_slot,effective_date,created_at,acknowledged_at')
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
   if (rotationResult.error || !rotationResult.data) {
@@ -62,6 +66,10 @@ export async function GET(request: Request) {
       success: false,
       message: 'LINE BOTローテーション用SQLがまだ実行されていません。supabase/line-bot-rotation.sql を実行してください。',
     }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+  if (historyResult.error) {
+    console.error('LINE BOT切替履歴を取得できません:', historyResult.error.message);
+    return NextResponse.json({ success: false, message: 'LINE BOT切替履歴を取得できません。SQL設定を確認してください。' }, { status: 500 });
   }
   if (eventResult.error) {
     console.error('LINE BOT切替通知を取得できません:', eventResult.error.message);
@@ -72,6 +80,7 @@ export async function GET(request: Request) {
     success: true,
     rotation: rotationResult.data,
     pendingEvent: eventResult.data || null,
+    history: historyResult.data || [],
     environment: getLineBotEnvironmentStatus(),
     notice: 'Channel Secretとアクセストークンの値はセキュリティのため返却しません。',
   }, { headers: { 'Cache-Control': 'no-store' } });

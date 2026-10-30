@@ -100,6 +100,21 @@ export const CLASS_TIMETABLE_DATA: ClassTimetableData = {
   },
 };
 
+
+export type ClassTimetableRow = { group_name: ClassTimetableGroup; day_key: ClassTimetableDayKey; period: number; subject: string; teacher: string };
+export function mapClassTimetableRows(rows: ClassTimetableRow[]): ClassTimetableData {
+ const result: ClassTimetableData = {'7組':{Mon:[],Tue:[],Wed:[],Thu:[],Fri:[]},'8組':{Mon:[],Tue:[],Wed:[],Thu:[],Fri:[]}};
+ const days = new Set<ClassTimetableDayKey>(['Mon','Tue','Wed','Thu','Fri']);
+ for (const row of rows || []) {
+  if (!row || (row.group_name !== '7組' && row.group_name !== '8組') || !days.has(row.day_key)) continue;
+  const period=Number(row.period),subject=String(row.subject||'').trim().slice(0,120);
+  if (!Number.isInteger(period)||period<1||period>8||!subject) continue;
+  result[row.group_name][row.day_key].push({period,subject,teacher:String(row.teacher||'').trim().slice(0,120)});
+ }
+ for (const group of ['7組','8組'] as const) for (const day of ['Mon','Tue','Wed','Thu','Fri'] as const) result[group][day].sort((a,b)=>a.period-b.period);
+ return result;
+}
+
 const ENGLISH_DAY_TO_KEY: Record<string, ClassTimetableDayKey | null> = {
   Mon: 'Mon',
   Tue: 'Tue',
@@ -151,8 +166,8 @@ export function getTokyoTomorrowTimetableInfo(now: Date = new Date()): TokyoTomo
   };
 }
 
-function buildGroupBubble(group: ClassTimetableGroup, dayKey: ClassTimetableDayKey, dateLabel: string) {
-  const rows = CLASS_TIMETABLE_DATA[group][dayKey];
+function buildGroupBubble(group: ClassTimetableGroup, dayKey: ClassTimetableDayKey, dateLabel: string, timetable: ClassTimetableData = CLASS_TIMETABLE_DATA) {
+  const rows = timetable[group][dayKey];
   const accent = group === '7組' ? '#0891B2' : '#4F46E5';
   const contents: Record<string, unknown>[] = rows.map(slot => ({
     type: 'box',
@@ -221,15 +236,15 @@ function buildGroupBubble(group: ClassTimetableGroup, dayKey: ClassTimetableDayK
   };
 }
 
-export function buildClassTimetableFlexMessage(dayKey: ClassTimetableDayKey, dateLabel: string) {
+export function buildClassTimetableFlexMessage(dayKey: ClassTimetableDayKey, dateLabel: string, timetable: ClassTimetableData = CLASS_TIMETABLE_DATA) {
   return {
     type: 'flex',
     altText: ('CampusSync｜' + dateLabel + 'の7組・8組時間割').slice(0, 400),
     contents: {
       type: 'carousel',
       contents: [
-        buildGroupBubble('7組', dayKey, dateLabel),
-        buildGroupBubble('8組', dayKey, dateLabel),
+        buildGroupBubble('7組', dayKey, dateLabel, timetable),
+        buildGroupBubble('8組', dayKey, dateLabel, timetable),
       ],
     },
   };

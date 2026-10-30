@@ -111,12 +111,16 @@ export async function POST(request: Request) {
     const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     if (supabaseUrl && supabasePublishableKey) {
       try {
-        const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
+        const historyKey=process.env.SUPABASE_SERVICE_ROLE_KEY||supabasePublishableKey;
+        const supabase=createClient(supabaseUrl,historyKey,{auth:{persistSession:false,autoRefreshToken:false}});
+        let {error:historyError}=await supabase.from('line_broadcast_history').insert({
+          title,message,status:'sent',sent_at:new Date().toISOString(),delivery_batch_id:deliveryBatchId,
+          bot_slot:activeLineBot?.slot&&activeLineBot.slot>0?activeLineBot.slot:null,
         });
-        const { error: historyError } = await supabase
-          .from('line_broadcast_history')
-          .insert({ title, message, status: 'sent', sent_at: new Date().toISOString(), delivery_batch_id: deliveryBatchId });
+        if(historyError){
+          const fallback=await supabase.from('line_broadcast_history').insert({title,message,status:'sent',sent_at:new Date().toISOString(),delivery_batch_id:deliveryBatchId});
+          historyError=fallback.error;
+        }
         if (historyError) {
           console.error('LINE配信履歴の保存に失敗しました:', historyError.message);
         } else {

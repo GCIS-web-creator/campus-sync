@@ -14,7 +14,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
-import { CLASS_TIMETABLE_DATA, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
+import { CLASS_TIMETABLE_DATA, type ClassTimetableData, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
@@ -1624,7 +1624,15 @@ const handleDeleteLostWatch = async (id: string) => {
   // 添付された7組・8組の時間割。プロフィールが7組・8組なら対応する表示を初期選択する。
   const [selectedTimetableGroup, setSelectedTimetableGroup] = useState<ClassTimetableGroup>('7組');
   const [selectedDay, setSelectedDay] = useState<ClassTimetableDayKey>('Mon');
-  const timetableData = CLASS_TIMETABLE_DATA;
+  const [timetableData, setTimetableData] = useState<ClassTimetableData>(CLASS_TIMETABLE_DATA);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/class-timetable', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => { if (!cancelled && result?.success && result?.timetable) setTimetableData(result.timetable as ClassTimetableData); })
+      .catch(error => console.error('時間割データの取得に失敗:', error));
+    return () => { cancelled = true; };
+  }, []);
   const [menuItems, setMenuItems] = useState<CafeteriaMenuItem[]>([]);
   const [cafeteriaMenuLoading, setCafeteriaMenuLoading] = useState(true);
   const [cafeteriaMenuLoadMessage, setCafeteriaMenuLoadMessage] = useState('本日の献立を読み込んでいます…');
@@ -5593,7 +5601,7 @@ Supabaseの設定を確認してください。
       tab: 'school-schedule',
       kind: '学校予定',
     })),
-    ...Object.entries(CLASS_TIMETABLE_DATA).flatMap(([group, days]) =>
+    ...Object.entries(timetableData).flatMap(([group, days]) =>
       Object.entries(days).flatMap(([day, slots]) =>
         slots.map(slot => ({
           id: 'timetable-' + group + '-' + day + '-' + slot.period,

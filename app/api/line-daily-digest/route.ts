@@ -2,7 +2,7 @@ import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo } from '@/lib/class-timetable';
+import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { buildTimetableDirectionBox, type TimetableDeparture } from '@/lib/line-flex';
 
@@ -147,6 +147,7 @@ function buildClassTimetableBubble(input: {
   group: '7組' | '8組';
   dateLabel: string;
   dayKey: ClassTimetableDayKey | null;
+  timetable: ClassTimetableData;
 }) {
   const isSeven = input.group === '7組';
   const accent = isSeven ? '#0891B2' : '#4F46E5';
@@ -166,7 +167,7 @@ function buildClassTimetableBubble(input: {
       ],
     });
   } else {
-    const slots = CLASS_TIMETABLE_DATA[input.group][input.dayKey];
+    const slots = input.timetable[input.group][input.dayKey];
     for (const slot of slots) {
       rows.push({
         type: 'box',
@@ -289,6 +290,7 @@ function buildDailyDigest(input: {
   today: string;
   tomorrowDateLabel: string;
   tomorrowDayKey: ClassTimetableDayKey | null;
+  timetable: ClassTimetableData;
   kokubunji: TimetableDeparture[];
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
@@ -314,11 +316,13 @@ function buildDailyDigest(input: {
               group: '7組',
               dateLabel: input.tomorrowDateLabel,
               dayKey: input.tomorrowDayKey,
+              timetable: input.timetable,
             }),
             buildClassTimetableBubble({
               group: '8組',
               dateLabel: input.tomorrowDateLabel,
               dayKey: input.tomorrowDayKey,
+              timetable: input.timetable,
             }),
             buildSchoolEventsBubble({
               today: input.today,
@@ -386,7 +390,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [trainResult, eventResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service')
       .order('direction', { ascending: true })
@@ -397,11 +401,17 @@ export async function POST(request: Request) {
       .gte('event_date', today)
       .order('event_date', { ascending: true })
       .limit(4),
+    admin.from('class_timetable_slots')
+      .select('group_name,day_key,period,subject,teacher')
+      .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
   if (eventResult.error) console.error('日次まとめ：行事取得エラー', eventResult.error.message);
+  if (classTimetableResult.error) console.error('日次まとめ：時間割取得エラー（初期データへフォールバック）', classTimetableResult.error.message);
 
+  const timetableRows = (classTimetableResult.data || []) as ClassTimetableRow[];
+  const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows) : CLASS_TIMETABLE_DATA;
   const trainRows = (trainResult.data || []) as TrainRow[];
   // 10/30臨時配信は16:50から18:00まで。通常の日次まとめは16:00から18:00まで。
   const timetableStartMinute = timetableOnlyToday ? 16 * 60 + 50 : 16 * 60;
@@ -425,6 +435,7 @@ export async function POST(request: Request) {
     today,
     tomorrowDateLabel: tomorrow.dateLabel,
     tomorrowDayKey: tomorrow.dayKey,
+    timetable,
     kokubunji,
     higashimurayama,
     trainError: Boolean(trainResult.error),
@@ -454,11 +465,28 @@ export async function POST(request: Request) {
       : 'LINEへの日次まとめ配信に失敗しました（HTTP ' + response.status + '）。', 502);
   }
 
+  const digestTitle = timetableOnlyToday ? '16:50 鷹の台駅 電車時刻表' : '16:00 CampusSync 学校情報まとめ';
+  const digestText = String((flex as { altText?: unknown }).altText || digestTitle);
+  let historySaved = false;
+  const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', retryKey).maybeSingle();
+  if (!historyLookup.error && historyLookup.data) {
+    historySaved = true;
+  } else {
+    const historyWithBot = await admin.from('line_broadcast_history').insert({
+      title: digestTitle, message: digestText, status: 'sent', sent_at: new Date().toISOString(),
+      delivery_batch_id: retryKey, bot_slot: activeLineBot?.slot && activeLineBot.slot > 0 ? activeLineBot.slot : null,
+    });
+    if (!historyWithBot.error) historySaved = true;
+    else {
+      const fallback = await admin.from('line_broadcast_history').insert({
+        title: digestTitle, message: digestText, status: 'sent', sent_at: new Date().toISOString(), delivery_batch_id: retryKey,
+      });
+      if (!fallback.error) historySaved = true;
+      else console.error('日次まとめの配信履歴を保存できません:', fallback.error.message);
+    }
+  }
   const groupDelivery = await pushLineMessagesToRegisteredChats(
-    accessToken,
-    [flex],
-    retryKey,
-    timetableOnlyToday ? 'train_timetable' : 'daily_digest',
+    accessToken, [flex], retryKey, timetableOnlyToday ? 'train_timetable' : 'daily_digest', retryKey,
   );
 
   return NextResponse.json({
@@ -470,6 +498,7 @@ export async function POST(request: Request) {
       classTimetable: timetableOnlyToday ? false : tomorrow.dayKey !== null,
       events: timetableOnlyToday ? 0 : events.length,
       carouselCards: timetableOnlyToday ? 1 : 4,
+      historySaved,
     },
     groupDelivery,
     message: (timetableOnlyToday

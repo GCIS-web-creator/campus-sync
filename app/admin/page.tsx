@@ -9,6 +9,7 @@ import ClubNotesAdmin from '@/components/ClubNotesAdmin';
 import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
 import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
 import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
+import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -253,6 +254,7 @@ type LineBroadcastHistoryRow = {
   status: string;
   sent_at: string;
   delivery_batch_id?: string | null;
+  bot_slot?: number | null;
 };
 
 type LineGroupPreferenceKey =
@@ -425,6 +427,7 @@ export default function CampusSyncAdmin() {
   const [lineBotRotation, setLineBotRotation] = useState<{
     rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; rotation_hold_until?: string | null; updated_at: string };
     pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string } | null;
+    history: Array<{ id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; acknowledged_at: string | null }>;
     environment: Array<{ slot: number; channelSecretConfigured: boolean; accessTokenConfigured: boolean }>;
   } | null>(null);
   const [lineBotRotationLoading, setLineBotRotationLoading] = useState(false);
@@ -624,29 +627,18 @@ export default function CampusSyncAdmin() {
     let cancelled = false;
     const loadHistory = async () => {
       setLineHistoryLoading(true);
-      let { data, error } = await supabase
-        .from('line_broadcast_history')
-        .select('id, title, message, status, sent_at, delivery_batch_id')
-        .order('sent_at', { ascending: false })
-        .limit(20);
-
-      if (error) {
-        const fallback = await supabase
-          .from('line_broadcast_history')
-          .select('id, title, message, status, sent_at')
-          .order('sent_at', { ascending: false })
-          .limit(20);
-        data = fallback.data as typeof data;
-        error = fallback.error;
-      }
-      if (cancelled) return;
-      if (error) {
-        console.error('LINE配信履歴の取得に失敗:', error);
-        setLineBroadcastHistory([]);
-        setLineHistoryMessage('配信履歴を読み込めません。SQL設定を確認してください。');
-      } else {
-        setLineBroadcastHistory((data || []) as LineBroadcastHistoryRow[]);
+      try {
+        const response=await fetch('/api/admin/line-broadcast-history',{cache:'no-store'});
+        const result=await response.json().catch(()=>({}));
+        if(cancelled)return;
+        if(!response.ok||!result?.success)throw new Error(result?.message||'LINE配信履歴を読み込めませんでした。');
+        setLineBroadcastHistory((result.history||[]) as LineBroadcastHistoryRow[]);
         setLineHistoryMessage('');
+      } catch(error) {
+        if(cancelled)return;
+        console.error('LINE配信履歴の取得に失敗:',error);
+        setLineBroadcastHistory([]);
+        setLineHistoryMessage(error instanceof Error?error.message:'LINE配信履歴を読み込めません。');
       }
       setLineHistoryLoading(false);
     };
@@ -1843,6 +1835,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="生徒プロフィール書き出し" title="生徒プロフィール書き出し" onClick={() => setActiveTab('student-profile-export')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'student-profile-export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <FilePlus size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
             </button>
+            <button aria-label="7組・8組時間割編集" title="7組・8組時間割編集" onClick={() => setActiveTab('class-timetable')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'class-timetable' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">時間割編集</span>
+            </button>
             <button aria-label="週間学校予定表" title="週間学校予定表" onClick={() => setActiveTab('school-schedule')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-schedule' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">週間学校予定表</span>
             </button>
@@ -1880,6 +1875,8 @@ export default function CampusSyncAdmin() {
       {/* 🚀 メインコンテンツ */}
       <main className="min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
+        {activeTab === 'class-timetable' && <ClassTimetableAdmin />}
+
         {activeTab === 'school-schedule' && (
           <SchoolScheduleAdmin adminPassword={adminApiPassword} />
         )}
@@ -2173,6 +2170,19 @@ export default function CampusSyncAdmin() {
                   {lineBotRotationMessage || '管理者認証を入力してください。'}
                 </div>
               )}
+              {lineBotRotation.history.length > 0 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                  <h4 className="text-sm font-black text-white">直近のBOT切替履歴</h4>
+                  <div className="space-y-2">
+                    {lineBotRotation.history.slice(0,10).map(event=>(
+                      <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2">
+                        <div><p className="text-xs font-bold text-slate-200">{event.previous_bot_slot?'BOT '+event.previous_bot_slot:'初期設定'} → BOT {event.new_bot_slot}</p><p className="mt-1 text-[10px] text-slate-500">{new Date(event.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</p></div>
+                        <span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(event.acknowledged_at?'bg-emerald-500/10 text-emerald-300':'bg-amber-500/10 text-amber-200')}>{event.acknowledged_at?'グループ切替確認済み':'確認待ち'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {lineBotRotationMessage && lineBotRotation && (
                 <p role="status" className="rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-xs text-slate-300">{lineBotRotationMessage}</p>
               )}
@@ -2446,6 +2456,7 @@ export default function CampusSyncAdmin() {
                               </div>
                               <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap break-words">{item.message}</p>
                               <p className="mt-2 text-[10px] text-slate-600">{item.sent_at ? new Date(item.sent_at).toLocaleString('ja-JP') : '日時不明'}</p>
+                              <p className="mt-1 text-[10px] text-cyan-300">{item.bot_slot ? '使用BOT：BOT ' + item.bot_slot : '使用BOT：旧配信・記録なし'}</p>
                               {item.delivery_batch_id ? (
                                 <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
                                   {lineGroupLogs.filter(log => log.delivery_batch_id === item.delivery_batch_id).map(log => (
