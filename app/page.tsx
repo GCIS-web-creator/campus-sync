@@ -380,6 +380,8 @@ type LostFoundWatch = {
   is_active: boolean;
   created_at: string;
 };
+type SearchableCountdownEvent = { id: string; title: string; summary: string; event_date: string; is_active: boolean };
+type SearchableScheduleItem = { id: string; date: string; dayLabel: string; time: string; title: string; location: string; details: string };
 
 type CafeteriaMenuItem = {
   id: string;
@@ -1608,6 +1610,59 @@ export default function CampusSyncApp() {
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost' | 'map'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
+// 学校イベント・カウントダウンを全体検索用に取得する。
+useEffect(() => {
+  let cancelled = false;
+  fetch('/api/school-countdowns', { cache: 'no-store' })
+    .then(async response => {
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'イベントを取得できませんでした。');
+      return result;
+    })
+    .then(result => {
+      if (cancelled) return;
+      const rows = Array.isArray(result.events) ? result.events as SearchableCountdownEvent[] : [];
+      setSearchableCountdownEvents(rows.filter(event => event.is_active));
+    })
+    .catch(error => {
+      if (!cancelled) console.warn('全体検索用イベントを取得できません:', error);
+    });
+  return () => { cancelled = true; };
+}, []);
+
+// 今週の学校予定表を全体検索に加える。前後の週は学校予定表タブから確認できる。
+useEffect(() => {
+  let cancelled = false;
+  const loadCurrentWeek = async () => {
+    const today = getTokyoDateKey();
+    const [year, month, day] = today.split('-').map(Number);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    const mondayOffset = (utcDate.getUTCDay() + 6) % 7;
+    utcDate.setUTCDate(utcDate.getUTCDate() - mondayOffset);
+    const weekStart = utcDate.toISOString().slice(0, 10);
+    try {
+      const response = await fetch('/api/school-schedule?weekStart=' + encodeURIComponent(weekStart), { cache: 'no-store' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || '学校予定表を取得できませんでした。');
+      const days = Array.isArray(result.schedule?.days) ? result.schedule.days : [];
+      const items = days.flatMap((day: any) => Array.isArray(day.items) ? day.items.map((item: any, index: number) => ({
+        id: String(item.id || day.date + '-' + index),
+        date: String(day.date || ''),
+        dayLabel: String(day.dayLabel || ''),
+        time: String(item.time || ''),
+        title: String(item.title || ''),
+        location: String(item.location || ''),
+        details: String(item.details || ''),
+      })) : []);
+      if (!cancelled) setSearchableScheduleItems(items);
+    } catch (error) {
+      if (!cancelled) console.warn('全体検索用学校予定を取得できません:', error);
+    }
+  };
+  void loadCurrentWeek();
+  return () => { cancelled = true; };
+}, []);
+
 // 校内施設マップ：認証済みの生徒に、管理者が公開した施設情報だけを取得する。
 useEffect(() => {
   let cancelled = false;
@@ -1836,6 +1891,8 @@ const handleDeleteLostWatch = async (id: string) => {
   const [lostWatchMessage, setLostWatchMessage] = useState('');
   const [campusFacilities, setCampusFacilities] = useState<CampusFacility[]>([]);
   const [campusFacilitiesMessage, setCampusFacilitiesMessage] = useState('');
+  const [searchableCountdownEvents, setSearchableCountdownEvents] = useState<SearchableCountdownEvent[]>([]);
+  const [searchableScheduleItems, setSearchableScheduleItems] = useState<SearchableScheduleItem[]>([]);
   const [profileSaving, setProfileSaving] = useState(false);
   const [scoreSaving, setScoreSaving] = useState(false);
   const [notifications, setNotifications] = useState<AppSchoolNotification[]>([]);
@@ -5675,6 +5732,34 @@ Supabaseの設定を確認してください。
   }
 
   const globalSearchItems: CampusSearchItem[] = [
+    ...searchableCountdownEvents.map(event => ({
+      id: 'event-' + event.id,
+      title: event.title,
+      description: [event.event_date, event.summary].filter(Boolean).join(' ・ '),
+      keywords: ['行事', 'イベント', 'カウントダウン', '学校予定'],
+      tab: 'countdowns',
+      kind: '学校イベント',
+    })),
+    ...searchableScheduleItems.map(item => ({
+      id: 'schedule-' + item.id,
+      title: item.title,
+      description: [item.date, item.dayLabel, item.time, item.location, item.details].filter(Boolean).join(' ・ '),
+      keywords: ['学校予定', '行事', '連絡', '時間', '場所'],
+      tab: 'school-schedule',
+      kind: '学校予定',
+    })),
+    ...Object.entries(CLASS_TIMETABLE_DATA).flatMap(([group, days]) =>
+      Object.entries(days).flatMap(([day, slots]) =>
+        slots.map(slot => ({
+          id: 'timetable-' + group + '-' + day + '-' + slot.period,
+          title: slot.subject,
+          description: group + ' ・ ' + day + '曜日 ・ ' + slot.period + '限 ・ ' + slot.teacher,
+          keywords: ['時間割', '授業', group, day, slot.teacher],
+          tab: 'timetable',
+          kind: '時間割',
+        })),
+      ),
+    ),
     ...visibleTodos.map((todo: any) => ({
       id: 'todo-' + String(todo.id),
       title: String(todo.title || '課題・提出物'),
