@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -66,10 +67,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const activeLineBot = await getActiveLineBot();
+      const accessToken = activeLineBot?.accessToken || null;
   if (!accessToken) {
     return NextResponse.json(
-      { success: false, message: 'LINE_CHANNEL_ACCESS_TOKEN がサーバー環境変数に設定されていません。' },
+      { success: false, message: '現在使用中のLINE BOTのアクセストークンが設定されていません。' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } },
     );
   }
@@ -92,7 +94,7 @@ export async function POST(request: Request) {
       console.error('LINE broadcast API error status:', lineResponse.status);
       let errorMessage = `LINE配信に失敗しました（HTTP ${lineResponse.status}）。LINE Developersの設定を確認してください。`;
       if (lineResponse.status === 401 || lineResponse.status === 403) {
-        errorMessage = 'LINE配信に失敗しました。LINE_CHANNEL_ACCESS_TOKEN を確認してください。';
+        errorMessage = 'LINE配信に失敗しました。現在使用中のLINE BOT設定を確認してください。';
       } else if (lineResponse.status === 429) {
         errorMessage = 'LINEの利用上限または送信制限に達した可能性があります。公式アカウントの利用状況を確認してください。';
       }
