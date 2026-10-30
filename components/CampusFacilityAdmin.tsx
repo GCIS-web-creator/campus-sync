@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { Building2, MapPin, Plus, Save, Trash2, Image as ImageIcon, Crosshair } from 'lucide-react';
 
 type FacilityRow = {
@@ -88,12 +89,6 @@ export default function CampusFacilityAdmin({
     }
   };
 
-  useEffect(() => {
-    if (adminPassword.trim()) void load();
-    // Password is entered by staff; no request is made until it exists.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminPassword]);
-
   const edit = (row: FacilityRow) => {
     setEditingId(row.id);
     setForm({
@@ -168,7 +163,7 @@ export default function CampusFacilityAdmin({
     }
   };
 
-  const placePin = (event: React.MouseEvent<HTMLDivElement>) => {
+  const placePin = (event: MouseEvent<HTMLDivElement>) => {
     if (!form.map_image_url) return;
     const rect = event.currentTarget.getBoundingClientRect();
     setForm(current => ({
