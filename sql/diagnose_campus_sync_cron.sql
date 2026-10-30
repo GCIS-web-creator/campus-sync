@@ -7,7 +7,7 @@ select
   (select extversion from pg_extension where extname = 'pg_cron') as pg_cron_version,
   (select extversion from pg_extension where extname = 'pg_net') as pg_net_version;
 
--- 2) Confirm the scheduler worker is running (no row may indicate a stopped worker).
+-- 2) Confirm the scheduler worker is running.
 select
   pid as process_id,
   usename as database_user,
@@ -18,7 +18,7 @@ select
 from pg_stat_activity
 where application_name ilike 'pg_cron scheduler';
 
--- 3) Registered jobs. Do not select or share the raw command because it contains the authorization secret.
+-- 3) Daily LINE digest and Sunday weekly schedule. Do not select raw command (it contains the secret).
 select
   jobid,
   jobname,
@@ -26,22 +26,34 @@ select
   active,
   command like '%REPLACE_WITH_CRON_SECRET%' as secret_placeholder_left,
   case
-    when command like '%/api/line-train-timetable%' then 'train timetable'
-    when command like '%/api/line-class-timetable%' then 'class timetable'
-    when command like '%/api/line-assignment-deadlines%' then 'assignment deadline'
-    when command like '%/api/push/reminders%' then 'web push reminders'
+    when command like '%/api/line-daily-digest%' then 'daily LINE digest (16:00 JST)'
+    when command like '%/api/line-weekly-school-schedule%' then 'weekly schedule (Sunday 09:00 JST)'
+    when command like '%/api/push/reminders%' then 'web push reminders (not LINE)'
     else 'other'
   end as target
 from cron.job
 where jobname in (
-  'campussync-afternoon-train-timetable',
-  'campussync-next-day-class-timetable',
-  'campussync-assignment-deadline-reminder',
+  'campussync-daily-line-digest',
+  'campussync-weekly-school-schedule',
   'campussync-push-reminders-every-five-minutes'
 )
 order by jobname;
 
--- 4) Recent job execution results
+-- 4) Check that obsolete daily LINE cron jobs have been removed.
+select
+  jobid,
+  jobname,
+  schedule,
+  active
+from cron.job
+where command ilike any (array[
+  '%/api/line-train-timetable%',
+  '%/api/line-class-timetable%',
+  '%/api/line-assignment-deadlines%',
+  '%/api/line-school-event-countdowns%'
+]);
+
+-- 5) Recent execution results for digest and weekly schedule.
 select
   j.jobname,
   r.runid,
@@ -52,15 +64,14 @@ select
 from cron.job_run_details r
 join cron.job j on j.jobid = r.jobid
 where j.jobname in (
-  'campussync-afternoon-train-timetable',
-  'campussync-next-day-class-timetable',
-  'campussync-assignment-deadline-reminder',
+  'campussync-daily-line-digest',
+  'campussync-weekly-school-schedule',
   'campussync-push-reminders-every-five-minutes'
 )
 order by r.start_time desc
 limit 40;
 
--- 5) Latest HTTP responses from pg_net (responses are retained for a limited time).
+-- 6) Latest HTTP responses from pg_net.
 select
   id,
   created,
