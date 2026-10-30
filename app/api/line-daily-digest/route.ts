@@ -407,16 +407,15 @@ export async function POST(request: Request) {
   const timetableStartMinute = timetableOnlyToday ? 16 * 60 + 50 : 16 * 60;
   const timetableEndMinute = 18 * 60;
   const departures = (direction: string): TimetableDeparture[] => trainRows
-    .filter(row => row.direction === direction)
-    .map(row => {
+    .filter(row => {
+      if (row.direction !== direction) return false;
       const minute = minutesFromTimetableTime(row.departure_time);
-      if (minute === null || minute < timetableStartMinute || minute > timetableEndMinute) return null;
-      return {
-        time: String(row.departure_time).slice(0, 5),
-        service: row.service ? String(row.service) : '各駅停車',
-      };
+      return minute !== null && minute >= timetableStartMinute && minute <= timetableEndMinute;
     })
-    .filter((value): value is TimetableDeparture => value !== null);
+    .map(row => ({
+      time: String(row.departure_time).slice(0, 5),
+      service: row.service ? String(row.service) : '各駅停車',
+    }));
   const kokubunji = departures('kokubunji');
   const higashimurayama = departures('higashimurayama');
 
