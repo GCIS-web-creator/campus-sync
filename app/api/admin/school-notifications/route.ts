@@ -116,7 +116,7 @@ async function sendLineNotification(
         .from('notifications')
         .update({ line_sent: false, line_error: message })
         .eq('id', notification.id)
-        .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+        .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
         .maybeSingle();
       if (error) console.error('LINE送信失敗状態の保存に失敗:', error.message);
       return { sent: false, message, notification: updated || { ...notification, line_sent: false, line_error: message } };
@@ -129,7 +129,7 @@ async function sendLineNotification(
       .from('notifications')
       .update({ line_sent: true, line_sent_at: sentAt, line_error: null })
       .eq('id', notification.id)
-      .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+      .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
       .maybeSingle();
     if (error) console.error('LINE送信済み状態の保存に失敗:', error.message);
     return {
@@ -144,7 +144,7 @@ async function sendLineNotification(
       .from('notifications')
       .update({ line_sent: false, line_error: message })
       .eq('id', notification.id)
-      .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+      .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
       .maybeSingle();
     if (updateError) console.error('LINE送信失敗状態の保存に失敗:', updateError.message);
     return { sent: false, message, notification: updated || { ...notification, line_sent: false, line_error: message } };
@@ -244,7 +244,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await admin
     .from('notifications')
-    .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+    .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -283,7 +283,7 @@ export async function POST(request: Request) {
     if (!notificationId) return NextResponse.json({ message: '再送する通知IDがありません。' }, { status: 400 });
     const { data: existing, error } = await admin
       .from('notifications')
-      .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+      .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
       .eq('id', notificationId)
       .maybeSingle();
     if (error || !existing) {
