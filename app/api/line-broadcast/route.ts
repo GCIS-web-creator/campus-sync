@@ -79,6 +79,7 @@ export async function POST(request: Request) {
   try {
     const messages = [buildNoticeFlexMessage(title, message)];
     const retryKey = randomUUID();
+    const deliveryBatchId = randomUUID();
     const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
@@ -115,7 +116,7 @@ export async function POST(request: Request) {
         });
         const { error: historyError } = await supabase
           .from('line_broadcast_history')
-          .insert({ title, message, status: 'sent', sent_at: new Date().toISOString() });
+          .insert({ title, message, status: 'sent', sent_at: new Date().toISOString(), delivery_batch_id: deliveryBatchId });
         if (historyError) {
           console.error('LINE配信履歴の保存に失敗しました:', historyError.message);
         } else {
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'quick_notice');
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'quick_notice', deliveryBatchId);
     const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const responseMessage = historySaved
       ? '「' + title + '」をLINE公式アカウントの友だちと登録済みグループへ配信し、配信履歴にも保存しました。 ' + groupSummary

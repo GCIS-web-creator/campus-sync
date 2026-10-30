@@ -84,6 +84,7 @@ export async function pushLineMessagesToRegisteredChats(
   messages: unknown[],
   retryKeyBase?: string,
   kind: LineGroupDeliveryKind = 'general',
+  deliveryBatchId?: string,
 ): Promise<LineGroupDeliveryResult> {
   const admin = getAdminClient();
   if (!admin) return { kind, registered: 0, sent: 0, failed: 0, lookupError: 'Supabaseのサーバー設定がありません。' };
@@ -133,8 +134,9 @@ export async function pushLineMessagesToRegisteredChats(
         cache: 'no-store',
         signal: AbortSignal.timeout(15000),
       });
-      if (response.ok || response.status === 409) return { success: true as const };
-      // Preserve LINE's error message for diagnosing 400 membership and 429 rate-limit failures.
+      if (response.ok || response.status === 409) {
+        return { chat_id: chat.chat_id, chat_type: chat.chat_type, success: true as const, status: response.status };
+      }
       const errorBody = await response.text().catch(() => '');
       console.error('LINEグループへの送信に失敗:', {
         chatType: chat.chat_type,
@@ -142,12 +144,35 @@ export async function pushLineMessagesToRegisteredChats(
         requestId: response.headers.get('x-line-request-id') || response.headers.get('x-line-accepted-request-id') || undefined,
         error: errorBody.slice(0, 500) || undefined,
       });
-      return { success: false as const, status: response.status };
+      return {
+        chat_id: chat.chat_id,
+        chat_type: chat.chat_type,
+        success: false as const,
+        status: response.status,
+        errorMessage: errorBody.slice(0, 500) || 'LINE APIへの送信に失敗しました。',
+      };
     } catch (error) {
-      console.error('LINEグループ送信の通信エラー:', error instanceof Error ? error.message : 'unknown error');
-      return { success: false as const, status: 0 };
+      const errorMessage = error instanceof Error ? error.message : 'unknown error';
+      console.error('LINEグループ送信の通信エラー:', errorMessage);
+      return { chat_id: chat.chat_id, chat_type: chat.chat_type, success: false as const, status: 0, errorMessage };
     }
   }));
+
+  if (deliveryBatchId && outcomes.length > 0) {
+    const { error: logError } = await admin.from('line_group_delivery_logs').insert(
+      outcomes.map(outcome => ({
+        delivery_batch_id: deliveryBatchId,
+        kind,
+        chat_id: outcome.chat_id,
+        chat_type: outcome.chat_type,
+        status: outcome.success ? 'success' : 'failure',
+        http_status: outcome.status,
+        error_message: outcome.success ? null : ('errorMessage' in outcome ? outcome.errorMessage : '送信に失敗しました。'),
+        sent_at: new Date().toISOString(),
+      })),
+    );
+    if (logError) console.error('LINEグループ配信結果の保存に失敗:', logError.message);
+  }
 
   const sent = outcomes.filter(outcome => outcome.success).length;
   const failureStatuses = outcomes.reduce<Record<string, number>>((counts, outcome) => {

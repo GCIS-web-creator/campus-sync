@@ -252,7 +252,52 @@ type LineBroadcastHistoryRow = {
   message: string;
   status: string;
   sent_at: string;
+  delivery_batch_id?: string | null;
 };
+
+type LineGroupPreferenceKey =
+  | 'receive_general_notifications'
+  | 'receive_train_timetable'
+  | 'receive_class_timetable'
+  | 'receive_school_schedule'
+  | 'receive_cafeteria_sold_out'
+  | 'receive_assignment_updates'
+  | 'receive_quick_notices';
+
+type LineGroupRow = {
+  chat_id: string;
+  chat_type: 'group' | 'room';
+  active: boolean;
+  receive_general_notifications: boolean;
+  receive_train_timetable: boolean;
+  receive_class_timetable: boolean;
+  receive_school_schedule: boolean;
+  receive_cafeteria_sold_out: boolean;
+  receive_assignment_updates: boolean;
+  receive_quick_notices: boolean;
+  last_seen_at: string;
+};
+
+type LineGroupDeliveryLogRow = {
+  delivery_batch_id: string;
+  kind: string;
+  chat_id: string;
+  chat_type: string;
+  status: 'success' | 'failure';
+  http_status: number | null;
+  error_message: string | null;
+  sent_at: string;
+};
+
+const LINE_GROUP_PREFERENCES: Array<{ key: LineGroupPreferenceKey; label: string }> = [
+  { key: 'receive_general_notifications', label: '学園総合通知・落とし物' },
+  { key: 'receive_train_timetable', label: '電車時刻表' },
+  { key: 'receive_class_timetable', label: '翌日の時間割' },
+  { key: 'receive_school_schedule', label: '週間学校予定・行事' },
+  { key: 'receive_cafeteria_sold_out', label: '学食売切情報' },
+  { key: 'receive_assignment_updates', label: '課題のお知らせ' },
+  { key: 'receive_quick_notices', label: 'クイックお知らせ・パトロール' },
+];
 
 type AdminSchoolNotification = {
   id: string | number;
@@ -351,6 +396,12 @@ export default function CampusSyncAdmin() {
   const [lineHistoryLoading, setLineHistoryLoading] = useState(true);
   const [lineHistoryMessage, setLineHistoryMessage] = useState('');
   const [lineHistoryRefreshKey, setLineHistoryRefreshKey] = useState(0);
+  const [lineGroupRows, setLineGroupRows] = useState<LineGroupRow[]>([]);
+  const [lineGroupLogs, setLineGroupLogs] = useState<LineGroupDeliveryLogRow[]>([]);
+  const [lineGroupLoading, setLineGroupLoading] = useState(false);
+  const [lineGroupMessage, setLineGroupMessage] = useState('');
+  const [lineGroupSaving, setLineGroupSaving] = useState<string | null>(null);
+  const [lineGroupRefreshKey, setLineGroupRefreshKey] = useState(0);
 
   // 学園総合通知：アプリの通知一覧へ本文付きで全校公開する。
   const [schoolNotificationTitle, setSchoolNotificationTitle] = useState('');
@@ -503,20 +554,96 @@ export default function CampusSyncAdmin() {
   }, []);
 
   useEffect(() => {
+    if (!adminApiPassword.trim()) {
+      setLineGroupRows([]);
+      setLineGroupLogs([]);
+      setLineGroupMessage('Admin用パスワードを入力すると、グループ設定を表示できます。');
+      return;
+    }
+    let cancelled = false;
+    const loadLineGroups = async () => {
+      setLineGroupLoading(true);
+      try {
+        const response = await fetch('/api/admin/line-groups', {
+          headers: { 'x-admin-password': adminApiPassword },
+          cache: 'no-store',
+        });
+        const result = await response.json().catch(() => null);
+        if (cancelled) return;
+        if (!response.ok || !result?.success) {
+          setLineGroupMessage(result?.message || 'LINEグループ設定を取得できませんでした。');
+          setLineGroupRows([]);
+          setLineGroupLogs([]);
+        } else {
+          setLineGroupRows((result.groups || []) as LineGroupRow[]);
+          setLineGroupLogs((result.logs || []) as LineGroupDeliveryLogRow[]);
+          setLineGroupMessage(result.notice || '');
+        }
+      } catch {
+        if (!cancelled) setLineGroupMessage('LINEグループ設定の読み込みに失敗しました。');
+      } finally {
+        if (!cancelled) setLineGroupLoading(false);
+      }
+    };
+    void loadLineGroups();
+    return () => { cancelled = true; };
+  }, [adminApiPassword, lineGroupRefreshKey]);
+
+  const updateLineGroup = async (
+    chatId: string,
+    changes: { active?: boolean } & Partial<Record<LineGroupPreferenceKey, boolean>>,
+  ) => {
+    if (!adminApiPassword.trim()) {
+      setLineGroupMessage('先にAdmin用パスワードを入力してください。');
+      return;
+    }
+    setLineGroupSaving(chatId);
+    setLineGroupMessage('');
+    try {
+      const response = await fetch('/api/admin/line-groups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ chatId, ...changes }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        setLineGroupMessage(result?.message || '設定を保存できませんでした。');
+        return;
+      }
+      setLineGroupRows(rows => rows.map(row => row.chat_id === chatId ? { ...row, ...changes } : row));
+      setLineGroupMessage('グループ設定を保存しました。');
+    } catch {
+      setLineGroupMessage('設定の保存中に通信エラーが発生しました。');
+    } finally {
+      setLineGroupSaving(null);
+    }
+  };
+
+  useEffect(() => {
     let cancelled = false;
     const loadHistory = async () => {
       setLineHistoryLoading(true);
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('line_broadcast_history')
-        .select('id, title, message, status, sent_at')
+        .select('id, title, message, status, sent_at, delivery_batch_id')
         .order('sent_at', { ascending: false })
         .limit(20);
 
+      if (error) {
+        const fallback = await supabase
+          .from('line_broadcast_history')
+          .select('id, title, message, status, sent_at')
+          .order('sent_at', { ascending: false })
+          .limit(20);
+        data = fallback.data as typeof data;
+        error = fallback.error;
+      }
       if (cancelled) return;
       if (error) {
         console.error('LINE配信履歴の取得に失敗:', error);
         setLineBroadcastHistory([]);
-        setLineHistoryMessage('配信履歴を読み込めません。SQLを実行したか確認してください。');
+        setLineHistoryMessage('配信履歴を読み込めません。SQL設定を確認してください。');
       } else {
         setLineBroadcastHistory((data || []) as LineBroadcastHistoryRow[]);
         setLineHistoryMessage('');
@@ -2273,6 +2400,42 @@ export default function CampusSyncAdmin() {
 
                     <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
                       <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-black text-white">LINEグループ受信設定</h4>
+                        <button type="button" onClick={() => setLineGroupRefreshKey(key => key + 1)} className="text-xs font-bold text-blue-300 hover:text-blue-200 flex items-center gap-1"><RefreshCw size={12} /> 更新</button>
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-400">通知カテゴリごとに受信先を管理できます。クイックお知らせと学食売切は現在、受信設定に関係なく有効な全グループへ送信します。</p>
+                      {lineGroupLoading ? (
+                        <p className="text-xs text-slate-500">グループ設定を読み込み中...</p>
+                      ) : lineGroupRows.length === 0 ? (
+                        <p className="text-xs text-amber-300">{lineGroupMessage || '登録済みグループはありません。'}</p>
+                      ) : (
+                        <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                          {lineGroupRows.map(group => (
+                            <div key={group.chat_id} className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-100">{group.chat_type === 'group' ? 'LINEグループ' : 'LINEルーム'} ·••{group.chat_id.slice(-6)}</p>
+                                  <p className="text-[10px] text-slate-500">最終受信：{group.last_seen_at ? new Date(group.last_seen_at).toLocaleString('ja-JP') : '不明'}</p>
+                                </div>
+                                <button type="button" disabled={lineGroupSaving === group.chat_id} onClick={() => void updateLineGroup(group.chat_id, { active: !group.active })} className={`rounded-lg px-3 py-2 text-xs font-bold ${group.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'} disabled:opacity-50`}>{group.active ? '有効' : '無効'}</button>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {LINE_GROUP_PREFERENCES.map(pref => (
+                                  <div key={pref.key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2">
+                                    <span className="text-xs text-slate-300">{pref.label}</span>
+                                    <button type="button" disabled={lineGroupSaving === group.chat_id} onClick={() => void updateLineGroup(group.chat_id, { [pref.key]: !group[pref.key] })} className={`rounded-md px-2.5 py-1 text-[10px] font-black ${group[pref.key] ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-500'} disabled:opacity-50`}>{group[pref.key] ? 'ON' : 'OFF'}</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {lineGroupMessage && lineGroupRows.length > 0 && <p className="text-xs text-emerald-300">{lineGroupMessage}</p>}
+                    </div>
+
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between gap-2">
                         <h4 className="text-sm font-black text-white flex items-center gap-2"><History size={16} className="text-blue-400" /> 最近の配信履歴</h4>
                         <button type="button" onClick={() => setLineHistoryRefreshKey(key => key + 1)} className="text-xs font-bold text-blue-300 hover:text-blue-200 flex items-center gap-1"><RefreshCw size={12} /> 更新</button>
                       </div>
@@ -2292,6 +2455,21 @@ export default function CampusSyncAdmin() {
                               </div>
                               <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap break-words">{item.message}</p>
                               <p className="mt-2 text-[10px] text-slate-600">{item.sent_at ? new Date(item.sent_at).toLocaleString('ja-JP') : '日時不明'}</p>
+                              {item.delivery_batch_id ? (
+                                <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
+                                  {lineGroupLogs.filter(log => log.delivery_batch_id === item.delivery_batch_id).map(log => (
+                                    <div key={log.chat_id} className="flex items-center justify-between gap-2 text-[10px]">
+                                      <span className="text-slate-400">{log.chat_type === 'group' ? 'グループ' : 'ルーム'} ·••{log.chat_id.slice(-6)}</span>
+                                      <span className={log.status === 'success' ? 'text-emerald-300' : 'text-red-300'}>{log.status === 'success' ? 'LINE API受付成功' : '送信失敗'}{log.http_status ? ' · HTTP ' + log.http_status : ''}</span>
+                                    </div>
+                                  ))}
+                                  {!lineGroupLogs.some(log => log.delivery_batch_id === item.delivery_batch_id) && (
+                                    <p className="text-[10px] text-slate-500">グループ別の記録はありません。SQL移行前の配信、または記録保存前の配信です。</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-[10px] text-slate-500">この配信はグループ別記録の導入前です。</p>
+                              )}
                             </div>
                           ))}
                         </div>

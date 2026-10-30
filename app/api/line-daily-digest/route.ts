@@ -99,19 +99,24 @@ function buildDailyDigest(input: {
   classText: string;
   assignmentText: string;
   eventText: string;
+  timetableOnly?: boolean;
 }) {
-  const sections = [
-    section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8'),
-    { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-    section('📚 明日の時間割｜7組・8組', input.classText, '#0F766E'),
-    { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-    section('📝 48時間以内の提出期限', input.assignmentText, '#B45309'),
-    { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-    section('📅 近日の学校行事', input.eventText, '#6D28D9'),
-  ];
+  const sections = input.timetableOnly
+    ? [section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8')]
+    : [
+        section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8'),
+        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
+        section('📚 明日の時間割｜7組・8組', input.classText, '#0F766E'),
+        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
+        section('📝 48時間以内の提出期限', input.assignmentText, '#B45309'),
+        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
+        section('📅 近日の学校行事', input.eventText, '#6D28D9'),
+      ];
   return {
     type: 'flex',
-    altText: ('【CampusSync 16:00まとめ】' + input.dateLabel + '｜時刻表・明日の時間割・課題期限・学校行事').slice(0, 400),
+    altText: (input.timetableOnly
+      ? '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表'
+      : '【CampusSync 16:00まとめ】' + input.dateLabel + '｜時刻表・明日の時間割・課題期限・学校行事').slice(0, 400),
     contents: {
       type: 'bubble',
       size: 'mega',
@@ -123,7 +128,7 @@ function buildDailyDigest(input: {
         spacing: 'xs',
         contents: [
           { type: 'text', text: 'CAMPUSSYNC  /  DAILY BRIEF', size: 'xs', color: '#67E8F9', weight: 'bold' },
-          { type: 'text', text: '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+          { type: 'text', text: input.timetableOnly ? '電車時刻表のお知らせ' : '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
           { type: 'text', text: input.dateLabel + '  •  毎日16:00配信', size: 'xs', color: '#CBD5E1', wrap: true },
         ],
       },
@@ -193,6 +198,8 @@ export async function POST(request: Request) {
 
   const today = dateKeyFromParts(nowParts);
   const todayLabel = Number(nowParts.month) + '月' + Number(nowParts.day) + '日';
+  // 2026-10-30 only: limit the 16:00 digest to the train timetable.
+  const timetableOnlyToday = today === '2026-10-30';
   const tomorrow = getTokyoTomorrowTimetableInfo(now);
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -279,6 +286,7 @@ export async function POST(request: Request) {
     classText: classText.slice(0, 1500),
     assignmentText: assignmentText.slice(0, 1500),
     eventText: eventText.slice(0, 1000),
+    timetableOnly: timetableOnlyToday,
   });
 
   const retryKey = stableRetryKey(today);
@@ -306,7 +314,7 @@ export async function POST(request: Request) {
     accessToken,
     [flex],
     retryKey,
-    'daily_digest',
+    timetableOnlyToday ? 'train_timetable' : 'daily_digest',
   );
 
   return NextResponse.json({
@@ -315,12 +323,14 @@ export async function POST(request: Request) {
     alreadyAccepted: response.status === 409,
     content: {
       trainDepartures: kokubunji.length + higashimurayama.length,
-      classTimetable: tomorrow.dayKey !== null,
-      assignments: assignments.length,
-      events: events.length,
+      classTimetable: timetableOnlyToday ? false : tomorrow.dayKey !== null,
+      assignments: timetableOnlyToday ? 0 : assignments.length,
+      events: timetableOnlyToday ? 0 : events.length,
     },
     groupDelivery,
-    message: todayLabel + 'の時刻表・翌日時間割・課題期限・学校行事を、16:00のFlex Message 1通にまとめて配信しました。' +
+    message: (timetableOnlyToday
+      ? todayLabel + 'の16:00配信は電車時刻表のみです。'
+      : todayLabel + 'の時刻表・翌日時間割・課題期限・学校行事を、16:00のFlex Message 1通にまとめて配信しました。') +
       summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
