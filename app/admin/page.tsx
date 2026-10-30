@@ -369,6 +369,18 @@ export default function CampusSyncAdmin() {
   const [classTimetableSending, setClassTimetableSending] = useState(false);
   const [classTimetableMessage, setClassTimetableMessage] = useState('');
 
+  // LINE公式アカウントBOT 1〜3の自動ローテーション状況（認証値は取得・表示しない）。
+  const [lineBotRotation, setLineBotRotation] = useState<{
+    rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; updated_at: string };
+    pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string } | null;
+    environment: Array<{ slot: number; channelSecretConfigured: boolean; accessTokenConfigured: boolean }>;
+  } | null>(null);
+  const [lineBotRotationLoading, setLineBotRotationLoading] = useState(false);
+  const [lineBotRotationMessage, setLineBotRotationMessage] = useState('');
+  const [lineBotRotationAckChecked, setLineBotRotationAckChecked] = useState(false);
+  const [lineBotRotationAckSaving, setLineBotRotationAckSaving] = useState(false);
+  const [lineBotRotationRefreshKey, setLineBotRotationRefreshKey] = useState(0);
+
   useEffect(() => {
     if (!schoolNotificationImage) {
       setSchoolNotificationImagePreview('');
@@ -378,6 +390,40 @@ export default function CampusSyncAdmin() {
     setSchoolNotificationImagePreview(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [schoolNotificationImage]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    if (!adminApiPassword.trim()) {
+      setLineBotRotation(null);
+      setLineBotRotationMessage('Admin用パスワードを入力すると、現在のBOTと次回切替予定を確認できます。');
+      return;
+    }
+    let cancelled = false;
+    const loadLineBotRotation = async () => {
+      setLineBotRotationLoading(true);
+      try {
+        const response = await fetch('/api/admin/line-bot-rotation', {
+          headers: { 'x-admin-password': adminApiPassword },
+          cache: 'no-store',
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.message || 'LINE BOTの切替情報を読み込めませんでした。');
+        }
+        if (cancelled) return;
+        setLineBotRotation(result);
+        setLineBotRotationMessage('');
+      } catch (error) {
+        if (cancelled) return;
+        setLineBotRotation(null);
+        setLineBotRotationMessage(error instanceof Error ? error.message : 'LINE BOTの切替情報を読み込めませんでした。');
+      } finally {
+        if (!cancelled) setLineBotRotationLoading(false);
+      }
+    };
+    void loadLineBotRotation();
+    return () => { cancelled = true; };
+  }, [activeTab, adminApiPassword, lineBotRotationRefreshKey]);
 
   // Supabase共有の蔵書管理
   const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -1547,6 +1593,42 @@ export default function CampusSyncAdmin() {
     }
   };
 
+  const handleAcknowledgeLineBotRotation = async () => {
+    const pendingEvent = lineBotRotation?.pendingEvent;
+    if (!pendingEvent) return;
+    if (!adminApiPassword.trim()) {
+      setLineBotRotationMessage('Admin用パスワードを入力してください。');
+      return;
+    }
+    if (!lineBotRotationAckChecked) {
+      setLineBotRotationMessage('旧BOTの退出・新BOTの招待・Webhook確認を行った後、確認欄にチェックしてください。');
+      return;
+    }
+    setLineBotRotationAckSaving(true);
+    setLineBotRotationMessage('');
+    try {
+      const response = await fetch('/api/admin/line-bot-rotation', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ action: 'acknowledge', eventId: pendingEvent.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || '切替確認を保存できませんでした。');
+      }
+      setLineBotRotationAckChecked(false);
+      setLineBotRotationMessage(result.message || '切替作業を確認済みにしました。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } catch (error) {
+      setLineBotRotationMessage(error instanceof Error ? error.message : '切替確認を保存できませんでした。');
+    } finally {
+      setLineBotRotationAckSaving(false);
+    }
+  };
+
   const deleteAssignment = async (row: CampusAssignment) => {
     if (!adminApiPassword.trim()) {
       setAssignmentMessage('管理用パスワードを入力してください。');
@@ -1838,6 +1920,111 @@ export default function CampusSyncAdmin() {
               </div>
             </div>
             
+            {/* LINE BOT切替：認証値は表示せず、Supabaseの現在枠と手動グループ切替作業だけを案内する。 */}
+            <section className="rounded-2xl border border-cyan-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><MessageSquare size={22} /></div>
+                  <div>
+                    <h3 className="text-base font-black text-white">LINE公式アカウント BOT ローテーション</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">毎月1日・11日・21日にSupabaseが使用BOTを自動更新します。認証情報はVercel内だけで管理し、この画面には表示しません。</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLineBotRotationRefreshKey(key => key + 1)}
+                  disabled={lineBotRotationLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={lineBotRotationLoading ? 'animate-spin' : ''} /> 状態を更新
+                </button>
+              </div>
+              <label className="block text-xs font-bold text-slate-300">
+                Admin用パスワード（他の管理操作と共通）
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={adminApiPassword}
+                  onChange={event => setAdminApiPassword(event.target.value)}
+                  placeholder="CAMPUS_SYNC_ADMIN_PASSWORD"
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
+                />
+              </label>
+              {lineBotRotationLoading ? (
+                <p className="text-xs text-slate-400">ローテーション設定を確認しています...</p>
+              ) : lineBotRotation ? (
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-cyan-800/60 bg-cyan-950/30 p-4">
+                      <p className="text-[11px] font-bold text-cyan-200">現在の使用BOT</p>
+                      <p className="mt-1 text-2xl font-black text-white">BOT {lineBotRotation.rotation.active_bot_slot}</p>
+                      <p className="mt-1 text-xs text-slate-400">次回切替：{new Date(lineBotRotation.rotation.next_switch_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
+                      <p className="text-[11px] font-bold text-slate-300">Vercel認証情報の登録状況</p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {lineBotRotation.environment.map(item => (
+                          <div key={item.slot} className="rounded-lg bg-slate-950 p-2 text-center">
+                            <p className="text-xs font-black text-white">BOT {item.slot}</p>
+                            <p className={item.channelSecretConfigured && item.accessTokenConfigured ? 'mt-1 text-[10px] font-bold text-emerald-300' : 'mt-1 text-[10px] font-bold text-amber-300'}>
+                              {item.channelSecretConfigured && item.accessTokenConfigured ? '登録済み' : '未登録'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-500">Channel Secretと長期アクセストークンの値は表示・保存しません。</p>
+                    </div>
+                  </div>
+                  {lineBotRotation.pendingEvent ? (
+                    <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-amber-200">
+                        <AlertCircle size={17} />
+                        <p className="text-sm font-black">BOT切替作業の確認が必要です</p>
+                      </div>
+                      <p className="text-xs leading-5 text-amber-100/90">
+                        {lineBotRotation.pendingEvent.previous_bot_slot
+                          ? `BOT ${lineBotRotation.pendingEvent.previous_bot_slot} から BOT ${lineBotRotation.pendingEvent.new_bot_slot} へ切り替わりました。`
+                          : `初期設定：BOT ${lineBotRotation.pendingEvent.new_bot_slot} が選択されています。`}
+                        LINEの仕様上、1つのグループに参加できる公式アカウントは同時に1つです。使用BOT番号の更新だけでは、グループ参加アカウントは自動で入れ替わりません。
+                      </p>
+                      <ol className="list-decimal space-y-1 pl-5 text-xs leading-5 text-slate-200">
+                        <li>グループ内の旧BOTを退出させる。</li>
+                        <li>BOT {lineBotRotation.pendingEvent.new_bot_slot} を同じグループに招待する。</li>
+                        <li>BOT {lineBotRotation.pendingEvent.new_bot_slot} からグループ内でテストメッセージを送り、Webhook登録を確認する。</li>
+                      </ol>
+                      <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={lineBotRotationAckChecked}
+                          onChange={event => setLineBotRotationAckChecked(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-cyan-500"
+                        />
+                        旧BOTの退出・新BOTの招待・Webhook確認まで完了しました。
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void handleAcknowledgeLineBotRotation()}
+                        disabled={!lineBotRotationAckChecked || lineBotRotationAckSaving}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-black text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={15} /> {lineBotRotationAckSaving ? '保存中...' : '切替作業を確認済みにする'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/20 p-3 text-xs text-emerald-200">
+                      <CheckCircle2 size={15} className="mr-1 inline" /> 未確認の切替作業はありません。次回切替日にAdminへ新しい確認通知が表示されます。
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
+                  {lineBotRotationMessage || 'Admin用パスワードを入力してください。'}
+                </div>
+              )}
+              {lineBotRotationMessage && lineBotRotation && (
+                <p role="status" className="rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-xs text-slate-300">{lineBotRotationMessage}</p>
+              )}
+            </section>
             <div className="mb-4 min-w-0">
               <ContributionRankAdminGuide />
             </div>
