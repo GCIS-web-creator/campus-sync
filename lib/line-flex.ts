@@ -623,3 +623,77 @@ export function buildCampusAiFlexMessage(input: {
     },
   };
 }
+
+
+/** 緊急連絡専用Flex。通常のお知らせと区別できる警告色・行動確認欄を使用する。 */
+export function buildEmergencyNoticeFlexMessage(
+  title: string,
+  message: string,
+  imageUrl?: string | null,
+  category?: string,
+): FlexMessage {
+  const safeTitle = title.trim().slice(0, 100) || '緊急連絡';
+  const safeMessage = message.trim().slice(0, 1800);
+  const safeImageUrl = typeof imageUrl === 'string' && /^https:\/\//i.test(imageUrl) ? imageUrl : '';
+  const categoryLabels: Record<string, string> = {
+    school_closure: '休校・登校時間変更',
+    class_change: '授業変更・休講',
+    early_dismissal: '緊急下校',
+    disaster: '災害・気象情報',
+    emergency: '緊急連絡',
+  };
+  const categoryLabel = categoryLabels[category || ''] || '緊急連絡';
+
+  return {
+    type: 'flex',
+    altText: ('【緊急】CampusSync｜' + safeTitle + '｜' + safeMessage).slice(0, 400),
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#991B1B',
+        paddingAll: '18px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: '●  CAMPUSSYNC  /  EMERGENCY', color: '#FECACA', size: 'xs', weight: 'bold' },
+          { type: 'text', text: categoryLabel, color: '#FEE2E2', size: 'sm', weight: 'bold' },
+          { type: 'text', text: safeTitle, color: '#FFFFFF', size: 'xl', weight: 'bold', wrap: true },
+        ],
+      },
+      ...(safeImageUrl ? {
+        hero: {
+          type: 'image',
+          url: safeImageUrl,
+          size: 'full',
+          aspectRatio: '20:13',
+          aspectMode: 'cover',
+        },
+      } : {}),
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '18px',
+        spacing: 'md',
+        contents: [
+          { type: 'text', text: '重要：学校からの緊急連絡です。本文と対象者・時刻を確認してください。', color: '#991B1B', size: 'xs', weight: 'bold', wrap: true },
+          { type: 'text', text: safeMessage, color: '#1E293B', size: 'sm', wrap: true },
+          { type: 'separator', color: '#FECACA', margin: 'md' },
+          { type: 'text', text: '不明点がある場合は、学校からの正式な案内・教職員の指示を確認してください。', color: '#475569', size: 'xs', wrap: true },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        backgroundColor: '#FEF2F2',
+        spacing: 'xs',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', color: '#7F1D1D', size: 'xs', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', color: '#7F1D1D', size: 'xs', align: 'center', wrap: true },
+        ],
+      },
+    },
+  };
+}
