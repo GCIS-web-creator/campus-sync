@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
   const [rotationResult, eventResult] = await Promise.all([
     admin.from('line_bot_rotation')
-      .select('active_bot_slot,next_switch_at,last_switched_at,updated_at')
+      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at')
       .eq('id', 1)
       .maybeSingle(),
     admin.from('line_bot_rotation_events')

@@ -423,7 +423,7 @@ export default function CampusSyncAdmin() {
 
   // LINE公式アカウントBOT 1〜3の自動ローテーション状況（認証値は取得・表示しない）。
   const [lineBotRotation, setLineBotRotation] = useState<{
-    rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; updated_at: string };
+    rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; rotation_hold_until?: string | null; updated_at: string };
     pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string } | null;
     environment: Array<{ slot: number; channelSecretConfigured: boolean; accessTokenConfigured: boolean }>;
   } | null>(null);
@@ -2105,6 +2105,11 @@ export default function CampusSyncAdmin() {
                       <p className="text-[11px] font-bold text-cyan-200">現在の使用BOT</p>
                       <p className="mt-1 text-2xl font-black text-white">BOT {lineBotRotation.rotation.active_bot_slot}</p>
                       <p className="mt-1 text-xs text-slate-400">次回切替：{new Date(lineBotRotation.rotation.next_switch_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      {lineBotRotation.rotation.rotation_hold_until && (
+                        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] font-bold text-amber-200">
+                          特例：{new Date(lineBotRotation.rotation.rotation_hold_until + 'T00:00:00+09:00').toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' })}までBOT {lineBotRotation.rotation.active_bot_slot}を維持
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
                       <p className="text-[11px] font-bold text-slate-300">Vercel認証情報の登録状況</p>
