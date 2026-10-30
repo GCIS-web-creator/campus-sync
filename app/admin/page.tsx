@@ -1975,6 +1975,14 @@ export default function CampusSyncAdmin() {
                       <p className="mt-2 text-[10px] text-slate-500">Channel Secretと長期アクセストークンの値は表示・保存しません。</p>
                     </div>
                   </div>
+                  {!lineBotRotation.environment.some(item => item.slot === lineBotRotation.rotation.active_bot_slot && item.channelSecretConfigured && item.accessTokenConfigured) && (
+                    <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs leading-5 text-rose-200">
+                      現在選択中のBOT {lineBotRotation.rotation.active_bot_slot} の認証情報がVercelに登録されていません。登録して再デプロイするまで、そのBOTからのLINE送信・Webhook返信は利用できません。
+                    </div>
+                  )}
+                  <p className="text-[11px] leading-5 text-slate-400">
+                    友だち向けBroadcastは現在選択中BOTの友だちにだけ届きます。BOT 1〜3は別々の友だちリストとして管理されるため、3つすべてから配信を受け取るには、各アカウントの友だち追加が必要です。
+                  </p>
                   {lineBotRotation.pendingEvent ? (
                     <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
                       <div className="flex items-center gap-2 text-amber-200">
