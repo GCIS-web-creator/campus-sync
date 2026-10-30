@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { buildNoticeFlexMessage } from '@/lib/line-flex';
+import { buildNoticeFlexMessage, buildEmergencyNoticeFlexMessage } from '@/lib/line-flex';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 
@@ -14,12 +14,19 @@ type Payload = {
   imageUrl?: unknown;
   action?: unknown;
   notificationId?: unknown;
+  category?: unknown;
+  priority?: unknown;
 };
 
 type SchoolNotification = {
   id: string | number;
   title: string;
   body: string;
+  category?: string;
+  priority?: string;
+  target_user_id?: string | null;
+  expires_at?: string | null;
+  is_pinned?: boolean;
   image_url?: string | null;
   created_at: string;
   line_sent?: boolean;
@@ -78,14 +85,16 @@ async function sendLineNotification(
       .from('notifications')
       .update({ line_sent: false, line_error: message })
       .eq('id', notification.id)
-      .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
+      .select('id, title, body, category, priority, target_user_id, expires_at, is_pinned, image_url, created_at, line_sent, line_sent_at, line_error')
       .maybeSingle();
     if (error) console.error('LINE送信失敗状態の保存に失敗:', error.message);
     return { sent: false, message, notification: updated || { ...notification, line_sent: false, line_error: message } };
   }
 
   try {
-    const messages = [buildNoticeFlexMessage(notification.title, notification.body, notification.image_url)];
+    const messages = [notification.priority === 'emergency'
+      ? buildEmergencyNoticeFlexMessage(notification.title, notification.body, notification.image_url, notification.category)
+      : buildNoticeFlexMessage(notification.title, notification.body, notification.image_url)];
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
@@ -222,9 +231,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'タイトルは100文字以内、本文は1,800文字以内にしてください。' }, { status: 400 });
   }
 
+  const allowedCategories = new Set(['general', 'school_closure', 'class_change', 'early_dismissal', 'disaster', 'emergency']);
+  const allowedPriorities = new Set(['normal', 'important', 'emergency']);
+  const category = typeof payload.category === 'string' ? payload.category : 'general';
+  const priority = typeof payload.priority === 'string' ? payload.priority : 'normal';
+  if (!allowedCategories.has(category) || !allowedPriorities.has(priority)) {
+    return NextResponse.json({ message: '通知の種類または重要度が不正です。' }, { status: 400 });
+  }
+  const isPinned = priority === 'emergency' || priority === 'important';
+
   const { data, error } = await admin
     .from('notifications')
-    .insert({ title, body, image_url: imageUrl, line_sent: false, line_error: null })
+    .insert({
+      title,
+      body,
+      category,
+      priority,
+      is_pinned: isPinned,
+      image_url: imageUrl,
+      line_sent: false,
+      line_error: null,
+    })
     .select('id, title, body, image_url, created_at, line_sent, line_sent_at, line_error')
     .single();
 
