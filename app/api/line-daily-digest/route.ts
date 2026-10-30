@@ -102,7 +102,7 @@ function buildDailyDigest(input: {
   timetableOnly?: boolean;
 }) {
   const sections = input.timetableOnly
-    ? [section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8')]
+    ? [section('🚃 鷹の台駅｜16:50〜18:00', input.trainText, '#1D4ED8')]
     : [
         section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8'),
         { type: 'separator', color: '#E2E8F0', margin: 'lg' },
@@ -238,11 +238,14 @@ export async function POST(request: Request) {
   if (eventResult.error) console.error('日次まとめ：行事取得エラー', eventResult.error.message);
 
   const trainRows = (trainResult.data || []) as TrainRow[];
+  // 10/30臨時配信は16:50から18:00まで。通常の日次まとめは16:00から18:00まで。
+  const timetableStartMinute = timetableOnlyToday ? 16 * 60 + 50 : 16 * 60;
+  const timetableEndMinute = 18 * 60;
   const departures = (direction: string) => trainRows
     .filter(row => row.direction === direction)
     .map(row => {
       const minute = minutesFromTimetableTime(row.departure_time);
-      if (minute === null || minute < 16 * 60 || minute >= 18 * 60) return null;
+      if (minute === null || minute < timetableStartMinute || minute > timetableEndMinute) return null;
       return String(row.departure_time).slice(0, 5) + (row.service ? ' ' + String(row.service).slice(0, 12) : '');
     })
     .filter((value): value is string => value !== null);
