@@ -78,10 +78,7 @@ type AuditRow = {
   metadata?: Record<string, unknown>;
 };
 
-type Props = {
-  adminPassword: string;
-  onAdminPasswordChange: (value: string) => void;
-};
+type Props = { adminPassword: string };
 
 const STATUS_LABEL: Record<Status, string> = {
   open: '未対応',
@@ -105,7 +102,7 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString('ja-JP', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
-export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChange }: Props) {
+export default function ChatModerationAdmin({ adminPassword }: Props) {
   const [view, setView] = useState<View>('reports');
   const [scope, setScope] = useState<Scope>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | Status>('open');
@@ -356,7 +353,7 @@ export default function ChatModerationAdmin({ adminPassword, onAdminPasswordChan
             <h2 className="text-sm font-black text-white">管理者認証</h2>
             <p className="mt-1 text-xs leading-5 text-slate-400">既存の CAMPUS_SYNC_ADMIN_PASSWORD を使います。パスワードはブラウザーに保存せず、管理用APIへのリクエスト時だけ送信します。</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input type="password" autoComplete="current-password" value={adminPassword} onChange={event => onAdminPasswordChange(event.target.value)} placeholder="管理用パスワード" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" />
+              <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2.5 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
               <button type="button" onClick={() => void loadData()} disabled={loading || !adminPassword.trim()} className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:opacity-50">{loading ? '確認中…' : loaded ? '認証して更新' : '認証して読み込む'}</button>
             </div>
           </div>

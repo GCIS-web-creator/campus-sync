@@ -3,10 +3,7 @@
 import React, { useState } from "react";
 import { BellRing, CheckCircle2, ClipboardList, Download, KeyRound, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2, UserCheck, UserX } from "lucide-react";
 
-type Props = {
-  adminPassword: string;
-  onAdminPasswordChange: (value: string) => void;
-};
+type Props = { adminPassword: string };
 type ClubNote = {
   id: string | number;
   club_name: string;
@@ -58,7 +55,7 @@ const formatDate = (value: string) => {
       }).format(date);
 };
 
-export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }: Props) {
+export default function ClubNotesAdmin({ adminPassword }: Props) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ notes: [], permissions: [], codes: [] });
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -236,7 +233,7 @@ export default function ClubNotesAdmin({ adminPassword, onAdminPasswordChange }:
       <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
         <label htmlFor="club-admin-password" className="block text-sm font-bold">管理用パスワード</label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          <input id="club-admin-password" type="password" autoComplete="current-password" value={adminPassword} onChange={event => onAdminPasswordChange(event.target.value)} placeholder="CAMPUS_SYNC_ADMIN_PASSWORD" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white" />
+          <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2.5 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>
           <button type="button" onClick={() => void loadData()} disabled={busy || !adminPassword.trim()} className="rounded-xl bg-slate-700 px-4 py-3 text-sm font-black hover:bg-slate-600 disabled:opacity-50">接続して読み込む</button>
         </div>
         {message && <p role={messageKind === "error" ? "alert" : "status"} className={`mt-3 rounded-xl border p-3 text-sm leading-6 ${messageClass}`}>{message}</p>}
