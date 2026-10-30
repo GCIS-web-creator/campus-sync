@@ -101,7 +101,7 @@ export function buildClubNoteFlexMessage(input: {
 
 export type TimetableDeparture = { time: string; service?: string | null };
 
-function timetableDirectionBox(title: string, accent: string, rows: TimetableDeparture[]) {
+export function buildTimetableDirectionBox(title: string, accent: string, rows: TimetableDeparture[]) {
   const contents: Record<string, unknown>[] = [
     { type: 'box', layout: 'horizontal', spacing: 'sm', alignItems: 'center',
       contents: [
@@ -149,9 +149,9 @@ export function buildHourlyTrainTimetableFlex(input: {
       body: {
         type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'xl',
         contents: [
-          timetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
+          buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
           { type: 'separator', color: '#E2E8F0' },
-          timetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
+          buildTimetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
         ],
       },
       footer: {

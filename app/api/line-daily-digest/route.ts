@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
+import { buildTimetableDirectionBox, type TimetableDeparture } from '@/lib/line-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,16 +96,43 @@ function section(title: string, body: string, accent: string): Record<string, un
 
 function buildDailyDigest(input: {
   dateLabel: string;
-  trainText: string;
+  kokubunji: TimetableDeparture[];
+  higashimurayama: TimetableDeparture[];
+  trainError: boolean;
   classText: string;
   assignmentText: string;
   eventText: string;
   timetableOnly?: boolean;
 }) {
-  const sections = input.timetableOnly
-    ? [section('🚃 鷹の台駅｜16:50〜18:00', input.trainText, '#1D4ED8')]
+  // 電車欄は旧TRANSIT Flex Messageと同じ、方面別・時刻カード形式を共通利用する。
+  const trainSection: Record<string, unknown> = {
+    type: 'box',
+    layout: 'vertical',
+    spacing: 'xl',
+    contents: [
+      {
+        type: 'text',
+        text: input.timetableOnly ? '🚃 鷹の台駅｜16:50〜18:00' : '🚃 鷹の台駅｜16:00〜18:00',
+        size: 'md',
+        weight: 'bold',
+        color: '#1D4ED8',
+        wrap: true,
+      },
+      { type: 'text', text: '平日ダイヤ', size: 'xs', color: '#64748B' },
+      ...(input.trainError
+        ? [{ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true }]
+        : [
+            buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
+            { type: 'separator', color: '#E2E8F0' },
+            buildTimetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
+          ]),
+    ],
+  };
+
+  const sections: Record<string, unknown>[] = input.timetableOnly
+    ? [trainSection]
     : [
-        section('🚃 鷹の台駅｜16:00〜18:00', input.trainText, '#1D4ED8'),
+        trainSection,
         { type: 'separator', color: '#E2E8F0', margin: 'lg' },
         section('📚 明日の時間割｜7組・8組', input.classText, '#0F766E'),
         { type: 'separator', color: '#E2E8F0', margin: 'lg' },
@@ -112,6 +140,7 @@ function buildDailyDigest(input: {
         { type: 'separator', color: '#E2E8F0', margin: 'lg' },
         section('📅 近日の学校行事', input.eventText, '#6D28D9'),
       ];
+
   return {
     type: 'flex',
     altText: (input.timetableOnly
@@ -126,11 +155,17 @@ function buildDailyDigest(input: {
         paddingAll: '18px',
         backgroundColor: '#0F172A',
         spacing: 'xs',
-        contents: [
-          { type: 'text', text: 'CAMPUSSYNC  /  DAILY BRIEF', size: 'xs', color: '#67E8F9', weight: 'bold' },
-          { type: 'text', text: input.timetableOnly ? '電車時刻表のお知らせ' : '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-          { type: 'text', text: input.dateLabel + (input.timetableOnly ? '  •  本日16:50配信' : '  •  毎日16:00配信'), size: 'xs', color: '#CBD5E1', wrap: true },
-        ],
+        contents: input.timetableOnly
+          ? [
+              { type: 'text', text: 'CAMPUSSYNC  /  TRANSIT', size: 'xs', color: '#67E8F9', weight: 'bold' },
+              { type: 'text', text: '鷹の台駅 発車案内', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+              { type: 'text', text: 'AFTERNOON TIMETABLE  •  16:50 – 18:00', size: 'xs', color: '#CBD5E1', wrap: true },
+            ]
+          : [
+              { type: 'text', text: 'CAMPUSSYNC  /  DAILY BRIEF', size: 'xs', color: '#67E8F9', weight: 'bold' },
+              { type: 'text', text: '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+              { type: 'text', text: input.dateLabel + '  •  毎日16:00配信', size: 'xs', color: '#CBD5E1', wrap: true },
+            ],
       },
       body: {
         type: 'box',
@@ -241,20 +276,19 @@ export async function POST(request: Request) {
   // 10/30臨時配信は16:50から18:00まで。通常の日次まとめは16:00から18:00まで。
   const timetableStartMinute = timetableOnlyToday ? 16 * 60 + 50 : 16 * 60;
   const timetableEndMinute = 18 * 60;
-  const departures = (direction: string) => trainRows
+  const departures = (direction: string): TimetableDeparture[] => trainRows
     .filter(row => row.direction === direction)
     .map(row => {
       const minute = minutesFromTimetableTime(row.departure_time);
       if (minute === null || minute < timetableStartMinute || minute > timetableEndMinute) return null;
-      return String(row.departure_time).slice(0, 5) + (row.service ? ' ' + String(row.service).slice(0, 12) : '');
+      return {
+        time: String(row.departure_time).slice(0, 5),
+        service: row.service ? String(row.service) : '各駅停車',
+      };
     })
-    .filter((value): value is string => value !== null);
+    .filter((value): value is TimetableDeparture => value !== null);
   const kokubunji = departures('kokubunji');
   const higashimurayama = departures('higashimurayama');
-  const trainText = trainResult.error
-    ? '時刻表データを取得できませんでした。'
-    : '平日ダイヤ\n国分寺方面（' + kokubunji.length + '本）\n' + (kokubunji.length ? kokubunji.join('　') : '該当する発車予定はありません。')
-      + '\n\n東村山方面（' + higashimurayama.length + '本）\n' + (higashimurayama.length ? higashimurayama.join('　') : '該当する発車予定はありません。');
 
   let classText = tomorrow.dateLabel + '\n';
   if (!tomorrow.dayKey) {
@@ -291,7 +325,9 @@ export async function POST(request: Request) {
 
   const flex = buildDailyDigest({
     dateLabel: todayLabel,
-    trainText: trainText.slice(0, 1500),
+    kokubunji,
+    higashimurayama,
+    trainError: Boolean(trainResult.error),
     classText: classText.slice(0, 1500),
     assignmentText: assignmentText.slice(0, 1500),
     eventText: eventText.slice(0, 1000),
