@@ -41,7 +41,7 @@ const CATEGORY_ICONS: Record<string, typeof Building2> = {
   facility: Building2,
 };
 
-export default function CampusFacilityMap({ facilities }: { facilities: CampusFacility[] }) {
+export default function CampusFacilityMap({ facilities, loadMessage = '' }: { facilities: CampusFacility[]; loadMessage?: string }) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [selected, setSelected] = useState<CampusFacility | null>(null);
@@ -104,6 +104,12 @@ export default function CampusFacilityMap({ facilities }: { facilities: CampusFa
           ))}
         </div>
       </section>
+
+      {loadMessage && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-800">
+          {loadMessage}
+        </div>
+      )}
 
       {mapGroups.length > 0 && (
         <div className="space-y-3">
