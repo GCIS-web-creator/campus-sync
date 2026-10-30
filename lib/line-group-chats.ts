@@ -190,7 +190,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
     return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed
       + '件失敗しました。' + (statusSummary ? '（' + statusSummary + '）' : '')
       + ' 現在使用中のBOTが対象グループに参加しているか確認してください。';
-  }';
+  }
   return result.kind === 'train_timetable'
     ? '時刻表専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
     : result.kind === 'class_timetable'
