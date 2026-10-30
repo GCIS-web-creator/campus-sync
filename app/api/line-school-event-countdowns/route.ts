@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 type EventRow = { id: string; title: string; summary: string; event_date: string; is_active: boolean };
 
-const REMINDER_DAYS = [30, 15, 7, 5, 3, 1];
+const DAILY_EVENT_LIMIT = 4;
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -81,19 +81,22 @@ export async function POST(request: Request) {
     .select('id,title,summary,event_date,is_active')
     .eq('is_active', true)
     .gte('event_date', today)
-    .order('event_date', { ascending: true });
+    .order('event_date', { ascending: true })
+    .limit(DAILY_EVENT_LIMIT);
 
   if (error) {
     console.error('カウントダウンイベント取得エラー:', error.message);
     return jsonError('イベントを取得できません。supabase/school-event-countdowns.sql を実行してください。', 500);
   }
 
+  // Notify the four nearest active upcoming events every day, regardless of
+  // how many days remain until each event.
   const matches = ((data || []) as EventRow[])
-    .map(event => ({ ...event, daysRemaining: daysUntil(today, event.event_date) }))
-    .filter(event => REMINDER_DAYS.includes(event.daysRemaining));
+    .slice(0, DAILY_EVENT_LIMIT)
+    .map(event => ({ ...event, daysRemaining: daysUntil(today, event.event_date) }));
 
   if (!matches.length) {
-    return NextResponse.json({ success: true, skipped: true, date: today, count: 0, message: today + ' は通知対象日（30・15・7・5・3・1日前）のイベントがありません。' }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ success: true, skipped: true, date: today, count: 0, message: today + ' 以降に配信対象の有効なイベントはありません。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   const flexMessages = buildSchoolEventCountdownFlexMessages(matches.map(event => ({
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
     events: matches.map(event => ({ title: event.title, event_date: event.event_date, daysRemaining: event.daysRemaining })),
     broadcasts: broadcastResults,
     groupDelivery: groupResults,
-    message: today + ' のカウントダウン通知対象は' + matches.length + '件です。' +
+    message: today + ' の直近イベント配信対象は' + matches.length + '件です（最大4件）。' +
       (failures.length ? ' LINE全体配信の一部に失敗しました。Vercelのログを確認してください。' : ' LINE公式アカウントへFlex Messageを送信しました。') +
       ' ' + groupSummary,
   }, { headers: { 'Cache-Control': 'no-store' } });
