@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 type TrainRow = { direction: string; departure_time: string; service?: string | null };
-type AssignmentRow = { title: string; source?: string | null; due_at: string; due?: string | null };
 type EventRow = { title: string; summary?: string | null; event_date: string };
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -58,18 +57,6 @@ function minutesFromTimetableTime(value: string): number | null {
   return hours * 60 + minutes;
 }
 
-function formatDueAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '日時未設定';
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
 function formatDateKey(value: string): string {
   const [year, month, day] = value.split('-').map(Number);
   return month + '/' + day;
@@ -81,112 +68,265 @@ function daysUntil(today: string, eventDate: string): number {
   return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
 }
 
-function section(title: string, body: string, accent: string): Record<string, unknown> {
+type ClassTimetableDayKey = keyof (typeof CLASS_TIMETABLE_DATA)['7組'];
+
+function buildBoardBubble(input: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  bodyContents: Record<string, unknown>[];
+}) {
   return {
-    type: 'box',
-    layout: 'vertical',
-    spacing: 'xs',
-    margin: 'lg',
-    contents: [
-      { type: 'text', text: title, size: 'md', weight: 'bold', color: accent, wrap: true },
-      { type: 'text', text: body, size: 'sm', color: '#334155', wrap: true },
-    ],
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#0F172A',
+      paddingAll: '18px',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: input.eyebrow, size: 'xs', color: '#67E8F9', weight: 'bold' },
+        { type: 'text', text: input.title, size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+        { type: 'text', text: input.subtitle, size: 'xs', color: '#CBD5E1', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      spacing: 'md',
+      contents: input.bodyContents,
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      backgroundColor: '#F8FAFC',
+      spacing: 'xs',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+      ],
+    },
   };
 }
 
-function buildDailyDigest(input: {
+function buildTransitBubble(input: {
   dateLabel: string;
   kokubunji: TimetableDeparture[];
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
-  classText: string;
-  assignmentText: string;
-  eventText: string;
   timetableOnly?: boolean;
 }) {
-  // 電車欄は旧TRANSIT Flex Messageと同じ、方面別・時刻カード形式を共通利用する。
-  const trainSection: Record<string, unknown> = {
-    type: 'box',
-    layout: 'vertical',
-    spacing: 'xl',
-    contents: [
-      {
-        type: 'text',
-        text: input.timetableOnly ? '🚃 鷹の台駅｜16:50〜18:00' : '🚃 鷹の台駅｜16:00〜18:00',
-        size: 'md',
-        weight: 'bold',
-        color: '#1D4ED8',
-        wrap: true,
-      },
-      { type: 'text', text: '平日ダイヤ', size: 'xs', color: '#64748B' },
-      ...(input.trainError
-        ? [{ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true }]
-        : [
-            buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
-            { type: 'separator', color: '#E2E8F0' },
-            buildTimetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
-          ]),
-    ],
-  };
+  const startLabel = input.timetableOnly ? '16:50' : '16:00';
+  const endLabel = '18:00';
+  const bodyContents: Record<string, unknown>[] = [
+    { type: 'text', text: '平日ダイヤ', size: 'xs', color: '#64748B' },
+  ];
+  if (input.trainError) {
+    bodyContents.push({ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
+  } else {
+    bodyContents.push(
+      buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
+      { type: 'separator', color: '#E2E8F0' },
+      buildTimetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
+    );
+  }
 
-  const sections: Record<string, unknown>[] = input.timetableOnly
-    ? [trainSection]
-    : [
-        trainSection,
-        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-        section('📚 明日の時間割｜7組・8組', input.classText, '#0F766E'),
-        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-        section('📝 48時間以内の提出期限', input.assignmentText, '#B45309'),
-        { type: 'separator', color: '#E2E8F0', margin: 'lg' },
-        section('📅 近日の学校行事', input.eventText, '#6D28D9'),
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  TRANSIT',
+    title: '鷹の台駅 発車案内',
+    subtitle: input.timetableOnly
+      ? 'AFTERNOON TIMETABLE  •  ' + startLabel + ' – ' + endLabel
+      : input.dateLabel + '  •  ' + startLabel + ' – ' + endLabel,
+    bodyContents,
+  });
+}
+
+function buildClassTimetableBubble(input: {
+  group: '7組' | '8組';
+  dateLabel: string;
+  dayKey: ClassTimetableDayKey | null;
+}) {
+  const isSeven = input.group === '7組';
+  const accent = isSeven ? '#0891B2' : '#4F46E5';
+  const rowBackground = isSeven ? '#F0F9FF' : '#F5F3FF';
+  const rows: Record<string, unknown>[] = [];
+
+  if (!input.dayKey) {
+    rows.push({
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '14px',
+      cornerRadius: '10px',
+      backgroundColor: rowBackground,
+      contents: [
+        { type: 'text', text: '明日は通常授業の時間割はありません。', size: 'sm', color: '#334155', wrap: true, weight: 'bold' },
+        { type: 'text', text: '土日などのため、通常時間割は表示されません。', size: 'xs', color: '#64748B', wrap: true, margin: 'sm' },
+      ],
+    });
+  } else {
+    const slots = CLASS_TIMETABLE_DATA[input.group][input.dayKey];
+    for (const slot of slots) {
+      rows.push({
+        type: 'box',
+        layout: 'horizontal',
+        alignItems: 'center',
+        spacing: 'sm',
+        paddingAll: '9px',
+        backgroundColor: rowBackground,
+        cornerRadius: '9px',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            width: '42px',
+            paddingAll: '6px',
+            cornerRadius: '6px',
+            backgroundColor: accent,
+            justifyContent: 'center',
+            contents: [
+              { type: 'text', text: slot.period + '限', size: 'xs', color: '#FFFFFF', weight: 'bold', align: 'center' },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            flex: 1,
+            spacing: 'xs',
+            contents: [
+              { type: 'text', text: slot.subject, size: 'sm', color: '#1E293B', weight: 'bold', wrap: true },
+              { type: 'text', text: slot.teacher, size: 'xs', color: '#64748B', wrap: true },
+            ],
+          },
+        ],
+      });
+    }
+  }
+
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  CLASS TIMETABLE',
+    title: input.group + 'の時間割',
+    subtitle: input.dateLabel + '  •  翌日の授業予定',
+    bodyContents: rows,
+  });
+}
+
+function buildSchoolEventsBubble(input: {
+  today: string;
+  events: EventRow[];
+  eventError: boolean;
+}) {
+  const bodyContents: Record<string, unknown>[] = [];
+  if (input.eventError) {
+    bodyContents.push({
+      type: 'text',
+      text: '学校行事データを取得できませんでした。',
+      size: 'sm',
+      color: '#B91C1C',
+      wrap: true,
+    });
+  } else if (!input.events.length) {
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '14px',
+      cornerRadius: '10px',
+      backgroundColor: '#FFF7ED',
+      contents: [
+        { type: 'text', text: '現在、登録されている今後の学校行事はありません。', size: 'sm', color: '#7C2D12', weight: 'bold', wrap: true },
+      ],
+    });
+  } else {
+    for (const event of input.events) {
+      const remaining = daysUntil(input.today, event.event_date);
+      const remainingText = remaining === 0 ? '本日' : remaining === 1 ? 'あと1日' : 'あと' + remaining + '日';
+      const remainingColor = remaining <= 3 ? '#B91C1C' : remaining <= 7 ? '#C2410C' : '#4338CA';
+      const contents: Record<string, unknown>[] = [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          alignItems: 'center',
+          spacing: 'sm',
+          contents: [
+            { type: 'text', text: formatDateKey(event.event_date), size: 'lg', color: '#C2410C', weight: 'bold', flex: 1 },
+            { type: 'text', text: remainingText, size: 'xs', color: remainingColor, weight: 'bold', align: 'end' },
+          ],
+        },
+        { type: 'text', text: String(event.title || '学校行事').slice(0, 70), size: 'sm', color: '#1E293B', weight: 'bold', wrap: true },
       ];
+      if (event.summary) {
+        contents.push({
+          type: 'text',
+          text: String(event.summary).slice(0, 100),
+          size: 'xs',
+          color: '#64748B',
+          wrap: true,
+        });
+      }
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '10px',
+        cornerRadius: '10px',
+        backgroundColor: '#FFF7ED',
+        spacing: 'xs',
+        contents,
+      });
+    }
+  }
+
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  SCHOOL EVENTS',
+    title: '学校行事',
+    subtitle: 'UPCOMING EVENTS  •  開催日・カウントダウン',
+    bodyContents,
+  });
+}
+
+function buildDailyDigest(input: {
+  dateLabel: string;
+  today: string;
+  tomorrowDateLabel: string;
+  tomorrowDayKey: ClassTimetableDayKey | null;
+  kokubunji: TimetableDeparture[];
+  higashimurayama: TimetableDeparture[];
+  trainError: boolean;
+  events: EventRow[];
+  eventError: boolean;
+  timetableOnly?: boolean;
+}) {
+  const transitBubble = buildTransitBubble(input);
+  const altText = input.timetableOnly
+    ? '【CampusSync 16:50】' + input.dateLabel + '｜鷹の台駅の電車時刻表'
+    : '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・7組と8組の時間割・学校行事。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
-    altText: (input.timetableOnly
-      ? '【CampusSync 16:50】' + input.dateLabel + '｜電車時刻表'
-      : '【CampusSync 16:00まとめ】' + input.dateLabel + '｜時刻表・明日の時間割・課題期限・学校行事').slice(0, 400),
-    contents: {
-      type: 'bubble',
-      size: 'mega',
-      header: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '18px',
-        backgroundColor: '#0F172A',
-        spacing: 'xs',
-        contents: input.timetableOnly
-          ? [
-              { type: 'text', text: 'CAMPUSSYNC  /  TRANSIT', size: 'xs', color: '#67E8F9', weight: 'bold' },
-              { type: 'text', text: '鷹の台駅 発車案内', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-              { type: 'text', text: 'AFTERNOON TIMETABLE  •  16:50 – 18:00', size: 'xs', color: '#CBD5E1', wrap: true },
-            ]
-          : [
-              { type: 'text', text: 'CAMPUSSYNC  /  DAILY BRIEF', size: 'xs', color: '#67E8F9', weight: 'bold' },
-              { type: 'text', text: '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-              { type: 'text', text: input.dateLabel + '  •  毎日16:00配信', size: 'xs', color: '#CBD5E1', wrap: true },
-            ],
-      },
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '16px',
-        spacing: 'none',
-        contents: sections,
-      },
-      footer: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '12px',
-        backgroundColor: '#F8FAFC',
-        spacing: 'xs',
-        contents: [
-          { type: 'text', text: '詳細・最新情報はCampusSyncで確認してください。', size: 'xs', color: '#475569', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-        ],
-      },
-    },
+    altText: altText.slice(0, 400),
+    contents: input.timetableOnly
+      ? transitBubble
+      : {
+          type: 'carousel',
+          contents: [
+            transitBubble,
+            buildClassTimetableBubble({
+              group: '7組',
+              dateLabel: input.tomorrowDateLabel,
+              dayKey: input.tomorrowDayKey,
+            }),
+            buildClassTimetableBubble({
+              group: '8組',
+              dateLabel: input.tomorrowDateLabel,
+              dayKey: input.tomorrowDayKey,
+            }),
+            buildSchoolEventsBubble({
+              today: input.today,
+              events: input.events,
+              eventError: input.eventError,
+            }),
+          ],
+        },
   };
 }
 
@@ -246,20 +386,11 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const horizon = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-  const [trainResult, assignmentResult, eventResult] = await Promise.all([
+  const [trainResult, eventResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service')
       .order('direction', { ascending: true })
       .order('departure_time', { ascending: true }),
-    admin.from('assignments')
-      .select('id,title,source,type,due_at,due')
-      .eq('is_active', true)
-      .not('due_at', 'is', null)
-      .gte('due_at', now.toISOString())
-      .lte('due_at', horizon.toISOString())
-      .order('due_at', { ascending: true })
-      .limit(12),
     admin.from('school_event_countdowns')
       .select('id,title,summary,event_date,is_active')
       .eq('is_active', true)
@@ -269,7 +400,6 @@ export async function POST(request: Request) {
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
-  if (assignmentResult.error) console.error('日次まとめ：課題取得エラー', assignmentResult.error.message);
   if (eventResult.error) console.error('日次まとめ：行事取得エラー', eventResult.error.message);
 
   const trainRows = (trainResult.data || []) as TrainRow[];
@@ -290,47 +420,17 @@ export async function POST(request: Request) {
   const kokubunji = departures('kokubunji');
   const higashimurayama = departures('higashimurayama');
 
-  let classText = tomorrow.dateLabel + '\n';
-  if (!tomorrow.dayKey) {
-    classText += '土日などのため、通常時間割はありません。';
-  } else {
-    const seven = CLASS_TIMETABLE_DATA['7組'][tomorrow.dayKey]
-      .map(slot => slot.period + '限 ' + slot.subject).join(' ／ ');
-    const eight = CLASS_TIMETABLE_DATA['8組'][tomorrow.dayKey]
-      .map(slot => slot.period + '限 ' + slot.subject).join(' ／ ');
-    classText += '7組：' + seven + '\n\n8組：' + eight;
-  }
-
-  const assignments = (assignmentResult.data || []) as AssignmentRow[];
-  const assignmentText = assignmentResult.error
-    ? '課題期限を取得できませんでした。'
-    : assignments.length
-      ? assignments.slice(0, 8).map(item =>
-          '・' + String(item.title || '課題名未設定').slice(0, 72) + '\n　期限 ' + formatDueAt(item.due_at)
-        ).join('\n\n') + (assignments.length > 8 ? '\n\nほか' + (assignments.length - 8) + '件' : '')
-      : '今後48時間以内に期限を迎える公開中の課題はありません。';
-
   const events = (eventResult.data || []) as EventRow[];
-  const eventText = eventResult.error
-    ? '学校行事データを取得できませんでした。'
-    : events.length
-      ? events.map(event => {
-          const remaining = daysUntil(today, event.event_date);
-          return '・' + String(event.title || '行事').slice(0, 60)
-            + '｜' + formatDateKey(event.event_date)
-            + (remaining === 0 ? '（本日）' : '（あと' + remaining + '日）')
-            + (event.summary ? '\n　' + String(event.summary).slice(0, 90) : '');
-        }).join('\n\n')
-      : '現在、登録されている今後の学校行事はありません。';
-
   const flex = buildDailyDigest({
     dateLabel: todayLabel,
+    today,
+    tomorrowDateLabel: tomorrow.dateLabel,
+    tomorrowDayKey: tomorrow.dayKey,
     kokubunji,
     higashimurayama,
     trainError: Boolean(trainResult.error),
-    classText: classText.slice(0, 1500),
-    assignmentText: assignmentText.slice(0, 1500),
-    eventText: eventText.slice(0, 1000),
+    events,
+    eventError: Boolean(eventResult.error),
     timetableOnly: timetableOnlyToday,
   });
 
@@ -369,13 +469,13 @@ export async function POST(request: Request) {
     content: {
       trainDepartures: kokubunji.length + higashimurayama.length,
       classTimetable: timetableOnlyToday ? false : tomorrow.dayKey !== null,
-      assignments: timetableOnlyToday ? 0 : assignments.length,
       events: timetableOnlyToday ? 0 : events.length,
+      carouselCards: timetableOnlyToday ? 1 : 4,
     },
     groupDelivery,
     message: (timetableOnlyToday
       ? todayLabel + 'の16:50配信は電車時刻表のみです。'
-      : todayLabel + 'の時刻表・翌日時間割・課題期限・学校行事を、16:00のFlex Message 1通にまとめて配信しました。') +
+      : todayLabel + 'の16:00配信は、電車・7組・8組・学校行事の4枚カルーセルです。') +
       summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
