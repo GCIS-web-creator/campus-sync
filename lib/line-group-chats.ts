@@ -76,8 +76,8 @@ function retryKeyForChat(base: string, chatId: string): string {
 }
 
 /**
- * Copies a message already broadcast to LINE friends to every active group/room
- * found through webhook events. The caller still sends the original broadcast.
+ * Copies a message already broadcast to LINE friends to the selected active group/room chats
+ * found through webhook events. Quick notices and cafeteria sold-out alerts go to all active chats.
  */
 export async function pushLineMessagesToRegisteredChats(
   accessToken: string,
@@ -110,7 +110,7 @@ export async function pushLineMessagesToRegisteredChats(
     ? await activeChatsQuery.or(
         'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true,receive_assignment_updates.eq.true',
       )
-    : kind === 'cafeteria_sold_out'
+    : kind === 'cafeteria_sold_out' || kind === 'quick_notice'
       ? await activeChatsQuery
       : await activeChatsQuery.eq(preferenceColumn, true);
   if (error) {
@@ -179,7 +179,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
         : result.kind === 'assignment_updates'
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
           : result.kind === 'quick_notice'
-            ? 'クイックお知らせ・パトロールを受信するLINEグループはありません（receive_quick_notices を確認してください）。'
+            ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
             : result.kind === 'daily_digest'
               ? '日次まとめを受信する設定のLINEグループはありません（時間割・時刻表・課題・学校予定の受信設定を確認してください）。'
               : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';

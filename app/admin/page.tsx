@@ -2181,7 +2181,7 @@ export default function CampusSyncAdmin() {
                     <ShieldAlert className="text-yellow-400" size={20} /> クイックお知らせ・パトロール
                   </h3>
                   <p className="text-xs text-slate-400">
-                    自由な文章やテンプレートから、見やすいカード型のFlex MessageでLINEお知らせを作成できます。配信前に内容を確認し、現在選択中のBOTの友だちへ送信します。
+                    自由な文章やテンプレートから、見やすいカード型のFlex MessageでLINEお知らせを作成できます。現在選択中のBOTの友だちと、Webhook登録済みの有効なLINEグループへ送信します。
                   </p>
                 </div>
 

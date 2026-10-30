@@ -129,11 +129,11 @@ export async function POST(request: Request) {
     const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'quick_notice');
     const groupSummary = summarizeLineGroupDelivery(groupDelivery);
     const responseMessage = historySaved
-      ? '「' + title + '」をLINE公式アカウントの友だちへ配信し、配信履歴にも保存しました。 ' + groupSummary
-      : '「' + title + '」をLINE公式アカウントの友だちへ配信しました。ただし、配信履歴の保存には失敗しました。SupabaseのSQL設定を確認してください。 ' + groupSummary;
+      ? '「' + title + '」をLINE公式アカウントの友だちと登録済みグループへ配信し、配信履歴にも保存しました。 ' + groupSummary
+      : '「' + title + '」をLINE公式アカウントの友だちと登録済みグループへ配信しました。ただし、配信履歴の保存には失敗しました。SupabaseのSQL設定を確認してください。 ' + groupSummary;
 
     return NextResponse.json(
-      { success: true, historySaved, message: responseMessage },
+      { success: true, historySaved, message: responseMessage, groupDelivery },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

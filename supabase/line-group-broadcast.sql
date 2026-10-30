@@ -12,7 +12,7 @@ create table if not exists public.line_group_chats (
   receive_school_schedule boolean not null default false,
   receive_cafeteria_sold_out boolean not null default true,
   receive_assignment_updates boolean not null default false,
-  receive_quick_notices boolean not null default false,
+  receive_quick_notices boolean not null default true,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
   last_event_type text,
@@ -35,13 +35,19 @@ alter table public.line_group_chats
 alter table public.line_group_chats
   add column if not exists receive_assignment_updates boolean not null default false;
 alter table public.line_group_chats
-  add column if not exists receive_quick_notices boolean not null default false;
+  add column if not exists receive_quick_notices boolean not null default true;
 
 -- New LINE groups receive both timetable categories by default; unrelated categories remain opt-in.
 alter table public.line_group_chats alter column receive_train_timetable set default true;
 alter table public.line_group_chats alter column receive_class_timetable set default true;
 alter table public.line_group_chats alter column receive_school_schedule set default false;
 alter table public.line_group_chats alter column receive_cafeteria_sold_out set default true;
+alter table public.line_group_chats alter column receive_quick_notices set default true;
+
+-- Existing active groups receive quick notices by default.
+update public.line_group_chats
+set receive_quick_notices = true
+where active = true;
 
 -- Existing registered active groups are included in cafeteria sold-out alerts.
 update public.line_group_chats
