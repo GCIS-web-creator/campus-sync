@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { MessageCircle, Send, X } from 'lucide-react';
+import { MessageCircle, Send, Sparkles, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type TablePayload = { headers: string[]; rows: string[][] };
@@ -161,25 +161,79 @@ function requestPageAction(action: PageAction): Promise<PageActionResult> {
   });
 }
 
-export default function CampusAIChat() {
+export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' | 'full' }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([{ id: 'greeting', role: 'ai', text: GREETING }]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dedicatedTabActive, setDedicatedTabActive] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const historyStorageKey = 'campus-sync-ai-current-conversation-v1';
 
   useEffect(() => {
-    const openForAiHash = () => {
-      if (window.location.hash.toLowerCase() === '#ai') setOpen(true);
+    if (mode !== 'floating') return;
+    const syncDedicatedRoute = () => {
+      setDedicatedTabActive(window.location.hash.toLowerCase() === '#ai');
     };
-    openForAiHash();
-    window.addEventListener('hashchange', openForAiHash);
-    return () => window.removeEventListener('hashchange', openForAiHash);
-  }, []);
+    syncDedicatedRoute();
+    window.addEventListener('hashchange', syncDedicatedRoute);
+    window.addEventListener('campus-sync-ai-route', syncDedicatedRoute);
+    return () => {
+      window.removeEventListener('hashchange', syncDedicatedRoute);
+      window.removeEventListener('campus-sync-ai-route', syncDedicatedRoute);
+    };
+  }, [mode]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [msgs, open]);
+  useEffect(() => {
+    if (mode !== 'full') return;
+    try {
+      const raw = window.sessionStorage.getItem(historyStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          const restored = parsed
+            .filter((item): item is Msg =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              typeof (item as Msg).id === 'string' &&
+              ((item as Msg).role === 'user' || (item as Msg).role === 'ai') &&
+              typeof (item as Msg).text === 'string'
+            )
+            .slice(-40);
+          setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }, ...restored]);
+        }
+      }
+    } catch (error) {
+      console.warn('CampusSync AIの会話履歴を復元できませんでした。', error);
+    } finally {
+      setHistoryReady(true);
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'full' || !historyReady) return;
+    try {
+      const saved = msgs.filter(message => message.id !== 'greeting').slice(-40);
+      window.sessionStorage.setItem(historyStorageKey, JSON.stringify(saved));
+    } catch (error) {
+      console.warn('CampusSync AIの会話履歴を一時保存できませんでした。', error);
+    }
+  }, [mode, msgs, historyReady]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }, [msgs]);
+
   if (pathname?.startsWith('/admin')) return null;
+  if (mode === 'floating' && dedicatedTabActive) return null;
+
+  const startNewChat = () => {
+    if (busy) return;
+    setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }]);
+    setInput('');
+    try { window.sessionStorage.removeItem(historyStorageKey); } catch {}
+  };
 
   async function send(raw: string) {
     const question = raw.trim().slice(0, 100);
@@ -264,62 +318,124 @@ export default function CampusAIChat() {
 
   return (
     <>
-      {open && (
-        <div role="dialog" aria-label="CampusSync AI" className="fixed bottom-36 right-4 z-[90] flex h-[30rem] max-h-[70vh] w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl md:bottom-24">
-          <div className="flex items-center justify-between bg-[#2B4FD8] px-4 py-3 text-white">
-            <div className="text-sm font-bold">CampusSync AI</div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="閉じる" className="rounded-full p-1 hover:bg-white/20"><X size={18} /></button>
-          </div>
+      {mode === 'full' ? (
+        <section
+          role="region"
+          aria-label="CampusSync AI 全画面チャット"
+          className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:rounded-3xl"
+        >
+          <header className="flex shrink-0 items-center justify-between gap-3 bg-[#111B35] px-4 py-3.5 text-white sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-violet-200">
+                <Sparkles size={22} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-black tracking-tight sm:text-lg">CampusSync AI</h2>
+                <p className="text-[9px] font-bold tracking-[0.16em] text-violet-200 sm:text-[10px]">SCHOOL LIFE INTELLIGENCE</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={startNewChat}
+              disabled={busy || msgs.length <= 1}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 sm:text-xs"
+            >
+              <Plus size={15} />
+              <span className="hidden sm:inline">新しい会話</span>
+              <span className="sm:hidden">新規</span>
+            </button>
+          </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-3">
-            {msgs.map(m => (
-              <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-                <div className={'max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed ' + (m.role === 'user' ? 'whitespace-pre-wrap bg-[#2B4FD8] text-white' : 'border border-slate-200 bg-white text-slate-800')}>
-                  <div className="whitespace-pre-wrap">{m.text}</div>
-                  {m.table && (
-                    <div className="mt-3 max-w-full overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="min-w-full border-collapse text-left text-xs">
-                        <thead className="bg-slate-100">
-                          <tr>{m.table.headers.map((h, i) => <th key={`${h}-${i}`} className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">{h}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                          {m.table.rows.map((row, i) => <tr key={i} className={i % 2 ? 'bg-slate-50' : 'bg-white'}>
-                            {m.table!.headers.map((_, j) => <td key={j} className="whitespace-nowrap border-b border-slate-100 px-2 py-2">{row[j] ?? '—'}</td>)}
-                          </tr>)}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {m.quickReplies?.length && m.queueMenuId && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {m.quickReplies.map(choice => (
-                        <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-3 py-1.5 text-xs font-medium text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+          <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3 dark:from-slate-950 dark:to-slate-900 sm:p-6">
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
+              {msgs.map(m => (
+                <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                  <div className={
+                    m.role === 'user'
+                      ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#2B4FD8] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'
+                      : 'w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-800 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:px-5'
+                  }>
+                    {m.role === 'ai' && (
+                      <div className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wide text-violet-700 dark:text-violet-300">
+                        <Sparkles size={13} />
+                        CAMPUSSYNC AI
+                      </div>
+                    )}
+                    <div className="whitespace-pre-wrap break-words">{m.text}</div>
+                    {m.table && (
+                      <div className="mt-4 max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-600">
+                        <table className="min-w-full border-collapse text-left text-xs">
+                          <thead className="bg-slate-100 dark:bg-slate-700">
+                            <tr>{m.table.headers.map((h, i) => <th key={h + '-' + i} className="whitespace-nowrap border-b border-slate-200 px-3 py-2.5 font-black dark:border-slate-600">{h}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            {m.table.rows.map((row, i) => (
+                              <tr key={i} className={i % 2 ? 'bg-slate-50 dark:bg-slate-800' : 'bg-white dark:bg-slate-900'}>
+                                {m.table!.headers.map((_, j) => <td key={j} className="border-b border-slate-100 px-3 py-2.5 align-top dark:border-slate-700">{row[j] ?? '—'}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {m.quickReplies?.length && m.queueMenuId && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {m.quickReplies.map(choice => (
+                          <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-4 py-2 text-xs font-bold text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">
+                            {choice.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {busy && <div className="text-xs text-slate-400">確認中…</div>}
-            {msgs.length === 1 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {SUGGESTIONS.map(s => <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-3 py-1 text-xs text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">{s}</button>)}
-              </div>
-            )}
-            <div ref={endRef} />
+              ))}
+              {busy && (
+                <div className="flex items-center gap-2 px-2 text-xs font-medium text-slate-400">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" />
+                  CampusSync AIが確認しています…
+                </div>
+              )}
+              {msgs.length === 1 && (
+                <div className="pt-1">
+                  <p className="mb-2 text-xs font-black text-slate-500 dark:text-slate-400">よく使う質問</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {SUGGESTIONS.map(s => (
+                      <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="flex items-center justify-between rounded-xl border border-violet-200 bg-white px-3.5 py-3 text-left text-xs font-bold text-slate-700 transition hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+                        {s}
+                        <span className="text-violet-500">→</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div ref={endRef} />
+            </div>
           </div>
 
-          <form onSubmit={e => { e.preventDefault(); void send(input); }} className="flex items-center gap-2 border-t border-slate-200 bg-white p-2">
-            <input value={input} onChange={e => setInput(e.target.value)} maxLength={100} placeholder="学校のことを質問" className="min-w-0 flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-base outline-none focus:border-[#2B4FD8]" />
-            <button type="submit" disabled={busy || !input.trim()} aria-label="送信" className="rounded-full bg-[#2B4FD8] p-2.5 text-white disabled:opacity-40"><Send size={18} /></button>
+          <form onSubmit={e => { e.preventDefault(); void send(input); }} className="shrink-0 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:px-6 sm:py-4">
+            <div className="mx-auto flex w-full max-w-5xl items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-xs focus-within:border-violet-400 dark:border-slate-700 dark:bg-slate-800">
+              <input value={input} onChange={e => setInput(e.target.value)} maxLength={100} placeholder="学校のことを質問してください…" className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-slate-400 dark:text-white" />
+              <button type="submit" disabled={busy || !input.trim()} aria-label="送信" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#6D28D9] text-white transition hover:bg-violet-800 disabled:opacity-40">
+                <Send size={18} />
+              </button>
+            </div>
+            <p className="mx-auto mt-2 max-w-5xl text-[10px] text-slate-400">回答には登録情報が必要です。重要な内容は学校からの正式な連絡も確認してください。</p>
           </form>
-        </div>
+        </section>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            if (window.location.hash.toLowerCase() !== '#ai') window.location.hash = 'ai';
+          }}
+          aria-label="CampusSync AI専用画面を開く"
+          title="CampusSync AIを開く"
+          className="fixed bottom-20 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-[#6D28D9] text-white shadow-lg transition hover:scale-105 md:bottom-6"
+        >
+          <Sparkles size={22} />
+        </button>
       )}
-      <button type="button" onClick={() => setOpen(o => !o)} aria-label={open ? 'AIチャットを閉じる' : 'AIチャットを開く'} className="fixed bottom-20 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-[#2B4FD8] text-white shadow-lg transition hover:scale-105 md:bottom-6">
-        {open ? <X size={22} /> : <MessageCircle size={22} />}
-      </button>
     </>
   );
 }
