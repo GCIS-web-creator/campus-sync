@@ -142,10 +142,11 @@ async function notifyMatchingLostFoundWatches(
         }
         webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
-        const results = await Promise.allSettled((subscriptions || []).filter(subscription => {
+        const eligibleSubscriptions = (subscriptions || []).filter(subscription => {
           const settings = preferenceByUser.get(String(subscription.user_id));
           return settings?.activity_updates !== false;
-        }).map(subscription => webpush.sendNotification(
+        });
+        const results = await Promise.allSettled(eligibleSubscriptions.map(subscription => webpush.sendNotification(
           subscription.subscription,
           JSON.stringify({
             title: 'CampusSync｜探している物に一致する可能性があります',
@@ -156,16 +157,18 @@ async function notifyMatchingLostFoundWatches(
           { TTL: 60 * 60 * 24 * 3, urgency: 'normal' },
         )));
         pushSent = results.filter(result => result.status === 'fulfilled').length;
-        results.forEach((result, index) => {
+        await Promise.all(results.map(async (result, index) => {
           if (result.status !== 'rejected') return;
           const statusCode = (result.reason as { statusCode?: number } | undefined)?.statusCode;
           if (statusCode === 404 || statusCode === 410) {
-            const subscription = (subscriptions || [])[index];
-            if (subscription?.endpoint) void admin.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+            const subscription = eligibleSubscriptions[index];
+            if (subscription?.endpoint) {
+              await admin.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+            }
           } else {
             console.error('落とし物一致通知のPush送信に失敗:', result.reason);
           }
-        });
+        }));
       } else {
         console.error('落とし物一致通知のPush設定を取得できません:', preferenceError.message);
       }
