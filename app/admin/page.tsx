@@ -2100,7 +2100,7 @@ export default function CampusSyncAdmin() {
                   <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><Clock size={22} /></div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-black text-white">鷹の台駅・今後1時間の時刻表</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">現在時刻から60分間の発車予定を、国分寺方面・東村山方面の2つに分けたFlex MessageでLINE公式アカウントへ送信します。毎時00分の自動配信とは別に、必要なとき手動送信できます。</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">現在時刻から60分間の発車予定を、国分寺方面・東村山方面に分けて手動テスト送信します。定期配信は毎日16:00の日次まとめに統合されています。</p>
                   </div>
                 </div>
                 <label className="block text-xs font-bold text-slate-300">
@@ -2135,8 +2135,8 @@ export default function CampusSyncAdmin() {
                 <div className="flex items-start gap-3">
                   <div className="rounded-xl bg-violet-500/15 p-3 text-violet-300"><CalendarDays size={22} /></div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-base font-black text-white">翌日の7組・8組時間割（21:00自動配信）</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">日本時間で翌日の曜日を判定し、7組・8組の時間割を1つのFlex Message（2枚のカルーセル）でLINEへ送信します。金曜・土曜の夜は、翌日が土日で授業がないため自動スキップします。テスト送信も実際にLINE配信されるため、LINE公式アカウントの友だちと「時間割配信をON」にしたグループへ届きます。</p>
+                    <h3 className="text-base font-black text-white">翌日の7組・8組時間割（16:00まとめ配信）</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">日本時間で翌日の曜日を判定し、7組・8組の時間割を1つのFlex Message（2枚のカルーセル）で作成します。定期配信は毎日16:00の日次まとめに含まれます。ここからのテスト送信は即時にLINE配信されるため、送信前に内容を確認してください。</p>
                   </div>
                 </div>
                 <button
@@ -2162,7 +2162,7 @@ export default function CampusSyncAdmin() {
                     <ShieldAlert className="text-yellow-400" size={20} /> クイックお知らせ・パトロール
                   </h3>
                   <p className="text-xs text-slate-400">
-                    自由な文章やテンプレートから、見やすいカード型のFlex MessageでLINEお知らせを作成できます。配信前に内容を確認し、友だち全員へ送信します。
+                    自由な文章やテンプレートから、見やすいカード型のFlex MessageでLINEお知らせを作成できます。配信前に内容を確認し、現在選択中のBOTの友だちへ送信します。
                   </p>
                 </div>
 
