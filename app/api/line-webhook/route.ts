@@ -1,3 +1,4 @@
+import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
@@ -144,12 +145,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const channelSecret = process.env.LINE_CHANNEL_SECRET;
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const channelCredentials = getLineWebhookCredentials();
 
-  if (!channelSecret || !channelAccessToken) {
+  if (channelCredentials.length === 0) {
     return NextResponse.json(
-      { message: 'LINE_CHANNEL_SECRET と LINE_CHANNEL_ACCESS_TOKEN をサーバー環境変数に設定してください。' },
+      { message: 'LINE BOT 1〜3のWebhook認証情報をサーバー環境変数に設定してください。' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
@@ -165,7 +165,10 @@ export async function POST(request: Request) {
   }
 
   const signature = request.headers.get('x-line-signature') || '';
-  if (!verifyLineSignature(rawBody, signature, channelSecret)) {
+  const matchedCredentials = channelCredentials.find(credential =>
+    verifyLineSignature(rawBody, signature, credential.channelSecret),
+  );
+  if (!matchedCredentials) {
     return NextResponse.json(
       { message: 'LINE webhook signature verification failed.' },
       { status: 401, headers: { 'Cache-Control': 'no-store' } },
@@ -184,7 +187,7 @@ export async function POST(request: Request) {
 
   const events = Array.isArray(payload.events) ? payload.events : [];
   after(async () => {
-    await handleLineEvents(events, channelAccessToken);
+    await handleLineEvents(events, matchedCredentials.accessToken);
   });
 
   return new Response('OK', {
