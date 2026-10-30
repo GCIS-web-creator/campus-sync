@@ -4859,7 +4859,7 @@ Supabaseの設定を確認してください。
                 </div>
               </div>
             ) : (
-              <CampusFacilityMap facilities={campusFacilities} />
+              <CampusFacilityMap facilities={campusFacilities} loadMessage={campusFacilitiesMessage} />
             )}
           </div>
         );
