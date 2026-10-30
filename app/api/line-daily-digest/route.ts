@@ -1,3 +1,4 @@
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -174,7 +175,8 @@ export async function POST(request: Request) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const activeLineBot = await getActiveLineBot();
+  const accessToken = activeLineBot?.accessToken || null;
   if (!supabaseUrl || !serviceRoleKey || !accessToken) {
     return jsonError('Supabaseのサーバー設定またはLINE_CHANNEL_ACCESS_TOKENが不足しています。', 503);
   }
