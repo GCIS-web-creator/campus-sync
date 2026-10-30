@@ -2393,7 +2393,13 @@ useEffect(() => {
       setNotificationLoadError('学校通知を読み込めませんでした。通信状態とSupabaseの設定を確認してください。');
     } else {
       const rows = (Array.isArray(notificationData) ? notificationData : [])
-        .filter(note => !LEGACY_SAMPLE_NOTIFICATION_TITLES.has(String(note.title || '').trim()));
+        .filter(note => !LEGACY_SAMPLE_NOTIFICATION_TITLES.has(String(note.title || '').trim()))
+        .filter(note => !note.expires_at || (Number.isFinite(new Date(note.expires_at).getTime()) && new Date(note.expires_at).getTime() > Date.now()))
+        .sort((a, b) => {
+          const priorityRank = (value: unknown) => value === 'emergency' ? 3 : value === 'important' ? 2 : 1;
+          const priorityDifference = priorityRank(b.priority) - priorityRank(a.priority);
+          return priorityDifference || String(b.created_at || '').localeCompare(String(a.created_at || ''));
+        });
       let readIds = new Set<string>();
       try {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -2435,6 +2441,10 @@ useEffect(() => {
           createdAt,
           time,
           isRead: readIds.has(String(note.id)),
+          category: typeof note.category === 'string' ? note.category : 'general',
+          priority: note.priority === 'emergency' || note.priority === 'important' ? note.priority : 'normal',
+          isPinned: Boolean(note.is_pinned),
+          expiresAt: typeof note.expires_at === 'string' ? note.expires_at : null,
         };
       }));
       setNotificationLoadError('');
@@ -4183,6 +4193,18 @@ Supabaseの設定を確認してください。
       case 'home':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {notifications.filter(note => note.priority === 'emergency' && (!note.expiresAt || new Date(note.expiresAt).getTime() > Date.now())).slice(0, 3).map(note => (
+              <button key={note.id} type="button" onClick={() => setSelectedNotification(note)} className="flex w-full items-start gap-3 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-left shadow-sm transition hover:bg-rose-100">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white"><AlertTriangle size={21}/></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-black tracking-widest text-rose-700">緊急連絡 / EMERGENCY</span>
+                  <span className="mt-1 block break-words text-sm font-black text-rose-950">{note.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-xs leading-5 text-rose-800">{note.body}</span>
+                  <span className="mt-2 block text-[10px] font-bold text-rose-700">{note.time} ・ 詳細を確認する</span>
+                </span>
+                <ChevronRight size={18} className="mt-1 shrink-0 text-rose-500"/>
+              </button>
+            ))}
             {/* ダッシュボード上部・スコアシステム */}
             <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-3xl p-6 shadow-xl text-white relative overflow-hidden transition-all duration-300`}>
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -4212,6 +4234,57 @@ Supabaseの設定を確認してください。
               </div>
               <p className="text-[10px] text-white/70 mt-2 text-right">※情報を報告したりタスクを完了するとポイントが貯まります</p>
             </div>
+
+            <section className={\`${cardBgClass} rounded-2xl border p-4 shadow-sm\`}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className={\`flex items-center gap-2 text-sm font-black \${activeTextClass}\`}><Star size={17} className="text-amber-500"/> お気に入り</h3>
+                <button type="button" onClick={() => setShowFavoriteEditor(value => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:bg-gray-50">
+                  {showFavoriteEditor ? '閉じる' : '編集'}
+                </button>
+              </div>
+              {favoriteDashboardTabs.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {favoriteDashboardTabs.map(id => {
+                    const item = FAVORITE_DASHBOARD_OPTIONS.find(option => option.id === id);
+                    if (!item) return null;
+                    const Icon = item.icon;
+                    return (
+                      <button key={id} type="button" onClick={() => {
+                        if (id === 'tasks') { setActiveTab('home'); setHashScrollTarget('tasks'); }
+                        else if (id === 'campus-map') { setFacilitiesSubTab('map'); setActiveTab('facilities'); }
+                        else setActiveTab(id);
+                      }} className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-left transition hover:border-cyan-200 hover:bg-cyan-50">
+                        <Icon size={19} className="shrink-0 text-cyan-700"/>
+                        <span className="min-w-0 truncate text-[11px] font-black text-gray-700">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-xl bg-gray-50 p-3 text-center text-xs text-gray-500">お気に入りがまだありません。「編集」から追加できます。</p>
+              )}
+              {showFavoriteEditor && (
+                <div className="mt-3 rounded-xl border border-dashed border-gray-200 p-3">
+                  <p className="mb-2 text-[10px] font-bold text-gray-500">ホームに表示する機能（最大6件）</p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {FAVORITE_DASHBOARD_OPTIONS.map(item => (
+                      <label key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-gray-50 p-2 text-[10px] font-bold text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={favoriteDashboardTabs.includes(item.id)}
+                          onChange={event => setFavoriteDashboardTabs(current => {
+                            if (event.target.checked) return current.length >= 6 ? current : [...current, item.id];
+                            return current.filter(value => value !== item.id);
+                          })}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[9px] text-gray-400">この設定は現在のブラウザーに保存されます。</p>
+                </div>
+              )}
+            </section>
 
             {/* クイックリンク・本日のショートカット */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -4617,6 +4690,12 @@ Supabaseの設定を確認してください。
               >
                 落とし物共有掲示板 🔍
               </button>
+              <button
+                onClick={() => setFacilitiesSubTab('map')}
+                className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${facilitiesSubTab === 'map' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+              >
+                校内マップ
+              </button>
             </div>
 
             {facilitiesSubTab === 'status' ? (
@@ -4716,8 +4795,25 @@ Supabaseの設定を確認してください。
                   </div>
                 </section>
               </div>
-            ) : (
+            ) : facilitiesSubTab === 'lost' ? (
               <div className="space-y-4 animate-in fade-in duration-200">
+                <section className={`${cardBgClass} rounded-2xl border p-4 shadow-sm space-y-3`}>
+                  <div>
+                    <h3 className="text-sm font-black text-amber-700">探している物の通知</h3>
+                    <p className="mt-1 text-[10px] leading-5 text-gray-500">キーワードを登録すると、事務室で確認・公開された落とし物に一致した場合、このアカウントだけに通知します。</p>
+                  </div>
+                  <form onSubmit={handleAddLostWatch} className="flex gap-2">
+                    <input value={lostWatchKeyword} onChange={event => setLostWatchKeyword(event.target.value)} maxLength={40} minLength={2} placeholder="例：黒い折りたたみ傘" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-medium outline-none focus:border-amber-400" />
+                    <button type="submit" disabled={lostWatchSaving || lostWatchKeyword.trim().length < 2} className="shrink-0 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">{lostWatchSaving ? '登録中…' : '登録'}</button>
+                  </form>
+                  {lostWatchMessage && <p role="status" className="text-[10px] leading-4 text-gray-500">{lostWatchMessage}</p>}
+                  {lostFoundWatches.length > 0 && <div className="space-y-1.5">{lostFoundWatches.map(watch => (
+                    <div key={watch.id} className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+                      <span className="min-w-0 flex-1 truncate text-xs font-bold text-amber-900">{watch.keyword}</span>
+                      <button type="button" onClick={() => void handleDeleteLostWatch(watch.id)} className="rounded-md px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100">削除</button>
+                    </div>
+                  ))}</div>}
+                </section>
                 {/* 落とし物新規報告 */}
                 <form onSubmit={handleAddLostItem} className={`${cardBgClass} rounded-2xl p-4 border shadow-sm space-y-3`}>
                   <h4 className="text-xs font-black flex items-center gap-2 text-amber-600"><AnimatedAsset name="lost-found-search" className="h-8 w-8" /> 落とし物発見の共有報告</h4>
@@ -4762,6 +4858,8 @@ Supabaseの設定を確認してください。
                   )}
                 </div>
               </div>
+            ) : (
+              <CampusFacilityMap facilities={campusFacilities} />
             )}
           </div>
         );
@@ -5030,7 +5128,7 @@ Supabaseの設定を確認してください。
                   })();
                 }}
                 aria-label={`通知の詳細を開く：${note.title}`}
-                className={`flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors ${note.isRead ? 'border-gray-200 bg-gray-50/80 opacity-80' : 'border-blue-200 bg-white shadow-sm'} hover:border-blue-300 hover:bg-blue-50/40`}
+                className={`flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors ${note.priority === 'emergency' ? 'border-rose-300 bg-rose-50 shadow-sm' : note.priority === 'important' ? 'border-amber-200 bg-amber-50/70 shadow-sm' : note.isRead ? 'border-gray-200 bg-gray-50/80 opacity-80' : 'border-blue-200 bg-white shadow-sm'} hover:border-blue-300 hover:bg-blue-50/40`}
               >
                 <div className="mt-1 shrink-0">
                   {note.isRead ? (
@@ -5040,7 +5138,11 @@ Supabaseの設定を確認してください。
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className={`mb-1 break-words text-xs leading-normal ${note.isRead ? 'font-medium text-gray-500' : 'font-black text-gray-800'}`}>{note.title}</h4>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    {note.priority === 'emergency' && <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black text-white">緊急</span>}
+                    {note.priority === 'important' && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black text-white">重要</span>}
+                    <h4 className={`break-words text-xs leading-normal ${note.isRead ? 'font-medium text-gray-500' : 'font-black text-gray-800'}`}>{note.title}</h4>
+                  </div>
                   {note.imageUrl && <img src={note.imageUrl} alt="" loading="lazy" className="mb-2 max-h-32 max-w-36 rounded-lg object-cover" />}
                   {note.body && (
                     <p className={`mb-2 whitespace-pre-wrap break-words text-[11px] leading-5 ${note.isRead ? 'text-gray-500' : 'text-gray-600'}`}>
@@ -6080,7 +6182,9 @@ Supabaseの設定を確認してください。
                 <BellRing size={22} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className={`text-[10px] font-black tracking-widest ${themeCls.text}`}>CAMPUSSYNC / SCHOOL NOTICE</p>
+                <p className={`text-[10px] font-black tracking-widest ${selectedNotification.priority === 'emergency' ? 'text-rose-700' : selectedNotification.priority === 'important' ? 'text-amber-700' : themeCls.text}`}>{selectedNotification.priority === 'emergency' ? 'CAMPUSSYNC / EMERGENCY' : 'CAMPUSSYNC / SCHOOL NOTICE'}</p>
+                {selectedNotification.priority === 'emergency' && <span className="mt-1 inline-block rounded-full bg-rose-600 px-2 py-1 text-[9px] font-black text-white">緊急連絡</span>}
+                {selectedNotification.priority === 'important' && <span className="mt-1 inline-block rounded-full bg-amber-500 px-2 py-1 text-[9px] font-black text-white">重要なお知らせ</span>}
                 <h2 id="school-notification-detail-title" className="mt-1 break-words text-base font-black leading-6 text-gray-900">
                   {selectedNotification.title}
                 </h2>
