@@ -8,7 +8,7 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
-type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice';
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice' | 'daily_digest';
 
 export type LineGroupDeliveryResult = {
   kind: LineGroupDeliveryKind;
@@ -100,10 +100,14 @@ export async function pushLineMessagesToRegisteredChats(
           : kind === 'quick_notice'
             ? 'receive_quick_notices'
             : 'receive_general_notifications';
-  const { data, error } = await admin.from('line_group_chats')
+  const activeChatsQuery = admin.from('line_group_chats')
     .select('chat_id,chat_type')
-    .eq('active', true)
-    .eq(preferenceColumn, true);
+    .eq('active', true);
+  const { data, error } = kind === 'daily_digest'
+    ? await activeChatsQuery.or(
+        'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true,receive_assignment_updates.eq.true',
+      )
+    : await activeChatsQuery.eq(preferenceColumn, true);
   if (error) {
     console.error('LINEグループ配信先の取得に失敗:', error.message);
     return { kind, registered: 0, sent: 0, failed: 0, lookupError: error.message };
@@ -158,7 +162,9 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
           : result.kind === 'quick_notice'
             ? 'クイックお知らせ・パトロールを受信するLINEグループはありません（receive_quick_notices を確認してください）。'
-            : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
+            : result.kind === 'daily_digest'
+              ? '日次まとめを受信する設定のLINEグループはありません（時間割・時刻表・課題・学校予定の受信設定を確認してください）。'
+              : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
   if (result.failed > 0) return 'LINEグループ配信は' + result.sent + '/' + result.registered + '件成功、' + result.failed + '件失敗しました。';
   return result.kind === 'train_timetable'
     ? '時刻表専用に設定されたLINEグループ' + result.sent + '件にも配信しました。'
