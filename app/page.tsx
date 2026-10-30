@@ -421,226 +421,68 @@ const FAVORITE_DASHBOARD_OPTIONS = [
   { id: 'notifications', label: 'お知らせ', icon: BellRing },
 ] as const;
 
-// --- 🚃 鷹の台駅：発車案内（ユーザー提供の2026年10月3日時刻表） ---
+// --- 🚃 鷹の台駅：平日ダイヤ（ユーザー提供の時刻表） ---
+const createWeekdayTrains = (times: string, destination: string) =>
+  times.trim().split(/\s+/).filter(Boolean).map(time => ({
+    time,
+    service: `各駅停車${destination}行き`,
+  }));
+
 const TAKANODAI_TIMETABLE = {
   kokubunji: {
     id: 'kokubunji',
     name: '国分寺方面',
     destination: '国分寺行き',
-    trains: [
-    { time: '05:10', service: '各駅停車国分寺行き' },
-    { time: '05:31', service: '各駅停車国分寺行き' },
-    { time: '05:47', service: '各駅停車国分寺行き' },
-    { time: '06:04', service: '各駅停車国分寺行き' },
-    { time: '06:19', service: '各駅停車国分寺行き' },
-    { time: '06:34', service: '各駅停車国分寺行き' },
-    { time: '06:48', service: '各駅停車国分寺行き' },
-    { time: '07:02', service: '各駅停車国分寺行き' },
-    { time: '07:12', service: '各駅停車国分寺行き' },
-    { time: '07:22', service: '各駅停車国分寺行き' },
-    { time: '07:32', service: '各駅停車国分寺行き' },
-    { time: '07:42', service: '各駅停車国分寺行き' },
-    { time: '07:51', service: '各駅停車国分寺行き' },
-    { time: '08:02', service: '各駅停車国分寺行き' },
-    { time: '08:12', service: '各駅停車国分寺行き' },
-    { time: '08:22', service: '各駅停車国分寺行き' },
-    { time: '08:32', service: '各駅停車国分寺行き' },
-    { time: '08:43', service: '各駅停車国分寺行き' },
-    { time: '08:52', service: '各駅停車国分寺行き' },
-    { time: '09:02', service: '各駅停車国分寺行き' },
-    { time: '09:11', service: '各駅停車国分寺行き' },
-    { time: '09:21', service: '各駅停車国分寺行き' },
-    { time: '09:31', service: '各駅停車国分寺行き' },
-    { time: '09:42', service: '各駅停車国分寺行き' },
-    { time: '09:51', service: '各駅停車国分寺行き' },
-    { time: '10:01', service: '各駅停車国分寺行き' },
-    { time: '10:12', service: '各駅停車国分寺行き' },
-    { time: '10:21', service: '各駅停車国分寺行き' },
-    { time: '10:32', service: '各駅停車国分寺行き' },
-    { time: '10:42', service: '各駅停車国分寺行き' },
-    { time: '10:53', service: '各駅停車国分寺行き' },
-    { time: '11:03', service: '各駅停車国分寺行き' },
-    { time: '11:13', service: '各駅停車国分寺行き' },
-    { time: '11:23', service: '各駅停車国分寺行き' },
-    { time: '11:33', service: '各駅停車国分寺行き' },
-    { time: '11:43', service: '各駅停車国分寺行き' },
-    { time: '11:53', service: '各駅停車国分寺行き' },
-    { time: '12:03', service: '各駅停車国分寺行き' },
-    { time: '12:13', service: '各駅停車国分寺行き' },
-    { time: '12:23', service: '各駅停車国分寺行き' },
-    { time: '12:33', service: '各駅停車国分寺行き' },
-    { time: '12:43', service: '各駅停車国分寺行き' },
-    { time: '12:53', service: '各駅停車国分寺行き' },
-    { time: '13:03', service: '各駅停車国分寺行き' },
-    { time: '13:13', service: '各駅停車国分寺行き' },
-    { time: '13:23', service: '各駅停車国分寺行き' },
-    { time: '13:33', service: '各駅停車国分寺行き' },
-    { time: '13:43', service: '各駅停車国分寺行き' },
-    { time: '13:53', service: '各駅停車国分寺行き' },
-    { time: '14:03', service: '各駅停車国分寺行き' },
-    { time: '14:13', service: '各駅停車国分寺行き' },
-    { time: '14:23', service: '各駅停車国分寺行き' },
-    { time: '14:33', service: '各駅停車国分寺行き' },
-    { time: '14:43', service: '各駅停車国分寺行き' },
-    { time: '14:53', service: '各駅停車国分寺行き' },
-    { time: '15:03', service: '各駅停車国分寺行き' },
-    { time: '15:13', service: '各駅停車国分寺行き' },
-    { time: '15:23', service: '各駅停車国分寺行き' },
-    { time: '15:33', service: '各駅停車国分寺行き' },
-    { time: '15:43', service: '各駅停車国分寺行き' },
-    { time: '15:53', service: '各駅停車国分寺行き' },
-    { time: '16:03', service: '各駅停車国分寺行き' },
-    { time: '16:13', service: '各駅停車国分寺行き' },
-    { time: '16:23', service: '各駅停車国分寺行き' },
-    { time: '16:33', service: '各駅停車国分寺行き' },
-    { time: '16:43', service: '各駅停車国分寺行き' },
-    { time: '16:53', service: '各駅停車国分寺行き' },
-    { time: '17:03', service: '各駅停車国分寺行き' },
-    { time: '17:13', service: '各駅停車国分寺行き' },
-    { time: '17:23', service: '各駅停車国分寺行き' },
-    { time: '17:34', service: '各駅停車国分寺行き' },
-    { time: '17:43', service: '各駅停車国分寺行き' },
-    { time: '17:53', service: '各駅停車国分寺行き' },
-    { time: '18:03', service: '各駅停車国分寺行き' },
-    { time: '18:13', service: '各駅停車国分寺行き' },
-    { time: '18:23', service: '各駅停車国分寺行き' },
-    { time: '18:33', service: '各駅停車国分寺行き' },
-    { time: '18:43', service: '各駅停車国分寺行き' },
-    { time: '18:53', service: '各駅停車国分寺行き' },
-    { time: '19:03', service: '各駅停車国分寺行き' },
-    { time: '19:13', service: '各駅停車国分寺行き' },
-    { time: '19:23', service: '各駅停車国分寺行き' },
-    { time: '19:33', service: '各駅停車国分寺行き' },
-    { time: '19:43', service: '各駅停車国分寺行き' },
-    { time: '19:53', service: '各駅停車国分寺行き' },
-    { time: '20:03', service: '各駅停車国分寺行き' },
-    { time: '20:13', service: '各駅停車国分寺行き' },
-    { time: '20:23', service: '各駅停車国分寺行き' },
-    { time: '20:33', service: '各駅停車国分寺行き' },
-    { time: '20:43', service: '各駅停車国分寺行き' },
-    { time: '20:53', service: '各駅停車国分寺行き' },
-    { time: '21:09', service: '各駅停車国分寺行き' },
-    { time: '21:24', service: '各駅停車国分寺行き' },
-    { time: '21:39', service: '各駅停車国分寺行き' },
-    { time: '21:54', service: '各駅停車国分寺行き' },
-    { time: '22:09', service: '各駅停車国分寺行き' },
-    { time: '22:24', service: '各駅停車国分寺行き' },
-    { time: '22:39', service: '各駅停車国分寺行き' },
-    { time: '22:54', service: '各駅停車国分寺行き' },
-    { time: '23:11', service: '各駅停車国分寺行き' },
-    { time: '23:32', service: '各駅停車国分寺行き' },
-    { time: '23:54', service: '各駅停車国分寺行き' },
-  ]
+    trains: createWeekdayTrains(`
+05:10 05:31 05:47
+06:02 06:17 06:27 06:38 06:48 06:56
+07:05 07:12 07:20 07:27 07:35 07:42 07:51 07:59
+08:06 08:14 08:21 08:29 08:36 08:46 08:54
+09:02 09:13 09:23 09:33 09:43 09:53
+10:03 10:13 10:23 10:33 10:43 10:53
+11:03 11:13 11:23 11:33 11:43 11:53
+12:03 12:13 12:23 12:33 12:43 12:53
+13:03 13:13 13:23 13:33 13:43 13:53
+14:03 14:13 14:23 14:33 14:43 14:53
+15:03 15:13 15:23 15:33 15:43 15:53
+16:04 16:14 16:25 16:34 16:45 16:55
+17:05 17:15 17:25 17:35 17:45 17:55
+18:05 18:15 18:25 18:35 18:45 18:55
+19:05 19:15 19:25 19:35 19:45 19:55
+20:05 20:15 20:25 20:35 20:45 20:55
+21:05 21:15 21:25 21:36 21:48
+22:06 22:21 22:37 22:51
+23:07 23:21 23:36 23:52
+00:10
+    `, '国分寺'),
   },
   higashimurayama: {
     id: 'higashimurayama',
     name: '東村山方面',
     destination: '東村山行き',
-    trains: [
-    { time: '05:25', service: '各駅停車東村山行き' },
-    { time: '05:47', service: '各駅停車東村山行き' },
-    { time: '06:04', service: '各駅停車東村山行き' },
-    { time: '06:19', service: '各駅停車東村山行き' },
-    { time: '06:34', service: '各駅停車東村山行き' },
-    { time: '06:48', service: '各駅停車東村山行き' },
-    { time: '07:07', service: '各駅停車東村山行き' },
-    { time: '07:16', service: '各駅停車東村山行き' },
-    { time: '07:26', service: '各駅停車東村山行き' },
-    { time: '07:36', service: '各駅停車東村山行き' },
-    { time: '07:46', service: '各駅停車東村山行き' },
-    { time: '07:56', service: '各駅停車東村山行き' },
-    { time: '08:06', service: '各駅停車東村山行き' },
-    { time: '08:16', service: '各駅停車東村山行き' },
-    { time: '08:26', service: '各駅停車東村山行き' },
-    { time: '08:37', service: '各駅停車東村山行き' },
-    { time: '08:47', service: '各駅停車東村山行き' },
-    { time: '08:57', service: '各駅停車東村山行き' },
-    { time: '09:06', service: '各駅停車東村山行き' },
-    { time: '09:16', service: '各駅停車東村山行き' },
-    { time: '09:26', service: '各駅停車東村山行き' },
-    { time: '09:36', service: '各駅停車東村山行き' },
-    { time: '09:46', service: '各駅停車東村山行き' },
-    { time: '09:56', service: '各駅停車東村山行き' },
-    { time: '10:06', service: '各駅停車東村山行き' },
-    { time: '10:16', service: '各駅停車東村山行き' },
-    { time: '10:26', service: '各駅停車東村山行き' },
-    { time: '10:37', service: '各駅停車東村山行き' },
-    { time: '10:47', service: '各駅停車東村山行き' },
-    { time: '10:58', service: '各駅停車東村山行き' },
-    { time: '11:08', service: '各駅停車東村山行き' },
-    { time: '11:18', service: '各駅停車東村山行き' },
-    { time: '11:28', service: '各駅停車東村山行き' },
-    { time: '11:38', service: '各駅停車東村山行き' },
-    { time: '11:48', service: '各駅停車東村山行き' },
-    { time: '11:58', service: '各駅停車東村山行き' },
-    { time: '12:08', service: '各駅停車東村山行き' },
-    { time: '12:18', service: '各駅停車東村山行き' },
-    { time: '12:28', service: '各駅停車東村山行き' },
-    { time: '12:38', service: '各駅停車東村山行き' },
-    { time: '12:48', service: '各駅停車東村山行き' },
-    { time: '12:58', service: '各駅停車東村山行き' },
-    { time: '13:08', service: '各駅停車東村山行き' },
-    { time: '13:18', service: '各駅停車東村山行き' },
-    { time: '13:28', service: '各駅停車東村山行き' },
-    { time: '13:38', service: '各駅停車東村山行き' },
-    { time: '13:48', service: '各駅停車東村山行き' },
-    { time: '13:58', service: '各駅停車東村山行き' },
-    { time: '14:08', service: '各駅停車東村山行き' },
-    { time: '14:18', service: '各駅停車東村山行き' },
-    { time: '14:28', service: '各駅停車東村山行き' },
-    { time: '14:38', service: '各駅停車東村山行き' },
-    { time: '14:48', service: '各駅停車東村山行き' },
-    { time: '14:58', service: '各駅停車東村山行き' },
-    { time: '15:08', service: '各駅停車東村山行き' },
-    { time: '15:18', service: '各駅停車東村山行き' },
-    { time: '15:28', service: '各駅停車東村山行き' },
-    { time: '15:38', service: '各駅停車東村山行き' },
-    { time: '15:48', service: '各駅停車東村山行き' },
-    { time: '15:58', service: '各駅停車東村山行き' },
-    { time: '16:08', service: '各駅停車東村山行き' },
-    { time: '16:18', service: '各駅停車東村山行き' },
-    { time: '16:28', service: '各駅停車東村山行き' },
-    { time: '16:38', service: '各駅停車東村山行き' },
-    { time: '16:48', service: '各駅停車東村山行き' },
-    { time: '16:58', service: '各駅停車東村山行き' },
-    { time: '17:08', service: '各駅停車東村山行き' },
-    { time: '17:18', service: '各駅停車東村山行き' },
-    { time: '17:28', service: '各駅停車東村山行き' },
-    { time: '17:38', service: '各駅停車東村山行き' },
-    { time: '17:48', service: '各駅停車東村山行き' },
-    { time: '17:58', service: '各駅停車東村山行き' },
-    { time: '18:08', service: '各駅停車東村山行き' },
-    { time: '18:18', service: '各駅停車東村山行き' },
-    { time: '18:28', service: '各駅停車東村山行き' },
-    { time: '18:38', service: '各駅停車東村山行き' },
-    { time: '18:48', service: '各駅停車東村山行き' },
-    { time: '18:58', service: '各駅停車東村山行き' },
-    { time: '19:08', service: '各駅停車東村山行き' },
-    { time: '19:17', service: '各駅停車東村山行き' },
-    { time: '19:28', service: '各駅停車東村山行き' },
-    { time: '19:38', service: '各駅停車東村山行き' },
-    { time: '19:48', service: '各駅停車東村山行き' },
-    { time: '19:58', service: '各駅停車東村山行き' },
-    { time: '20:08', service: '各駅停車東村山行き' },
-    { time: '20:18', service: '各駅停車東村山行き' },
-    { time: '20:28', service: '各駅停車東村山行き' },
-    { time: '20:38', service: '各駅停車東村山行き' },
-    { time: '20:48', service: '各駅停車東村山行き' },
-    { time: '20:58', service: '各駅停車東村山行き' },
-    { time: '21:09', service: '各駅停車東村山行き' },
-    { time: '21:24', service: '各駅停車東村山行き' },
-    { time: '21:39', service: '各駅停車東村山行き' },
-    { time: '21:54', service: '各駅停車東村山行き' },
-    { time: '22:09', service: '各駅停車東村山行き' },
-    { time: '22:24', service: '各駅停車東村山行き' },
-    { time: '22:39', service: '各駅停車東村山行き' },
-    { time: '22:54', service: '各駅停車東村山行き' },
-    { time: '23:11', service: '各駅停車東村山行き' },
-    { time: '23:27', service: '各駅停車東村山行き' },
-    { time: '23:46', service: '各駅停車東村山行き' },
-    { time: '00:07', service: '各駅停車東村山行き' },
-  ]
-  }
+    trains: createWeekdayTrains(`
+05:25 05:47
+06:02 06:17 06:33 06:43 06:56
+07:07 07:12 07:20 07:27 07:37 07:44 07:51 07:59
+08:07 08:14 08:23 08:29 08:37 08:45 08:55
+09:01 09:08 09:18 09:28 09:38 09:48 09:58
+10:08 10:18 10:28 10:38 10:48 10:58
+11:08 11:18 11:28 11:38 11:48 11:58
+12:08 12:18 12:28 12:38 12:48 12:58
+13:08 13:18 13:28 13:38 13:48 13:58
+14:08 14:18 14:28 14:38 14:48 14:58
+15:08 15:18 15:28 15:38 15:48 15:58
+16:09 16:19 16:29 16:39 16:50
+17:00 17:10 17:20 17:30 17:40 17:50
+18:00 18:10 18:20 18:30 18:40 18:50
+19:00 19:10 19:20 19:30 19:40 19:50
+20:00 20:10 20:20 20:30 20:40 20:50
+21:00 21:10 21:20 21:30 21:42 21:53
+22:06 22:21 22:36 22:51
+23:06 23:21 23:36 23:52
+00:10 00:27
+    `, '東村山'),
+  },
 };
 
 // 旧バス状況報告の互換データ（現在の生徒画面では表示せず、電車発車案内を使用）
@@ -4927,7 +4769,7 @@ Supabaseの設定を確認してください。
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
               <h2 className={`text-xl font-black ${activeTextClass} flex items-center gap-2`}><AnimatedAsset name="train-move" className="h-9 w-12" /> 鷹の台駅 発車案内</h2>
-              <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">電車時刻表</span>
+              <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">平日ダイヤ</span>
             </div>
 
             {busSubTab === 'countdown' ? (
@@ -4935,16 +4777,19 @@ Supabaseの設定を確認してください。
                 const direction = trainTimetable[selectedTrainDirection];
                 const now = new Date(trainClockNow);
                 const nowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-                const parsed = direction.trains.map(train => ({
-                  ...train,
-                  seconds: Number(train.time.slice(0, 2)) * 3600 + Number(train.time.slice(3)) * 60
-                }));
-                const nextIndex = parsed.findIndex(train => train.seconds >= nowSeconds);
+                let previousSeconds = -1;
+                const parsed = direction.trains.map(train => {
+                  let seconds = Number(train.time.slice(0, 2)) * 3600 + Number(train.time.slice(3)) * 60;
+                  if (seconds < previousSeconds) seconds += 24 * 3600;
+                  previousSeconds = seconds;
+                  return { ...train, seconds };
+                });
+                const adjustedNowSeconds = nowSeconds < 5 * 3600 ? nowSeconds + 24 * 3600 : nowSeconds;
+                const nextIndex = parsed.findIndex(train => train.seconds >= adjustedNowSeconds);
                 const effectiveIndex = nextIndex >= 0 ? nextIndex : 0;
                 const nextTrain = parsed[effectiveIndex];
-                const rawDiff = nextIndex >= 0
-                  ? nextTrain.seconds - nowSeconds
-                  : (24 * 3600 - nowSeconds) + nextTrain.seconds;
+                const nextTrainSeconds = nextIndex >= 0 ? nextTrain.seconds : nextTrain.seconds + 24 * 3600;
+                const rawDiff = Math.max(0, nextTrainSeconds - adjustedNowSeconds);
                 const hoursUntil = Math.floor(rawDiff / 3600);
                 const minsUntil = Math.floor((rawDiff % 3600) / 60);
                 const secondsUntil = rawDiff % 60;

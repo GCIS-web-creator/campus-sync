@@ -115,7 +115,7 @@ function buildDailyDigest(input: {
   return {
     type: 'flex',
     altText: (input.timetableOnly
-      ? '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表'
+      ? '【CampusSync 16:50】' + input.dateLabel + '｜電車時刻表'
       : '【CampusSync 16:00まとめ】' + input.dateLabel + '｜時刻表・明日の時間割・課題期限・学校行事').slice(0, 400),
     contents: {
       type: 'bubble',
@@ -129,7 +129,7 @@ function buildDailyDigest(input: {
         contents: [
           { type: 'text', text: 'CAMPUSSYNC  /  DAILY BRIEF', size: 'xs', color: '#67E8F9', weight: 'bold' },
           { type: 'text', text: input.timetableOnly ? '電車時刻表のお知らせ' : '今日の学校情報まとめ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-          { type: 'text', text: input.dateLabel + '  •  毎日16:00配信', size: 'xs', color: '#CBD5E1', wrap: true },
+          { type: 'text', text: input.dateLabel + (input.timetableOnly ? '  •  本日16:50配信' : '  •  毎日16:00配信'), size: 'xs', color: '#CBD5E1', wrap: true },
         ],
       },
       body: {
@@ -188,17 +188,23 @@ export async function POST(request: Request) {
 
   const now = new Date();
   const nowParts = tokyoParts(now);
-  if (!manualRequest && (Number(nowParts.hour) !== 16 || Number(nowParts.minute) >= 10)) {
+  const today = dateKeyFromParts(nowParts);
+  const currentHour = Number(nowParts.hour);
+  const currentMinute = Number(nowParts.minute);
+  const regularDispatchWindow = currentHour === 16 && currentMinute < 10;
+  const oneTimeOct30DispatchWindow =
+    today === '2026-10-30' && currentHour === 16 && currentMinute >= 50 && currentMinute < 55;
+  if (!manualRequest && !regularDispatchWindow && !oneTimeOct30DispatchWindow) {
     return NextResponse.json({
       success: true,
       skipped: true,
-      message: '日次まとめは毎日16:00（日本時間）のみ配信します。',
+      message: '日次まとめは通常16:00（日本時間）、2026年10月30日のみ16:50に配信します。',
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
-  const today = dateKeyFromParts(nowParts);
+
   const todayLabel = Number(nowParts.month) + '月' + Number(nowParts.day) + '日';
-  // 2026-10-30 only: limit the 16:00 digest to the train timetable.
+  // 2026-10-30 only: limit the 16:50 digest to the train timetable.
   const timetableOnlyToday = today === '2026-10-30';
   const tomorrow = getTokyoTomorrowTimetableInfo(now);
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -244,7 +250,7 @@ export async function POST(request: Request) {
   const higashimurayama = departures('higashimurayama');
   const trainText = trainResult.error
     ? '時刻表データを取得できませんでした。'
-    : '国分寺方面（' + kokubunji.length + '本）\n' + (kokubunji.length ? kokubunji.join('　') : '該当する発車予定はありません。')
+    : '平日ダイヤ\n国分寺方面（' + kokubunji.length + '本）\n' + (kokubunji.length ? kokubunji.join('　') : '該当する発車予定はありません。')
       + '\n\n東村山方面（' + higashimurayama.length + '本）\n' + (higashimurayama.length ? higashimurayama.join('　') : '該当する発車予定はありません。');
 
   let classText = tomorrow.dateLabel + '\n';
@@ -329,7 +335,7 @@ export async function POST(request: Request) {
     },
     groupDelivery,
     message: (timetableOnlyToday
-      ? todayLabel + 'の16:00配信は電車時刻表のみです。'
+      ? todayLabel + 'の16:50配信は電車時刻表のみです。'
       : todayLabel + 'の時刻表・翌日時間割・課題期限・学校行事を、16:00のFlex Message 1通にまとめて配信しました。') +
       summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
