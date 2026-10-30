@@ -4236,9 +4236,9 @@ Supabaseの設定を確認してください。
               <p className="text-[10px] text-white/70 mt-2 text-right">※情報を報告したりタスクを完了するとポイントが貯まります</p>
             </div>
 
-            <section className={\`${cardBgClass} rounded-2xl border p-4 shadow-sm\`}>
+            <section className={`${cardBgClass} rounded-2xl border p-4 shadow-sm`}>
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className={\`flex items-center gap-2 text-sm font-black \${activeTextClass}\`}><Star size={17} className="text-amber-500"/> お気に入り</h3>
+                <h3 className={`flex items-center gap-2 text-sm font-black ${activeTextClass}`}><Star size={17} className="text-amber-500"/> お気に入り</h3>
                 <button type="button" onClick={() => setShowFavoriteEditor(value => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:bg-gray-50">
                   {showFavoriteEditor ? '閉じる' : '編集'}
                 </button>
