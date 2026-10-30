@@ -5976,8 +5976,9 @@ function NavItem({ icon, label, isActive, onClick, themeCls, badge }: { icon: Re
 function SidebarItem({ icon, label, isActive, onClick, badge, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number, themeCls: any }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
-      <div className="flex shrink-0 items-center [&_svg]:block [&_svg]:shrink-0">
-      {icon}</div>
+      <span className="campus-nav-icon-motion flex h-8 w-8 shrink-0 items-center justify-center" aria-hidden="true">
+        {icon}
+      </span>
       <span className="truncate">{label}</span>
       {badge && <span className="ml-auto bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>
