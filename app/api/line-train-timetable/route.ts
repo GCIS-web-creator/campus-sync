@@ -47,6 +47,13 @@ function jsonError(message: string, status: number) {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as { mode?: unknown };
   const manualRequest = body?.mode === 'manual';
+  if (!manualRequest) {
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      message: '個別の時刻表定期配信は16:00の日次まとめへ統合されました。',
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
