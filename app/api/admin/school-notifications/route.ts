@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import webpush from 'web-push';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildNoticeFlexMessage, buildEmergencyNoticeFlexMessage } from '@/lib/line-flex';
@@ -150,6 +151,91 @@ async function sendLineNotification(
   }
 }
 
+
+
+async function sendPriorityNoticePush(
+  admin: ReturnType<typeof getAdminClient> & {},
+  notification: SchoolNotification,
+): Promise<{ attempted: number; sent: number; skipped: boolean; message: string }> {
+  if (notification.priority !== 'emergency' && notification.priority !== 'important') {
+    return { attempted: 0, sent: 0, skipped: true, message: '通常通知のためPush追加配信は行いません。' };
+  }
+
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT;
+  if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
+    return { attempted: 0, sent: 0, skipped: true, message: 'VAPID設定がないためブラウザーPushは未送信です。CampusSyncとLINEへの配信は別途実行します。' };
+  }
+
+  const [{ data: subscriptions, error: subscriptionError }, { data: preferences, error: preferenceError }] = await Promise.all([
+    admin.from('push_subscriptions').select('user_id, endpoint, subscription'),
+    admin.from('push_reminder_preferences').select('user_id, notification_settings'),
+  ]);
+
+  if (subscriptionError || preferenceError) {
+    const detail = [subscriptionError?.message, preferenceError?.message].filter(Boolean).join(' / ');
+    console.error('重要通知のPush対象取得に失敗:', detail);
+    return { attempted: 0, sent: 0, skipped: true, message: 'Push対象の取得に失敗しました。' };
+  }
+
+  const settingsByUser = new Map<string, Record<string, unknown>>();
+  for (const preference of preferences || []) {
+    settingsByUser.set(String(preference.user_id), preference.notification_settings || {});
+  }
+
+  const eligible = (subscriptions || []).filter(subscription => {
+    const settings = settingsByUser.get(String(subscription.user_id));
+    return settings?.school_announcements !== false;
+  });
+
+  if (!eligible.length) {
+    return { attempted: 0, sent: 0, skipped: true, message: 'Push通知が有効な登録端末はありません。' };
+  }
+
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+  const isEmergency = notification.priority === 'emergency';
+  const title = (isEmergency ? '緊急連絡｜' : '重要なお知らせ｜') + notification.title;
+  const body = notification.body.slice(0, 220);
+  const payload = JSON.stringify({
+    title,
+    body,
+    url: '/#notices',
+    tag: 'campus-notice-' + String(notification.id),
+    requireInteraction: isEmergency,
+  });
+
+  const results = await Promise.allSettled(eligible.map(subscription =>
+    webpush.sendNotification(
+      subscription.subscription,
+      payload,
+      { TTL: 60 * 60 * 24, urgency: isEmergency ? 'high' : 'normal' },
+    ),
+  ));
+
+  let sent = 0;
+  await Promise.all(results.map(async (result, index) => {
+    if (result.status === 'fulfilled') {
+      sent += 1;
+      return;
+    }
+    const statusCode = (result.reason as { statusCode?: number } | undefined)?.statusCode;
+    if (statusCode === 404 || statusCode === 410) {
+      const endpoint = eligible[index]?.endpoint;
+      if (endpoint) await admin.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    } else {
+      console.error('重要通知のPush送信に失敗:', result.reason);
+    }
+  }));
+
+  return {
+    attempted: eligible.length,
+    sent,
+    skipped: false,
+    message: 'ブラウザーPush ' + sent + '/' + eligible.length + '件',
+  };
+}
+
 export async function GET(request: Request) {
   const authError = authorize(request);
   if (authError) return authError;
@@ -264,12 +350,19 @@ export async function POST(request: Request) {
   }
 
   const delivery = await sendLineNotification(admin, data as SchoolNotification);
+  const priorityPush = await sendPriorityNoticePush(admin, data as SchoolNotification);
   const message = delivery.sent
     ? `「${title}」をCampusSyncに全校公開し、LINE公式アカウントへ送信しました。`
     : `「${title}」はCampusSyncに公開しましたが、LINE送信に失敗しました。履歴の「LINE再送」から再試行できます。詳細: ${delivery.message}`;
 
   return NextResponse.json(
-    { success: true, notification: delivery.notification, lineNotification: { sent: delivery.sent, message: delivery.message }, message },
+    {
+      success: true,
+      notification: delivery.notification,
+      lineNotification: { sent: delivery.sent, message: delivery.message },
+      priorityPush,
+      message: message + (priorityPush.skipped ? '' : ' ' + priorityPush.message),
+    },
     { status: 201, headers: { 'Cache-Control': 'no-store' } },
   );
 }
