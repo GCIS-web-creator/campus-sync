@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { MessageCircle, Send, Sparkles, Plus } from 'lucide-react';
+import { Send, Sparkles, Plus, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type TablePayload = { headers: string[]; rows: string[][] };
@@ -15,6 +15,7 @@ type Msg = {
   quickReplies?: QuickReply[];
   queueMenuId?: string;
 };
+type SavedConversation = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
 const SUGGESTIONS = ['今日のメニューは?', '次の電車は?', '課題ある?', '教室の状況は?'];
 const GREETING = 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。';
@@ -168,8 +169,11 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
   const [busy, setBusy] = useState(false);
   const [dedicatedTabActive, setDedicatedTabActive] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
+  const [conversations, setConversations] = useState<SavedConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
-  const historyStorageKey = 'campus-sync-ai-current-conversation-v1';
+  const historyStorageKey = 'campus-sync-ai-conversations-v1';
+  const activeHistoryStorageKey = 'campus-sync-ai-active-conversation-v1';
 
   useEffect(() => {
     if (mode !== 'floating') return;
@@ -185,41 +189,80 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
     };
   }, [mode]);
 
+  // 専用タブでは複数の会話を、このブラウザータブ内に一時保存する。
   useEffect(() => {
     if (mode !== 'full') return;
     try {
       const raw = window.sessionStorage.getItem(historyStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as unknown;
-        if (Array.isArray(parsed)) {
-          const restored = parsed
-            .filter((item): item is Msg =>
-              Boolean(item) &&
-              typeof item === 'object' &&
-              typeof (item as Msg).id === 'string' &&
-              ((item as Msg).role === 'user' || (item as Msg).role === 'ai') &&
-              typeof (item as Msg).text === 'string'
-            )
-            .slice(-40);
-          setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }, ...restored]);
-        }
+      const parsed = raw ? JSON.parse(raw) as unknown : [];
+      const restored: SavedConversation[] = Array.isArray(parsed)
+        ? parsed.filter((item): item is SavedConversation =>
+            Boolean(item) &&
+            typeof item === 'object' &&
+            typeof (item as SavedConversation).id === 'string' &&
+            typeof (item as SavedConversation).title === 'string' &&
+            Number.isFinite((item as SavedConversation).updatedAt) &&
+            Array.isArray((item as SavedConversation).messages)
+          ).map(item => ({
+            ...item,
+            messages: item.messages.filter((message): message is Msg =>
+              Boolean(message) &&
+              typeof message === 'object' &&
+              typeof (message as Msg).id === 'string' &&
+              ((message as Msg).role === 'user' || (message as Msg).role === 'ai') &&
+              typeof (message as Msg).text === 'string'
+            ).slice(-40),
+          })).slice(0, 20)
+        : [];
+      const preferredId = window.sessionStorage.getItem(activeHistoryStorageKey) || '';
+      const active = restored.find(item => item.id === preferredId) || restored[0];
+
+      if (restored.length) {
+        setConversations(restored);
+        setActiveConversationId(active.id);
+        setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }, ...active.messages]);
+      } else {
+        const id = 'chat-' + Date.now();
+        setConversations([{ id, title: '新しい会話', updatedAt: Date.now(), messages: [] }]);
+        setActiveConversationId(id);
       }
     } catch (error) {
       console.warn('CampusSync AIの会話履歴を復元できませんでした。', error);
+      const id = 'chat-' + Date.now();
+      setConversations([{ id, title: '新しい会話', updatedAt: Date.now(), messages: [] }]);
+      setActiveConversationId(id);
     } finally {
       setHistoryReady(true);
     }
   }, [mode]);
 
   useEffect(() => {
+    if (mode !== 'full' || !historyReady || !activeConversationId) return;
+    const savedMessages = msgs.filter(message => message.id !== 'greeting').slice(-40);
+    const firstQuestion = savedMessages.find(message => message.role === 'user')?.text || '';
+    setConversations(current => {
+      const existing = current.find(item => item.id === activeConversationId);
+      const updated: SavedConversation = {
+        id: activeConversationId,
+        title: existing?.title === '新しい会話' && firstQuestion
+          ? firstQuestion.slice(0, 32)
+          : existing?.title || firstQuestion.slice(0, 32) || '新しい会話',
+        updatedAt: Date.now(),
+        messages: savedMessages,
+      };
+      return [updated, ...current.filter(item => item.id !== activeConversationId)].slice(0, 20);
+    });
+  }, [mode, msgs, historyReady, activeConversationId]);
+
+  useEffect(() => {
     if (mode !== 'full' || !historyReady) return;
     try {
-      const saved = msgs.filter(message => message.id !== 'greeting').slice(-40);
-      window.sessionStorage.setItem(historyStorageKey, JSON.stringify(saved));
+      window.sessionStorage.setItem(historyStorageKey, JSON.stringify(conversations));
+      if (activeConversationId) window.sessionStorage.setItem(activeHistoryStorageKey, activeConversationId);
     } catch (error) {
       console.warn('CampusSync AIの会話履歴を一時保存できませんでした。', error);
     }
-  }, [mode, msgs, historyReady]);
+  }, [mode, conversations, activeConversationId, historyReady]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -229,10 +272,43 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
   if (mode === 'floating' && dedicatedTabActive) return null;
 
   const startNewChat = () => {
-    if (busy) return;
+    if (busy || mode !== 'full') return;
+    const id = 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    setConversations(current => [
+      { id, title: '新しい会話', updatedAt: Date.now(), messages: [] },
+      ...current,
+    ].slice(0, 20));
+    setActiveConversationId(id);
     setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }]);
     setInput('');
-    try { window.sessionStorage.removeItem(historyStorageKey); } catch {}
+  };
+
+  const openConversation = (conversation: SavedConversation) => {
+    if (busy) return;
+    setActiveConversationId(conversation.id);
+    setMsgs([{ id: 'greeting', role: 'ai', text: GREETING }, ...conversation.messages]);
+    setInput('');
+  };
+
+  const renameConversation = (conversation: SavedConversation) => {
+    const title = window.prompt('会話のタイトルを入力してください。', conversation.title);
+    if (!title?.trim()) return;
+    setConversations(current => current.map(item =>
+      item.id === conversation.id ? { ...item, title: title.trim().slice(0, 32) } : item
+    ));
+  };
+
+  const deleteConversation = (conversation: SavedConversation) => {
+    if (!window.confirm('「' + conversation.title + '」を削除しますか？')) return;
+    const remaining = conversations.filter(item => item.id !== conversation.id);
+    if (conversation.id === activeConversationId) {
+      if (remaining.length) {
+        openConversation(remaining[0]);
+      } else {
+        startNewChat();
+      }
+    }
+    setConversations(remaining);
   };
 
   async function send(raw: string) {
@@ -337,7 +413,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
             <button
               type="button"
               onClick={startNewChat}
-              disabled={busy || msgs.length <= 1}
+              disabled={busy || !historyReady}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 sm:text-xs"
             >
               <Plus size={15} />
@@ -346,70 +422,117 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3 dark:from-slate-950 dark:to-slate-900 sm:p-6">
-            <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
-              {msgs.map(m => (
-                <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-                  <div className={
-                    m.role === 'user'
-                      ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#2B4FD8] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'
-                      : 'w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-800 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:px-5'
-                  }>
-                    {m.role === 'ai' && (
-                      <div className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wide text-violet-700 dark:text-violet-300">
-                        <Sparkles size={13} />
-                        CAMPUSSYNC AI
-                      </div>
-                    )}
-                    <div className="whitespace-pre-wrap break-words">{m.text}</div>
-                    {m.table && (
-                      <div className="mt-4 max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-600">
-                        <table className="min-w-full border-collapse text-left text-xs">
-                          <thead className="bg-slate-100 dark:bg-slate-700">
-                            <tr>{m.table.headers.map((h, i) => <th key={h + '-' + i} className="whitespace-nowrap border-b border-slate-200 px-3 py-2.5 font-black dark:border-slate-600">{h}</th>)}</tr>
-                          </thead>
-                          <tbody>
-                            {m.table.rows.map((row, i) => (
-                              <tr key={i} className={i % 2 ? 'bg-slate-50 dark:bg-slate-800' : 'bg-white dark:bg-slate-900'}>
-                                {m.table!.headers.map((_, j) => <td key={j} className="border-b border-slate-100 px-3 py-2.5 align-top dark:border-slate-700">{row[j] ?? '—'}</td>)}
-                              </tr>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950 md:flex">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-[10px] font-black tracking-wider text-slate-500 dark:text-slate-400">会話履歴</p>
+                <span className="text-[10px] text-slate-400">{conversations.length}/20</span>
+              </div>
+              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+                {conversations.map(conversation => (
+                  <div key={conversation.id} className={'group rounded-xl border p-2 ' + (activeConversationId === conversation.id ? 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/40' : 'border-transparent hover:border-slate-200 hover:bg-white dark:hover:border-slate-700 dark:hover:bg-slate-900')}>
+                    <button type="button" disabled={busy} onClick={() => openConversation(conversation)} className="w-full min-w-0 text-left disabled:opacity-50">
+                      <span className={'block truncate text-xs font-bold ' + (activeConversationId === conversation.id ? 'text-violet-800 dark:text-violet-200' : 'text-slate-700 dark:text-slate-200')}>{conversation.title}</span>
+                      <span className="mt-1 block text-[9px] text-slate-400">{conversation.messages.length ? new Date(conversation.updatedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '新規会話'}</span>
+                    </button>
+                    <div className="mt-1 flex justify-end gap-1 opacity-70 transition group-hover:opacity-100">
+                      <button type="button" onClick={() => renameConversation(conversation)} aria-label="会話名を変更" title="名前を変更" className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-violet-700 dark:hover:bg-slate-800"><Pencil size={12} /></button>
+                      <button type="button" onClick={() => deleteConversation(conversation)} aria-label="会話を削除" title="削除" className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-rose-600 dark:hover:bg-slate-800"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:hidden">
+                <select
+                  aria-label="会話履歴"
+                  value={activeConversationId}
+                  onChange={event => {
+                    const selected = conversations.find(item => item.id === event.target.value);
+                    if (selected) openConversation(selected);
+                  }}
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  {conversations.map(conversation => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
+                </select>
+                <button type="button" onClick={() => {
+                  const current = conversations.find(item => item.id === activeConversationId);
+                  if (current) renameConversation(current);
+                }} aria-label="会話名を変更" className="rounded-lg border border-slate-200 p-2 text-slate-500 dark:border-slate-700"><Pencil size={14} /></button>
+                <button type="button" onClick={() => {
+                  const current = conversations.find(item => item.id === activeConversationId);
+                  if (current) deleteConversation(current);
+                }} aria-label="会話を削除" className="rounded-lg border border-slate-200 p-2 text-slate-500 dark:border-slate-700"><Trash2 size={14} /></button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3 dark:from-slate-950 dark:to-slate-900 sm:p-6">
+                <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
+                  {msgs.map(m => (
+                    <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                      <div className={
+                        m.role === 'user'
+                          ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#2B4FD8] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'
+                          : 'w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-800 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:px-5'
+                      }>
+                        {m.role === 'ai' && (
+                          <div className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wide text-violet-700 dark:text-violet-300">
+                            <Sparkles size={13} />
+                            CAMPUSSYNC AI
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap break-words">{m.text}</div>
+                        {m.table && (
+                          <div className="mt-4 max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-600">
+                            <table className="min-w-full border-collapse text-left text-xs">
+                              <thead className="bg-slate-100 dark:bg-slate-700">
+                                <tr>{m.table.headers.map((h, i) => <th key={h + '-' + i} className="whitespace-nowrap border-b border-slate-200 px-3 py-2.5 font-black dark:border-slate-600">{h}</th>)}</tr>
+                              </thead>
+                              <tbody>
+                                {m.table.rows.map((row, i) => (
+                                  <tr key={i} className={i % 2 ? 'bg-slate-50 dark:bg-slate-800' : 'bg-white dark:bg-slate-900'}>
+                                    {m.table!.headers.map((_, j) => <td key={j} className="border-b border-slate-100 px-3 py-2.5 align-top dark:border-slate-700">{row[j] ?? '—'}</td>)}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        {m.quickReplies?.length && m.queueMenuId && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {m.quickReplies.map(choice => (
+                              <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-4 py-2 text-xs font-bold text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">
+                                {choice.label}
+                              </button>
                             ))}
-                          </tbody>
-                        </table>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {m.quickReplies?.length && m.queueMenuId && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {m.quickReplies.map(choice => (
-                          <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-4 py-2 text-xs font-bold text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">
-                            {choice.label}
+                    </div>
+                  ))}
+                  {busy && (
+                    <div className="flex items-center gap-2 px-2 text-xs font-medium text-slate-400">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" />
+                      CampusSync AIが確認しています…
+                    </div>
+                  )}
+                  {msgs.length === 1 && (
+                    <div className="pt-1">
+                      <p className="mb-2 text-xs font-black text-slate-500 dark:text-slate-400">よく使う質問</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {SUGGESTIONS.map(s => (
+                          <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="flex items-center justify-between rounded-xl border border-violet-200 bg-white px-3.5 py-3 text-left text-xs font-bold text-slate-700 transition hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+                            {s}
+                            <span className="text-violet-500">→</span>
                           </button>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  <div ref={endRef} />
                 </div>
-              ))}
-              {busy && (
-                <div className="flex items-center gap-2 px-2 text-xs font-medium text-slate-400">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" />
-                  CampusSync AIが確認しています…
-                </div>
-              )}
-              {msgs.length === 1 && (
-                <div className="pt-1">
-                  <p className="mb-2 text-xs font-black text-slate-500 dark:text-slate-400">よく使う質問</p>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {SUGGESTIONS.map(s => (
-                      <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="flex items-center justify-between rounded-xl border border-violet-200 bg-white px-3.5 py-3 text-left text-xs font-bold text-slate-700 transition hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-                        {s}
-                        <span className="text-violet-500">→</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div ref={endRef} />
+              </div>
             </div>
           </div>
 
