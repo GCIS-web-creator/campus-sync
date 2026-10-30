@@ -6,6 +6,8 @@ import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
 import CampusAIChat from '@/components/CampusAIChat';
+import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGlobalSearch';
+import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacilityMap';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import CountdownEventWidget from '@/components/CountdownEventWidget';
 import React, { useState, useEffect, useRef } from 'react';
@@ -17,7 +19,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
   ThermometerSun, Info, Users, Check, X,
-  Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu,
+  Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
   Volume2, Coffee, Moon, Sun, HelpCircle
@@ -366,6 +368,17 @@ type AppSchoolNotification = {
   createdAt: string;
   time: string;
   isRead: boolean;
+  category: string;
+  priority: 'normal' | 'important' | 'emergency';
+  isPinned: boolean;
+  expiresAt: string | null;
+};
+
+type LostFoundWatch = {
+  id: string;
+  keyword: string;
+  is_active: boolean;
+  created_at: string;
 };
 
 type CafeteriaMenuItem = {
@@ -393,6 +406,18 @@ const getTokyoDayRange = (dateKey = getTokyoDateKey()) => {
 };
 
 const INITIAL_LOST_AND_FOUND: LostAndFoundItem[] = [];
+
+
+const FAVORITE_DASHBOARD_OPTIONS = [
+  { id: 'timetable', label: '時間割', icon: Calendar },
+  { id: 'cafeteria', label: '学食', icon: Utensils },
+  { id: 'ai', label: 'CampusSync AI', icon: Sparkles },
+  { id: 'tasks', label: '課題・提出物', icon: FileText },
+  { id: 'bus', label: '電車・バス', icon: Train },
+  { id: 'chat', label: 'クラスチャット', icon: MessageCircle },
+  { id: 'campus-map', label: '校内マップ', icon: MapPin },
+  { id: 'notifications', label: 'お知らせ', icon: BellRing },
+] as const;
 
 // --- 🚃 鷹の台駅：発車案内（ユーザー提供の2026年10月3日時刻表） ---
 const TAKANODAI_TIMETABLE = {
@@ -914,6 +939,9 @@ export default function CampusSyncApp() {
   const [activeTab, setActiveTab] = useState('home');
   const [hashScrollTarget, setHashScrollTarget] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [favoriteDashboardTabs, setFavoriteDashboardTabs] = useState<string[]>(['timetable', 'cafeteria', 'ai', 'chat']);
+  const [showFavoriteEditor, setShowFavoriteEditor] = useState(false);
   const activeTabHashSyncRef = useRef(false);
   const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
@@ -1576,8 +1604,124 @@ export default function CampusSyncApp() {
   const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
   const [cafeteriaAnnouncement, setCafeteriaAnnouncement] = useState<{ message: string; show_popup: boolean; show_banner: boolean; updated_at?: string | null } | null>(null);
   const [showCafeteriaAnnouncementPopup, setShowCafeteriaAnnouncementPopup] = useState(false);
-  const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost'>('status');
+  const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost' | 'map'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
+
+// 校内施設マップ：認証済みの生徒に、管理者が公開した施設情報だけを取得する。
+useEffect(() => {
+  let cancelled = false;
+  const loadFacilities = async () => {
+    if (!authUser?.id) {
+      setCampusFacilities([]);
+      return;
+    }
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) return;
+      const response = await fetch('/api/campus-facilities', {
+        headers: { Authorization: 'Bearer ' + accessToken },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(result?.facilities)) {
+        throw new Error(result?.message || '校内施設を読み込めませんでした。');
+      }
+      if (!cancelled) {
+        setCampusFacilities(result.facilities as CampusFacility[]);
+        setCampusFacilitiesMessage('');
+      }
+    } catch (error) {
+      if (!cancelled) {
+        setCampusFacilities([]);
+        setCampusFacilitiesMessage(error instanceof Error ? error.message : '校内施設を読み込めませんでした。');
+      }
+    }
+  };
+  void loadFacilities();
+  return () => { cancelled = true; };
+}, [authUser?.id]);
+
+// 落とし物通知キーワードは本人のアカウントに紐づく設定だけを取得する。
+useEffect(() => {
+  let cancelled = false;
+  const loadWatches = async () => {
+    if (!authUser?.id) {
+      setLostFoundWatches([]);
+      return;
+    }
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) return;
+      const response = await fetch('/api/lost-found-watches', {
+        headers: { Authorization: 'Bearer ' + accessToken },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(result?.watches)) {
+        throw new Error(result?.message || '落とし物通知設定を読み込めませんでした。');
+      }
+      if (!cancelled) {
+        setLostFoundWatches(result.watches as LostFoundWatch[]);
+        setLostWatchMessage('');
+      }
+    } catch (error) {
+      if (!cancelled) setLostWatchMessage(error instanceof Error ? error.message : '落とし物通知設定を読み込めませんでした。');
+    }
+  };
+  void loadWatches();
+  return () => { cancelled = true; };
+}, [authUser?.id]);
+
+const handleAddLostWatch = async (event: React.FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+  const keyword = lostWatchKeyword.trim();
+  if (lostWatchSaving || keyword.length < 2) return;
+  setLostWatchSaving(true);
+  setLostWatchMessage('');
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('学校アカウントでログインしてください。');
+    const response = await fetch('/api/lost-found-watches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+      body: JSON.stringify({ keyword }),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.watch) throw new Error(result?.message || '通知キーワードを登録できませんでした。');
+    setLostFoundWatches(current => [result.watch as LostFoundWatch, ...current.filter(item => item.id !== result.watch.id)]);
+    setLostWatchKeyword('');
+    setLostWatchMessage('登録しました。一致する落とし物が事務室で確認・公開されたときに個別通知します。');
+  } catch (error) {
+    setLostWatchMessage(error instanceof Error ? error.message : '通知キーワードを登録できませんでした。');
+  } finally {
+    setLostWatchSaving(false);
+  }
+};
+
+const handleDeleteLostWatch = async (id: string) => {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('学校アカウントでログインしてください。');
+    const response = await fetch('/api/lost-found-watches', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+      body: JSON.stringify({ id }),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.message || '通知キーワードを削除できませんでした。');
+    setLostFoundWatches(current => current.filter(item => item.id !== id));
+    setLostWatchMessage('通知キーワードを削除しました。');
+  } catch (error) {
+    setLostWatchMessage(error instanceof Error ? error.message : '通知キーワードを削除できませんでした。');
+  }
+};
+
 
   // 添付された7組・8組の時間割。プロフィールが7組・8組なら対応する表示を初期選択する。
   const [selectedTimetableGroup, setSelectedTimetableGroup] = useState<ClassTimetableGroup>('7組');
@@ -1685,6 +1829,12 @@ export default function CampusSyncApp() {
   const [newLostFinder, setNewLostFinder] = useState('');
   const [lostAndFoundError, setLostAndFoundError] = useState('');
   const [lostSubmitting, setLostSubmitting] = useState(false);
+  const [lostFoundWatches, setLostFoundWatches] = useState<LostFoundWatch[]>([]);
+  const [lostWatchKeyword, setLostWatchKeyword] = useState('');
+  const [lostWatchSaving, setLostWatchSaving] = useState(false);
+  const [lostWatchMessage, setLostWatchMessage] = useState('');
+  const [campusFacilities, setCampusFacilities] = useState<CampusFacility[]>([]);
+  const [campusFacilitiesMessage, setCampusFacilitiesMessage] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [scoreSaving, setScoreSaving] = useState(false);
   const [notifications, setNotifications] = useState<AppSchoolNotification[]>([]);
@@ -1702,6 +1852,43 @@ export default function CampusSyncApp() {
     total_seats: 35,
   });
 
+
+// お気に入りダッシュボードは端末内に保存し、学校の個人情報は保存しない。
+useEffect(() => {
+  try {
+    const saved = window.localStorage.getItem('campus-sync-dashboard-favorites-v1');
+    if (saved) {
+      const parsed = JSON.parse(saved) as unknown;
+      if (Array.isArray(parsed)) {
+        const valid = parsed.filter((value): value is string =>
+          typeof value === 'string' && FAVORITE_DASHBOARD_OPTIONS.some(option => option.id === value)
+        ).slice(0, 6);
+        setFavoriteDashboardTabs(valid);
+      }
+    }
+  } catch (error) {
+    console.warn('お気に入りダッシュボードを読み込めませんでした。', error);
+  }
+}, []);
+
+useEffect(() => {
+  try {
+    window.localStorage.setItem('campus-sync-dashboard-favorites-v1', JSON.stringify(favoriteDashboardTabs.slice(0, 6)));
+  } catch (error) {
+    console.warn('お気に入りダッシュボードを保存できませんでした。', error);
+  }
+}, [favoriteDashboardTabs]);
+
+useEffect(() => {
+  const onShortcut = (event: KeyboardEvent) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      setShowGlobalSearch(true);
+    }
+  };
+  window.addEventListener('keydown', onShortcut);
+  return () => window.removeEventListener('keydown', onShortcut);
+}, []);
 
 // 保存されたテーマ・自由色・ダークモード・お気に入り教室を復元する。
 useEffect(() => {
