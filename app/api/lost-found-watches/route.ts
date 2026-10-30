@@ -67,12 +67,12 @@ export async function POST(request: Request) {
 
   const { data, error } = await student.client
     .from('lost_found_watches')
-    .upsert({
+    .insert({
       user_id: student.user.id,
       student_id: student.studentId,
       keyword,
       is_active: true,
-    }, { onConflict: 'user_id,keyword' })
+    })
     .select('id, keyword, is_active, created_at')
     .single();
 
