@@ -408,3 +408,74 @@ body {
   }
   .campus-intro--exiting { animation-duration: .01ms !important; }
 }
+
+
+/* Navigation layout: animated, fixed-size icons that never collapse on narrow screens. */
+.campus-nav-icon-motion {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  flex: 0 0 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 55%;
+  animation: campusNavIconFloat 3.4s ease-in-out infinite;
+}
+.campus-nav-icon-motion > svg,
+.campus-nav-icon-motion > img {
+  display: block !important;
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px;
+  min-height: 21px;
+  max-width: none !important;
+  max-height: none !important;
+  flex: 0 0 21px;
+  object-fit: contain;
+}
+.campus-nav-icon-motion > svg {
+  overflow: visible;
+}
+.campus-theme-sidebar nav > button:nth-child(2n) .campus-nav-icon-motion,
+.campus-mobile-drawer-nav > button:nth-child(2n) .campus-nav-icon-motion {
+  animation-delay: -1.4s;
+}
+.campus-theme-sidebar nav > button:nth-child(3n) .campus-nav-icon-motion,
+.campus-mobile-drawer-nav > button:nth-child(3n) .campus-nav-icon-motion {
+  animation-delay: -2.2s;
+}
+.campus-theme-sidebar nav > button:hover .campus-nav-icon-motion,
+.campus-mobile-drawer-nav > button:hover .campus-nav-icon-motion {
+  animation: campusNavIconTap 520ms ease both;
+}
+@keyframes campusNavIconFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  45% { transform: translate3d(0, -2px, 0) rotate(-3deg); }
+  70% { transform: translate3d(0, 0, 0) rotate(2deg); }
+}
+@keyframes campusNavIconTap {
+  0% { transform: scale(1) rotate(0deg); }
+  35% { transform: scale(1.16) rotate(-9deg); }
+  70% { transform: scale(1.08) rotate(6deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* The mobile menu is a single entry point for every feature; prevent SVG shrinkage. */
+.campus-theme-mobile-header svg {
+  display: block;
+  flex: 0 0 auto;
+}
+.campus-mobile-drawer-nav > button {
+  min-height: 48px;
+}
+.campus-mobile-drawer-nav > button > span:last-of-type {
+  min-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus-nav-icon-motion,
+  .campus-theme-sidebar nav > button:hover .campus-nav-icon-motion,
+  .campus-mobile-drawer-nav > button:hover .campus-nav-icon-motion {
+    animation: none !important;
+  }
+}
