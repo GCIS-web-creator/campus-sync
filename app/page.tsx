@@ -911,6 +911,7 @@ export default function CampusSyncApp() {
   const introStartedAtRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState('home');
+  const [hashScrollTarget, setHashScrollTarget] = useState('');
   const [classChatUnreadCount, setClassChatUnreadCount] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<any>(null);
   const [showTempModal, setShowTempModal] = useState(false);
@@ -1013,6 +1014,68 @@ export default function CampusSyncApp() {
   const [profileSetupPasswordConfirm, setProfileSetupPasswordConfirm] = useState('');
   const [profileSetupMessage, setProfileSetupMessage] = useState('');
   const [profileSetupBusy, setProfileSetupBusy] = useState(false);
+
+
+  // LINEリッチメニューのURLハッシュから、対応するアプリ内タブを直接開く。
+  useEffect(() => {
+    const hashRoutes: Record<string, { tab: string; scrollTarget?: string }> = {
+      food: { tab: 'cafeteria' },
+      tasks: { tab: 'home', scrollTarget: 'tasks' },
+      transit: { tab: 'bus' },
+      chat: { tab: 'chat' },
+      campus: { tab: 'facilities' },
+      timetable: { tab: 'timetable' },
+      schedule: { tab: 'school-schedule' },
+      notices: { tab: 'notifications' },
+    };
+
+    const applyHashRoute = () => {
+      const hash = window.location.hash.replace(/^#/, '').toLowerCase();
+      if (!hash) return;
+
+      if (hash === 'ai') {
+        setActiveTab('home');
+        setHashScrollTarget('');
+        return; // CampusAIChatが #ai を検知してチャットを自動で開く。
+      }
+
+      const route = hashRoutes[hash];
+      if (!route) return;
+      setActiveTab(route.tab);
+      setHashScrollTarget(route.scrollTarget || '');
+    };
+
+    applyHashRoute();
+    window.addEventListener('hashchange', applyHashRoute);
+    return () => window.removeEventListener('hashchange', applyHashRoute);
+  }, []);
+
+  // 課題はホーム内の提出物セクションにあるため、ホーム描画後に該当位置まで移動する。
+  useEffect(() => {
+    if (hashScrollTarget !== 'tasks' || activeTab !== 'home') return;
+    let frame = 0;
+    let attempts = 0;
+    let cancelled = false;
+
+    const scrollToTasks = () => {
+      if (cancelled) return;
+      const target = document.getElementById('tasks');
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setHashScrollTarget('');
+        return;
+      }
+      attempts += 1;
+      if (attempts < 30) frame = window.requestAnimationFrame(scrollToTasks);
+      else setHashScrollTarget('');
+    };
+
+    frame = window.requestAnimationFrame(scrollToTasks);
+    return () => {
+      cancelled = true;
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [hashScrollTarget, activeTab, authUser?.id, profileSetupStatus, isGuestMode]);
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [chatDisplayName, setChatDisplayName] = useState('');
@@ -3954,7 +4017,7 @@ Supabaseの設定を確認してください。
             <CountdownEventWidget mode="dashboard" onViewAll={() => setActiveTab('countdowns')} />
 
             {/* TODOセクション */}
-            <section>
+            <section id="tasks" className="scroll-mt-24">
               <h3 className={`text-[17px] font-black mb-3 flex items-center ${activeTextClass}`}>
                 <Clock size={20} className={`mr-2 ${themeCls.text}`}/> マイ提出物・連絡リマインダー
               </h3>
