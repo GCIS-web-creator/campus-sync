@@ -349,10 +349,17 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
   const feedUrl = mode === 'high' ? HIGH_FEED_URL : LONG_FEED_URL;
   const fetchedAt = new Date().toISOString();
   const feedXml = await fetchText(feedUrl, 15000, MAX_FEED_BYTES);
-  const allEntries = parseFeed(feedXml, feedUrl);
-  const candidateEntries = allEntries
-    .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''))
-    .slice(-MAX_FEED_ITEMS);
+  const allEntries = parseFeed(feedXml, feedUrl)
+    .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''));
+  const latestAggregateEntry = [...allEntries].reverse().find(entry => /集約通報/.test(entry.title));
+  const aggregateFeedTime = latestAggregateEntry?.publishedAt ? Date.parse(latestAggregateEntry.publishedAt) : 0;
+  const candidateEntries = (latestAggregateEntry && aggregateFeedTime
+    ? allEntries.filter(entry => entry.id === latestAggregateEntry.id || Date.parse(entry.publishedAt || '') >= aggregateFeedTime)
+    : allEntries.filter(entry => {
+        const publishedAt = entry.publishedAt ? Date.parse(entry.publishedAt) : 0;
+        return publishedAt > 0 && Date.now() - publishedAt <= (mode === 'high' ? 20 : 180) * 60 * 1000;
+      })
+  ).slice(-MAX_FEED_ITEMS);
   const known = await existingSourceIds(admin, candidateEntries.map(entry => entry.id));
   const downloadResult = await downloadEntries(candidateEntries.filter(entry => !known.has(entry.id)));
   if (downloadResult.failures > 0) throw new Error('気象庁の個別XMLを一部取得できませんでした。次回同期で再試行します。');
@@ -399,7 +406,7 @@ export async function GET() {
     const [alertsResult, stateResult, aggregateResult] = await Promise.all([
       admin.from('jma_weather_alerts').select('area_key,area_name,alert_key,alert_code,alert_name,alert_family,severity,status,details,issued_at,source_product_code,source_url,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }),
       admin.from('jma_weather_sync_state').select('high_last_success_at,long_last_success_at,last_success_at,last_attempt_at,last_error').eq('id', 1).maybeSingle(),
-      admin.from('jma_weather_alert_events').select('source_id,issued_at').eq('product_code', 'VPWS50').order('issued_at', { ascending: false }).limit(1),
+      admin.from('jma_weather_alert_events').select('source_id,issued_at,target_areas').eq('product_code', 'VPWS50').order('issued_at', { ascending: false }).limit(1),
     ]);
     if (alertsResult.error) throw alertsResult.error;
     if (stateResult.error) throw stateResult.error;
