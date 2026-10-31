@@ -1,6 +1,6 @@
 export type WeatherHour={time:string;temperatureC:number|null;precipitationProbability:number|null;precipitationMm:number;rainMm:number;windKmh:number|null;humidity:number|null};
 export type WeatherDayForecast={
-  date:string;weatherCode:number;description:string;iconName:string;highC:number|null;lowC:number|null;
+  date:string;weatherCode:number;description:string;iconName:string;highC:number|null;lowC:number|null;humidityAvg:number|null;
   precipitationProbabilityMax:number|null;rainTotalMm:number;precipitationTotalMm:number;precipitationHours:number|null;
   windMaxKmh:number|null;uvIndexMax:number|null;sunrise:string|null;sunset:string|null;rainHours:WeatherHour[];hours:WeatherHour[];
 };
@@ -34,6 +34,7 @@ export async function fetchSchoolWeatherForecast():Promise<WeatherDayForecast[]>
     return {
       date,weatherCode:code,description:LABELS[code]||'天気情報',iconName:weatherIconName(code),
       highC:num(daily.temperature_2m_max,index),lowC:num(daily.temperature_2m_min,index),
+      humidityAvg:hours.length?Math.round(hours.reduce((sum,h)=>sum+(h.humidity??0),0)/Math.max(1,hours.filter(h=>h.humidity!==null).length)):null,
       precipitationProbabilityMax:num(daily.precipitation_probability_max,index),
       rainTotalMm:Math.max(0,rain),precipitationTotalMm:Math.max(0,num(daily.precipitation_sum,index)??rain),
       precipitationHours:num(daily.precipitation_hours,index),windMaxKmh:num(daily.wind_speed_10m_max,index),uvIndexMax:num(daily.uv_index_max,index),
