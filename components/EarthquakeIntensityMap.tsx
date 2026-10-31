@@ -172,9 +172,15 @@ function buildRegionalClusters(items: MatchedCity[], latStep: number, lonStep: n
       group.reduce((sum, item) => sum + item.center[0], 0) / group.length,
       group.reduce((sum, item) => sum + item.center[1], 0) / group.length,
     ];
+    const bounds: LatLng[] = [
+      [south, west],
+      [south, east],
+      [north, east],
+      [north, west],
+    ];
     return {
       center,
-      bounds: [[south, west], [south, east], [north, east], [north, west]],
+      bounds,
       areas: group,
       maxRank: Math.max(0, ...group.map(item => getAreaRank(item.area))),
     };
