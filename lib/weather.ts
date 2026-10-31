@@ -13,9 +13,10 @@ export function weatherIconName(code:number):string{
   if(code>=95)return code>=96?'hail':'thunderstorm';return 'partly_cloudy';
 }
 function num(values:number[]|undefined,i:number):number|null{const v=values?.[i];return typeof v==='number'&&Number.isFinite(v)?v:null;}
-export async function fetchSchoolWeatherForecast():Promise<WeatherDayForecast[]>{
+export async function fetchSchoolWeatherForecast(forecastDays=3):Promise<WeatherDayForecast[]>{
+  const safeForecastDays=Math.max(1,Math.min(16,Math.floor(forecastDays)||3));
   const params=new URLSearchParams({
-    latitude:'35.723600280184456',longitude:'139.4507710152599',timezone:'Asia/Tokyo',forecast_days:'3',
+    latitude:'35.723600280184456',longitude:'139.4507710152599',timezone:'Asia/Tokyo',forecast_days:String(safeForecastDays),
     daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,precipitation_hours,wind_speed_10m_max,uv_index_max,sunrise,sunset',
     hourly:'temperature_2m,precipitation_probability,precipitation,rain,showers,wind_speed_10m,relative_humidity_2m',
   });

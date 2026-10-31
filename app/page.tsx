@@ -486,6 +486,68 @@ const TAKANODAI_TIMETABLE = {
   },
 };
 
+// --- 🚃 鷹の台駅：土曜ダイヤ（ユーザー提供の時刻表PDF） ---
+const TAKANODAI_SATURDAY_TIMETABLE = {
+  kokubunji: {
+    id: 'kokubunji',
+    name: '国分寺方面',
+    destination: '国分寺行き',
+    trains: createWeekdayTrains(`
+05:10 05:31 05:47
+06:04 06:19 06:34 06:48
+07:02 07:12 07:22 07:32 07:42 07:51
+08:02 08:12 08:22 08:32 08:43 08:52
+09:02 09:11 09:21 09:31 09:42 09:51
+10:01 10:12 10:21 10:32 10:42 10:53
+11:03 11:13 11:23 11:33 11:43 11:53
+12:03 12:13 12:23 12:33 12:43 12:53
+13:03 13:13 13:23 13:33 13:43 13:53
+14:03 14:13 14:23 14:33 14:43 14:53
+15:03 15:13 15:23 15:33 15:43 15:53
+16:03 16:13 16:23 16:33 16:43 16:53
+17:03 17:13 17:23 17:34 17:43 17:53
+18:03 18:13 18:23 18:33 18:43 18:53
+19:03 19:13 19:23 19:33 19:43 19:53
+20:03 20:13 20:23 20:33 20:43 20:53
+21:09 21:24 21:39 21:54
+22:09 22:24 22:39 22:54
+23:11 23:32 23:54
+    `, '国分寺'),
+  },
+  higashimurayama: {
+    id: 'higashimurayama',
+    name: '東村山方面',
+    destination: '東村山行き',
+    trains: createWeekdayTrains(`
+05:25 05:47
+06:04 06:19 06:34 06:48
+07:07 07:16 07:26 07:36 07:46 07:56
+08:06 08:16 08:26 08:37 08:47 08:57
+09:06 09:16 09:26 09:36 09:46 09:56
+10:06 10:16 10:26 10:37 10:47 10:58
+11:08 11:18 11:28 11:38 11:48 11:58
+12:08 12:18 12:28 12:38 12:48 12:58
+13:08 13:18 13:28 13:38 13:48 13:58
+14:08 14:18 14:28 14:38 14:48 14:58
+15:08 15:18 15:28 15:38 15:48 15:58
+16:08 16:18 16:28 16:38 16:48 16:58
+17:08 17:18 17:28 17:38 17:48 17:58
+18:08 18:18 18:28 18:38 18:48 18:58
+19:08 19:17 19:28 19:38 19:48 19:58
+20:08 20:18 20:28 20:38 20:48 20:58
+21:09 21:24 21:39 21:54
+22:09 22:24 22:39 22:54
+23:11 23:27 23:46
+00:07
+    `, '東村山'),
+  },
+};
+function getJapanTrainServiceDay(date: Date): 'weekday' | 'saturday' {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(date) === 'Sat'
+    ? 'saturday'
+    : 'weekday';
+}
+
 // 旧バス状況報告の互換データ（現在の生徒画面では表示せず、電車発車案内を使用）
 const MOCK_BUS_STATIONS: {
   id: string;
@@ -1649,8 +1711,10 @@ const handleDeleteLostWatch = async (id: string) => {
   // バス用状態
   const [selectedBusStation, setSelectedBusStation] = useState<string>('hachioji');
   const [selectedTrainDirection, setSelectedTrainDirection] = useState<'kokubunji' | 'higashimurayama'>('kokubunji');
-  const [trainTimetable, setTrainTimetable] = useState(TAKANODAI_TIMETABLE);
+  const [trainTimetableByDay, setTrainTimetableByDay] = useState({ weekday: TAKANODAI_TIMETABLE, saturday: TAKANODAI_SATURDAY_TIMETABLE });
   const [trainClockNow, setTrainClockNow] = useState<number>(() => Date.now());
+  const currentTrainServiceDay = getJapanTrainServiceDay(new Date(trainClockNow));
+  const trainTimetable = trainTimetableByDay[currentTrainServiceDay];
   const [busCongestionVote, setBusCongestionVote] = useState<Record<string, string>>({ hachioji: '普通', haijima: '空いている', akitsu: '混雑' });
   const [busDelayMinutes, setBusDelayMinutes] = useState<Record<string, number>>({ hachioji: 0, haijima: 5, akitsu: 0 });
 
@@ -2364,29 +2428,35 @@ useEffect(() => {
     fetchStep = '鷹の台駅時刻表取得（takanodai_timetable）';
     const { data: trainRows, error: trainError } = await supabase
       .from('takanodai_timetable')
-      .select('*')
+      .select('direction,departure_time,service,service_day')
+      .order('service_day', { ascending: true })
       .order('direction', { ascending: true })
       .order('departure_time', { ascending: true });
 
     if (trainError) {
       console.error('鷹の台駅の時刻表取得に失敗:', trainError);
     } else if (trainRows && trainRows.length > 0) {
-      const nextTrainTimetable = {
-        kokubunji: {
-          ...TAKANODAI_TIMETABLE.kokubunji,
-          trains: trainRows
-            .filter(row => row.direction === 'kokubunji')
-            .map(row => ({ time: row.departure_time, service: row.service })),
-        },
-        higashimurayama: {
-          ...TAKANODAI_TIMETABLE.higashimurayama,
-          trains: trainRows
-            .filter(row => row.direction === 'higashimurayama')
-            .map(row => ({ time: row.departure_time, service: row.service })),
-        },
+      const buildTimetableForDay = (serviceDay: 'weekday' | 'saturday') => {
+        const base = serviceDay === 'saturday' ? TAKANODAI_SATURDAY_TIMETABLE : TAKANODAI_TIMETABLE;
+        return {
+          kokubunji: {
+            ...base.kokubunji,
+            trains: trainRows
+              .filter(row => row.service_day === serviceDay && row.direction === 'kokubunji')
+              .map(row => ({ time: row.departure_time, service: row.service })),
+          },
+          higashimurayama: {
+            ...base.higashimurayama,
+            trains: trainRows
+              .filter(row => row.service_day === serviceDay && row.direction === 'higashimurayama')
+              .map(row => ({ time: row.departure_time, service: row.service })),
+          },
+        };
       };
-
-      setTrainTimetable(nextTrainTimetable);
+      setTrainTimetableByDay({
+        weekday: buildTimetableForDay('weekday'),
+        saturday: buildTimetableForDay('saturday'),
+      });
     }
 
 
@@ -4804,7 +4874,7 @@ Supabaseの設定を確認してください。
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex justify-between items-center">
               <h2 className={`text-xl font-black ${activeTextClass} flex items-center gap-2`}><AnimatedAsset name="train-move" className="h-9 w-12" /> 鷹の台駅 発車案内</h2>
-              <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">平日ダイヤ</span>
+              <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">{currentTrainServiceDay === 'saturday' ? '土曜ダイヤ' : '平日ダイヤ'}</span>
             </div>
 
             {busSubTab === 'countdown' ? (

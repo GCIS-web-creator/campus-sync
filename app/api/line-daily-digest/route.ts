@@ -6,6 +6,7 @@ import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo, mapClassTimetableR
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { buildTimetableDirectionBox, type TimetableDeparture } from '@/lib/line-flex';
 import { fetchSchoolWeatherForecast, type WeatherDayForecast } from '@/lib/weather';
+import { buildWeatherForecastBubble } from '@/lib/line-weather-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,9 +38,9 @@ function dateKeyFromParts(parts: Record<string, string>): string {
   return String(parts.year) + '-' + String(parts.month) + '-' + String(parts.day);
 }
 
-function stableRetryKey(dateKey: string): string {
+function stableRetryKey(dateKey: string, deliveryType = 'weekday'): string {
   const chars = createHash('sha256')
-    .update('campussync-daily-line-digest:' + dateKey)
+    .update('campussync-daily-line-digest:' + deliveryType + ':' + dateKey)
     .digest('hex')
     .slice(0, 32)
     .split('');
@@ -117,11 +118,14 @@ function buildTransitBubble(input: {
   kokubunji: TimetableDeparture[];
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
+  scheduleDayLabel?: string;
+  startLabel?: string;
+  endLabel?: string;
 }) {
-  const startLabel = '16:00';
-  const endLabel = '18:00';
+  const startLabel = input.startLabel || '16:00';
+  const endLabel = input.endLabel || '18:00';
   const bodyContents: Record<string, unknown>[] = [
-    { type: 'text', text: '平日ダイヤ', size: 'xs', color: '#64748B' },
+    { type: 'text', text: input.scheduleDayLabel || '平日ダイヤ', size: 'xs', color: '#64748B' },
   ];
   if (input.trainError) {
     bodyContents.push({ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
@@ -284,55 +288,6 @@ function buildSchoolEventsBubble(input: {
 }
 
 
-function buildWeatherBubble(input: { dateLabel: string; weather: WeatherDayForecast[] }) {
-  const origin=(process.env.NEXT_PUBLIC_SITE_URL||(process.env.VERCEL_URL?'https://'+process.env.VERCEL_URL:'https://campus-sync-mocha.vercel.app')).replace(/\\/$/,'');
-  const icon=(name:string)=>origin+'/api/weather/icons/'+name+'?format=png';
-  const days=input.weather.slice(0,3);
-  const dayCards:Record<string,unknown>[] = days.map((day,index)=>({
-    type:'box',layout:'vertical',flex:1,spacing:'xs',paddingAll:'8px',cornerRadius:'10px',
-    backgroundColor:index===0?'#EFF6FF':'#F8FAFC',
-    contents:[
-      {type:'text',text:['明日','明後日','明々後日'][index]+' '+day.date.slice(5).replace('-','/'),size:'xs',weight:'bold',color:'#334155',align:'center',wrap:true},
-      {type:'image',url:icon(day.iconName),size:'sm',aspectRatio:'1:1',aspectMode:'fit',align:'center'},
-      {type:'text',text:day.description,size:'xs',weight:'bold',color:'#0F172A',align:'center',wrap:true},
-      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
-        {type:'image',url:icon('temp_high'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
-        {type:'text',text:day.highC===null?'—':Math.round(day.highC)+'°',size:'sm',weight:'bold',color:'#DC2626',flex:1},
-      ]},
-      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
-        {type:'image',url:icon('temp_low'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
-        {type:'text',text:day.lowC===null?'—':Math.round(day.lowC)+'°',size:'sm',weight:'bold',color:'#0284C7',flex:1},
-      ]},
-      {type:'separator',color:'#CBD5E1'},
-      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
-        {type:'image',url:icon('precip_probability'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
-        {type:'text',text:day.precipitationProbabilityMax===null?'—':Math.round(day.precipitationProbabilityMax)+'%',size:'xs',color:'#334155',weight:'bold',flex:1},
-      ]},
-      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
-        {type:'image',url:icon('humidity'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
-        {type:'text',text:day.humidityAvg===null?'—':day.humidityAvg+'%',size:'xs',color:'#334155',weight:'bold',flex:1},
-      ]},
-    ],
-  }));
-  const body:Record<string,unknown>[] = days.length ? [
-    {type:'text',text:'天気・最高/最低気温・降水確率・湿度',size:'xs',color:'#64748B',wrap:true},
-    {type:'box',layout:'horizontal',spacing:'sm',contents:dayCards},
-  ] : [{type:'text',text:'天気情報を取得できませんでした。',size:'sm',color:'#64748B',wrap:true}];
-  return {
-    type:'bubble',size:'mega',
-    header:{type:'box',layout:'vertical',backgroundColor:'#0F3B63',paddingAll:'16px',spacing:'xs',contents:[
-      {type:'text',text:'CAMPUSSYNC / WEATHER',size:'xs',color:'#67E8F9',weight:'bold'},
-      {type:'text',text:'3日間の天気予報',size:'lg',color:'#FFFFFF',weight:'bold'},
-      {type:'text',text:'小平市たかの台周辺',size:'xs',color:'#CBD5E1',wrap:true},
-    ]},
-    body:{type:'box',layout:'vertical',paddingAll:'12px',spacing:'md',contents:body},
-    footer:{type:'box',layout:'vertical',paddingAll:'12px',backgroundColor:'#F8FAFC',spacing:'sm',contents:[
-      {type:'text',text:'時間ごとの詳しい予報はCampusSyncで確認できます。',size:'xs',color:'#475569',wrap:true,align:'center'},
-      {type:'button',style:'primary',color:'#2563A6',height:'sm',action:{type:'uri',label:'天気の詳細を見る',uri:origin+'/#weather'}},
-    ]},
-  };
-}
-
 function buildDailyDigest(input: {
   dateLabel: string;
   today: string;
@@ -348,7 +303,7 @@ function buildDailyDigest(input: {
   weather: WeatherDayForecast[];
 }) {
   const transitBubble = buildTransitBubble(input);
-  const weatherBubble = buildWeatherBubble({dateLabel:input.tomorrowDateLabel,weather:input.weather});
+  const weatherBubble = buildWeatherForecastBubble(input.weather);
   const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
 
   return {
@@ -366,6 +321,29 @@ function buildDailyDigest(input: {
         buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
       ],
     },
+  };
+}
+
+function buildSaturdayDigest(input: {
+  dateLabel: string;
+  kokubunji: TimetableDeparture[];
+  higashimurayama: TimetableDeparture[];
+  trainError: boolean;
+  weather: WeatherDayForecast[];
+}) {
+  const transitBubble = buildTransitBubble({
+    dateLabel: input.dateLabel,
+    kokubunji: input.kokubunji,
+    higashimurayama: input.higashimurayama,
+    trainError: input.trainError,
+    scheduleDayLabel: '土曜ダイヤ',
+    startLabel: '12:30',
+    endLabel: '14:00',
+  });
+  return {
+    type: 'flex',
+    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の土曜時刻表・明日から3日間の天気。横にスワイプして確認できます。').slice(0, 400),
+    contents: { type: 'carousel', contents: [transitBubble, buildWeatherForecastBubble(input.weather)] },
   };
 }
 
@@ -405,12 +383,15 @@ export async function POST(request: Request) {
   const today = dateKeyFromParts(nowParts);
   const weekday = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',weekday:'short'}).format(now);
   const isWeekday = ['Mon','Tue','Wed','Thu','Fri'].includes(weekday);
+  const isSaturday = weekday === 'Sat';
   const includeClassTimetable = ['Mon','Tue','Wed','Thu'].includes(weekday);
   const currentHour = Number(nowParts.hour);
   const currentMinute = Number(nowParts.minute);
-  const inDispatchWindow = currentHour===16 && currentMinute<10;
-  if(!manualRequest&&(!isWeekday||!inDispatchWindow)){
-    return NextResponse.json({success:true,skipped:true,message:!isWeekday?'16:00の日次配信は平日のみです。':'日次まとめは16:00（日本時間）に配信します。'},{headers:{'Cache-Control':'no-store'}});
+  const inDispatchWindow = isSaturday
+    ? currentHour === 12 && currentMinute >= 30 && currentMinute < 40
+    : currentHour === 16 && currentMinute < 10;
+  if (!manualRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
+    return NextResponse.json({ success: true, skipped: true, message: '平日16:00・土曜12:30に配信します。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const todayLabel = Number(nowParts.month)+'月'+Number(nowParts.day)+'日';
   const tomorrow = getTokyoTomorrowTimetableInfo(now);
@@ -420,7 +401,8 @@ export async function POST(request: Request) {
 
   const [trainResult, eventResult, classTimetableResult, weatherResult] = await Promise.all([
     admin.from('takanodai_timetable')
-      .select('direction,departure_time,service')
+      .select('direction,departure_time,service,service_day')
+      .eq('service_day', isSaturday ? 'saturday' : 'weekday')
       .order('direction', { ascending: true })
       .order('departure_time', { ascending: true }),
     admin.from('school_event_countdowns')
@@ -432,7 +414,7 @@ export async function POST(request: Request) {
     admin.from('class_timetable_slots')
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
-    fetchSchoolWeatherForecast().catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
+    fetchSchoolWeatherForecast(4).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
@@ -442,9 +424,8 @@ export async function POST(request: Request) {
   const timetableRows = (classTimetableResult.data || []) as ClassTimetableRow[];
   const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows) : CLASS_TIMETABLE_DATA;
   const trainRows = (trainResult.data || []) as TrainRow[];
-  // 10/30臨時配信は16:50から18:00まで。通常の日次まとめは16:00から18:00まで。
-  const timetableStartMinute = 16 * 60;
-  const timetableEndMinute = 18 * 60;
+  const timetableStartMinute = isSaturday ? (12 * 60 + 30) : (16 * 60);
+  const timetableEndMinute = isSaturday ? (14 * 60) : (18 * 60);
   const departures = (direction: string): TimetableDeparture[] => trainRows
     .filter(row => {
       if (row.direction !== direction) return false;
@@ -461,22 +442,24 @@ export async function POST(request: Request) {
   const events = (eventResult.data || []) as EventRow[];
   const weatherDays = weatherResult as WeatherDayForecast[] | null;
   const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
-  const flex = buildDailyDigest({
-    dateLabel: todayLabel,
-    today,
-    tomorrowDateLabel: tomorrow.dateLabel,
-    tomorrowDayKey: tomorrow.dayKey,
-    timetable,
-    kokubunji,
-    higashimurayama,
-    trainError: Boolean(trainResult.error),
-    events,
-    eventError: Boolean(eventResult.error),
-    includeClassTimetable,
-    weather:forecastDays,
-  });
+  const flex = isSaturday
+    ? buildSaturdayDigest({ dateLabel: todayLabel, kokubunji, higashimurayama, trainError: Boolean(trainResult.error), weather: forecastDays })
+    : buildDailyDigest({
+        dateLabel: todayLabel,
+        today,
+        tomorrowDateLabel: tomorrow.dateLabel,
+        tomorrowDayKey: tomorrow.dayKey,
+        timetable,
+        kokubunji,
+        higashimurayama,
+        trainError: Boolean(trainResult.error),
+        events,
+        eventError: Boolean(eventResult.error),
+        includeClassTimetable,
+        weather: forecastDays,
+      });
 
-  const retryKey = stableRetryKey(today);
+  const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');
   const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
     method: 'POST',
     headers: {
@@ -497,7 +480,7 @@ export async function POST(request: Request) {
       : 'LINEへの日次まとめ配信に失敗しました（HTTP ' + response.status + '）。', 502);
   }
 
-  const digestTitle = '16:00 CampusSync 学校情報まとめ';
+  const digestTitle = isSaturday ? '12:30 CampusSync 土曜時刻表・天気' : '16:00 CampusSync 学校情報まとめ';
   const digestText = String((flex as { altText?: unknown }).altText || digestTitle);
   let historySaved = false;
   const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', retryKey).maybeSingle();
@@ -528,10 +511,12 @@ export async function POST(request: Request) {
       classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
       events:events.length,
       weather:forecastDays.length>0,
-      carouselCards:includeClassTimetable?5:3,
+      carouselCards: isSaturday ? 2 : (includeClassTimetable ? 5 : 3),
       historySaved,
     },
     groupDelivery,
-    message:todayLabel+'の16:00配信は、電車・天気'+(includeClassTimetable?'・7組・8組':'')+'・学校行事をまとめて配信しました。'+summarizeLineGroupDelivery(groupDelivery),
+    message: isSaturday
+      ? todayLabel + 'の12:30配信は、土曜ダイヤ12:30〜14:00と明日から3日間の天気を1つのLINEメッセージにまとめて配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+      : todayLabel + 'の16:00配信は、電車・明日から3日間の天気' + (includeClassTimetable ? '・7組・8組' : '') + '・学校行事をまとめて配信しました。' + summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

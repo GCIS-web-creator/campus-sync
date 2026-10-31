@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server';
 import { buildWeeklySchoolScheduleFlexMessage } from '@/lib/line-flex';
 import { CLASS_TIMETABLE_DATA, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
+import { fetchSchoolWeatherForecast } from '@/lib/weather';
+import { buildWeatherForecastBubble } from '@/lib/line-weather-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -133,16 +135,22 @@ export async function POST(request: Request) {
     .order('group_name', { ascending: true }).order('period', { ascending: true });
   if (timetableError) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableError.message);
   const timetable: ClassTimetableData = timetableRows?.length ? mapClassTimetableRows(timetableRows as ClassTimetableRow[]) : CLASS_TIMETABLE_DATA;
+  const forecast = await fetchSchoolWeatherForecast(4).catch(error => {
+    console.error('週間学校予定表：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
+    return [];
+  });
+  const weeklyWeather = forecast.filter(day => day.date >= weekStart).slice(0, 3);
   const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
   const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
   const baseContents = baseFlex.contents as Record<string, unknown> & { contents?: unknown[] };
   const flex = {
     ...baseFlex,
-    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割').slice(0, 400),
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・翌日から3日間の天気').slice(0, 400),
     contents: { ...baseContents, contents: [
       ...(Array.isArray(baseContents.contents) ? baseContents.contents : []),
       buildMondayClassBubble('7組', mondayLabel, timetable),
       buildMondayClassBubble('8組', mondayLabel, timetable),
+      buildWeatherForecastBubble(weeklyWeather),
     ] },
   };
   const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
@@ -164,7 +172,7 @@ export async function POST(request: Request) {
     const weekEnd = addDays(weekStart, 6);
     return NextResponse.json({
       success: true, weekStart, groupDelivery,
-      message: weekStart + '〜' + weekEnd + ' の学校予定表と月曜日の7組・8組時間割をLINEへ送信しました。' + groupMessage,
+      message: weekStart + '〜' + weekEnd + ' の学校予定表、月曜日の7組・8組時間割、翌日から3日間の天気をLINEへ送信しました。' + groupMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学校予定表のLINE配信通信エラー:', error instanceof Error ? error.message : 'unknown error');
