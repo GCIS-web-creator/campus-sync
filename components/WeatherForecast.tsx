@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { WeatherBundle, WeatherDayForecast, WeatherHour, WeatherScalar } from '@/lib/weather';
+import type { WeatherBundle, WeatherDayForecast, WeatherHour, WeatherScalar, WeatherValueMap } from '@/lib/weather';
 
 type IconInfo = [string, string, string];
 
