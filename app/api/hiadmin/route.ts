@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -22,9 +23,22 @@ function serviceClient() {
   return url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 }
 
+function matchesSecret(provided: string, expected: string): boolean {
+  const providedDigest = createHash('sha256').update(provided, 'utf8').digest();
+  const expectedDigest = createHash('sha256').update(expected, 'utf8').digest();
+  return timingSafeEqual(providedDigest, expectedDigest);
+}
+
 async function authorize(request: Request): Promise<AuthContext | NextResponse> {
   const allowed = (process.env.CAMPUS_SYNC_HIADMIN_EMAILS || '').split(/[;,]/).map((v) => v.trim().toLowerCase()).filter(Boolean);
-  if (!allowed.length) return fail('CAMPUS_SYNC_HIADMIN_EMAILS が未設定です。最高管理者の学校メールアドレスをVercel Production環境変数に登録してください。', 503);
+  if (!allowed.length) return fail('CAMPUS_SYNC_HIADMIN_EMAILS が未設定です。', 503);
+
+  const gate2 = process.env.CAMPUS_SYNC_HIADMIN_PASSWORD_2 || '';
+  const gate3 = process.env.CAMPUS_SYNC_HIADMIN_PASSWORD_3 || '';
+  if (gate2.length < 16 || gate3.length < 16 || gate2 === gate3) {
+    return fail('CAMPUS_SYNC_HIADMIN_PASSWORD_2 と CAMPUS_SYNC_HIADMIN_PASSWORD_3 に、異なる16文字以上の秘密文字列を設定してください。', 503);
+  }
+
   const authClient = publicClient();
   const admin = serviceClient();
   if (!authClient || !admin) return fail('Supabaseのサーバー環境変数が不足しています。', 503);
@@ -34,8 +48,36 @@ async function authorize(request: Request): Promise<AuthContext | NextResponse> 
   if (error || !data.user) return fail('ログインセッションを確認できません。再度ログインしてください。', 401);
   const email = (data.user.email || '').trim().toLowerCase();
   if (!email || !allowed.includes(email)) return fail('このアカウントは最高管理者として許可されていません。', 403);
-  const { data: assurance, error: assuranceError } = await authClient.auth.mfa.getAuthenticatorAssuranceLevel(match[1]);
-  if (assuranceError || assurance?.currentLevel !== 'aal2') return fail('認証アプリによる追加認証（MFA）が必要です。', 428);
+
+  const { data: attempts, error: attemptsError } = await admin.from('hiadmin_gate_attempts')
+    .select('failed_attempts,locked_until').eq('user_id', data.user.id).maybeSingle();
+  if (attemptsError) return fail('認証ロック状態を確認できません。', 503);
+  if (attempts?.locked_until && Date.parse(attempts.locked_until) > Date.now()) {
+    return fail('追加パスワードの失敗回数が上限に達しました。15分後に再試行してください。', 423);
+  }
+
+  const provided2 = request.headers.get('x-hiadmin-password-2') || '';
+  const provided3 = request.headers.get('x-hiadmin-password-3') || '';
+  if (!provided2 || !provided3) return fail('第2・第3パスワードを入力してください。', 428);
+
+  const valid2 = matchesSecret(provided2, gate2);
+  const valid3 = matchesSecret(provided3, gate3);
+  const valid = valid2 && valid3;
+  if (!valid) {
+    const failed = (attempts?.failed_attempts || 0) + 1;
+    const lockedUntil = failed >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+    const { error: saveError } = await admin.from('hiadmin_gate_attempts').upsert({
+      user_id: data.user.id, failed_attempts: failed, locked_until: lockedUntil, updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+    if (saveError) return fail('認証失敗回数を記録できません。', 503);
+    if (lockedUntil) return fail('追加パスワードが5回連続で一致しなかったため、15分間ロックしました。', 423);
+    return fail('第2・第3パスワードの組み合わせが一致しません。', 409);
+  }
+
+  const { error: resetError } = await admin.from('hiadmin_gate_attempts').upsert({
+    user_id: data.user.id, failed_attempts: 0, locked_until: null, updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' });
+  if (resetError) return fail('認証状態を更新できません。', 503);
   return { user: data.user, admin };
 }
 
