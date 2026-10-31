@@ -3,6 +3,7 @@ import { fetchSchoolWeatherBundle } from '@/lib/weather';
 
 export const runtime = 'nodejs';
 export const revalidate = 1800;
+export const maxDuration = 30;
 
 export async function GET() {
   try {

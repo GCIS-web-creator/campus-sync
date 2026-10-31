@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { WeatherBundle, WeatherDayForecast, WeatherHour, WeatherScalar, WeatherValueMap } from '@/lib/weather';
+import type { WeatherBundle, WeatherDayForecast, WeatherHour, WeatherScalar } from '@/lib/weather';
 
 type IconInfo = [string, string, string];
 
@@ -425,7 +425,7 @@ export default function WeatherForecast() {
                 {selectedDay.hours.length ? (
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
                     {selectedDay.hours.map(hour => (
-                      <HourlyCard key={hour.time} hour={hour} units={data.hourlyUnits} />
+                      <HourlyCard key={hour.time} hour={hour} />
                     ))}
                   </div>
                 ) : <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500 dark:bg-slate-900">この日の時間別データはありません。</p>}
@@ -546,7 +546,7 @@ export default function WeatherForecast() {
   );
 }
 
-function HourlyCard({ hour, units }: { hour: WeatherHour; units: Record<string, string> }) {
+function HourlyCard({ hour }: { hour: WeatherHour }) {
   const code = getNumber(hour.values, 'weather_code') ?? 3;
   const isDay = getNumber(hour.values, 'is_day') !== 0;
   const icon = weatherIcon(code, isDay);
