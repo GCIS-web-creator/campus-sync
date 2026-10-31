@@ -468,7 +468,7 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
   const resolvedNotificationKind = item.isEewCancelled && current?.eew_kodaira_target
     ? 'eew_cancelled'
     : item.notificationKind;
-  if (resolvedNotificationKind) {
+  if (resolvedNotificationKind && mode === 'high') {
     const kind = resolvedNotificationKind;
     const notificationItem: ParsedEarthquake = {
       ...item,
