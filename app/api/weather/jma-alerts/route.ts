@@ -126,7 +126,7 @@ function parseFeed(xml: string, feedUrl: string): FeedEntry[] {
       href = '';
     }
     return {
-      id: childText(entry, 'id') || href,
+      id: entryId || href,
       title: childText(entry, 'title'),
       href,
       publishedAt: childText(entry, 'updated') || childText(entry, 'published') || null,
@@ -251,16 +251,22 @@ async function existingSourceIds(admin: SupabaseClient, ids: string[]): Promise<
   return new Set((data || []).map((row: { source_id: string }) => row.source_id));
 }
 
-async function downloadEntries(entries: FeedEntry[]): Promise<{ downloaded: Array<{ entry: FeedEntry; message: ParsedMessage }>; failures: number }> {
+async function downloadEntries(entries: FeedEntry[]): Promise<{ downloaded: Array<{ entry: FeedEntry; message: ParsedMessage }>; failures: number; skipped: Array<{ title: string; productCode: string | null }> }> {
   const downloaded: Array<{ entry: FeedEntry; message: ParsedMessage }> = [];
   let failures = 0;
+  const skipped: Array<{ title: string; productCode: string | null }> = [];
   for (let index = 0; index < entries.length; index += 5) {
     const chunk = entries.slice(index, index + 5);
     const results = await Promise.all(chunk.map(async entry => {
       try {
         const xml = await fetchText(entry.href, 10000);
         const message = parseMessage(xml, entry.title, entry.publishedAt);
-        return message ? { entry, message } : null;
+        if (!message) {
+          const productCode = xml.match(/VPW[WS]\d{2}/)?.[0] || null;
+          skipped.push({ title: entry.title, productCode });
+          return null;
+        }
+        return { entry, message };
       } catch (error) {
         failures += 1;
         console.error('JMA message download failed:', entry.id, error instanceof Error ? error.message : 'unknown');
@@ -270,7 +276,7 @@ async function downloadEntries(entries: FeedEntry[]): Promise<{ downloaded: Arra
     for (const result of results) if (result) downloaded.push(result);
   }
   downloaded.sort((a, b) => Date.parse(a.message.issuedAt) - Date.parse(b.message.issuedAt));
-  return { downloaded, failures };
+  return { downloaded, failures, skipped };
 }
 
 async function latestIssuedAt(admin: SupabaseClient, areaKey: string, family?: string): Promise<number> {
@@ -387,7 +393,22 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
     : { long_last_success_at: fetchedAt, last_success_at: fetchedAt, last_attempt_at: fetchedAt, last_error: null, updated_at: fetchedAt };
   const { error: stateError } = await admin.from('jma_weather_sync_state').update(stateUpdate).eq('id', 1);
   if (stateError) throw stateError;
-  return { mode, feedEntries: allEntries.length, newEntries: downloaded.length, processed, savedAlerts: activeSaved, latestAggregateAt: latestAggregate?.message.issuedAt || null };
+  const diagnostics = {
+    candidateCount: candidateEntries.length,
+    knownCount: known.size,
+    attemptedCount: candidateEntries.length - known.size,
+    parseSkippedCount: downloadResult.skipped.length,
+    parseSkippedSamples: downloadResult.skipped.slice(0, 5),
+    newestFeedEntries: allEntries.slice(-5).map(entry => ({
+      title: entry.title,
+      updatedAt: entry.publishedAt,
+      hasXmlUrl: Boolean(entry.href),
+      id: entry.id,
+    })),
+    latestAggregateFeedTitle: latestAggregateEntry?.title || null,
+    latestAggregateFeedUpdatedAt: latestAggregateEntry?.publishedAt || null,
+  };
+  return { mode, feedEntries: allEntries.length, newEntries: downloaded.length, processed, savedAlerts: activeSaved, latestAggregateAt: latestAggregate?.message.issuedAt || null, diagnostics };
 }
 
 async function recordFailure(admin: SupabaseClient, error: unknown): Promise<void> {
