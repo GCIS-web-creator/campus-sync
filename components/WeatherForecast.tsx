@@ -310,9 +310,9 @@ function JmaWeatherAlertPanel() {
     : null;
 
   const severityStyle = (severity: number) => {
-    if (severity >= 5) return { label: '特別警報', className: 'border-rose-300 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200' };
-    if (severity >= 4) return { label: '危険警報', className: 'border-orange-300 bg-orange-100 text-orange-900 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-200' };
-    if (severity >= 3) return { label: '警報', className: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200' };
+    if (severity >= 5) return { label: '特別警報', className: 'border-slate-800 bg-slate-950 text-white dark:border-black dark:bg-black dark:text-white' };
+    if (severity >= 4) return { label: '危険警報', className: 'border-violet-300 bg-violet-100 text-violet-900 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-200' };
+    if (severity >= 3) return { label: '警報', className: 'border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200' };
     return { label: '注意報', className: 'border-yellow-300 bg-yellow-100 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-200' };
   };
 

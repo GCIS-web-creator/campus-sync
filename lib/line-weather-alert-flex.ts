@@ -10,9 +10,22 @@ export type JmaWeatherAlertNotificationPayload = {
 };
 
 export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPayload) {
-  const isSpecial = payload.severity >= 5;
-  const accent = isSpecial ? '#991B1B' : '#B45309';
-  const headerTitle = isSpecial ? '小平市に特別警報' : '小平市に警報';
+  const severityLabel = payload.severity >= 5
+    ? '特別警報'
+    : payload.severity >= 4
+      ? '危険警報'
+      : '警報';
+  const accent = payload.severity >= 5
+    ? '#111827'
+    : payload.severity >= 4
+      ? '#7C3AED'
+      : '#DC2626';
+  const softBackground = payload.severity >= 5
+    ? '#F3F4F6'
+    : payload.severity >= 4
+      ? '#F5F3FF'
+      : '#FEF2F2';
+  const headerTitle = '小平市に' + severityLabel;
   const issued = new Date(payload.issuedAt).toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
     month: 'numeric',
@@ -26,9 +39,9 @@ export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPay
     spacing: 'xs',
     paddingAll: '11px',
     cornerRadius: '10px',
-    backgroundColor: '#FFF7ED',
+    backgroundColor: softBackground,
     contents: [
-      { type: 'text', text: alert.name, size: 'md', weight: 'bold', color: '#7F1D1D', wrap: true },
+      { type: 'text', text: alert.name, size: 'md', weight: 'bold', color: accent, wrap: true },
       { type: 'text', text: alert.status, size: 'xs', weight: 'bold', color: accent, wrap: true },
       ...(alert.details ? [{ type: 'text', text: alert.details.slice(0, 180), size: 'xs', color: '#475569', wrap: true }] : []),
     ],
@@ -67,7 +80,7 @@ export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPay
               cornerRadius: '6px',
               backgroundColor: accent,
               contents: [
-                { type: 'text', text: isSpecial ? '特別警報' : '警報', size: 'xs', weight: 'bold', color: '#FFFFFF' },
+                { type: 'text', text: severityLabel, size: 'xs', weight: 'bold', color: '#FFFFFF' },
               ],
             },
             { type: 'text', text: issued + ' 発表', size: 'xs', color: '#64748B', align: 'end', flex: 1 },
@@ -78,11 +91,11 @@ export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPay
           type: 'box',
           layout: 'vertical',
           paddingAll: '12px',
-          backgroundColor: '#FEF2F2',
+          backgroundColor: softBackground,
           cornerRadius: '10px',
           contents: [
-            { type: 'text', text: '最新の気象情報・自治体からの情報を確認し、安全確保を優先してください。', size: 'sm', color: '#991B1B', weight: 'bold', wrap: true },
-            { type: 'text', text: '※注意報はLINE通知の対象外です。', size: 'xxs', color: '#7F1D1D', wrap: true, margin: 'sm' },
+            { type: 'text', text: '最新の気象情報・自治体からの情報を確認し、安全確保を優先してください。', size: 'sm', color: accent, weight: 'bold', wrap: true },
+            { type: 'text', text: '※注意報はLINE通知の対象外です。', size: 'xxs', color: accent, wrap: true, margin: 'sm' },
           ],
         },
       ],
@@ -102,7 +115,7 @@ export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPay
   const names = payload.alerts.slice(0, 3).map(alert => alert.name).join('・');
   return {
     type: 'flex',
-    altText: ('【CampusSync 防災速報】小平市に' + (isSpecial ? '特別警報' : '警報') + '：' + names).slice(0, 400),
+    altText: ('【CampusSync 防災速報】小平市に' + severityLabel + '：' + names).slice(0, 400),
     contents: bubble,
   };
 }
