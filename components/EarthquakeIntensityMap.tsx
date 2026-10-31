@@ -35,15 +35,16 @@ type LeafletApi = {
     onEachFeature?: (feature: GeoFeature, layer: LeafletLayer) => void;
   }): LeafletLayer;
   marker(position: LatLng, options?: Record<string, unknown>): LeafletLayer;
+  polygon(points: LatLng[], options?: Record<string, unknown>): LeafletLayer;
   divIcon(options: Record<string, unknown>): unknown;
   latLngBounds(points: LatLng[]): LeafletBounds;
 };
 declare global { interface Window { L?: LeafletApi } }
 
 const RAW_GEOJSON_ROOT = 'https://raw.githubusercontent.com/kaz-ogiwara/japan-topography/main/data/municipality/geojson';
-const PREFECTURE_GEOJSON_URL = RAW_GEOJSON_ROOT + '/s0001/prefectures.json';
 const CITY_GEOJSON_PATH = (code: string) => RAW_GEOJSON_ROOT + '/s0010/N03-21_' + code.padStart(2, '0') + '_210101.json';
-const MAP_ZOOM_DETAIL_THRESHOLD = 6.5;
+const MAP_ZOOM_DETAIL_THRESHOLD = 7.8;
+const MAP_ZOOM_MEDIUM_THRESHOLD = 5.4;
 let leafletPromise: Promise<LeafletApi> | null = null;
 const geoJsonCache = new Map<string, Promise<GeoCollection>>();
 
@@ -51,7 +52,7 @@ function ensureMapStyles(): void {
   if (document.getElementById('campussync-earthquake-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'campussync-earthquake-map-styles';
-  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.94);color:var(--pin-color);font-size:12px;font-weight:900;line-height:1;box-shadow:0 1px 5px rgba(15,23,42,.18)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
+  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:23px;height:23px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:9px;font-weight:900;line-height:1;box-shadow:0 1px 3px rgba(15,23,42,.16)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
   document.head.appendChild(style);
 }
 function loadLeaflet(): Promise<LeafletApi> {
@@ -95,7 +96,7 @@ function normaliseName(value: string): string {
 }
 function intensityColor(rank: number | null | undefined): string {
   const colors: Record<number, string> = {
-    1: '#94a3b8', 2: '#3b82f6', 3: '#0d9488', 4: '#ca8a04',
+    1: '#64748b', 2: '#3b82f6', 3: '#0d9488', 4: '#ca8a04',
     5: '#ea580c', 6: '#dc2626', 7: '#c026d3', 8: '#7e22ce', 9: '#7f1d1d',
   };
   return rank ? colors[rank] || '#64748b' : '#94a3b8';
@@ -142,6 +143,59 @@ function observationPopup(area: EarthquakeObservedArea): string {
     escapeHtml(intensityText(area.intensityRank, area.intensity)) + '</b></div><div class="cs-earthquake-popup-list">' + stationRows + '</div></div>';
 }
 
+type MatchedCity = { feature: GeoFeature; area: EarthquakeObservedArea; center: LatLng };
+type RegionalCluster = { center: LatLng; bounds: LatLng[]; areas: MatchedCity[]; maxRank: number };
+
+function getAreaRank(area: EarthquakeObservedArea): number {
+  if (typeof area.intensityRank === 'number' && Number.isFinite(area.intensityRank)) return area.intensityRank;
+  const labels: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
+  return labels[String(area.intensity || '')] || 0;
+}
+
+function buildRegionalClusters(items: MatchedCity[], latStep: number, lonStep: number): RegionalCluster[] {
+  const groups = new Map<string, MatchedCity[]>();
+  for (const item of items) {
+    const latIndex = Math.floor(item.center[0] / latStep);
+    const lonIndex = Math.floor(item.center[1] / lonStep);
+    const key = latIndex + ':' + lonIndex;
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.entries()).map(([key, group]) => {
+    const [latIndex, lonIndex] = key.split(':').map(Number);
+    const south = latIndex * latStep;
+    const west = lonIndex * lonStep;
+    const north = south + latStep;
+    const east = west + lonStep;
+    const center: LatLng = [
+      group.reduce((sum, item) => sum + item.center[0], 0) / group.length,
+      group.reduce((sum, item) => sum + item.center[1], 0) / group.length,
+    ];
+    return {
+      center,
+      bounds: [[south, west], [south, east], [north, east], [north, west]],
+      areas: group,
+      maxRank: Math.max(0, ...group.map(item => getAreaRank(item.area))),
+    };
+  }).sort((a, b) => b.maxRank - a.maxRank);
+}
+
+function regionalPopup(cluster: RegionalCluster, title: string): string {
+  const rows = [...cluster.areas]
+    .sort((a, b) => getAreaRank(b.area) - getAreaRank(a.area))
+    .slice(0, 16)
+    .map(item => '<div class="cs-earthquake-popup-station"><span>' +
+      escapeHtml((item.area.prefecture || '') + item.area.name) + '</span><b>' +
+      escapeHtml(intensityText(getAreaRank(item.area), item.area.intensity)) + '</b></div>')
+    .join('');
+  return '<div class="cs-earthquake-popup"><strong>' + escapeHtml(title) +
+    '</strong><div class="cs-earthquake-popup-rank">この範囲の最大震度 <b style="color:' +
+    intensityColor(cluster.maxRank) + '">震度' + escapeHtml(intensityText(cluster.maxRank)) +
+    '</b></div><p class="cs-earthquake-popup-muted">観測市区町村 ' + cluster.areas.length +
+    '件</p><div class="cs-earthquake-popup-list">' + rows + '</div></div>';
+}
+
 export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMapEvent }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -156,95 +210,107 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
         const L = await loadLeaflet();
         if (cancelled || !mapElement.current) return;
         ensureMapStyles();
-        const areas = (event.observed_areas || []).filter(area => Boolean(area.prefectureCode && area.prefecture));
-        const rankByPrefecture = new Map<string, number>();
-        for (const area of areas) {
-          const key = normaliseName(area.prefecture || '');
-          const rank = area.intensityRank || 0;
-          if (key && rank > (rankByPrefecture.get(key) || 0)) rankByPrefecture.set(key, rank);
-        }
-        const prefectureGeo = await loadGeoJson(PREFECTURE_GEOJSON_URL);
-        if (cancelled || !mapElement.current) return;
+        const areas = (event.observed_areas || [])
+          .filter(area => getAreaRank(area) > 0)
+          .map(area => ({
+            ...area,
+            prefectureCode: area.prefectureCode || (area.cityCode ? String(area.cityCode).slice(0, 2) : null),
+          }));
         map = L.map(mapElement.current, { zoomControl: true, scrollWheelZoom: true, dragging: true, tap: true, preferCanvas: true });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 18,
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
         }).addTo(map);
 
-        const codes = Array.from(new Set(areas.map(area => String(area.prefectureCode || '').padStart(2, '0')).filter(code => /^\d{2}$/.test(code))));
+        const codes = Array.from(new Set(areas
+          .map(area => String(area.prefectureCode || '').padStart(2, '0'))
+          .filter(code => /^\\d{2}$/.test(code))));
         const cityCollections = await Promise.all(codes.map(code => loadGeoJson(CITY_GEOJSON_PATH(code))));
         if (cancelled || !map) return;
 
-        const areaByName = new Map<string, EarthquakeObservedArea>();
-        for (const area of areas) {
-          const key = normaliseName(area.prefecture || '') + '|' + normaliseName(area.name);
-          const existing = areaByName.get(key);
-          if (!existing || (area.intensityRank || 0) > (existing.intensityRank || 0)) areaByName.set(key, area);
-        }
-        const matched: Array<{ feature: GeoFeature; area: EarthquakeObservedArea; center: LatLng }> = [];
+        const matched: MatchedCity[] = [];
+        const seenAreaKeys = new Set<string>();
         for (const collection of cityCollections) {
           for (const feature of collection.features) {
             const p = feature.properties || {};
-            const pref = normaliseName(String(p.N03_001 || ''));
+            const featurePrefCode = String(p.N03_007 || '').slice(0, 2);
+            const featureCityCode = String(p.N03_007 || '').slice(0, 5);
             const municipality = String(p.N03_004 || '');
             const ward = String(p.N03_003 || '');
-            const aliases = [municipality, ward, municipality + ward, ward + municipality, String(p.N03_001 || '') + municipality + ward, String(p.N03_001 || '') + ward + municipality].map(normaliseName);
-            const area = Array.from(areaByName.entries()).find(([key]) =>
-              key.startsWith(pref + '|') && aliases.includes(key.slice(key.indexOf('|') + 1))
-            )?.[1];
+            const wardPrefix = ward.endsWith('市') ? ward.slice(0, -1) : ward;
+            const aliases = [
+              municipality, ward, municipality + ward, ward + municipality,
+              wardPrefix + municipality, municipality + wardPrefix,
+              String(p.N03_001 || '') + municipality + ward,
+              String(p.N03_001 || '') + ward + municipality,
+            ].map(normaliseName);
+            const area = areas.find(candidate => {
+              const areaPrefCode = String(candidate.prefectureCode || '').padStart(2, '0');
+              if (areaPrefCode && areaPrefCode !== featurePrefCode) return false;
+              const areaCityCode = candidate.cityCode ? String(candidate.cityCode).slice(0, 5) : '';
+              if (areaCityCode && featureCityCode && areaCityCode === featureCityCode) return true;
+              const name = normaliseName(candidate.name);
+              if (!aliases.includes(name)) return false;
+              return !candidate.prefecture || normaliseName(candidate.prefecture) === normaliseName(String(p.N03_001 || ''));
+            });
             if (!area) continue;
+            const areaKey = String(area.prefectureCode || '') + '|' + String(area.cityCode || '') + '|' + normaliseName(area.name);
+            if (seenAreaKeys.has(areaKey)) continue;
             const center = featureCenter(feature);
             if (!center) continue;
+            seenAreaKeys.add(areaKey);
+            const rank = getAreaRank(area);
             matched.push({
-              feature: { ...feature, properties: { ...feature.properties, __intensityRank: area.intensityRank || 0, __areaName: area.name } },
-              area, center,
+              feature: { ...feature, properties: { ...feature.properties, __intensityRank: rank, __areaName: area.name } },
+              area,
+              center,
             });
           }
         }
+
         const cityCollection: GeoCollection = { type: 'FeatureCollection', features: matched.map(item => item.feature) };
         const cityLayer = L.geoJSON(cityCollection, {
           style: feature => {
             const rank = Number(feature.properties.__intensityRank || 0);
             const color = intensityColor(rank || null);
-            return { color, weight: 1, opacity: 0.8, fillColor: color, fillOpacity: 0.1 };
+            return { color, weight: 0.8, opacity: 0.75, fillColor: color, fillOpacity: 0.06 };
           },
         });
-        const prefectureLayer = L.geoJSON(prefectureGeo, {
-          style: feature => {
-            const rank = rankByPrefecture.get(normaliseName(String(feature.properties.N03_001 || ''))) || 0;
-            const color = intensityColor(rank || null);
-            return { color: rank ? color : '#94a3b8', weight: rank ? 1.4 : 0.7, opacity: rank ? 0.9 : 0.55, fillColor: color, fillOpacity: rank ? 0.2 : 0.015 };
-          },
-        }).addTo(map);
+        const mediumClusters = buildRegionalClusters(matched, 0.58, 0.72);
+        const wideClusters = buildRegionalClusters(matched, 1.35, 1.65);
+        const createClusterLayers = (clusters: RegionalCluster[], title: string, fillOpacity: number) => clusters.map(cluster => {
+          const color = intensityColor(cluster.maxRank);
+          const polygon = L.polygon(cluster.bounds, {
+            color, weight: 1.1, opacity: 0.72, fillColor: color, fillOpacity,
+          });
+          polygon.bindPopup(regionalPopup(cluster, title));
+          const marker = L.marker(cluster.center, {
+            icon: L.divIcon({
+              className: 'cs-earthquake-map-icon',
+              html: '<span class="cs-earthquake-region-pin" style="--pin-color:' + color + '">' +
+                escapeHtml(intensityText(cluster.maxRank)) + '</span>',
+              iconSize: [27, 27], iconAnchor: [13.5, 13.5],
+            }),
+            riseOnHover: true,
+          });
+          marker.bindPopup(regionalPopup(cluster, title));
+          return { polygon, marker };
+        });
+        const mediumClusterLayers = createClusterLayers(mediumClusters, '周辺地域の震度', 0.13);
+        const wideClusterLayers = createClusterLayers(wideClusters, '広域メッシュの震度', 0.18);
         const cityMarkers = matched.map(item => {
-          const rank = item.area.intensityRank;
+          const rank = getAreaRank(item.area);
           const marker = L.marker(item.center, {
             icon: L.divIcon({
               className: 'cs-earthquake-map-icon',
               html: markerHtml(rank, intensityText(rank, item.area.intensity)),
-              iconSize: [36, 36], iconAnchor: [18, 18],
+              iconSize: [26, 26], iconAnchor: [13, 13],
             }),
             riseOnHover: true,
           });
           marker.bindPopup(observationPopup(item.area));
           return marker;
         });
-        const prefectureMarkers: LeafletLayer[] = [];
-        for (const feature of prefectureGeo.features) {
-          const name = String(feature.properties.N03_001 || '');
-          const rank = rankByPrefecture.get(normaliseName(name));
-          if (!rank) continue;
-          const center = featureCenter(feature);
-          if (!center) continue;
-          prefectureMarkers.push(L.marker(center, {
-            icon: L.divIcon({
-              className: 'cs-earthquake-map-icon',
-              html: markerHtml(rank, intensityText(rank)),
-              iconSize: [40, 40], iconAnchor: [20, 20],
-            }),
-            interactive: false,
-          }));
-        }
         if (event.latitude !== null && event.longitude !== null) {
           L.marker([event.latitude, event.longitude], {
             icon: L.divIcon({
@@ -256,30 +322,33 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
           }).addTo(map);
         }
         const points = matched.map(item => item.center);
-        if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [28, 28], maxZoom: 7.2 });
-        else if (points.length === 1) map.setView(points[0], 8);
+        if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [28, 28], maxZoom: 8.2 });
+        else if (points.length === 1) map.setView(points[0], 8.2);
         else if (event.latitude !== null && event.longitude !== null) map.setView([event.latitude, event.longitude], event.is_distant ? 3.8 : 5.5);
         else map.setView([36.2, 138.2], 4.8);
 
         const updateZoomLayers = () => {
           if (!map) return;
-          const detailed = map.getZoom() >= MAP_ZOOM_DETAIL_THRESHOLD;
-          prefectureLayer.setStyle?.(feature => {
-            const key = normaliseName(String(feature.properties.N03_001 || ''));
-            const rank = rankByPrefecture.get(key) || 0;
-            const color = intensityColor(rank || null);
-            return { color: rank ? color : '#94a3b8', weight: rank ? (detailed ? 0.9 : 1.5) : 0.65, opacity: rank ? 0.8 : 0.45, fillColor: color, fillOpacity: rank ? (detailed ? 0.025 : 0.22) : 0.01 };
-          });
+          const zoom = map.getZoom();
+          const detailed = zoom >= MAP_ZOOM_DETAIL_THRESHOLD;
+          const medium = zoom >= MAP_ZOOM_MEDIUM_THRESHOLD && !detailed;
           ensureLayer(map, cityLayer, detailed && matched.length > 0);
           for (const marker of cityMarkers) ensureLayer(map, marker, detailed);
-          for (const marker of prefectureMarkers) ensureLayer(map, marker, !detailed);
+          for (const item of mediumClusterLayers) {
+            ensureLayer(map, item.polygon, medium);
+            ensureLayer(map, item.marker, medium);
+          }
+          for (const item of wideClusterLayers) {
+            ensureLayer(map, item.polygon, !detailed && !medium);
+            ensureLayer(map, item.marker, !detailed && !medium);
+          }
         };
         map.on('zoomend', updateZoomLayers);
         updateZoomLayers();
         if (cancelled) return;
         setStatus('ready');
         setMessage(matched.length
-          ? '拡大すると市町村別、縮小すると都道府県別の最大震度を表示します。'
+          ? '拡大：市町村別 ／ 中間：周辺メッシュ別 ／ 縮小：広域メッシュ別の最大震度を表示します。'
           : areas.length ? '震度情報は取得済みですが、市町村境界と照合できませんでした。' : '震度分布の詳細がありません。震源位置を表示しています。');
       } catch (error) {
         if (cancelled) return;
@@ -293,8 +362,8 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
-        <div><p className="text-[11px] font-black text-slate-800 dark:text-white">観測震度マップ</p><p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">拡大：市町村別 ／ 縮小：都道府県別</p></div>
-        <span className="text-[9px] text-slate-400">地図上の番号＝最大震度</span>
+        <div><p className="text-[11px] font-black text-slate-800 dark:text-white">観測震度マップ</p><p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">拡大：市町村別 ／ 中間・縮小：地域メッシュ別</p></div>
+        <span className="text-[9px] text-slate-400">番号＝範囲内の最大震度</span>
       </div>
       <div className="relative">
         <div ref={mapElement} className="h-[300px] w-full bg-slate-100 sm:h-[360px]" aria-label="地震の観測震度分布地図" />
@@ -309,7 +378,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
         ))}
       </div>
       <p className="px-3 pb-2 text-[9px] leading-relaxed text-slate-400">
-        市町村の色・番号は市町村内の最大観測震度です。拡大時のピンは市町村の代表位置で、震度計そのものの設置座標ではありません。出典：気象庁／国土数値情報／OpenStreetMap
+        地域メッシュの塗り分け・番号は、その範囲内の最大観測震度です。メッシュ境界は表示用の概略範囲で、行政区域や震度計の設置場所を示すものではありません。詳細表示のピンも市町村の代表位置です。出典：気象庁／国土数値情報／OpenStreetMap
       </p>
     </div>
   );
