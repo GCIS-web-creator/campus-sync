@@ -2229,7 +2229,7 @@ export default function CampusSyncAdmin() {
               {/* 公式アカウントだけに天気予報をテスト配信（グループには送信しない） */}
               <div className="rounded-2xl border border-sky-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-xl bg-sky-500/15 p-3 text-sky-300"><CloudSun size={22} /></div>
+                  <div className="rounded-xl bg-sky-500/15 p-3 text-sky-300"><Thermometer size={22} /></div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-black text-white">天気予報・公式アカウント限定テスト</h3>
                     <p className="mt-1 text-xs leading-5 text-slate-400">明日から3日間の天気予報をFlex Messageでテスト配信します。送信先は現在のLINE公式アカウントの友だちだけです。登録済みグループには送信しません。</p>
