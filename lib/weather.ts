@@ -153,11 +153,23 @@ const AIR_HOURLY_FIELDS = [
 
 const LABELS: Record<number, string> = {
   0:'快晴',1:'晴れ',2:'晴れ時々くもり',3:'くもり',45:'霧',48:'着氷性の霧',
-  51:'弱い霧雨',53:'霧雨',55:'強い霧雨',56:'弱い凍雨',57:'強い凍雨',
-  61:'弱い雨',63:'雨',65:'強い雨',66:'弱い凍雨',67:'強い凍雨',
-  71:'弱い雪',73:'雪',75:'大雪',77:'細かな雪',80:'にわか雨',81:'強いにわか雨',
-  82:'激しいにわか雨',85:'にわか雪',86:'強いにわか雪',95:'雷雨',96:'ひょうを伴う雷雨',99:'強いひょうを伴う雷雨',
+  51:'霧雨',53:'霧雨',55:'霧雨',56:'着氷性の霧雨',57:'着氷性の霧雨',
+  61:'雨',63:'雨',65:'雨',66:'着氷性の雨',67:'着氷性の雨',
+  71:'弱い雪',73:'雪',75:'大雪',77:'細かな雪',80:'にわか雨',81:'にわか雨',
+  82:'にわか雨',85:'にわか雪',86:'強いにわか雪',95:'雷雨',96:'ひょうを伴う雷雨',
+  97:'強い雷雨',99:'強いひょうを伴う雷雨',
 };
+
+export function jmaRainIntensityLabel(rainMm: number | null | undefined): string | null {
+  if (typeof rainMm !== 'number' || !Number.isFinite(rainMm) || rainMm <= 0) return null;
+  if (rainMm < 3) return '弱い雨';
+  if (rainMm < 10) return '雨';
+  if (rainMm < 20) return 'やや強い雨';
+  if (rainMm < 30) return '強い雨';
+  if (rainMm < 50) return '激しい雨';
+  if (rainMm < 80) return '非常に激しい雨';
+  return '猛烈な雨';
+}
 
 export function weatherIconName(code: number, isDay = true): string {
   if (code === 0) return isDay ? 'sunny' : 'night_clear';
@@ -168,7 +180,7 @@ export function weatherIconName(code: number, isDay = true): string {
   if (code >= 61 && code <= 67) return code === 61 ? 'rain_light' : 'rain_heavy';
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
   if (code >= 80 && code <= 82) return code === 80 ? 'shower' : 'rain_heavy';
-  if (code >= 95) return code >= 96 ? 'hail' : 'thunderstorm';
+  if (code >= 95) return code === 96 || code === 99 ? 'hail' : 'thunderstorm';
   return 'partly_cloudy';
 }
 
