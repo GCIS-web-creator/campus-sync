@@ -45,8 +45,16 @@ create table if not exists public.jma_weather_sync_state (
   last_success_at timestamptz,
   last_attempt_at timestamptz,
   last_error text,
+  sync_lock_until timestamptz,
+  sync_lock_token uuid,
   updated_at timestamptz not null default now()
 );
+
+-- 既存環境にも同期ロック列を追加する（再実行可能）。
+alter table public.jma_weather_sync_state
+  add column if not exists sync_lock_until timestamptz;
+alter table public.jma_weather_sync_state
+  add column if not exists sync_lock_token uuid;
 
 insert into public.jma_weather_sync_state (id)
 values (1)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { gunzipSync } from 'node:zlib';
+import { randomUUID } from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -452,6 +453,70 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
   };
 }
 
+const SYNC_LOCK_TTL_MS = 70_000;
+
+async function acquireSyncLock(admin: SupabaseClient): Promise<string | null> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const token = randomUUID();
+  const lockUntil = new Date(now.getTime() + SYNC_LOCK_TTL_MS).toISOString();
+  const { data, error } = await admin
+    .from('jma_weather_sync_state')
+    .update({
+      sync_lock_until: lockUntil,
+      sync_lock_token: token,
+      last_attempt_at: nowIso,
+      last_error: null,
+      updated_at: nowIso,
+    })
+    .eq('id', 1)
+    .or('sync_lock_until.is.null,sync_lock_until.lt.' + nowIso)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return data ? token : null;
+}
+
+async function releaseSyncLock(admin: SupabaseClient, token: string): Promise<void> {
+  const { error } = await admin
+    .from('jma_weather_sync_state')
+    .update({ sync_lock_until: null, sync_lock_token: null, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+    .eq('sync_lock_token', token);
+  if (error) throw error;
+}
+
+async function readAlertSnapshot(admin: SupabaseClient) {
+  const [alertsResult, stateResult, aggregateResult] = await Promise.all([
+    admin.from('jma_weather_alerts').select('area_key,area_name,alert_key,alert_code,alert_name,alert_family,severity,status,details,issued_at,source_product_code,source_url,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }),
+    admin.from('jma_weather_sync_state').select('high_last_success_at,long_last_success_at,last_success_at,last_attempt_at,last_error,sync_lock_until').eq('id', 1).maybeSingle(),
+    admin.from('jma_weather_alert_events').select('source_id,issued_at,target_areas').eq('product_code', 'VPWS50').order('issued_at', { ascending: false }).limit(1),
+  ]);
+  if (alertsResult.error) throw alertsResult.error;
+  if (stateResult.error) throw stateResult.error;
+  if (aggregateResult.error) throw aggregateResult.error;
+  const state = stateResult.data;
+  const highLastSuccessAt = state?.high_last_success_at || null;
+  const highAge = highLastSuccessAt ? Date.now() - Date.parse(highLastSuccessAt) : Number.POSITIVE_INFINITY;
+  const initialized = (aggregateResult.data || []).some((row: { target_areas?: string[] | null }) =>
+    (row.target_areas || []).some(area => area === '小平市（多摩北部）' || area === '多摩北部')
+  );
+  const lockUntil = state?.sync_lock_until ? Date.parse(state.sync_lock_until) : 0;
+  return {
+    alerts: alertsResult.data || [],
+    sync: {
+      initialized,
+      inProgress: Number.isFinite(lockUntil) && lockUntil > Date.now(),
+      highLastSuccessAt,
+      longLastSuccessAt: state?.long_last_success_at || null,
+      lastSuccessAt: state?.last_success_at || null,
+      lastAttemptAt: state?.last_attempt_at || null,
+      lastError: state?.last_error || null,
+      stale: !initialized || highAge > 3 * 60 * 1000,
+    },
+  };
+}
+
 async function recordFailure(admin: SupabaseClient, error: unknown): Promise<void> {
   const now = new Date().toISOString();
   const message = error instanceof Error ? error.message : '不明な同期エラー';
@@ -462,39 +527,53 @@ async function recordFailure(admin: SupabaseClient, error: unknown): Promise<voi
   }).eq('id', 1);
 }
 
+
 export async function GET() {
+  let admin: SupabaseClient;
   try {
-    const admin = getSupabaseAdmin();
-    const [alertsResult, stateResult, aggregateResult] = await Promise.all([
-      admin.from('jma_weather_alerts').select('area_key,area_name,alert_key,alert_code,alert_name,alert_family,severity,status,details,issued_at,source_product_code,source_url,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }),
-      admin.from('jma_weather_sync_state').select('high_last_success_at,long_last_success_at,last_success_at,last_attempt_at,last_error').eq('id', 1).maybeSingle(),
-      admin.from('jma_weather_alert_events').select('source_id,issued_at,target_areas').eq('product_code', 'VPWS50').order('issued_at', { ascending: false }).limit(1),
-    ]);
-    if (alertsResult.error) throw alertsResult.error;
-    if (stateResult.error) throw stateResult.error;
-    if (aggregateResult.error) throw aggregateResult.error;
-    const state = stateResult.data;
-    const highLastSuccessAt = state?.high_last_success_at || null;
-    const highAge = highLastSuccessAt ? Date.now() - Date.parse(highLastSuccessAt) : Number.POSITIVE_INFINITY;
-    const initialized = (aggregateResult.data || []).some((row: { target_areas?: string[] | null }) =>
-      (row.target_areas || []).some(area => area === '小平市（多摩北部）' || area === '多摩北部')
-    );
-    return NextResponse.json({
-      alerts: alertsResult.data || [],
-      sync: {
-        initialized,
-        highLastSuccessAt,
-        longLastSuccessAt: state?.long_last_success_at || null,
-        lastSuccessAt: state?.last_success_at || null,
-        lastAttemptAt: state?.last_attempt_at || null,
-        lastError: state?.last_error || null,
-        stale: !initialized || highAge > 3 * 60 * 1000,
-      },
-    }, { headers: { 'Cache-Control': 'no-store' } });
+    admin = getSupabaseAdmin();
   } catch (error) {
     console.error('JMA weather alert read failed:', error instanceof Error ? error.message : 'unknown');
     return NextResponse.json(
-      { message: '気象庁の警報・注意報データを読み込めませんでした。', alerts: [], sync: { initialized: false, stale: true } },
+      { message: '気象庁の警報・注意報データを読み込めませんでした。', alerts: [], sync: { initialized: false, inProgress: false, stale: true } },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  try {
+    let snapshot = await readAlertSnapshot(admin);
+
+    // 初回のVPWS50集約電文が未保存なら、サイト表示時に高頻度フィードを即時同期する。
+    // DBの期限付きロックにより、複数ユーザー・画面側の並行GET・Cronとの二重実行を防ぐ。
+    if (!snapshot.sync.initialized && !snapshot.sync.inProgress) {
+      let lockToken: string | null = null;
+      try {
+        lockToken = await acquireSyncLock(admin);
+        if (lockToken) {
+          try {
+            await syncFeed(admin, 'high');
+          } catch (error) {
+            await recordFailure(admin, error);
+            console.error('JMA initial weather alert sync failed:', error instanceof Error ? error.message : 'unknown');
+          } finally {
+            try {
+              await releaseSyncLock(admin, lockToken);
+            } catch (releaseError) {
+              console.error('JMA initial sync lock release failed:', releaseError instanceof Error ? releaseError.message : 'unknown');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('JMA initial sync could not start:', error instanceof Error ? error.message : 'unknown');
+      }
+      snapshot = await readAlertSnapshot(admin);
+    }
+
+    return NextResponse.json(snapshot, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('JMA weather alert read failed:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json(
+      { message: '気象庁の警報・注意報データを読み込めませんでした。', alerts: [], sync: { initialized: false, inProgress: false, stale: true } },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
@@ -511,15 +590,37 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : '設定エラー' }, { status: 500 });
   }
+
   let mode: 'high' | 'long' = 'high';
   try {
     const body = await request.json().catch(() => ({}));
     if (body?.mode === 'long') mode = 'long';
-    const result = await syncFeed(admin, mode);
-    return NextResponse.json({ success: true, ...result, syncedAt: new Date().toISOString() });
+    const lockToken = await acquireSyncLock(admin);
+    if (!lockToken) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        mode,
+        message: '別の気象庁同期が実行中のため、重複同期をスキップしました。',
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    try {
+      const result = await syncFeed(admin, mode);
+      return NextResponse.json({ success: true, ...result, syncedAt: new Date().toISOString() });
+    } catch (error) {
+      await recordFailure(admin, error);
+      console.error('JMA weather alert sync failed:', error instanceof Error ? error.message : 'unknown');
+      return NextResponse.json({ success: false, mode, message: error instanceof Error ? error.message : '気象庁XMLの同期に失敗しました。' }, { status: 500 });
+    } finally {
+      try {
+        await releaseSyncLock(admin, lockToken);
+      } catch (error) {
+        console.error('JMA sync lock release failed:', error instanceof Error ? error.message : 'unknown');
+      }
+    }
   } catch (error) {
-    await recordFailure(admin, error);
-    console.error('JMA weather alert sync failed:', error instanceof Error ? error.message : 'unknown');
-    return NextResponse.json({ success: false, mode, message: error instanceof Error ? error.message : '気象庁XMLの同期に失敗しました。' }, { status: 500 });
+    console.error('JMA weather alert sync lock failed:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json({ success: false, mode, message: '気象庁同期の開始に失敗しました。' }, { status: 500 });
   }
 }
