@@ -14,6 +14,7 @@ const LONG_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/eqvol_l.xml
 const MAX_FEED_BYTES = 12 * 1024 * 1024;
 const MAX_XML_BYTES = 3 * 1024 * 1024;
 const MAX_FEED_ITEMS = 100;
+const MAX_LONG_BATCH_ITEMS = 12;
 const KODAIRA_EEW_AREA = '東京都多摩東部';
 
 type XmlNode = { name: string; attributes: Record<string, string>; children: XmlNode[]; text: string };
@@ -142,7 +143,10 @@ function parseFeed(xml: string, feedUrl: string): FeedEntry[] {
       href = '';
     }
     return { id: id || href, title: childText(entry, 'title'), href, publishedAt: childText(entry, 'updated') || childText(entry, 'published') || null };
-  }).filter(entry => entry.id && entry.href && /地震|緊急地震速報|震源|震度/.test(entry.title));
+  }).filter(entry => entry.id && entry.href && (
+    /VXSE(43|51|52|53)/i.test(entry.href + ' ' + entry.id)
+    || /緊急地震速報|震度速報|震源に関する情報|震源・震度.*情報|遠地地震に関する情報/.test(entry.title)
+  ));
 }
 
 async function fetchText(url: string, timeoutMs: number, limit: number): Promise<string> {
@@ -573,14 +577,22 @@ async function dispatchNotifications(admin: SupabaseClient) {
   return { pending: pending.length, attempted, completed };
 }
 
-async function acquireLock(admin: SupabaseClient): Promise<string | null> {
+async function acquireLock(admin: SupabaseClient, mode: 'high' | 'long'): Promise<string | null> {
   const token = randomUUID();
   const now = new Date().toISOString();
-  const expires = new Date(Date.now() + 110_000).toISOString();
+  const lockTokenColumn = mode === 'high' ? 'high_lock_token' : 'long_lock_token';
+  const lockExpiresColumn = mode === 'high' ? 'high_lock_expires_at' : 'long_lock_expires_at';
+  const durationMs = mode === 'high' ? 75_000 : 5 * 60_000;
+  const expires = new Date(Date.now() + durationMs).toISOString();
+  const patch: Record<string, unknown> = {
+    [lockTokenColumn]: token,
+    [lockExpiresColumn]: expires,
+    last_attempt_at: now,
+  };
   const { data, error } = await admin.from('jma_earthquake_sync_state')
-    .update({ lock_token: token, lock_expires_at: expires, last_attempt_at: now })
+    .update(patch)
     .eq('id', 1)
-    .or('lock_expires_at.is.null,lock_expires_at.lt.' + now)
+    .or(lockExpiresColumn + '.is.null,' + lockExpiresColumn + '.lt.' + now)
     .select('id')
     .maybeSingle();
   if (error) throw error;
@@ -593,9 +605,13 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
   const entries = parseFeed(feedXml, feedUrl)
     .filter(entry => {
       const published = entry.publishedAt ? Date.parse(entry.publishedAt) : 0;
-      if (!published) return true;
+      // Undated feed items stay with the high-frequency path. The long feed
+      // only backfills items older than the realtime window.
+      if (!published) return mode === 'high';
       const age = Date.now() - published;
-      return mode === 'high' ? age <= 30 * 60 * 1000 : age <= 5 * 24 * 60 * 60 * 1000;
+      return mode === 'high'
+        ? age <= 30 * 60 * 1000
+        : age > 30 * 60 * 1000 && age <= 5 * 24 * 60 * 60 * 1000;
     })
     .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''))
     .slice(-MAX_FEED_ITEMS);
@@ -605,12 +621,17 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
     : { data: [], error: null };
   if (knownError) throw knownError;
   const known = new Set((knownRows || []).map((row: { source_id: string }) => row.source_id));
+  const pendingEntries = entries.filter(entry => !known.has(entry.id));
+  const batchEntries = mode === 'long'
+    ? pendingEntries.slice(0, MAX_LONG_BATCH_ITEMS)
+    : pendingEntries;
+
   let downloaded = 0;
   let saved = 0;
   let failures = 0;
 
-  for (let index = 0; index < entries.length; index += 4) {
-    const chunk = entries.slice(index, index + 4).filter(entry => !known.has(entry.id));
+  for (let index = 0; index < batchEntries.length; index += 4) {
+    const chunk = batchEntries.slice(index, index + 4);
     const results = await Promise.all(chunk.map(async entry => {
       try {
         const xml = await fetchText(entry.href, 10000, MAX_XML_BYTES);
@@ -629,6 +650,7 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
   }
   if (failures > 0) throw new Error('気象庁の地震情報を一部取得できませんでした。次回同期で再試行します。');
 
+  const remainingEntries = Math.max(0, pendingEntries.length - batchEntries.length);
   const now = new Date().toISOString();
   const patch = mode === 'high'
     ? { high_last_success_at: now, last_error: null, updated_at: now }
@@ -636,8 +658,22 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
   const { error: stateError } = await admin.from('jma_earthquake_sync_state').update(patch).eq('id', 1);
   if (stateError) throw stateError;
 
-  const notifications = await dispatchNotifications(admin);
-  return { mode, entries: entries.length, downloaded, saved, notifications, syncedAt: now };
+  // The high-frequency feed is the only source allowed to create and dispatch
+  // realtime LINE alerts. The long feed is strictly for historical display.
+  const notifications = mode === 'high'
+    ? await dispatchNotifications(admin)
+    : { pending: 0, attempted: 0, completed: 0, skipped: 'historical_feed_no_dispatch' };
+  return {
+    mode,
+    entries: entries.length,
+    newEntries: pendingEntries.length,
+    batchEntries: batchEntries.length,
+    downloaded,
+    saved,
+    remainingEntries,
+    notifications,
+    syncedAt: now,
+  };
 }
 
 export async function GET() {
@@ -690,7 +726,7 @@ export async function POST(request: Request) {
   const mode: 'high' | 'long' = body?.mode === 'long' ? 'long' : 'high';
   let lockToken: string | null = null;
   try {
-    lockToken = await acquireLock(admin);
+    lockToken = await acquireLock(admin, mode);
     if (!lockToken) return NextResponse.json({ success: true, skipped: true, mode, message: '別の地震同期が実行中のため、重複同期をスキップしました。' });
 
     const result = await syncFeed(admin, mode);
@@ -702,10 +738,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, mode, message }, { status: 500 });
   } finally {
     if (lockToken) {
+      const lockTokenColumn = mode === 'high' ? 'high_lock_token' : 'long_lock_token';
+      const lockExpiresColumn = mode === 'high' ? 'high_lock_expires_at' : 'long_lock_expires_at';
+      const unlockPatch: Record<string, unknown> = {
+        [lockTokenColumn]: null,
+        [lockExpiresColumn]: null,
+        updated_at: new Date().toISOString(),
+      };
       await admin.from('jma_earthquake_sync_state')
-        .update({ lock_token: null, lock_expires_at: null, updated_at: new Date().toISOString() })
+        .update(unlockPatch)
         .eq('id', 1)
-        .eq('lock_token', lockToken);
+        .eq(lockTokenColumn, lockToken);
     }
   }
 }

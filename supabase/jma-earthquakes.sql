@@ -79,8 +79,18 @@ create table if not exists public.jma_earthquake_sync_state (
   last_error text,
   lock_token uuid,
   lock_expires_at timestamptz,
+  high_lock_token uuid,
+  high_lock_expires_at timestamptz,
+  long_lock_token uuid,
+  long_lock_expires_at timestamptz,
   updated_at timestamptz not null default now()
 );
+alter table public.jma_earthquake_sync_state
+  add column if not exists high_lock_token uuid,
+  add column if not exists high_lock_expires_at timestamptz,
+  add column if not exists long_lock_token uuid,
+  add column if not exists long_lock_expires_at timestamptz;
+
 insert into public.jma_earthquake_sync_state (id) values (1)
 on conflict (id) do nothing;
 
