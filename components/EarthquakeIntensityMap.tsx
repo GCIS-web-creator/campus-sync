@@ -371,7 +371,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
-        <div><p className="text-[11px] font-black text-slate-800 dark:text-white">観測震度マップ</p><p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">拡大：市町村別 ／ 中間・縮小：地域メッシュ別</p></div>
+        <div><p className="text-[11px] font-black text-slate-800 dark:text-white">観測震度マップ</p><p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">拡大：市町村別 ／ 中間：市町村境界別 ／ 縮小：都道府県形状別</p></div>
         <span className="text-[9px] text-slate-400">観測市区町村 {matchedCount}件 ／ 番号＝範囲内の最大震度</span>
       </div>
       <div className="relative">
