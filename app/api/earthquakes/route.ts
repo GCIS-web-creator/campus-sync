@@ -37,7 +37,15 @@ type ParsedEarthquake = {
   maxIntensityRank: number | null;
   kodairaIntensity: string | null;
   kodairaIntensityRank: number | null;
-  observedAreas: Array<{ name: string; intensity: string | null; intensityRank: number | null }>;
+  observedAreas: Array<{
+    name: string;
+    prefecture: string | null;
+    prefectureCode: string | null;
+    cityCode: string | null;
+    intensity: string | null;
+    intensityRank: number | null;
+    stations: Array<{ name: string; code: string; intensity: string | null; intensityRank: number | null }>;
+  }>;
   eewTargets: string[];
   eewKodairaTarget: boolean;
   eewForecastIntensity: string | null;
@@ -288,15 +296,56 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   const maxIntensityRank = intensityRank(maxIntensityRaw);
   const maxIntensity = intensityLabel(maxIntensityRank);
 
-  const observedAreas: Array<{ name: string; intensity: string | null; intensityRank: number | null }> = [];
+  const observedAreas: ParsedEarthquake['observedAreas'] = [];
   let kodairaIntensityRank: number | null = null;
-  for (const city of descendantsNamed(root, 'City')) {
-    const name = firstText(city, 'Name');
-    if (!name) continue;
-    const raw = firstText(city, 'Intensity') || firstText(city, 'MaxInt');
-    const rank = intensityRank(raw);
-    if (!observedAreas.some(area => area.name === name)) observedAreas.push({ name, intensity: intensityLabel(rank), intensityRank: rank });
-    if (/小平市$/.test(name) && rank !== null) kodairaIntensityRank = Math.max(kodairaIntensityRank ?? 0, rank);
+  for (const pref of descendantsNamed(root, 'Pref')) {
+    const prefecture = childText(pref, 'Name') || null;
+    const prefectureCode = childText(pref, 'Code') || null;
+    for (const area of childrenNamed(pref, 'Area')) {
+      for (const city of childrenNamed(area, 'City')) {
+        const name = childText(city, 'Name');
+        if (!name) continue;
+        const cityCode = childText(city, 'Code') || null;
+        const stations = childrenNamed(city, 'IntensityStation').map(station => {
+          const rawStationIntensity = childText(station, 'Int');
+          const stationRank = intensityRank(rawStationIntensity);
+          return {
+            name: childText(station, 'Name') || '観測点',
+            code: childText(station, 'Code'),
+            intensity: intensityLabel(stationRank),
+            intensityRank: stationRank,
+          };
+        }).filter(station => station.name && station.code);
+        const raw = childText(city, 'MaxInt') || childText(city, 'Intensity');
+        const stationMax = stations.reduce<number | null>((maximum, station) =>
+          station.intensityRank === null ? maximum : Math.max(maximum ?? 0, station.intensityRank), null);
+        const rank = intensityRank(raw) ?? stationMax;
+        const existing = observedAreas.find(item =>
+          item.name === name && item.prefectureCode === prefectureCode
+        );
+        if (existing) {
+          if (rank !== null && rank > (existing.intensityRank ?? 0)) {
+            existing.intensityRank = rank;
+            existing.intensity = intensityLabel(rank);
+          }
+          const knownStations = new Set(existing.stations.map(station => station.code));
+          existing.stations.push(...stations.filter(station => !knownStations.has(station.code)));
+        } else {
+          observedAreas.push({
+            name,
+            prefecture,
+            prefectureCode,
+            cityCode,
+            intensity: intensityLabel(rank),
+            intensityRank: rank,
+            stations: stations.slice(0, 100),
+          });
+        }
+        if (/小平市$/.test(name) && rank !== null) {
+          kodairaIntensityRank = Math.max(kodairaIntensityRank ?? 0, rank);
+        }
+      }
+    }
   }
   const kodairaIntensity = intensityLabel(kodairaIntensityRank);
 
@@ -676,9 +725,59 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const admin = getAdmin();
+    const requestUrl = new URL(request.url);
+    const detailEventKey = requestUrl.searchParams.get('eventKey');
+
+    if (detailEventKey) {
+      const { data: row, error: rowError } = await admin.from('jma_earthquakes')
+        .select('event_key,latest_source_url,latest_source_id,product_code,title,headline,issued_at,event_time,hypocenter_name,latitude,longitude,depth_km,magnitude,max_intensity,max_intensity_rank,kodaira_intensity,kodaira_intensity_rank,observed_areas,eew_targets,eew_kodaira_target,eew_forecast_intensity,is_eew,is_eew_cancelled,is_distant,updated_at')
+        .eq('event_key', detailEventKey)
+        .maybeSingle();
+      if (rowError) throw rowError;
+      if (!row) return NextResponse.json({ message: '指定された地震情報が見つかりません。' }, { status: 404 });
+
+      let enrichedRow = row;
+      try {
+        const { data: intensityReport } = await admin.from('jma_earthquake_reports')
+          .select('source_id,source_url,title,issued_at')
+          .eq('event_key', detailEventKey)
+          .eq('product_code', 'VXSE53')
+          .order('issued_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const sourceUrl = intensityReport?.source_url || row.latest_source_url;
+        const sourceId = intensityReport?.source_id || row.latest_source_id;
+        const sourceTitle = intensityReport?.title || row.title;
+        const sourceIssuedAt = intensityReport?.issued_at || row.issued_at;
+        const parsedUrl = new URL(sourceUrl);
+        const allowedHosts = ['www.data.jma.go.jp', 'xml.kishou.go.jp'];
+        if (parsedUrl.protocol === 'https:' && allowedHosts.includes(parsedUrl.hostname)) {
+          const xml = await fetchText(parsedUrl.toString(), 10000, MAX_XML_BYTES);
+          const parsed = parseMessage({
+            id: sourceId,
+            title: sourceTitle,
+            href: parsedUrl.toString(),
+            publishedAt: sourceIssuedAt,
+          }, xml);
+          if (parsed?.observedAreas.length) {
+            const { error: updateError } = await admin.from('jma_earthquakes')
+              .update({ observed_areas: parsed.observedAreas, updated_at: new Date().toISOString() })
+              .eq('event_key', detailEventKey);
+            if (updateError) throw updateError;
+            enrichedRow = { ...row, observed_areas: parsed.observedAreas, updated_at: new Date().toISOString() };
+          }
+        }
+      } catch (enrichmentError) {
+        console.error('Earthquake detail enrichment failed:', enrichmentError instanceof Error ? enrichmentError.message : 'unknown');
+      }
+
+      return NextResponse.json({ event: enrichedRow }, {
+        headers: { 'Cache-Control': 'no-store, max-age=0' },
+      });
+    }
     const [eventsResult, syncResult] = await Promise.all([
       admin.from('jma_earthquakes')
         .select('event_key,latest_source_url,product_code,title,headline,issued_at,event_time,hypocenter_name,latitude,longitude,depth_km,magnitude,max_intensity,max_intensity_rank,kodaira_intensity,kodaira_intensity_rank,observed_areas,eew_targets,eew_kodaira_target,eew_forecast_intensity,is_eew,is_eew_cancelled,is_distant,updated_at')
