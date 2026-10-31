@@ -153,6 +153,25 @@ async function fetchText(url: string, timeoutMs: number, limit: number): Promise
   return new TextDecoder('utf-8').decode(bytes);
 }
 
+function resolveProductCode(entry: FeedEntry, root: XmlNode, control: XmlNode): string {
+  const candidates = [
+    entry.href,
+    entry.id,
+    entry.title,
+    childText(control, 'Title'),
+    firstText(root, 'Title'),
+  ].filter(Boolean).join(' ');
+  const fromFileName = candidates.match(/VXSE(43|51|52|53)/i);
+  if (fromFileName) return ('VXSE' + fromFileName[1]).toUpperCase();
+
+  const label = [childText(control, 'Title'), firstText(root, 'Title'), entry.title].join(' ');
+  if (/緊急地震速報.*警報/.test(label)) return 'VXSE43';
+  if (/震度速報/.test(label)) return 'VXSE51';
+  if (/震源に関する情報/.test(label) && !/震源・震度/.test(label)) return 'VXSE52';
+  if (/震源・震度.*情報|遠地地震に関する情報/.test(label)) return 'VXSE53';
+  return '';
+}
+
 function parseIssuedAt(root: XmlNode, fallback: string | null): string {
   for (const candidate of [firstText(root, 'DateTime'), firstText(root, 'ReportDateTime'), firstText(root, 'TargetDateTime'), fallback || '']) {
     const timestamp = Date.parse(candidate);
@@ -162,7 +181,12 @@ function parseIssuedAt(root: XmlNode, fallback: string | null): string {
 }
 
 function parseEventTime(root: XmlNode): string | null {
-  for (const candidate of [firstText(root, 'OriginTime'), firstText(root, 'OccurrenceTime'), firstText(root, 'ArrivalTime')]) {
+  for (const candidate of [
+    firstText(root, 'OriginTime'),
+    firstText(root, 'OccurrenceTime'),
+    firstText(root, 'ArrivalTime'),
+    firstText(root, 'TargetDateTime'),
+  ]) {
     const timestamp = Date.parse(candidate);
     if (candidate && Number.isFinite(timestamp)) return new Date(timestamp).toISOString();
   }
@@ -189,39 +213,60 @@ function parseMagnitude(raw: string): number | null {
 }
 
 function parseCoordinate(raw: string, description: string): { latitude: number | null; longitude: number | null; depthKm: number | null } {
-  const text = (raw || '').trim();
+  const text = (raw || '').trim().normalize('NFKC');
+
+  // JMA's current decimal-degree ISO 6709 form, e.g. +32.3+130.5-10000/.
+  const decimalIso = text.match(/^([+-]\d{1,2}(?:\.\d+)?)([+-]\d{1,3}(?:\.\d+)?)([+-]\d{1,5})?(?:\/)?$/);
+  if (decimalIso) {
+    const latitude = Number(decimalIso[1]);
+    const longitude = Number(decimalIso[2]);
+    const depthKm = decimalIso[3] ? Math.abs(Number(decimalIso[3])) / 1000 : null;
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)
+      && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
+      return { latitude, longitude, depthKm: depthKm !== null && Number.isFinite(depthKm) ? depthKm : null };
+    }
+  }
+
+  // Older degree-minute-second ISO 6709 form.
   const iso = text.match(/^([+-])(\d{2})(\d{2})(\d{2}(?:\.\d+)?)([+-])(\d{3})(\d{2})(\d{2}(?:\.\d+)?)([+-])(\d{2,5})/);
   if (iso) {
     const lat = Number(iso[2]) + Number(iso[3]) / 60 + Number(iso[4]) / 3600;
     const lon = Number(iso[6]) + Number(iso[7]) / 60 + Number(iso[8]) / 3600;
-    const depth = Number(iso[10]) / 1000;
+    const depth = Math.abs(Number(iso[10])) / 1000;
     return { latitude: iso[1] === '-' ? -lat : lat, longitude: iso[5] === '-' ? -lon : lon, depthKm: Number.isFinite(depth) ? depth : null };
   }
-  const source = text + ' ' + description;
+
+  const source = (text + ' ' + (description || '')).normalize('NFKC');
   const latMatch = source.match(/北緯\s*([+-]?\d+(?:\.\d+)?)\s*度?/);
   const lonMatch = source.match(/東経\s*([+-]?\d+(?:\.\d+)?)\s*度?/);
   const depthMatch = source.match(/深さ\s*(\d+(?:\.\d+)?)\s*(?:km|キロ)/i);
+  const latitude = latMatch ? Number(latMatch[1]) : null;
+  const longitude = lonMatch ? Number(lonMatch[1]) : null;
   return {
-    latitude: latMatch ? Number(latMatch[1]) : null,
-    longitude: lonMatch ? Number(lonMatch[1]) : null,
+    latitude: latitude !== null && Math.abs(latitude) <= 90 ? latitude : null,
+    longitude: longitude !== null && Math.abs(longitude) <= 180 ? longitude : null,
     depthKm: depthMatch ? Number(depthMatch[1]) : null,
   };
 }
 
-function buildEventKey(root: XmlNode, eventTime: string | null, hypocenter: string | null, magnitude: number | null): string {
+function buildEventKey(root: XmlNode, eventTime: string | null, hypocenter: string | null, magnitude: number | null, sourceId: string): string {
   const eventId = firstText(root, 'EventID');
   if (eventId) return eventId.slice(0, 160);
-  const fallback = [eventTime || '', hypocenter || '', magnitude === null ? '' : String(magnitude)].join('|');
+  // Some early-stage intensity bulletins have no EventID or hypocenter yet.
+  // Include the unique feed item ID to avoid collapsing unrelated earthquakes.
+  const fallback = [eventTime || '', hypocenter || '', magnitude === null ? '' : String(magnitude), sourceId].join('|');
   return createHash('sha256').update(fallback).digest('hex').slice(0, 40);
 }
 
 function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   if (xml.length > MAX_XML_BYTES) throw new Error('気象庁の地震XMLがサイズ上限を超えています。');
   const root = parseXml(xml);
-  const productCode = descendantsNamed(root, 'code').map(nodeText).find(value => /^VXSE(43|51|52|53)$/.test(value)) || '';
+  const control = descendantsNamed(root, 'Control')[0] || root;
+  // VXSE product codes are in the Atom item's linked filename, not in the XML
+  // Code elements (those are geographic/intensity codes).
+  const productCode = resolveProductCode(entry, root, control);
   if (!productCode) return null;
 
-  const control = descendantsNamed(root, 'Control')[0] || root;
   const controlStatus = childText(control, 'Status');
   if (/訓練|試験/.test(controlStatus)) return null;
 
@@ -251,30 +296,76 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   }
   const kodairaIntensity = intensityLabel(kodairaIntensityRank);
 
-  const eewTargets: string[] = [];
-  for (const info of descendantsNamed(root, 'Information')) {
-    const type = info.attributes.type || '';
-    if (!/細分区域/.test(type)) continue;
-    for (const area of descendantsNamed(info, 'Area')) {
-      const name = firstText(area, 'Name');
-      if (name && !eewTargets.includes(name)) eewTargets.push(name);
-    }
-  }
   const infoType = firstText(root, 'InfoType');
   const titleOrKind = title + ' ' + descendantsNamed(root, 'Kind').map(nodeText).join(' ');
   const isEewCancelled = productCode === 'VXSE43' && /取消|取り消し/.test(infoType + ' ' + headline + ' ' + titleOrKind);
   const isEew = productCode === 'VXSE43' && /緊急地震速報/.test(titleOrKind) && !isEewCancelled;
-  const eewKodairaTarget = isEew && eewTargets.some(area => area === KODAIRA_EEW_AREA || area.includes('東京都多摩東部'));
-  const forecastFrom = firstText(root, 'From');
-  const eewForecastIntensity = forecastFrom || null;
+
+  const eewTargets: string[] = [];
+  let kodairaForecastIntensity: string | null = null;
+  const addEewTarget = (name: string) => {
+    const normalized = name.normalize('NFKC').replace(/\s+/g, '');
+    if (normalized && !eewTargets.some(existing => existing.normalize('NFKC').replace(/\s+/g, '') === normalized)) {
+      eewTargets.push(name);
+    }
+  };
+
+  // The Headline contains an Information block whose Areas are the forecast
+  // subdivisions. Restrict this to VXSE43 so observed seismic subdivisions in
+  // VXSE53 are not accidentally labeled as EEW target areas.
+  if (isEew || isEewCancelled) {
+    for (const info of descendantsNamed(root, 'Information')) {
+      const type = info.attributes.type || '';
+      if (!/緊急地震速報/.test(type) || !/細分区域/.test(type)) continue;
+      for (const item of childrenNamed(info, 'Item')) {
+        const itemKind = childrenNamed(item, 'Kind')[0];
+        const currentKindName = childText(itemKind || item, 'Name');
+        if (currentKindName && !/緊急地震速報.*警報/.test(currentKindName)) continue;
+        for (const area of descendantsNamed(item, 'Area')) {
+          addEewTarget(childText(area, 'Name'));
+        }
+      }
+    }
+
+    // The current EEW XML also exposes each predicted area under
+    // Body/Intensity/Forecast/Pref/Area, with an area-specific ForecastInt.
+    const forecast = descendantsNamed(root, 'Forecast')[0];
+    if (forecast) {
+      for (const pref of childrenNamed(forecast, 'Pref')) {
+        for (const area of childrenNamed(pref, 'Area')) {
+          const category = childrenNamed(area, 'Category')[0];
+          const kind = category ? childrenNamed(category, 'Kind')[0] : undefined;
+          const kindName = childText(kind || area, 'Name');
+          if (kindName && !/緊急地震速報.*警報/.test(kindName)) continue;
+          const name = childText(area, 'Name');
+          addEewTarget(name);
+          const normalized = name.normalize('NFKC').replace(/\s+/g, '');
+          if (normalized === KODAIRA_EEW_AREA && !kodairaForecastIntensity) {
+            const areaForecast = childrenNamed(area, 'ForecastInt')[0];
+            kodairaForecastIntensity = childText(areaForecast || area, 'From') || null;
+          }
+        }
+      }
+    }
+  }
+
+  const eewKodairaTarget = (isEew || isEewCancelled)
+    && eewTargets.some(area => area.normalize('NFKC').replace(/\s+/g, '') === KODAIRA_EEW_AREA);
+  const globalForecast = descendantsNamed(root, 'Forecast')
+    .map(node => childrenNamed(node, 'ForecastInt')[0])
+    .map(node => childText(node || root, 'From'))
+    .find(Boolean) || firstText(root, 'From');
+  const eewForecastIntensity = kodairaForecastIntensity || globalForecast || null;
   const placeText = (hypocenterName || '') + ' ' + headline + ' ' + title;
   const isDistant = descendantsNamed(root, 'Foreign').length > 0 || /海外|中国|ロシア|アメリカ|台湾|トンガ|パプア|フィリピン|インドネシア|南米|太平洋|地中海|メキシコ|チリ|カムチャツカ|マリアナ|バヌアツ/.test(placeText);
-  const eventKey = buildEventKey(root, eventTime, hypocenterName, magnitude);
-  const notificationKind = eewKodairaTarget
-    ? 'eew_kodaira'
-    : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
-      ? 'kodaira_intensity2'
-      : null;
+  const eventKey = buildEventKey(root, eventTime, hypocenterName, magnitude, entry.id);
+  const notificationKind = isEewCancelled && eewKodairaTarget
+    ? 'eew_cancelled'
+    : isEew && eewKodairaTarget
+      ? 'eew_kodaira'
+      : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
+        ? 'kodaira_intensity2'
+        : null;
 
   return {
     sourceId: entry.id,
@@ -371,18 +462,9 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
   const { error: upsertError } = await admin.from('jma_earthquakes').upsert(merged, { onConflict: 'event_key' });
   if (upsertError) throw upsertError;
 
-  const { error: reportError } = await admin.from('jma_earthquake_reports').insert({
-    source_id: item.sourceId,
-    event_key: item.eventKey,
-    feed_mode: mode,
-    product_code: item.productCode,
-    title: item.title,
-    source_url: item.sourceUrl,
-    issued_at: item.issuedAt,
-    fetched_at: new Date().toISOString(),
-  });
-  if (reportError && reportError.code !== '23505') throw reportError;
-
+  // Preserve the outbox before marking the XML report as processed. If the
+  // notification insert fails, the report remains eligible for retry on the
+  // next high-frequency feed poll.
   const resolvedNotificationKind = item.isEewCancelled && current?.eew_kodaira_target
     ? 'eew_cancelled'
     : item.notificationKind;
@@ -409,6 +491,18 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
     }, { onConflict: 'event_key,notification_kind', ignoreDuplicates: true });
     if (notificationError) throw notificationError;
   }
+
+  const { error: reportError } = await admin.from('jma_earthquake_reports').insert({
+    source_id: item.sourceId,
+    event_key: item.eventKey,
+    feed_mode: mode,
+    product_code: item.productCode,
+    title: item.title,
+    source_url: item.sourceUrl,
+    issued_at: item.issuedAt,
+    fetched_at: new Date().toISOString(),
+  });
+  if (reportError && reportError.code !== '23505') throw reportError;
   return true;
 }
 
@@ -463,7 +557,7 @@ async function dispatchNotifications(admin: SupabaseClient) {
           'earthquake_alert',
         );
         patch.groups_result = groupResult;
-        if (!groupResult.lookupError && groupResult.failed === 0 && groupResult.registered > 0) patch.groups_sent_at = now;
+        if (!groupResult.lookupError && groupResult.failed === 0) patch.groups_sent_at = now;
         else failures.push(groupResult.lookupError || ('グループ配信 ' + groupResult.sent + '/' + groupResult.registered + '件'));
       } catch (caught) {
         failures.push('グループ配信エラー：' + (caught instanceof Error ? caught.message : 'unknown'));
