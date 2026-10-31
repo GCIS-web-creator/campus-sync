@@ -415,8 +415,6 @@ export default function WeatherForecast() {
   const currentCode = getNumber(current, 'weather_code') ?? selectedDay?.weatherCode ?? 3;
   const currentIsDay = getNumber(current, 'is_day') !== 0;
   const currentIcon = weatherIcon(currentCode, currentIsDay);
-  const currentRainMm = Math.max(0, (getNumber(current, 'rain') ?? 0) + (getNumber(current, 'showers') ?? 0));
-  const currentRainIntensity = jmaRainIntensityLabel(currentRainMm);
   const selectedDayMaxHourlyRainMm = selectedDay?.hours.reduce((max, hour) => Math.max(max, hour.rainMm), 0) ?? 0;
   const selectedDayRainIntensity = jmaRainIntensityLabel(selectedDayMaxHourlyRainMm);
 
@@ -466,7 +464,6 @@ export default function WeatherForecast() {
                   <div>
                     <p className="text-4xl font-black tabular-nums sm:text-5xl">{fmt(current.temperature_2m, '°C')}</p>
                     <p className="mt-1 text-sm font-bold text-blue-100">{weatherText(currentCode)}</p>
-                    {currentRainIntensity && <p className="mt-1 text-xs font-black text-cyan-200">雨の強さ：{currentRainIntensity}（直近1時間）</p>}
                     <p className="mt-1 text-xs text-blue-100">体感 {fmt(current.apparent_temperature, '°C')} ・ 湿度 {fmt(current.relative_humidity_2m, '%')}</p>
                   </div>
                 </div>
@@ -530,7 +527,7 @@ export default function WeatherForecast() {
                     <p className="text-[11px] font-black text-slate-700 dark:text-slate-200">{index === 0 ? '今日' : fmtDate(day.date)}</p>
                     <div className="mt-2 flex items-center justify-center">{getIcon(day.iconName, 'h-10 w-10')}</div>
                     <p className="mt-1 truncate text-center text-[11px] font-bold text-slate-600 dark:text-slate-300">{rainIntensity || day.description}</p>
-                    {rainIntensity && <p className="mt-0.5 truncate text-center text-[9px] text-slate-400">降り方：{day.description}</p>}
+                    {rainIntensity && day.description !== '雨' && <p className="mt-0.5 truncate text-center text-[9px] text-slate-400">降り方：{day.description}</p>}
                     <div className="mt-2 flex items-center justify-center gap-2 text-xs font-black tabular-nums">
                       <span className="text-rose-600 dark:text-rose-300">{fmt(day.highC, '°')}</span>
                       <span className="text-sky-600 dark:text-sky-300">{fmt(day.lowC, '°')}</span>
@@ -559,7 +556,7 @@ export default function WeatherForecast() {
                   </div>
                   <div className="flex items-center gap-3">
                     {getIcon(selectedDay.iconName, 'h-12 w-12')}
-                    <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">{selectedDayRainIntensity || selectedDay.description}</p>{selectedDayRainIntensity && <p className="text-[10px] text-slate-500">降り方：{selectedDay.description}</p>}<p className="text-xs text-slate-500">最高 {fmt(selectedDay.highC, '°C')} / 最低 {fmt(selectedDay.lowC, '°C')}</p></div>
+                    <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">{selectedDayRainIntensity || selectedDay.description}</p>{selectedDayRainIntensity && selectedDay.description !== '雨' && <p className="text-[10px] text-slate-500">降り方：{selectedDay.description}</p>}<p className="text-xs text-slate-500">最高 {fmt(selectedDay.highC, '°C')} / 最低 {fmt(selectedDay.lowC, '°C')}</p></div>
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -697,7 +694,7 @@ export default function WeatherForecast() {
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-[10px] leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-900">
             <p className="font-black text-slate-700 dark:text-slate-200">データ提供・予報の見方</p>
             <p className="mt-1">気象：Open-Meteo Forecast API（Best Match）／大気質：Open-Meteo Air Quality API（CAMS）。取得できない項目は「—」または非表示にしています。16日先ほど予測の幅が大きくなるため、先の日付は傾向として確認してください。</p>
-            <p className="mt-1">雨の強さは1時間雨量で気象庁区分に分類。3mm未満は弱い雨、3〜10mm未満は「雨」、10mm以上から「やや強い雨」〜「猛烈な雨」で表示します。</p>
+            <p className="mt-1">時間別予報の雨の強さは、先行1時間の雨量を気象庁区分で分類します。3mm未満は弱い雨、3〜10mm未満は「雨」、10mm以上から「やや強い雨」〜「猛烈な雨」で表示します。現在の天気欄は15分ごとの現況値のため、この1時間雨量区分は適用しません。</p>
             <p className="mt-1">地点：{data.metadata.latitude ?? '—'}, {data.metadata.longitude ?? '—'} ・ {data.metadata.timezone} ・ {data.metadata.modelPolicy}</p>
             <p className="mt-1">予報データ：Open-Meteo ・ 最新取得 {new Date(data.updatedAt).toLocaleString('ja-JP')}</p>
           </section>
