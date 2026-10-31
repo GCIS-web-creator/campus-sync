@@ -230,7 +230,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
 
         const codes = Array.from(new Set(areas
           .map(area => String(area.prefectureCode || '').padStart(2, '0'))
-          .filter(code => /^\\d{2}$/.test(code))));
+          .filter(code => /^\d{2}$/.test(code))));
         const cityCollections = await Promise.all(codes.map(code => loadGeoJson(CITY_GEOJSON_PATH(code))));
         if (cancelled || !map) return;
 
