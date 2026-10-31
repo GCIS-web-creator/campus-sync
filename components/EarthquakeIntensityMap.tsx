@@ -18,7 +18,7 @@ type LatLng = [number, number];
 type LeafletBounds = { isValid(): boolean };
 type LeafletLayer = {
   addTo(map: LeafletMap): LeafletLayer; remove(): void;
-  bindPopup?(html: string): LeafletLayer;
+  bindPopup(html: string): LeafletLayer;
   setStyle?(style: (feature: GeoFeature) => Record<string, string | number>): void;
 };
 type LeafletMap = {
@@ -207,11 +207,6 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             const rank = Number(feature.properties.__intensityRank || 0);
             const color = intensityColor(rank || null);
             return { color, weight: 1, opacity: 0.8, fillColor: color, fillOpacity: 0.1 };
-          },
-          onEachFeature: feature => {
-            const name = String(feature.properties.__areaName || '');
-            const item = matched.find(match => match.area.name === name);
-            if (item) return;
           },
         });
         const prefectureLayer = L.geoJSON(prefectureGeo, {
