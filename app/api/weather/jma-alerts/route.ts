@@ -368,7 +368,7 @@ async function storeEvent(
 }
 
 function alertKeyForKind(kind: ParsedKind): string {
-  return kind.family + ':' + (kind.code || kind.name.replace(/\\s+/g, '_'));
+  return kind.family + ':' + (kind.code || kind.name.trim().replaceAll(' ', '_'));
 }
 
 async function findNewKodairaWarningNotification(
