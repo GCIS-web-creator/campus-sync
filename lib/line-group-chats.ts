@@ -8,7 +8,7 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
-type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'daily_digest';
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'earthquake_alert' | 'daily_digest';
 
 export type LineGroupDeliveryResult = {
   kind: LineGroupDeliveryKind;
@@ -111,7 +111,7 @@ export async function pushLineMessagesToRegisteredChats(
     ? await activeChatsQuery.or(
         'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true',
       )
-    : kind === 'cafeteria_sold_out' || kind === 'quick_notice' || kind === 'weather_alert'
+    : kind === 'cafeteria_sold_out' || kind === 'quick_notice' || kind === 'weather_alert' || kind === 'earthquake_alert'
       ? await activeChatsQuery
       : await activeChatsQuery.eq(preferenceColumn, true);
   if (error) {
@@ -204,7 +204,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
         ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
         : result.kind === 'assignment_updates'
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
-          : result.kind === 'quick_notice' || result.kind === 'weather_alert'
+          : result.kind === 'quick_notice' || result.kind === 'weather_alert' || result.kind === 'earthquake_alert'
             ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
             : result.kind === 'daily_digest'
               ? '日次まとめを受信する設定のLINEグループはありません（電車時刻表・時間割・学校行事の受信設定を確認してください）。'

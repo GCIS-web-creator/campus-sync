@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import EarthquakePanel from '@/components/EarthquakePanel';
 import { jmaRainIntensityLabel } from '@/lib/weather';
 import type { WeatherBundle, WeatherDayForecast, WeatherHour, WeatherScalar, WeatherValueMap } from '@/lib/weather';
 
@@ -387,6 +388,7 @@ export default function WeatherForecast() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState('');
   const [showAllIcons, setShowAllIcons] = useState(false);
+  const [activePanelTab, setActivePanelTab] = useState<'weather' | 'earthquake'>('weather');
 
   useEffect(() => {
     let cancelled = false;
@@ -434,7 +436,7 @@ export default function WeatherForecast() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black tracking-[0.2em] text-cyan-600 dark:text-cyan-300">CAMPUS WEATHER INTELLIGENCE</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">CampusSync 高機能天気予報</h2>
+            <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">CampusSync 気象パネル</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{data?.location || '東京都小平市たかの台周辺'} ・ 16日間予報</p>
           </div>
           <div className="text-right">
@@ -444,7 +446,13 @@ export default function WeatherForecast() {
         </div>
       </div>
 
-      <JmaWeatherAlertPanel />
+      <div className="grid grid-cols-2 gap-1 border-b border-slate-200/70 bg-slate-50 p-2 dark:border-slate-700/70 dark:bg-slate-900/70">
+        <button type="button" aria-pressed={activePanelTab === 'weather'} onClick={() => setActivePanelTab('weather')} className={'rounded-xl px-4 py-2.5 text-xs font-black transition ' + (activePanelTab === 'weather' ? 'bg-white text-cyan-700 shadow-sm dark:bg-slate-800 dark:text-cyan-300' : 'text-slate-500 hover:bg-white/70 dark:text-slate-400 dark:hover:bg-slate-800/70')}>天気</button>
+        <button type="button" aria-pressed={activePanelTab === 'earthquake'} onClick={() => setActivePanelTab('earthquake')} className={'rounded-xl px-4 py-2.5 text-xs font-black transition ' + (activePanelTab === 'earthquake' ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-800 dark:text-violet-300' : 'text-slate-500 hover:bg-white/70 dark:text-slate-400 dark:hover:bg-slate-800/70')}>地震</button>
+      </div>
+      {activePanelTab === 'earthquake' ? <EarthquakePanel /> : (
+        <>
+          <JmaWeatherAlertPanel />
 
       {loading ? (
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
@@ -699,6 +707,8 @@ export default function WeatherForecast() {
             <p className="mt-1">予報データ：Open-Meteo ・ 最新取得 {new Date(data.updatedAt).toLocaleString('ja-JP')}</p>
           </section>
         </div>
+      )}
+        </>
       )}
     </section>
   );

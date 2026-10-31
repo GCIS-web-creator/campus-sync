@@ -5803,7 +5803,7 @@ Supabaseの設定を確認してください。
           <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
             <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
             <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-            <SidebarItem icon={<ThermometerSun size={18} />} label="天気予報" isActive={activeTab === 'weather'} onClick={() => setActiveTab('weather')} themeCls={themeCls} />
+            <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => setActiveTab('weather')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
             <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
@@ -5892,7 +5892,7 @@ Supabaseの設定を確認してください。
               <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
                 <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => { setShowGlobalSearch(true); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<ThermometerSun size={18} />} label="天気予報" isActive={activeTab === 'weather'} onClick={() => { setActiveTab('weather'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => { setActiveTab('weather'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => { setActiveTab('countdowns'); setMobileMenuOpen(false); }} themeCls={themeCls} />
