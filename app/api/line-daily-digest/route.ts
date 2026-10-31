@@ -284,38 +284,48 @@ function buildSchoolEventsBubble(input: {
 }
 
 
-function buildWeatherBubble(input: { dateLabel: string; weather: WeatherDayForecast | null }) {
-  const weather=input.weather;
-  const origin=(process.env.NEXT_PUBLIC_SITE_URL||(process.env.VERCEL_URL?'https://'+process.env.VERCEL_URL:'https://campus-sync-mocha.vercel.app')).replace(/\/$/,'');
-  const iconUrl=weather?origin+'/api/weather/icons/'+weather.iconName+'?format=png':'';
-  const rows:Record<string,unknown>[]=[];
-  if(weather){
-    rows.push(
-      {type:'text',text:weather.description,size:'xl',weight:'bold',color:'#0F172A',align:'center',wrap:true},
-      {type:'box',layout:'horizontal',justifyContent:'center',spacing:'lg',margin:'md',contents:[
-        {type:'box',layout:'vertical',alignItems:'center',contents:[{type:'text',text:'最高',size:'xs',color:'#64748B'},{type:'text',text:weather.highC===null?'—':Math.round(weather.highC)+'°',size:'xxl',weight:'bold',color:'#DC2626'}]},
-        {type:'box',layout:'vertical',alignItems:'center',contents:[{type:'text',text:'最低',size:'xs',color:'#64748B'},{type:'text',text:weather.lowC===null?'—':Math.round(weather.lowC)+'°',size:'xxl',weight:'bold',color:'#0284C7'}]},
+function buildWeatherBubble(input: { dateLabel: string; weather: WeatherDayForecast[] }) {
+  const origin=(process.env.NEXT_PUBLIC_SITE_URL||(process.env.VERCEL_URL?'https://'+process.env.VERCEL_URL:'https://campus-sync-mocha.vercel.app')).replace(/\\/$/,'');
+  const icon=(name:string)=>origin+'/api/weather/icons/'+name+'?format=png';
+  const days=input.weather.slice(0,3);
+  const dayCards:Record<string,unknown>[] = days.map((day,index)=>({
+    type:'box',layout:'vertical',flex:1,spacing:'xs',paddingAll:'8px',cornerRadius:'10px',
+    backgroundColor:index===0?'#EFF6FF':'#F8FAFC',
+    contents:[
+      {type:'text',text:['明日','明後日','明々後日'][index]+' '+day.date.slice(5).replace('-','/'),size:'xs',weight:'bold',color:'#334155',align:'center',wrap:true},
+      {type:'image',url:icon(day.iconName),size:'sm',aspectRatio:'1:1',aspectMode:'fit',align:'center'},
+      {type:'text',text:day.description,size:'xs',weight:'bold',color:'#0F172A',align:'center',wrap:true},
+      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
+        {type:'image',url:icon('temp_high'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
+        {type:'text',text:day.highC===null?'—':Math.round(day.highC)+'°',size:'sm',weight:'bold',color:'#DC2626',flex:1},
       ]},
-      {type:'separator',color:'#E2E8F0',margin:'md'},
-      {type:'box',layout:'horizontal',justifyContent:'space-between',contents:[
-        {type:'text',text:'降水確率',size:'sm',color:'#64748B'},
-        {type:'text',text:weather.precipitationProbabilityMax===null?'—':Math.round(weather.precipitationProbabilityMax)+'%',size:'sm',color:'#0F172A',weight:'bold'},
+      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
+        {type:'image',url:icon('temp_low'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
+        {type:'text',text:day.lowC===null?'—':Math.round(day.lowC)+'°',size:'sm',weight:'bold',color:'#0284C7',flex:1},
       ]},
-    );
-    if(weather.rainTotalMm>=0.1)rows.push({type:'box',layout:'horizontal',justifyContent:'space-between',contents:[
-      {type:'text',text:'予想雨量',size:'sm',color:'#64748B'},
-      {type:'text',text:weather.rainTotalMm.toFixed(1)+' mm',size:'sm',color:'#0F172A',weight:'bold'},
-    ]});
-  }else rows.push({type:'text',text:'天気情報を取得できませんでした。詳しくはCampusSyncをご確認ください。',size:'sm',color:'#64748B',wrap:true});
+      {type:'separator',color:'#CBD5E1'},
+      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
+        {type:'image',url:icon('precip_probability'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
+        {type:'text',text:day.precipitationProbabilityMax===null?'—':Math.round(day.precipitationProbabilityMax)+'%',size:'xs',color:'#334155',weight:'bold',flex:1},
+      ]},
+      {type:'box',layout:'horizontal',spacing:'xs',alignItems:'center',contents:[
+        {type:'image',url:icon('humidity'),size:'xxs',aspectRatio:'1:1',aspectMode:'fit'},
+        {type:'text',text:day.humidityAvg===null?'—':day.humidityAvg+'%',size:'xs',color:'#334155',weight:'bold',flex:1},
+      ]},
+    ],
+  }));
+  const body:Record<string,unknown>[] = days.length ? [
+    {type:'text',text:'天気・最高/最低気温・降水確率・湿度',size:'xs',color:'#64748B',wrap:true},
+    {type:'box',layout:'horizontal',spacing:'sm',contents:dayCards},
+  ] : [{type:'text',text:'天気情報を取得できませんでした。',size:'sm',color:'#64748B',wrap:true}];
   return {
-    type:'bubble',size:'kilo',
+    type:'bubble',size:'mega',
     header:{type:'box',layout:'vertical',backgroundColor:'#0F3B63',paddingAll:'16px',spacing:'xs',contents:[
       {type:'text',text:'CAMPUSSYNC / WEATHER',size:'xs',color:'#67E8F9',weight:'bold'},
-      {type:'text',text:'明日の天気',size:'lg',color:'#FFFFFF',weight:'bold'},
-      {type:'text',text:input.dateLabel+' ・ 小平市たかの台周辺',size:'xs',color:'#CBD5E1',wrap:true},
+      {type:'text',text:'3日間の天気予報',size:'lg',color:'#FFFFFF',weight:'bold'},
+      {type:'text',text:'小平市たかの台周辺',size:'xs',color:'#CBD5E1',wrap:true},
     ]},
-    ...(iconUrl?{hero:{type:'image',url:iconUrl,size:'full',aspectRatio:'16:5',aspectMode:'fit',backgroundColor:'#EFF6FF'}}:{}),
-    body:{type:'box',layout:'vertical',paddingAll:'16px',spacing:'sm',contents:rows},
+    body:{type:'box',layout:'vertical',paddingAll:'12px',spacing:'md',contents:body},
     footer:{type:'box',layout:'vertical',paddingAll:'12px',backgroundColor:'#F8FAFC',spacing:'sm',contents:[
       {type:'text',text:'時間ごとの詳しい予報はCampusSyncで確認できます。',size:'xs',color:'#475569',wrap:true,align:'center'},
       {type:'button',style:'primary',color:'#2563A6',height:'sm',action:{type:'uri',label:'天気の詳細を見る',uri:origin+'/#weather'}},
@@ -335,7 +345,7 @@ function buildDailyDigest(input: {
   events: EventRow[];
   eventError: boolean;
   includeClassTimetable: boolean;
-  weather: WeatherDayForecast | null;
+  weather: WeatherDayForecast[];
 }) {
   const transitBubble = buildTransitBubble(input);
   const weatherBubble = buildWeatherBubble({dateLabel:input.tomorrowDateLabel,weather:input.weather});
@@ -450,7 +460,7 @@ export async function POST(request: Request) {
 
   const events = (eventResult.data || []) as EventRow[];
   const weatherDays = weatherResult as WeatherDayForecast[] | null;
-  const tomorrowWeather = weatherDays?.find(day=>day.date===tomorrow.dateKey)||null;
+  const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
   const flex = buildDailyDigest({
     dateLabel: todayLabel,
     today,
@@ -463,7 +473,7 @@ export async function POST(request: Request) {
     events,
     eventError: Boolean(eventResult.error),
     includeClassTimetable,
-    weather:tomorrowWeather,
+    weather:forecastDays,
   });
 
   const retryKey = stableRetryKey(today);
@@ -517,7 +527,7 @@ export async function POST(request: Request) {
       trainDepartures: kokubunji.length + higashimurayama.length,
       classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
       events:events.length,
-      weather:Boolean(tomorrowWeather),
+      weather:forecastDays.length>0,
       carouselCards:includeClassTimetable?5:3,
       historySaved,
     },
