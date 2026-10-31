@@ -52,7 +52,7 @@ function ensureMapStyles(): void {
   if (document.getElementById('campussync-earthquake-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'campussync-earthquake-map-styles';
-  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
+  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-station-pin{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:5px;background:#1e293b;color:#fff;font-size:11px;font-weight:1000;line-height:1;box-shadow:0 1px 5px rgba(15,23,42,.48)}.cs-earthquake-regional-square{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:2px solid #fff;border-radius:7px;background:var(--cell-color);color:#fff;font-size:12px;font-weight:1000;line-height:1;text-shadow:0 1px 2px rgba(15,23,42,.38);box-shadow:0 1px 6px rgba(15,23,42,.34)}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
   document.head.appendChild(style);
 }
 function loadLeaflet(): Promise<LeafletApi> {
@@ -90,6 +90,19 @@ function loadGeoJson(url: string): Promise<GeoCollection> {
   }).catch(error => { geoJsonCache.delete(url); throw error; });
   geoJsonCache.set(url, request);
   return request;
+}
+function loadStationLocations(): Promise<JmaStationLocation[]> {
+  if (!stationLocationsPromise) {
+    stationLocationsPromise = fetch('/data/jma-intensity-stations.json', { cache: 'force-cache' })
+      .then(async response => {
+        if (!response.ok) throw new Error('震度観測点の座標データを取得できませんでした。');
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('震度観測点の座標データ形式が正しくありません。');
+        return data as JmaStationLocation[];
+      })
+      .catch(error => { stationLocationsPromise = null; throw error; });
+  }
+  return stationLocationsPromise;
 }
 function normaliseName(value: string): string {
   return value.normalize('NFKC').replace(/\s+/g, '').replace(/　/g, '');
@@ -144,10 +157,49 @@ function observationPopup(area: EarthquakeObservedArea): string {
 }
 
 type MatchedCity = { feature: GeoFeature; area: EarthquakeObservedArea; center: LatLng };
+type JmaStationLocation = { name: string; lat: number; lng: number; from: string; to: string | null };
+type RegionalCell = { center: LatLng; maxRank: number; areaCount: number; areaNames: string[] };
+let stationLocationsPromise: Promise<JmaStationLocation[]> | null = null;
+
 function getAreaRank(area: EarthquakeObservedArea): number {
   if (typeof area.intensityRank === 'number' && Number.isFinite(area.intensityRank)) return area.intensityRank;
   const labels: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
   return labels[String(area.intensity || '')] || 0;
+}
+function getStationRank(station: EarthquakeStation): number {
+  if (typeof station.intensityRank === 'number' && Number.isFinite(station.intensityRank)) return station.intensityRank;
+  const labels: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
+  return labels[String(station.intensity || '')] || 0;
+}
+function buildRegionalCells(items: MatchedCity[], step: number): RegionalCell[] {
+  const groups = new Map<string, MatchedCity[]>();
+  for (const item of items) {
+    const row = Math.floor(item.center[0] / step);
+    const column = Math.floor(item.center[1] / step);
+    const key = row + ':' + column;
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values()).map(group => {
+    const center: LatLng = [
+      group.reduce((sum, item) => sum + item.center[0], 0) / group.length,
+      group.reduce((sum, item) => sum + item.center[1], 0) / group.length,
+    ];
+    return {
+      center,
+      maxRank: Math.max(0, ...group.map(item => getAreaRank(item.area))),
+      areaCount: group.length,
+      areaNames: group.map(item => item.area.name),
+    };
+  }).sort((a, b) => b.maxRank - a.maxRank);
+}
+function regionalCellPopup(cell: RegionalCell, title: string): string {
+  return '<div class="cs-earthquake-popup"><strong>' + escapeHtml(title) +
+    '</strong><div class="cs-earthquake-popup-rank">周辺の最大震度 <b style="color:' + intensityColor(cell.maxRank) +
+    '">震度' + escapeHtml(intensityText(cell.maxRank)) + '</b></div><p class="cs-earthquake-popup-muted">対象市区町村 ' +
+    cell.areaCount + '件</p><p class="cs-earthquake-popup-muted">' +
+    escapeHtml(cell.areaNames.slice(0, 12).join('、')) + (cell.areaNames.length > 12 ? ' ほか' : '') + '</p></div>';
 }
 
 export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMapEvent }) {
@@ -156,6 +208,8 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
   const [message, setMessage] = useState('震度分布を準備しています…');
   const [rankCounts, setRankCounts] = useState<Record<number, number>>({});
   const [matchedCount, setMatchedCount] = useState(0);
+  const [rankOneStationCount, setRankOneStationCount] = useState(0);
+  const [rankOneStationMappedCount, setRankOneStationMappedCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,8 +235,24 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
         const codes = Array.from(new Set(areas
           .map(area => String(area.prefectureCode || '').padStart(2, '0'))
           .filter(code => /^\d{2}$/.test(code))));
-        const cityCollections = await Promise.all(codes.map(code => loadGeoJson(CITY_GEOJSON_PATH(code))));
+        const [cityCollections, stationLocations] = await Promise.all([
+          Promise.all(codes.map(code => loadGeoJson(CITY_GEOJSON_PATH(code)))),
+          loadStationLocations().catch(() => [] as JmaStationLocation[]),
+        ]);
         if (cancelled || !map) return;
+        const stationLocationsByName = new Map<string, JmaStationLocation[]>();
+        for (const location of stationLocations) {
+          const group = stationLocationsByName.get(location.name) || [];
+          group.push(location);
+          stationLocationsByName.set(location.name, group);
+        }
+        const eventMinute = event.event_key.slice(0, 12);
+        const resolveStationLocation = (station: EarthquakeStation): JmaStationLocation | null => {
+          const matches = (stationLocationsByName.get(station.name) || []).filter(location =>
+            location.from <= eventMinute && (!location.to || eventMinute < location.to)
+          );
+          return matches.length === 1 ? matches[0] : null;
+        };
 
         const matched: MatchedCity[] = [];
         const seenAreaKeys = new Set<string>();
@@ -285,34 +355,42 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             );
           },
         });
-        const prefectureMarkers = Array.from(prefectureAreas.entries()).map(([prefCode, group]) => {
-          const maxRank = prefectureRanks.get(prefCode) || 0;
-          const center: LatLng = [
-            group.reduce((sum, item) => sum + item.center[0], 0) / group.length,
-            group.reduce((sum, item) => sum + item.center[1], 0) / group.length,
-          ];
-          const prefName = group[0]?.area.prefecture || '観測地域';
-          const color = intensityColor(maxRank);
-          const marker = L.marker(center, {
-            icon: L.divIcon({
-              className: 'cs-earthquake-map-icon',
-              html: '<span class="cs-earthquake-region-pin" style="--pin-color:' + color + '">' +
-                escapeHtml(intensityText(maxRank)) + '</span>',
-              iconSize: [27, 27], iconAnchor: [13.5, 13.5],
-            }),
-            riseOnHover: true,
-            zIndexOffset: 800,
-          });
-          marker.bindPopup(
-            '<div class="cs-earthquake-popup"><strong>' + escapeHtml(prefName) +
-            '</strong><div class="cs-earthquake-popup-rank">都道府県内の最大観測震度 <b style="color:' +
-            color + '">震度' + escapeHtml(intensityText(maxRank)) +
-            '</b></div><p class="cs-earthquake-popup-muted">観測市区町村 ' + group.length + '件</p></div>'
-          );
-          return marker;
-        });
-        const cityMarkers = matched.map(item => {
+        const rankOneStationMarkers: LeafletLayer[] = [];
+        const areasWithExactRankOneStation = new Set<MatchedCity>();
+        let rankOneStationsNext = 0;
+        let rankOneStationsMappedNext = 0;
+        for (const item of matched) {
+          for (const station of item.area.stations || []) {
+            if (getStationRank(station) !== 1) continue;
+            rankOneStationsNext++;
+            const location = resolveStationLocation(station);
+            if (!location) continue;
+            rankOneStationsMappedNext++;
+            areasWithExactRankOneStation.add(item);
+            const stationMarker = L.marker([location.lat, location.lng], {
+              icon: L.divIcon({
+                className: 'cs-earthquake-map-icon',
+                html: '<span class="cs-earthquake-station-pin">1</span>',
+                iconSize: [22, 22], iconAnchor: [11, 11],
+              }),
+              riseOnHover: true,
+              zIndexOffset: 2400,
+            });
+            stationMarker.bindPopup(
+              '<div class="cs-earthquake-popup"><strong>' + escapeHtml(station.name) +
+              '</strong><div class="cs-earthquake-popup-rank">観測震度 <b style="color:' + intensityColor(1) +
+              '">震度1</b></div><p class="cs-earthquake-popup-muted">市町村最大震度：震度' +
+              escapeHtml(intensityText(getAreaRank(item.area), item.area.intensity)) + '</p></div>'
+            );
+            rankOneStationMarkers.push(stationMarker);
+          }
+        }
+        setRankOneStationCount(rankOneStationsNext);
+        setRankOneStationMappedCount(rankOneStationsMappedNext);
+
+        const cityMarkers = matched.flatMap(item => {
           const rank = getAreaRank(item.area);
+          if (rank === 1 && areasWithExactRankOneStation.has(item)) return [];
           const marker = L.marker(item.center, {
             icon: L.divIcon({
               className: 'cs-earthquake-map-icon',
@@ -323,8 +401,26 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             zIndexOffset: rank === 1 ? 1500 : 0,
           });
           marker.bindPopup(observationPopup(item.area));
+          return [marker];
+        });
+
+        const createRegionalMarkers = (cells: RegionalCell[], title: string) => cells.map(cell => {
+          const color = intensityColor(cell.maxRank);
+          const marker = L.marker(cell.center, {
+            icon: L.divIcon({
+              className: 'cs-earthquake-map-icon',
+              html: '<span class="cs-earthquake-regional-square" style="--cell-color:' + color + '">' +
+                escapeHtml(intensityText(cell.maxRank)) + '</span>',
+              iconSize: [34, 34], iconAnchor: [17, 17],
+            }),
+            riseOnHover: true,
+            zIndexOffset: 1100,
+          });
+          marker.bindPopup(regionalCellPopup(cell, title));
           return marker;
         });
+        const mediumRegionalMarkers = createRegionalMarkers(buildRegionalCells(matched, 0.28), '周辺地域の最大震度');
+        const wideRegionalMarkers = createRegionalMarkers(buildRegionalCells(matched, 0.62), '広域地域の最大震度');
         if (event.latitude !== null && event.longitude !== null) {
           L.marker([event.latitude, event.longitude], {
             icon: L.divIcon({
@@ -348,9 +444,11 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
           const medium = zoom >= MAP_ZOOM_MEDIUM_THRESHOLD && !detailed;
           const wide = !detailed && !medium;
           ensureLayer(map, prefectureLayer, wide && prefectureFeatures.length > 0);
-          for (const marker of prefectureMarkers) ensureLayer(map, marker, wide);
+          for (const marker of wideRegionalMarkers) ensureLayer(map, marker, wide);
+          for (const marker of mediumRegionalMarkers) ensureLayer(map, marker, medium);
           ensureLayer(map, cityLayer, medium || detailed);
           for (const marker of cityMarkers) ensureLayer(map, marker, detailed);
+          for (const marker of rankOneStationMarkers) ensureLayer(map, marker, medium || detailed);
         };
         map.on('zoomend', updateZoomLayers);
         updateZoomLayers();
@@ -372,7 +470,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
         <div><p className="text-[11px] font-black text-slate-800 dark:text-white">観測震度マップ</p><p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">拡大：市町村別 ／ 中間：市町村境界別 ／ 縮小：都道府県形状別</p></div>
-        <span className="text-[9px] text-slate-400">観測市区町村 {matchedCount}件 ／ 番号＝範囲内の最大震度</span>
+        <span className="text-[9px] text-slate-400">観測市区町村 {matchedCount}件 ／ 丸印＝市町村最大震度</span>
       </div>
       <div className="relative">
         <div ref={mapElement} className="h-[300px] w-full bg-slate-100 sm:h-[360px]" aria-label="地震の観測震度分布地図" />
@@ -386,8 +484,13 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
           </span>
         ))}
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-1 border-t border-slate-100 px-3 py-2 text-[9px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <span className="inline-flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded-[3px] border border-slate-400 bg-slate-700" />実際の震度1観測点 {rankOneStationCount}点</span>
+        <span>地図に表示 {rankOneStationMappedCount}点</span>
+        <span>色付き四角＝周辺区画の最大震度</span>
+      </div>
       <p className="px-3 pb-2 text-[9px] leading-relaxed text-slate-400">
-        広域表示は実際の市町村境界ポリゴンを組み合わせて都道府県の形状を表示し、都道府県内の最大観測震度で塗り分けます。中間表示は市町村別、拡大表示のピンは市町村の代表位置です。詳細表示のピンも市町村の代表位置です。出典：気象庁／国土数値情報／OpenStreetMap
+        広域表示は都道府県形状の塗り分けに周辺区画の最大震度を四角いラベルで重ねます。中間表示は市町村別の塗り分けと周辺区画ラベル、拡大表示は市町村最大震度の丸印と実際の震度1観測点を表示します。観測点の位置は気象庁の震度観測点一覧に基づき、観測期間も照合しています。出典：気象庁／国土数値情報／OpenStreetMap
       </p>
     </div>
   );
