@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { gunzipSync } from 'node:zlib';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { getActiveLineBot } from '@/lib/line-bot-rotation';
+import { pushLineMessagesToRegisteredChats } from '@/lib/line-group-chats';
+import { buildJmaWeatherAlertFlex, type JmaWeatherAlertNotificationPayload } from '@/lib/line-weather-alert-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -338,7 +341,14 @@ async function applyMessageState(admin: SupabaseClient, entry: FeedEntry, messag
   return saved;
 }
 
-async function storeEvent(admin: SupabaseClient, feedMode: 'high' | 'long', entry: FeedEntry, message: ParsedMessage, parsedAlerts: unknown[]): Promise<void> {
+async function storeEvent(
+  admin: SupabaseClient,
+  feedMode: 'high' | 'long',
+  entry: FeedEntry,
+  message: ParsedMessage,
+  parsedAlerts: unknown[],
+  notificationPayload: JmaWeatherAlertNotificationPayload | null,
+): Promise<void> {
   const { error } = await admin.from('jma_weather_alert_events').upsert({
     source_id: entry.id,
     feed_mode: feedMode,
@@ -351,9 +361,162 @@ async function storeEvent(admin: SupabaseClient, feedMode: 'high' | 'long', entr
     target_areas: message.targetAreas.map(area => area.areaName),
     parsed_alerts: parsedAlerts,
     raw_xml: message.rawXml.length <= MAX_XML_BYTES ? message.rawXml : null,
+    notification_payload: notificationPayload,
     fetched_at: new Date().toISOString(),
   }, { onConflict: 'source_id', ignoreDuplicates: true });
   if (error) throw error;
+}
+
+function alertKeyForKind(kind: ParsedKind): string {
+  return kind.family + ':' + (kind.code || kind.name.replace(/\\s+/g, '_'));
+}
+
+async function findNewKodairaWarningNotification(
+  admin: SupabaseClient,
+  message: ParsedMessage,
+): Promise<JmaWeatherAlertNotificationPayload | null> {
+  const kodaira = message.targetAreas.find(area => area.areaKey === 'kodaira');
+  if (!kodaira) return null;
+
+  // 「警報」「特別警報」だけを対象にし、注意報（severity 2）は通知しない。
+  const candidates = kodaira.kinds.filter(kind =>
+    kind.active && kind.severity >= 3 && /警報/.test(kind.name)
+  );
+  if (!candidates.length) return null;
+
+  const family = message.productCode === 'VPWS50' ? undefined : FAMILY_BY_PRODUCT[message.productCode];
+  const latest = await latestIssuedAt(admin, 'kodaira', family);
+  if (latest > Date.parse(message.issuedAt)) return null;
+
+  const keys = [...new Set(candidates.map(alertKeyForKind))];
+  const { data, error } = await admin.from('jma_weather_alerts')
+    .select('alert_key,severity,active')
+    .eq('area_key', 'kodaira')
+    .in('alert_key', keys);
+  if (error) throw error;
+
+  const previous = new Map((data || []).map((row: { alert_key: string; severity: number; active: boolean }) =>
+    [row.alert_key, row]
+  ));
+  const newlyIssued = candidates.filter(kind => {
+    const old = previous.get(alertKeyForKind(kind));
+    return !old || !old.active || Number(old.severity) < kind.severity;
+  });
+  if (!newlyIssued.length) return null;
+
+  return {
+    areaName: '小平市',
+    issuedAt: message.issuedAt,
+    severity: Math.max(...newlyIssued.map(kind => kind.severity)),
+    alerts: newlyIssued.map(kind => ({
+      name: kind.name,
+      status: kind.status,
+      details: kind.details || '',
+    })),
+  };
+}
+
+function stableLineRetryUuid(value: string): string {
+  const chars = createHash('sha256').update('campussync-jma-alert:' + value)
+    .digest('hex').slice(0, 32).split('');
+  chars[12] = '4';
+  chars[16] = ((parseInt(chars[16], 16) & 3) | 8).toString(16);
+  const hex = chars.join('');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16)
+    + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+}
+
+async function dispatchPendingKodairaWarnings(admin: SupabaseClient): Promise<Record<string, unknown>> {
+  const { data, error } = await admin.from('jma_weather_alert_events')
+    .select('source_id,notification_payload,official_sent_at,groups_sent_at')
+    .not('notification_payload', 'is', null)
+    .or('official_sent_at.is.null,groups_sent_at.is.null')
+    .order('fetched_at', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  const pending = (data || []) as Array<{
+    source_id: string;
+    notification_payload: JmaWeatherAlertNotificationPayload;
+    official_sent_at: string | null;
+    groups_sent_at: string | null;
+  }>;
+  if (!pending.length) return { pending: 0, attempted: 0, completed: 0 };
+
+  const bot = await getActiveLineBot();
+  if (!bot?.accessToken) {
+    return { pending: pending.length, attempted: 0, completed: 0, skipped: '有効なLINE公式アカウントのアクセストークンがありません。' };
+  }
+
+  let completed = 0;
+  let attempted = 0;
+  let failed = 0;
+
+  for (const item of pending) {
+    attempted += 1;
+    const flex = buildJmaWeatherAlertFlex(item.notification_payload);
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { notification_last_attempt_at: now };
+    const failures: string[] = [];
+
+    if (!item.official_sent_at) {
+      try {
+        const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + bot.accessToken,
+            'Content-Type': 'application/json',
+            'X-Line-Retry-Key': stableLineRetryUuid(item.source_id + ':official'),
+          },
+          body: JSON.stringify({ messages: [flex] }),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        patch.official_http_status = response.status;
+        if (response.ok || response.status === 409) {
+          patch.official_sent_at = now;
+        } else {
+          const body = await response.text().catch(() => '');
+          failures.push('公式アカウント HTTP ' + response.status + (body ? '：' + body.slice(0, 220) : ''));
+        }
+      } catch (caught) {
+        failures.push('公式アカウント通信エラー：' + (caught instanceof Error ? caught.message : 'unknown'));
+      }
+    }
+
+    if (!item.groups_sent_at) {
+      try {
+        const groupResult = await pushLineMessagesToRegisteredChats(
+          bot.accessToken,
+          [flex],
+          stableLineRetryUuid(item.source_id + ':groups'),
+          'weather_alert',
+        );
+        patch.groups_result = groupResult;
+        if (groupResult.lookupError || groupResult.failed > 0) {
+          failures.push(groupResult.lookupError || ('グループ送信 ' + groupResult.sent + '/' + groupResult.registered + '件成功'));
+        } else {
+          // 登録先が0件の場合も、この警報に対する配信処理は完了として記録する。
+          patch.groups_sent_at = now;
+        }
+      } catch (caught) {
+        failures.push('グループ送信エラー：' + (caught instanceof Error ? caught.message : 'unknown'));
+      }
+    }
+
+    patch.notification_last_error = failures.length ? failures.join(' / ').slice(0, 1000) : null;
+    const { error: updateError } = await admin.from('jma_weather_alert_events')
+      .update(patch)
+      .eq('source_id', item.source_id);
+    if (updateError) {
+      failed += 1;
+      console.error('JMA警報通知の送信状態を保存できません:', updateError.message);
+      continue;
+    }
+    if (failures.length) failed += 1;
+    else completed += 1;
+  }
+
+  return { pending: pending.length, attempted, completed, failed };
 }
 
 async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<Record<string, unknown>> {
@@ -405,8 +568,9 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
     let processed = 0;
     let savedAlerts = 0;
     for (const item of relevant) {
+      const notificationPayload = await findNewKodairaWarningNotification(admin, item.message);
       const parsedAlerts = await applyMessageState(admin, item.entry, item.message);
-      await storeEvent(admin, mode, item.entry, item.message, parsedAlerts);
+      await storeEvent(admin, mode, item.entry, item.message, parsedAlerts, notificationPayload);
       processed += 1;
       savedAlerts += parsedAlerts.length;
     }
@@ -442,6 +606,14 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
   const { error: stateError } = await admin.from('jma_weather_sync_state').update(stateUpdate).eq('id', 1);
   if (stateError) throw stateError;
 
+  let notificationDelivery: Record<string, unknown> = { pending: 0, attempted: 0, completed: 0 };
+  try {
+    notificationDelivery = await dispatchPendingKodairaWarnings(admin);
+  } catch (error) {
+    notificationDelivery = { error: error instanceof Error ? error.message : '警報通知の処理に失敗しました。' };
+    console.error('JMA警報通知の処理に失敗:', error instanceof Error ? error.message : 'unknown');
+  }
+
   return {
     mode,
     feedEntries: totalFeedEntries,
@@ -449,6 +621,7 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
     processed: totalProcessed,
     savedAlerts: totalSavedAlerts,
     latestAggregateAt,
+    notificationDelivery,
     diagnostics: { feeds: feedDiagnostics },
   };
 }
