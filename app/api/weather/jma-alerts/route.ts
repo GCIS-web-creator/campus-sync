@@ -395,9 +395,10 @@ async function findNewKodairaWarningNotification(
     .in('alert_key', keys);
   if (error) throw error;
 
-  const previous = new Map((data || []).map((row: { alert_key: string; severity: number; active: boolean }) =>
-    [row.alert_key, row]
-  ));
+  const previous = new Map<string, { alert_key: string; severity: number; active: boolean }>();
+  for (const row of (data || []) as Array<{ alert_key: string; severity: number; active: boolean }>) {
+    previous.set(row.alert_key, row);
+  }
   const newlyIssued = candidates.filter(kind => {
     const old = previous.get(alertKeyForKind(kind));
     return !old || !old.active || Number(old.severity) < kind.severity;
