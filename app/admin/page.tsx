@@ -420,6 +420,8 @@ export default function CampusSyncAdmin() {
 
   const [trainTimetableSending, setTrainTimetableSending] = useState(false);
   const [trainTimetableMessage, setTrainTimetableMessage] = useState('');
+  const [weatherForecastTestSending, setWeatherForecastTestSending] = useState(false);
+  const [weatherForecastTestMessage, setWeatherForecastTestMessage] = useState('');
   const [classTimetableSending, setClassTimetableSending] = useState(false);
   const [classTimetableMessage, setClassTimetableMessage] = useState('');
 
@@ -1229,6 +1231,38 @@ export default function CampusSyncAdmin() {
 
     setAcReports(prev => prev.filter(item => item.id !== id));
     setAcReportsMessage(`${report.room}を「快適」に更新しました。生徒用サイトにも反映されます。`);
+  };
+
+  // 天気予報のテスト配信はLINE公式アカウントの友だちだけに送信する（グループ送信APIは呼び出さない）。
+  const handleSendWeatherForecastTest = async () => {
+    if (weatherForecastTestSending) return;
+    const confirmed = window.confirm(
+      '天気予報をLINE公式アカウントの友だち全員へテスト配信します。登録済みグループには送信しません。配信通数が発生する場合があります。送信しますか？',
+    );
+    if (!confirmed) return;
+
+    setWeatherForecastTestSending(true);
+    setWeatherForecastTestMessage('');
+    try {
+      const response = await fetch('/api/line-weather-forecast-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'test' }),
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        setWeatherForecastTestMessage(result?.message || `天気予報のテスト配信に失敗しました（HTTP ${response.status}）。`);
+        return;
+      }
+      setWeatherForecastTestMessage(result.message || '天気予報をLINE公式アカウントだけに配信しました。');
+    } catch (error) {
+      console.error('天気予報の公式アカウント限定テスト配信に失敗:', error);
+      setWeatherForecastTestMessage('天気予報を送信できませんでした。管理者セッションとLINE設定を確認してください。');
+    } finally {
+      setWeatherForecastTestSending(false);
+    }
   };
 
   // Adminからボタン操作で、現在時刻から今後60分の時刻表をLINE Flex Messageとして送信
@@ -2189,6 +2223,34 @@ export default function CampusSyncAdmin() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+
+              {/* 公式アカウントだけに天気予報をテスト配信（グループには送信しない） */}
+              <div className="rounded-2xl border border-sky-800/70 bg-gradient-to-br from-slate-950 to-slate-900 p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-sky-500/15 p-3 text-sky-300"><CloudSun size={22} /></div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-black text-white">天気予報・公式アカウント限定テスト</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">明日から3日間の天気予報をFlex Messageでテスト配信します。送信先は現在のLINE公式アカウントの友だちだけです。登録済みグループには送信しません。</p>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-700/50 bg-amber-950/30 px-3 py-2.5 text-[11px] leading-5 text-amber-200">
+                  実行すると公式アカウントの友だち全員に届きます。テスト配信でもLINEの送信通数に計上される場合があります。
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleSendWeatherForecastTest()}
+                  disabled={weatherForecastTestSending}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm font-black text-white transition hover:bg-sky-500 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Send size={16} />
+                  {weatherForecastTestSending ? '天気予報を送信中...' : '公式アカウントだけに天気予報をテスト送信'}
+                </button>
+                {weatherForecastTestMessage && (
+                  <p role="status" className={`rounded-xl border p-3 text-xs leading-5 ${weatherForecastTestMessage.includes('失敗') || weatherForecastTestMessage.includes('確認してください') ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+                    {weatherForecastTestMessage}
+                  </p>
                 )}
               </div>
 

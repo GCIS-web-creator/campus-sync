@@ -1,9 +1,8 @@
 import type { WeatherDayForecast } from '@/lib/weather';
 
 export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
-  // LINEの画像取得先は、デプロイごとに変わるVERCEL_URLではなく安定した本番URLに固定する。
-  const baseOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'https://campus-sync-mocha.vercel.app';
-  const origin = baseOrigin.endsWith('/') ? baseOrigin.slice(0, -1) : baseOrigin;
+  // LINEの画像・詳細ボタンは必ずCampusSyncの本番URLを使う。NEXT_PUBLIC_SITE_URL等の誤設定でVercel管理画面へ飛ばないよう固定。
+  const origin = 'https://campus-sync-mocha.vercel.app';
   const icon = (name: string) => origin + '/api/weather/icons/' + name + '?format=png';
   const days = weather.slice(0, 3);
   const dayCards: Record<string, unknown>[] = days.map((day, index) => ({
