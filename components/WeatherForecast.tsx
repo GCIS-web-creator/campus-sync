@@ -253,7 +253,6 @@ type JmaWeatherAlertsResponse = {
   alerts: JmaWeatherAlert[];
   sync: {
     initialized: boolean;
-    inProgress: boolean;
     highLastSuccessAt: string | null;
     longLastSuccessAt: string | null;
     lastSuccessAt: string | null;
@@ -327,7 +326,7 @@ function JmaWeatherAlertPanel() {
         </div>
         <div className="text-right">
           <p className={'text-[10px] font-black ' + (stale ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
-            {loading ? '初回取得中' : data?.sync.inProgress ? '初回同期中' : stale ? '更新遅延・確認中' : '自動更新中'}
+            {loading ? '初回取得中' : stale ? '更新遅延・確認中' : '自動更新中'}
           </p>
           <p className="mt-0.5 text-[10px] text-slate-400">{updatedAt ? '最終確認 ' + updatedAt : '確認時刻未取得'}</p>
         </div>
@@ -336,12 +335,8 @@ function JmaWeatherAlertPanel() {
       {stale && (
         <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 sm:px-5">
           {error || (!data?.sync.initialized
-            ? data?.sync.inProgress
-              ? '気象庁の初回同期を実行中です。公式XMLを取得しているため、同期完了後に警報・注意報の有無を表示します。'
-              : data?.sync.lastError
-                ? '気象庁の初回同期に失敗しました。自動で再試行します。'
-                : '気象庁の初回同期が完了するまで、警報・注意報の有無を確定できません。'
-            : '気象庁データの更新が遅れています。以下は最後に取得できた情報です.')}
+            ? '気象庁の初回同期が完了するまで、警報・注意報の有無を確定できません。'
+            : '気象庁データの更新が遅れています。以下は最後に取得できた情報です。')}
           <span className="mt-1 block text-[10px] opacity-80">更新が遅れている場合は、気象庁の公式情報も確認してください。</span>
         </div>
       )}

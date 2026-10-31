@@ -544,8 +544,11 @@ export async function GET() {
     let snapshot = await readAlertSnapshot(admin);
 
     // 初回のVPWS50集約電文が未保存なら、サイト表示時に高頻度フィードを即時同期する。
-    // DBの期限付きロックにより、複数ユーザー・画面側の並行GET・Cronとの二重実行を防ぐ。
-    if (!snapshot.sync.initialized && !snapshot.sync.inProgress) {
+    // 直近1分以内に試行済みならCronの次回実行に任せ、サイト再読み込みによる連続取得を防ぐ。
+    // DBの期限付きロックにより、複数ユーザー・画面側の並行GET・Cronとの二重実行も防ぐ。
+    const lastAttemptMs = snapshot.sync.lastAttemptAt ? Date.parse(snapshot.sync.lastAttemptAt) : Number.NaN;
+    const retryAllowed = !Number.isFinite(lastAttemptMs) || Date.now() - lastAttemptMs >= 60_000;
+    if (!snapshot.sync.initialized && !snapshot.sync.inProgress && retryAllowed) {
       let lockToken: string | null = null;
       try {
         lockToken = await acquireSyncLock(admin);

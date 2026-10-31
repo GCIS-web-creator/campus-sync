@@ -845,12 +845,6 @@ export default function CampusSyncApp() {
 
   const [activeTab, setActiveTab] = useState('home');
   const [hashScrollTarget, setHashScrollTarget] = useState('');
-
-  // サイト起動時に気象庁の初回警報・注意報同期を要求する。
-  // API側が未初期化時だけ同期し、DBロックで複数アクセスやCronとの重複を防ぐ。
-  useEffect(() => {
-    void fetch('/api/weather/jma-alerts', { cache: 'no-store' }).catch(() => undefined);
-  }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [favoriteDashboardTabs, setFavoriteDashboardTabs] = useState<string[]>(['timetable', 'cafeteria', 'ai', 'chat']);
