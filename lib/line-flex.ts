@@ -302,77 +302,153 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
   const weekEnd = weekEndDate.toISOString().slice(0, 10);
   const dateLabel = (value: string) => value.slice(5).replace('-', '/');
   const heading = input.title.trim().slice(0, 100) || '学校予定表';
-  const bubbles = input.days.slice(0, 7).map((day, index) => {
+  const dayNames = ['月', '火', '水', '木', '金', '土', '日'];
+
+  // Seven day sections live inside one bubble. The outer carousel is
+  // composed by the route from exactly four bubbles.
+  const daySections: Record<string, unknown>[] = input.days.slice(0, 7).map((day, index) => {
     const holiday = day.isHoliday === true;
     const weekend = day.dayLabel === '土' || day.dayLabel === '日';
     const weekendSchool = weekend && day.isWeekendSchool === true;
-    const allItems = Array.isArray(day.items) ? day.items : [];
-    const items = allItems.filter(item => String(item.title || item.details || item.time || item.location || '').trim());
-    const bodyContents: Record<string, unknown>[] = [];
+    const items = (Array.isArray(day.items) ? day.items : [])
+      .filter(item => String(item.title || item.details || item.time || item.location || '').trim());
+
+    const sectionContents: Record<string, unknown>[] = [
+      {
+        type: 'box',
+        layout: 'horizontal',
+        alignItems: 'center',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: (day.dayLabel || dayNames[index]) + '曜日', size: 'sm', weight: 'bold', color: '#0F172A', flex: 1, wrap: true },
+          { type: 'text', text: dateLabel(day.date), size: 'sm', weight: 'bold', color: '#475569', align: 'end' },
+        ],
+      },
+    ];
+
     if (holiday) {
-      bodyContents.push({
-        type: 'box', layout: 'vertical', paddingAll: '10px', cornerRadius: '9px',
-        backgroundColor: '#FFF1F2', contents: [
-          { type: 'text', text: '祝日・休校日', size: 'sm', weight: 'bold', color: '#BE123C', wrap: true },
+      sectionContents.push({
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '8px',
+        cornerRadius: '8px',
+        backgroundColor: '#FFE4E6',
+        contents: [
+          { type: 'text', text: '祝日・休校日', size: 'xs', weight: 'bold', color: '#BE123C', wrap: true },
           ...(day.holidayName ? [{ type: 'text', text: String(day.holidayName).slice(0, 100), size: 'xs', color: '#9F1239', wrap: true, margin: 'xs' }] : []),
         ],
       });
-    }
-    if (weekend && !holiday) {
-      bodyContents.push({
-        type: 'box', layout: 'vertical', paddingAll: '10px', cornerRadius: '9px',
+    } else if (weekend) {
+      sectionContents.push({
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '8px',
+        cornerRadius: '8px',
         backgroundColor: weekendSchool ? '#D1FAE5' : '#E2E8F0',
-        contents: [{ type: 'text', text: weekendSchool ? '休日登校日' : '基本休日', size: 'sm', weight: 'bold', color: weekendSchool ? '#065F46' : '#334155', wrap: true }],
+        contents: [{
+          type: 'text',
+          text: weekendSchool ? '休日登校日' : '基本休日',
+          size: 'xs',
+          weight: 'bold',
+          color: weekendSchool ? '#065F46' : '#334155',
+          wrap: true,
+        }],
       });
     }
+
     if (items.length === 0 && !holiday && !(weekend && !weekendSchool)) {
-      bodyContents.push({ type: 'text', text: 'この日の予定はありません。', size: 'sm', color: '#64748B', wrap: true });
-    }
-    for (const item of items.slice(0, 7)) {
-      const contents: Record<string, unknown>[] = [];
-      if (item.time) contents.push({ type: 'text', text: String(item.time).slice(0, 30), size: 'xs', color: '#0E7490', weight: 'bold', wrap: true });
-      contents.push({ type: 'text', text: String(item.title || '予定').slice(0, 120), size: 'sm', color: '#0F172A', weight: 'bold', wrap: true });
-      if (item.location) contents.push({ type: 'text', text: '場所：' + String(item.location).slice(0, 100), size: 'xs', color: '#475569', wrap: true });
-      if (item.details) contents.push({ type: 'text', text: String(item.details).slice(0, 220), size: 'xs', color: '#475569', wrap: true });
-      bodyContents.push({
-        type: 'box', layout: 'vertical', spacing: 'xs', paddingAll: '10px',
-        cornerRadius: '9px', backgroundColor: '#F8FAFC', contents,
+      sectionContents.push({
+        type: 'text',
+        text: 'この日の予定はありません。',
+        size: 'xs',
+        color: '#64748B',
+        wrap: true,
       });
     }
-    if (items.length > 7) bodyContents.push({
-      type: 'text', text: 'ほか' + (items.length - 7) + '件の予定があります。CampusSyncで確認してください。',
-      size: 'xs', color: '#64748B', wrap: true,
+
+    for (const item of items.slice(0, 7)) {
+      const itemContents: Record<string, unknown>[] = [];
+      if (item.time) itemContents.push({
+        type: 'text', text: String(item.time).slice(0, 30), size: 'xxs', color: '#0E7490', weight: 'bold', wrap: true,
+      });
+      itemContents.push({
+        type: 'text', text: String(item.title || '予定').slice(0, 120), size: 'sm', color: '#0F172A', weight: 'bold', wrap: true,
+      });
+      if (item.location) itemContents.push({
+        type: 'text', text: '場所：' + String(item.location).slice(0, 100), size: 'xs', color: '#475569', wrap: true,
+      });
+      if (item.details) itemContents.push({
+        type: 'text', text: String(item.details).slice(0, 220), size: 'xs', color: '#475569', wrap: true,
+      });
+      sectionContents.push({
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'xs',
+        paddingAll: '9px',
+        cornerRadius: '8px',
+        backgroundColor: '#FFFFFF',
+        contents: itemContents,
+      });
+    }
+
+    if (items.length > 7) sectionContents.push({
+      type: 'text',
+      text: 'ほか' + (items.length - 7) + '件の予定があります。CampusSyncで確認してください。',
+      size: 'xxs',
+      color: '#64748B',
+      wrap: true,
     });
 
     return {
-      type: 'bubble',
-      size: 'mega',
-      header: {
-        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm',
-        backgroundColor: holiday ? '#881337' : '#0F172A',
-        contents: [
-          { type: 'text', text: 'CAMPUSSYNC  /  WEEKLY SCHEDULE', size: 'xs', color: '#67E8F9', weight: 'bold', wrap: true },
-          { type: 'text', text: String(day.dayLabel || ['月', '火', '水', '木', '金', '土', '日'][index]) + '曜日の予定', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-          { type: 'text', text: dateLabel(day.date), size: 'sm', color: '#CBD5E1', wrap: true },
-        ],
-      },
-      body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: bodyContents },
-      footer: {
-        type: 'box', layout: 'vertical', paddingAll: '10px', backgroundColor: '#F1F5F9', spacing: 'xs',
-        contents: [
-          { type: 'text', text: heading + '  •  ' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd), size: 'xs', color: '#475569', wrap: true },
-          { type: 'text', text: (index + 1) + ' / 7  日曜日の週予定配信', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-        ],
-      },
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '11px',
+      cornerRadius: '11px',
+      backgroundColor: holiday ? '#FFF1F2' : weekend ? (weekendSchool ? '#ECFDF5' : '#F1F5F9') : '#F8FAFC',
+      contents: sectionContents,
     };
   });
 
   return {
     type: 'flex',
-    altText: ('CampusSync｜' + heading + '｜' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd) + 'の学校予定表').slice(0, 400),
-    contents: { type: 'carousel', contents: bubbles },
+    altText: ('CampusSync｜' + heading + '｜' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd) + 'の1週間の学校予定表').slice(0, 400),
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        backgroundColor: '#0F172A',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC  /  WEEKLY SCHEDULE', size: 'xs', color: '#67E8F9', weight: 'bold', wrap: true },
+          { type: 'text', text: '1週間の学校予定表', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+          { type: 'text', text: dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd), size: 'sm', color: '#CBD5E1', wrap: true },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        spacing: 'md',
+        contents: daySections,
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '10px',
+        backgroundColor: '#F1F5F9',
+        spacing: 'xs',
+        contents: [
+          { type: 'text', text: heading + '  •  ' + dateLabel(input.weekStart) + '〜' + dateLabel(weekEnd), size: 'xs', color: '#475569', wrap: true },
+          { type: 'text', text: '1 / 1  日曜日の週予定配信', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+        ],
+      },
+    },
   };
 }
 

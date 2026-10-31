@@ -142,16 +142,19 @@ export async function POST(request: Request) {
   const weeklyWeather = forecast.filter(day => day.date >= weekStart).slice(0, 3);
   const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
   const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
-  const baseContents = baseFlex.contents as Record<string, unknown> & { contents?: unknown[] };
+  const weeklyScheduleBubble = baseFlex.contents as Record<string, unknown>;
   const flex = {
     ...baseFlex,
-    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・翌日から3日間の天気').slice(0, 400),
-    contents: { ...baseContents, contents: [
-      ...(Array.isArray(baseContents.contents) ? baseContents.contents : []),
-      buildMondayClassBubble('7組', mondayLabel, timetable),
-      buildMondayClassBubble('8組', mondayLabel, timetable),
-      buildWeatherForecastBubble(weeklyWeather),
-    ] },
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・天気予報').slice(0, 400),
+    contents: {
+      type: 'carousel',
+      contents: [
+        weeklyScheduleBubble,
+        buildMondayClassBubble('7組', mondayLabel, timetable),
+        buildMondayClassBubble('8組', mondayLabel, timetable),
+        buildWeatherForecastBubble(weeklyWeather),
+      ],
+    },
   };
   const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
   try {
