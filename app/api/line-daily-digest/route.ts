@@ -124,9 +124,12 @@ function buildTransitBubble(input: {
 }) {
   const startLabel = input.startLabel || '16:00';
   const endLabel = input.endLabel || '18:00';
-  const bodyContents: Record<string, unknown>[] = [
-    { type: 'text', text: input.scheduleDayLabel || '平日ダイヤ', size: 'xs', color: '#64748B' },
-  ];
+  const scheduleLabel = input.scheduleDayLabel === '土曜ダイヤ'
+    ? 'SATURDAY TIMETABLE'
+    : 'AFTERNOON TIMETABLE';
+  const compactDateLabel = input.dateLabel.replace('月', '/').replace('日', '');
+  const bodyContents: Record<string, unknown>[] = [];
+
   if (input.trainError) {
     bodyContents.push({ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
   } else {
@@ -137,12 +140,39 @@ function buildTransitBubble(input: {
     );
   }
 
-  return buildBoardBubble({
-    eyebrow: 'CAMPUSSYNC  /  TRANSIT',
-    title: '鷹の台駅 発車案内',
-    subtitle: input.dateLabel + '  •  ' + startLabel + ' – ' + endLabel,
-    bodyContents,
-  });
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#0F172A',
+      paddingAll: '22px',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC  /  TRANSIT', size: 'xs', color: '#67E8F9', weight: 'bold' },
+        { type: 'text', text: '鷹の台駅 発車案内', size: 'xxl', color: '#FFFFFF', weight: 'bold', wrap: true },
+        { type: 'text', text: scheduleLabel + '  •  ' + compactDateLabel + ' ' + startLabel + ' – ' + endLabel, size: 'sm', color: '#CBD5E1', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '18px',
+      spacing: 'xl',
+      contents: bodyContents,
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      backgroundColor: '#F8FAFC',
+      spacing: 'xs',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
+      ],
+    },
+  };
 }
 
 function buildClassTimetableBubble(input: {

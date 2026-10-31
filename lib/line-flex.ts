@@ -103,10 +103,14 @@ export type TimetableDeparture = { time: string; service?: string | null };
 
 export function buildTimetableDirectionBox(title: string, accent: string, rows: TimetableDeparture[]) {
   const contents: Record<string, unknown>[] = [
-    { type: 'box', layout: 'horizontal', spacing: 'sm', alignItems: 'center',
+    {
+      type: 'box',
+      layout: 'horizontal',
+      spacing: 'sm',
+      alignItems: 'center',
       contents: [
-        { type: 'box', layout: 'vertical', width: '4px', height: '18px', backgroundColor: accent, cornerRadius: '2px', contents: [{ type: 'filler' }] },
-        { type: 'text', text: title, size: 'md', weight: 'bold', color: '#0F172A', flex: 1, wrap: true },
+        { type: 'box', layout: 'vertical', width: '5px', height: '24px', backgroundColor: accent, cornerRadius: '3px', contents: [{ type: 'filler' }] },
+        { type: 'text', text: title, size: 'xl', weight: 'bold', color: '#0F172A', flex: 1, wrap: true },
       ],
     },
   ];
@@ -115,16 +119,21 @@ export function buildTimetableDirectionBox(title: string, accent: string, rows: 
   } else {
     for (const row of rows.slice(0, 12)) {
       contents.push({
-        type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center', paddingAll: '8px',
-        backgroundColor: '#F8FAFC', cornerRadius: '8px',
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'md',
+        alignItems: 'center',
+        paddingAll: '13px',
+        backgroundColor: '#F8FAFC',
+        cornerRadius: '10px',
         contents: [
-          { type: 'text', text: row.time, size: 'lg', weight: 'bold', color: accent, flex: 1 },
-          { type: 'text', text: row.service?.trim().slice(0, 50) || '各駅停車', size: 'xs', color: '#475569', align: 'end', wrap: true, flex: 2 },
+          { type: 'text', text: row.time, size: 'xxl', weight: 'bold', color: accent, flex: 1 },
+          { type: 'text', text: row.service?.trim().slice(0, 50) || '各駅停車', size: 'lg', color: '#475569', align: 'end', wrap: true, flex: 2 },
         ],
       });
     }
   }
-  return { type: 'box', layout: 'vertical', spacing: 'sm', contents };
+  return { type: 'box', layout: 'vertical', spacing: 'md', contents };
 }
 
 /** 鷹の台駅の時刻表まとめ配信用Flex Message */
@@ -147,7 +156,7 @@ export function buildHourlyTrainTimetableFlex(input: {
         ],
       },
       body: {
-        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'xl',
+        type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'xl',
         contents: [
           buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
           { type: 'separator', color: '#E2E8F0' },
