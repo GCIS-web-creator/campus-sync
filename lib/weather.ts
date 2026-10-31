@@ -15,7 +15,7 @@ export function weatherIconName(code:number):string{
 function num(values:number[]|undefined,i:number):number|null{const v=values?.[i];return typeof v==='number'&&Number.isFinite(v)?v:null;}
 export async function fetchSchoolWeatherForecast():Promise<WeatherDayForecast[]>{
   const params=new URLSearchParams({
-    latitude:'35.723654',longitude:'139.455325',timezone:'Asia/Tokyo',forecast_days:'3',
+    latitude:'35.723600280184456',longitude:'139.4507710152599',timezone:'Asia/Tokyo',forecast_days:'3',
     daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,precipitation_hours,wind_speed_10m_max,uv_index_max,sunrise,sunset',
     hourly:'temperature_2m,precipitation_probability,precipitation,rain,showers,wind_speed_10m,relative_humidity_2m',
   });
@@ -38,7 +38,7 @@ export async function fetchSchoolWeatherForecast():Promise<WeatherDayForecast[]>
       rainTotalMm:Math.max(0,rain),precipitationTotalMm:Math.max(0,num(daily.precipitation_sum,index)??rain),
       precipitationHours:num(daily.precipitation_hours,index),windMaxKmh:num(daily.wind_speed_10m_max,index),uvIndexMax:num(daily.uv_index_max,index),
       sunrise:daily.sunrise?.[index]??null,sunset:daily.sunset?.[index]??null,
-      rainHours:hours.filter(h=>h.rainMm>=0.1||h.precipitationMm>=0.1),hours,
+      rainHours:hours.filter(h=>h.rainMm>=0.1),hours,
     };
   });
 }
