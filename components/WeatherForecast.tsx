@@ -233,6 +233,152 @@ function MetricCard({ icon, label, value, unit = '' }: { icon: string; label: st
   );
 }
 
+
+type JmaWeatherAlert = {
+  area_key: string;
+  area_name: string;
+  alert_key: string;
+  alert_code: string | null;
+  alert_name: string;
+  alert_family: string;
+  severity: number;
+  status: string;
+  details: string | null;
+  issued_at: string | null;
+  source_product_code: string;
+  source_url: string;
+};
+
+type JmaWeatherAlertsResponse = {
+  alerts: JmaWeatherAlert[];
+  sync: {
+    initialized: boolean;
+    highLastSuccessAt: string | null;
+    longLastSuccessAt: string | null;
+    lastSuccessAt: string | null;
+    lastAttemptAt: string | null;
+    lastError: string | null;
+    stale: boolean;
+  };
+};
+
+function JmaWeatherAlertPanel() {
+  const [data, setData] = useState<JmaWeatherAlertsResponse | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch('/api/weather/jma-alerts', { cache: 'no-store' });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !Array.isArray(result?.alerts) || !result?.sync) {
+          throw new Error(result?.message || '気象庁の警報・注意報を取得できませんでした。');
+        }
+        if (!cancelled) {
+          setData(result as JmaWeatherAlertsResponse);
+          setError('');
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setError(caught instanceof Error ? caught.message : '気象庁データを取得できませんでした。');
+          setData(current => current ? { ...current, sync: { ...current.sync, stale: true } } : current);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    const interval = window.setInterval(() => void load(), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const allAlerts = data?.alerts || [];
+  const kodairaFamilies = new Set(allAlerts.filter(alert => alert.area_key === 'kodaira').map(alert => alert.alert_family));
+  const visibleAlerts = allAlerts.filter(alert =>
+    alert.area_key === 'kodaira' || (alert.area_key === 'tama-north' && !kodairaFamilies.has(alert.alert_family))
+  );
+  const stale = !data || data.sync.stale;
+  const updatedAt = data?.sync.highLastSuccessAt
+    ? new Date(data.sync.highLastSuccessAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
+
+  const severityStyle = (severity: number) => {
+    if (severity >= 5) return { label: '特別警報', className: 'border-rose-300 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200' };
+    if (severity >= 4) return { label: '危険警報', className: 'border-orange-300 bg-orange-100 text-orange-900 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-200' };
+    if (severity >= 3) return { label: '警報', className: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200' };
+    return { label: '注意報', className: 'border-yellow-300 bg-yellow-100 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-200' };
+  };
+
+  return (
+    <section className="mx-4 mb-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:mx-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-5">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">⚠</span>
+          <div>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">気象庁 警報・注意報</h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">対象：小平市・多摩北部</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className={'text-[10px] font-black ' + (stale ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
+            {loading ? '初回取得中' : stale ? '更新遅延・確認中' : '自動更新中'}
+          </p>
+          <p className="mt-0.5 text-[10px] text-slate-400">{updatedAt ? '最終確認 ' + updatedAt : '確認時刻未取得'}</p>
+        </div>
+      </div>
+
+      {stale && (
+        <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 sm:px-5">
+          {error || (!data?.sync.initialized
+            ? '気象庁の初回同期が完了するまで、警報・注意報の有無を確定できません。'
+            : '気象庁データの更新が遅れています。以下は最後に取得できた情報です。')}
+          <span className="mt-1 block text-[10px] opacity-80">更新が遅れている場合は、気象庁の公式情報も確認してください。</span>
+        </div>
+      )}
+
+      {!stale && visibleAlerts.length === 0 && (
+        <div className="px-4 py-5 text-sm font-bold text-emerald-700 dark:text-emerald-300 sm:px-5">
+          現在、小平市を対象とする気象警報・注意報は発表されていません。
+        </div>
+      )}
+
+      {visibleAlerts.length > 0 && (
+        <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4">
+          {visibleAlerts.map(alert => {
+            const style = severityStyle(alert.severity);
+            return (
+              <article key={alert.area_key + ':' + alert.alert_key} className="rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{alert.area_name}</p>
+                    <h4 className="mt-1 break-words text-sm font-black text-slate-950 dark:text-white">{alert.alert_name}</h4>
+                  </div>
+                  <span className={'shrink-0 rounded-lg border px-2 py-1 text-[10px] font-black ' + style.className}>{style.label}</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{alert.status}{alert.details ? ' ・ ' + alert.details : ''}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+                  <span>{alert.issued_at ? new Date(alert.issued_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 発表' : '発表時刻未取得'}</span>
+                  <a href={alert.source_url} target="_blank" rel="noreferrer" className="font-bold text-cyan-700 underline dark:text-cyan-300">発表電文</a>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 text-[10px] text-slate-400 dark:border-slate-800 sm:px-5">
+        <span>気象庁防災情報XML ・ 1分ごとに確認</span>
+        <a href="https://www.jma.go.jp/bosai/warning/" target="_blank" rel="noreferrer" className="font-bold text-cyan-700 underline dark:text-cyan-300">気象庁 公式警報一覧</a>
+      </div>
+    </section>
+  );
+}
+
 export default function WeatherForecast() {
   const [data, setData] = useState<WeatherBundle | null>(null);
   const [error, setError] = useState('');
@@ -293,6 +439,8 @@ export default function WeatherForecast() {
           </div>
         </div>
       </div>
+
+      <JmaWeatherAlertPanel />
 
       {loading ? (
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
