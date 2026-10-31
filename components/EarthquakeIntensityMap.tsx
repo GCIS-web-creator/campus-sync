@@ -144,6 +144,12 @@ function observationPopup(area: EarthquakeObservedArea): string {
 }
 
 type MatchedCity = { feature: GeoFeature; area: EarthquakeObservedArea; center: LatLng };
+function getAreaRank(area: EarthquakeObservedArea): number {
+  if (typeof area.intensityRank === 'number' && Number.isFinite(area.intensityRank)) return area.intensityRank;
+  const labels: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
+  return labels[String(area.intensity || '')] || 0;
+}
+
 export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMapEvent }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
