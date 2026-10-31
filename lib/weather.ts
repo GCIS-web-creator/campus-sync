@@ -95,7 +95,7 @@ const CURRENT_FIELDS = [
 
 const DIGEST_HOURLY_FIELDS = [
   'temperature_2m','relative_humidity_2m','precipitation_probability','precipitation',
-  'rain','showers','wind_speed_10m','is_day',
+  'rain','showers','wind_speed_10m','is_day','weather_code',
 ];
 
 const DAILY_FIELDS = [
