@@ -133,6 +133,8 @@ const AIR_METRICS = [
   ['european_aqi', '欧州大気質指数', ''],
   ['pm2_5', 'PM2.5', 'μg/m³'],
   ['pm10', 'PM10', 'μg/m³'],
+  ['uv_index', '紫外線指数', ''],
+  ['uv_index_clear_sky', '快晴時UV指数', ''],
   ['ozone', 'オゾン', 'μg/m³'],
   ['nitrogen_dioxide', '二酸化窒素', 'μg/m³'],
   ['sulphur_dioxide', '二酸化硫黄', 'μg/m³'],
