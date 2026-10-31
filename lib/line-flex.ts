@@ -342,15 +342,15 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
       sectionContents.push({
         type: 'box',
         layout: 'vertical',
-        paddingAll: '8px',
-        cornerRadius: '8px',
-        backgroundColor: weekendSchool ? '#D1FAE5' : '#E2E8F0',
+        paddingAll: '6px',
+        cornerRadius: '7px',
+        backgroundColor: day.dayLabel === '土' ? '#DBEAFE' : day.dayLabel === '日' ? '#FFE4E6' : weekendSchool ? '#D1FAE5' : '#E2E8F0',
         contents: [{
           type: 'text',
           text: weekendSchool ? '休日登校日' : '基本休日',
           size: 'xs',
           weight: 'bold',
-          color: weekendSchool ? '#065F46' : '#334155',
+          color: day.dayLabel === '土' ? '#1D4ED8' : day.dayLabel === '日' ? '#BE123C' : weekendSchool ? '#065F46' : '#334155',
           wrap: true,
         }],
       });
@@ -384,8 +384,8 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
         type: 'box',
         layout: 'vertical',
         spacing: 'xs',
-        paddingAll: '9px',
-        cornerRadius: '8px',
+        paddingAll: '6px',
+        cornerRadius: '7px',
         backgroundColor: '#FFFFFF',
         contents: itemContents,
       });
@@ -402,10 +402,10 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
     return {
       type: 'box',
       layout: 'vertical',
-      spacing: 'sm',
-      paddingAll: '11px',
-      cornerRadius: '11px',
-      backgroundColor: holiday ? '#FFF1F2' : weekend ? (weekendSchool ? '#ECFDF5' : '#F1F5F9') : '#F8FAFC',
+      spacing: 'xs',
+      paddingAll: '7px',
+      cornerRadius: '9px',
+      backgroundColor: holiday ? '#FFF1F2' : day.dayLabel === '土' ? '#EFF6FF' : day.dayLabel === '日' ? '#FFF1F2' : '#F8FAFC',
       contents: sectionContents,
     };
   });
@@ -431,8 +431,8 @@ export function buildWeeklySchoolScheduleFlexMessage(input: {
       body: {
         type: 'box',
         layout: 'vertical',
-        paddingAll: '12px',
-        spacing: 'md',
+        paddingAll: '8px',
+        spacing: 'sm',
         contents: daySections,
       },
       footer: {
