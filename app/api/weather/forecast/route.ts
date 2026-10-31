@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchSchoolWeatherBundle } from '@/lib/weather';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const revalidate = 1800;
 export const maxDuration = 30;
 

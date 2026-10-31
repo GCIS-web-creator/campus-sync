@@ -93,6 +93,11 @@ const CURRENT_FIELDS = [
   'pressure_msl','surface_pressure','wind_speed_10m','wind_direction_10m','wind_gusts_10m',
 ];
 
+const DIGEST_HOURLY_FIELDS = [
+  'temperature_2m','relative_humidity_2m','precipitation_probability','precipitation',
+  'rain','showers','wind_speed_10m','is_day',
+];
+
 const DAILY_FIELDS = [
   'weather_code','temperature_2m_max','temperature_2m_min','apparent_temperature_max','apparent_temperature_min',
   'sunrise','sunset','daylight_duration','sunshine_duration','uv_index_max','uv_index_clear_sky_max',
@@ -191,7 +196,7 @@ function safeTimeArray(record: Record<string, unknown>): string[] {
   return Array.isArray(record.time) ? record.time.map(value => String(value)) : [];
 }
 
-async function fetchForecastPayload(forecastDays: number): Promise<OpenMeteoPayload> {
+async function fetchForecastPayload(forecastDays: number, hourlyFields: string[] = HOURLY_FIELDS): Promise<OpenMeteoPayload> {
   const safeDays = Math.max(1, Math.min(16, Math.floor(forecastDays) || 16));
   const params = new URLSearchParams({
     latitude: LATITUDE,
@@ -200,7 +205,7 @@ async function fetchForecastPayload(forecastDays: number): Promise<OpenMeteoPayl
     forecast_days: String(safeDays),
     current: CURRENT_FIELDS.join(','),
     daily: DAILY_FIELDS.join(','),
-    hourly: HOURLY_FIELDS.join(','),
+    hourly: hourlyFields.join(','),
   });
   const response = await fetch('https://api.open-meteo.com/v1/forecast?' + params.toString(), {
     next: { revalidate: 1800 },
@@ -210,7 +215,7 @@ async function fetchForecastPayload(forecastDays: number): Promise<OpenMeteoPayl
   return await response.json() as OpenMeteoPayload;
 }
 
-function createWeatherDays(payload: OpenMeteoPayload): WeatherDayForecast[] {
+function createWeatherDays(payload: OpenMeteoPayload, hourlyFields: string[] = HOURLY_FIELDS): WeatherDayForecast[] {
   const daily = payload.daily || {};
   const hourly = payload.hourly || {};
   const dates = safeTimeArray(daily);
@@ -228,8 +233,8 @@ function createWeatherDays(payload: OpenMeteoPayload): WeatherDayForecast[] {
   return dates.map((date, index) => {
     const hours: WeatherHour[] = (hourlyIndexesByDate.get(date) || []).map(hourIndex => {
       const values = valuesFromRecord(
-        Object.fromEntries(HOURLY_FIELDS.map(key => [key, arrayValue(hourly, key, hourIndex)])),
-        HOURLY_FIELDS,
+        Object.fromEntries(hourlyFields.map(key => [key, arrayValue(hourly, key, hourIndex)])),
+        hourlyFields,
       );
       const rain = Math.max(0, (numericArrayValue(hourly, 'rain', hourIndex) ?? 0) + (numericArrayValue(hourly, 'showers', hourIndex) ?? 0));
       return {
@@ -315,8 +320,8 @@ async function fetchAirQuality(): Promise<WeatherAirQuality | null> {
 }
 
 export async function fetchSchoolWeatherForecast(forecastDays = 3): Promise<WeatherDayForecast[]> {
-  const payload = await fetchForecastPayload(forecastDays);
-  return createWeatherDays(payload);
+  const payload = await fetchForecastPayload(forecastDays, DIGEST_HOURLY_FIELDS);
+  return createWeatherDays(payload, DIGEST_HOURLY_FIELDS);
 }
 
 export async function fetchSchoolWeatherBundle(forecastDays = 16): Promise<WeatherBundle> {
