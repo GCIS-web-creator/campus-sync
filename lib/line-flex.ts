@@ -128,7 +128,7 @@ export function buildTimetableDirectionBox(title: string, accent: string, rows: 
         cornerRadius: '10px',
         contents: [
           { type: 'text', text: row.time, size: 'xxl', weight: 'bold', color: accent, flex: 1 },
-          { type: 'text', text: row.service?.trim().slice(0, 50) || '各駅停車', size: 'lg', color: '#475569', align: 'end', wrap: true, flex: 2 },
+          { type: 'text', text: (row.service?.trim() || '各駅停車').replace(/(?:国分寺|東村山)行き$/, '').replace(/行き$/, ''), size: 'md', color: '#475569', align: 'end', wrap: false, flex: 2 },
         ],
       });
     }
