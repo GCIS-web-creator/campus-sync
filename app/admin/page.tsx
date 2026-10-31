@@ -270,6 +270,7 @@ type LineGroupPreferenceKey =
 type LineGroupRow = {
   chat_id: string;
   chat_type: 'group' | 'room';
+  bot_slot: number | null;
   active: boolean;
   receive_general_notifications: boolean;
   receive_train_timetable: boolean;
@@ -286,6 +287,7 @@ type LineGroupDeliveryLogRow = {
   kind: string;
   chat_id: string;
   chat_type: string;
+  bot_slot: number | null;
   status: 'success' | 'failure';
   http_status: number | null;
   error_message: string | null;
@@ -2423,6 +2425,7 @@ export default function CampusSyncAdmin() {
                                 <div>
                                   <p className="text-sm font-bold text-slate-100">{group.chat_type === 'group' ? 'LINEグループ' : 'LINEルーム'} ·••{group.chat_id.slice(-6)}</p>
                                   <p className="text-[10px] text-slate-500">最終受信：{group.last_seen_at ? new Date(group.last_seen_at).toLocaleString('ja-JP') : '不明'}</p>
+                                  <p className="text-[10px] text-cyan-300">最後に受信したBOT：{group.bot_slot ? 'BOT ' + group.bot_slot : '未記録（次のWebhookから記録）'}</p>
                                 </div>
                                 <button type="button" disabled={lineGroupSaving === group.chat_id} onClick={() => void updateLineGroup(group.chat_id, { active: !group.active })} className={`rounded-lg px-3 py-2 text-xs font-bold ${group.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'} disabled:opacity-50`}>{group.active ? '有効' : '無効'}</button>
                               </div>
@@ -2467,7 +2470,7 @@ export default function CampusSyncAdmin() {
                                 <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
                                   {lineGroupLogs.filter(log => log.delivery_batch_id === item.delivery_batch_id).map(log => (
                                     <div key={log.chat_id} className="flex items-center justify-between gap-2 text-[10px]">
-                                      <span className="text-slate-400">{log.chat_type === 'group' ? 'グループ' : 'ルーム'} ·••{log.chat_id.slice(-6)}</span>
+                                      <span className="text-slate-400">{log.chat_type === 'group' ? 'グループ' : 'ルーム'} ·••{log.chat_id.slice(-6)}{log.bot_slot ? ' · BOT ' + log.bot_slot : ''}</span>
                                       <span className={log.status === 'success' ? 'text-emerald-300' : 'text-red-300'}>{log.status === 'success' ? 'LINE API受付成功' : '送信失敗'}{log.http_status ? ' · HTTP ' + log.http_status : ''}</span>
                                     </div>
                                   ))}

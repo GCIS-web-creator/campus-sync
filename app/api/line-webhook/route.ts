@@ -112,10 +112,14 @@ async function replyToLine(
   }
 }
 
-async function handleLineEvents(events: LineTextMessageEvent[], channelAccessToken: string): Promise<void> {
+async function handleLineEvents(
+  events: LineTextMessageEvent[],
+  channelAccessToken: string,
+  botSlot: 0 | 1 | 2 | 3,
+): Promise<void> {
   await Promise.all(events.map(async event => {
     if (event.source?.type === 'group' || event.source?.type === 'room') {
-      await rememberLineChatEvent(event.source, event.type || 'unknown');
+      await rememberLineChatEvent(event.source, event.type || 'unknown', botSlot);
     }
     if (event.type !== 'message' || event.message?.type !== 'text') return;
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
@@ -187,7 +191,7 @@ export async function POST(request: Request) {
 
   const events = Array.isArray(payload.events) ? payload.events : [];
   after(async () => {
-    await handleLineEvents(events, matchedCredentials.accessToken);
+    await handleLineEvents(events, matchedCredentials.accessToken, matchedCredentials.slot);
   });
 
   return new Response('OK', {

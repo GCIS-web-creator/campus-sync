@@ -51,10 +51,10 @@ export async function GET(request: Request) {
 
   const [groupsResult, logsResult] = await Promise.all([
     admin.from('line_group_chats')
-      .select('chat_id,chat_type,active,receive_general_notifications,receive_train_timetable,receive_class_timetable,receive_school_schedule,receive_cafeteria_sold_out,receive_assignment_updates,receive_quick_notices,last_seen_at')
+      .select('chat_id,chat_type,bot_slot,active,receive_general_notifications,receive_train_timetable,receive_class_timetable,receive_school_schedule,receive_cafeteria_sold_out,receive_assignment_updates,receive_quick_notices,last_seen_at')
       .order('last_seen_at', { ascending: false }),
     admin.from('line_group_delivery_logs')
-      .select('delivery_batch_id,kind,chat_id,chat_type,status,http_status,error_message,sent_at')
+      .select('delivery_batch_id,kind,chat_id,chat_type,bot_slot,status,http_status,error_message,sent_at')
       .order('sent_at', { ascending: false })
       .limit(500),
   ]);

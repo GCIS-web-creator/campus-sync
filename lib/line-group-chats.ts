@@ -29,7 +29,11 @@ function getAdminClient() {
 }
 
 /** IDs are recorded only from LINE webhook events whose signature was verified. */
-export async function rememberLineChatEvent(source: LineChatSource | undefined, eventType: string): Promise<void> {
+export async function rememberLineChatEvent(
+  source: LineChatSource | undefined,
+  eventType: string,
+  botSlot: 0 | 1 | 2 | 3,
+): Promise<void> {
   if (!source || (source.type !== 'group' && source.type !== 'room')) return;
   const chatId = source.type === 'group' ? source.groupId : source.roomId;
   if (!chatId || chatId.length > 200) return;
@@ -41,12 +45,14 @@ export async function rememberLineChatEvent(source: LineChatSource | undefined, 
   }
 
   const now = new Date().toISOString();
+  const storedBotSlot = botSlot >= 1 && botSlot <= 3 ? botSlot : null;
   if (eventType === 'leave') {
     // Keep the ID for troubleshooting even if the bot leaves before a prior join
     // event could be saved. Inactive chats are never used as delivery targets.
     const { error } = await admin.from('line_group_chats').upsert({
       chat_id: chatId,
       chat_type: source.type,
+      bot_slot: storedBotSlot,
       active: false,
       last_seen_at: now,
       last_event_type: eventType,
@@ -58,11 +64,20 @@ export async function rememberLineChatEvent(source: LineChatSource | undefined, 
   const { error } = await admin.from('line_group_chats').upsert({
     chat_id: chatId,
     chat_type: source.type,
+    bot_slot: storedBotSlot,
     active: true,
     last_seen_at: now,
     last_event_type: eventType.slice(0, 80),
   }, { onConflict: 'chat_id' });
   if (error) console.error('LINEグループIDを保存できません:', error.message);
+}
+
+function resolveLineBotSlot(accessToken: string): number | null {
+  for (const slot of [1, 2, 3] as const) {
+    const configuredToken = process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`] || '';
+    if (configuredToken && configuredToken === accessToken) return slot;
+  }
+  return null;
 }
 
 function retryKeyForChat(base: string, chatId: string): string {
@@ -88,6 +103,7 @@ export async function pushLineMessagesToRegisteredChats(
 ): Promise<LineGroupDeliveryResult> {
   const admin = getAdminClient();
   if (!admin) return { kind, registered: 0, sent: 0, failed: 0, lookupError: 'Supabaseのサーバー設定がありません。' };
+  const botSlot = resolveLineBotSlot(accessToken);
 
   const preferenceColumn = kind === 'train_timetable'
     ? 'receive_train_timetable'
@@ -165,6 +181,7 @@ export async function pushLineMessagesToRegisteredChats(
         kind,
         chat_id: outcome.chat_id,
         chat_type: outcome.chat_type,
+        bot_slot: botSlot,
         status: outcome.success ? 'success' : 'failure',
         http_status: outcome.status,
         error_message: outcome.success ? null : ('errorMessage' in outcome ? outcome.errorMessage : '送信に失敗しました。'),
