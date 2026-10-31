@@ -569,8 +569,19 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
     let savedAlerts = 0;
     for (const item of relevant) {
       const notificationPayload = await findNewKodairaWarningNotification(admin, item.message);
+      // 通知対象なら、現在状態の更新より先にoutboxを保存して送信漏れを防ぐ。
+      if (notificationPayload) {
+        await storeEvent(admin, mode, item.entry, item.message, [], notificationPayload);
+      }
       const parsedAlerts = await applyMessageState(admin, item.entry, item.message);
-      await storeEvent(admin, mode, item.entry, item.message, parsedAlerts, notificationPayload);
+      if (notificationPayload) {
+        const { error: eventUpdateError } = await admin.from('jma_weather_alert_events')
+          .update({ parsed_alerts: parsedAlerts })
+          .eq('source_id', item.entry.id);
+        if (eventUpdateError) throw eventUpdateError;
+      } else {
+        await storeEvent(admin, mode, item.entry, item.message, parsedAlerts, null);
+      }
       processed += 1;
       savedAlerts += parsedAlerts.length;
     }
