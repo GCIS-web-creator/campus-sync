@@ -231,45 +231,46 @@ export function buildLostFoundApprovedFlexMessage(input: {
 
 /** 学食メニューが正式に売切へ切り替わったときの通知 */
 export function buildCafeteriaSoldOutFlexMessage(input: {
-  menuName: string;
+  menuName?: string;
   price?: string | null;
+  items?: Array<{ menuName: string; price?: string | null }>;
   updatedAt?: string;
 }): FlexMessage {
-  const menuName = input.menuName.trim().slice(0, 100) || '本日のメニュー';
-  const price = String(input.price || '').trim().slice(0, 40);
-  const updatedAt = String(input.updatedAt || '').trim().slice(0, 50);
-  const bodyContents: Record<string, unknown>[] = [
-    { type: 'text', text: menuName, size: 'xl', weight: 'bold', color: '#0F172A', wrap: true },
-    { type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'sm', margin: 'md', contents: [
-      { type: 'box', layout: 'vertical', width: '5px', height: '24px', backgroundColor: '#EF4444', cornerRadius: '3px', contents: [{ type: 'filler' }] },
-      { type: 'text', text: '本日の販売は終了しました', size: 'md', weight: 'bold', color: '#B91C1C', wrap: true, flex: 1 },
-    ] },
-  ];
-  if (price) bodyContents.push({ type: 'text', text: '価格：' + price, size: 'sm', color: '#64748B', margin: 'sm' });
-  if (updatedAt) bodyContents.push({ type: 'text', text: '更新：' + updatedAt, size: 'xs', color: '#94A3B8', margin: 'md' });
-
+  const items=(input.items?.length?input.items:[{menuName:input.menuName||'本日のメニュー',price:input.price}])
+    .slice(0,5)
+    .map(item=>({menuName:String(item.menuName||'本日のメニュー').trim().slice(0,100),price:String(item.price||'').trim().slice(0,40)}))
+    .filter(item=>item.menuName);
+  const updatedAt=String(input.updatedAt||'').trim().slice(0,50);
+  const body:Record<string,unknown>[]=[];
+  for(const [index,item] of items.entries()){
+    if(index>0)body.push({type:'separator',color:'#FECACA',margin:'md'});
+    body.push(
+      {type:'text',text:item.menuName,size:'lg',weight:'bold',color:'#0F172A',wrap:true},
+      {type:'box',layout:'horizontal',alignItems:'center',spacing:'sm',margin:'sm',contents:[
+        {type:'box',layout:'vertical',width:'5px',height:'22px',backgroundColor:'#EF4444',cornerRadius:'3px',contents:[{type:'filler'}]},
+        {type:'text',text:'本日の販売は終了しました',size:'sm',weight:'bold',color:'#B91C1C',wrap:true,flex:1},
+      ]},
+      ...(item.price?[{type:'text',text:'価格：'+item.price,size:'xs',color:'#64748B',margin:'xs',wrap:true}]:[]),
+    );
+  }
+  if(updatedAt)body.push({type:'text',text:'更新：'+updatedAt,size:'xs',color:'#94A3B8',margin:'md'});
+  const itemNames=items.map(item=>item.menuName).join('・');
   return {
-    type: 'flex',
-    altText: ('【学食・売切情報】' + menuName + 'は売切となりました。').slice(0, 400),
-    contents: {
-      type: 'bubble',
-      size: 'mega',
-      header: {
-        type: 'box', layout: 'vertical', backgroundColor: '#7F1D1D', paddingAll: '18px', spacing: 'sm',
-        contents: [
-          { type: 'text', text: 'CAMPUSSYNC  /  CAFETERIA', size: 'xs', color: '#FECACA', weight: 'bold' },
-          { type: 'text', text: '売切のお知らせ', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
-        ],
-      },
-      body: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: bodyContents },
-      footer: {
-        type: 'box', layout: 'vertical', backgroundColor: '#FFF7F7', paddingAll: '12px', spacing: 'xs',
-        contents: [
-          { type: 'text', text: '次回の販売状況はCampusSyncでご確認ください。', size: 'xs', color: '#7F1D1D', wrap: true },
-          { type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-          { type: 'text', text: '@ created by Fuku', size: 'xs', color: '#64748B', align: 'center', wrap: true },
-        ],
-      },
+    type:'flex',
+    altText:('【学食・売切情報】'+itemNames+'は売切となりました。').slice(0,400),
+    contents:{
+      type:'bubble',size:'mega',
+      header:{type:'box',layout:'vertical',backgroundColor:'#7F1D1D',paddingAll:'18px',spacing:'sm',contents:[
+        {type:'text',text:'CAMPUSSYNC / CAFETERIA',size:'xs',color:'#FECACA',weight:'bold'},
+        {type:'text',text:'売切のお知らせ',size:'xl',color:'#FFFFFF',weight:'bold',wrap:true},
+        {type:'text',text:items.length+'件のメニューが売切となりました',size:'xs',color:'#FEE2E2',wrap:true},
+      ]},
+      body:{type:'box',layout:'vertical',paddingAll:'18px',spacing:'sm',contents:body},
+      footer:{type:'box',layout:'vertical',backgroundColor:'#FFF7F7',paddingAll:'12px',spacing:'xs',contents:[
+        {type:'text',text:'次回の販売状況はCampusSyncでご確認ください。',size:'xs',color:'#7F1D1D',wrap:true},
+        {type:'text',text:'CAMPUSSYNC・SOKA HIGH SCHOOL',size:'xs',color:'#64748B',align:'center',wrap:true},
+        {type:'text',text:'@ created by Fuku',size:'xs',color:'#64748B',align:'center',wrap:true},
+      ]},
     },
   };
 }

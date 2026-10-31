@@ -10,6 +10,7 @@ import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGl
 import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacilityMap';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import CountdownEventWidget from '@/components/CountdownEventWidget';
+import WeatherForecast from '@/components/WeatherForecast';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -4133,6 +4134,7 @@ Supabaseの設定を確認してください。
                 <p className="mt-2 max-w-xl text-xs font-semibold leading-5 text-white/85 sm:text-sm">時間割も、学校予定も、移動も。毎日のキャンパスライフをCampusSyncで。</p>
               </div>
             </section>
+            <WeatherForecast />
 
             {/* ダッシュボード上部・スコアシステム */}
             <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-3xl p-6 shadow-xl text-white relative overflow-hidden transition-all duration-300`}>

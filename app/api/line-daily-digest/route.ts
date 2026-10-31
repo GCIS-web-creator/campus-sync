@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { buildTimetableDirectionBox, type TimetableDeparture } from '@/lib/line-flex';
+import { fetchSchoolWeatherForecast, type WeatherDayForecast } from '@/lib/weather';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -116,9 +117,8 @@ function buildTransitBubble(input: {
   kokubunji: TimetableDeparture[];
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
-  timetableOnly?: boolean;
 }) {
-  const startLabel = input.timetableOnly ? '16:50' : '16:00';
+  const startLabel = '16:00';
   const endLabel = '18:00';
   const bodyContents: Record<string, unknown>[] = [
     { type: 'text', text: '平日ダイヤ', size: 'xs', color: '#64748B' },
@@ -136,9 +136,7 @@ function buildTransitBubble(input: {
   return buildBoardBubble({
     eyebrow: 'CAMPUSSYNC  /  TRANSIT',
     title: '鷹の台駅 発車案内',
-    subtitle: input.timetableOnly
-      ? 'AFTERNOON TIMETABLE  •  ' + startLabel + ' – ' + endLabel
-      : input.dateLabel + '  •  ' + startLabel + ' – ' + endLabel,
+    subtitle: input.dateLabel + '  •  ' + startLabel + ' – ' + endLabel,
     bodyContents,
   });
 }
@@ -285,6 +283,45 @@ function buildSchoolEventsBubble(input: {
   });
 }
 
+
+function buildWeatherBubble(input: { dateLabel: string; weather: WeatherDayForecast | null }) {
+  const weather=input.weather;
+  const origin=(process.env.NEXT_PUBLIC_SITE_URL||(process.env.VERCEL_URL?'https://'+process.env.VERCEL_URL:'https://campus-sync-mocha.vercel.app')).replace(/\/$/,'');
+  const iconUrl=weather?origin+'/api/weather/icons/'+weather.iconName+'?format=png':'';
+  const rows:Record<string,unknown>[]=[];
+  if(weather){
+    rows.push(
+      {type:'text',text:weather.description,size:'xl',weight:'bold',color:'#0F172A',align:'center',wrap:true},
+      {type:'box',layout:'horizontal',justifyContent:'center',spacing:'lg',margin:'md',contents:[
+        {type:'box',layout:'vertical',alignItems:'center',contents:[{type:'text',text:'最高',size:'xs',color:'#64748B'},{type:'text',text:weather.highC===null?'—':Math.round(weather.highC)+'°',size:'xxl',weight:'bold',color:'#DC2626'}]},
+        {type:'box',layout:'vertical',alignItems:'center',contents:[{type:'text',text:'最低',size:'xs',color:'#64748B'},{type:'text',text:weather.lowC===null?'—':Math.round(weather.lowC)+'°',size:'xxl',weight:'bold',color:'#0284C7'}]},
+      ]},
+      {type:'separator',color:'#E2E8F0',margin:'md'},
+      {type:'box',layout:'horizontal',justifyContent:'space-between',contents:[
+        {type:'text',text:'降水確率',size:'sm',color:'#64748B'},
+        {type:'text',text:weather.precipitationProbabilityMax===null?'—':Math.round(weather.precipitationProbabilityMax)+'%',size:'sm',color:'#0F172A',weight:'bold'},
+      ]},
+    );
+    if(weather.rainTotalMm>=0.1)rows.push({type:'box',layout:'horizontal',justifyContent:'space-between',contents:[
+      {type:'text',text:'予想雨量',size:'sm',color:'#64748B'},
+      {type:'text',text:weather.rainTotalMm.toFixed(1)+' mm',size:'sm',color:'#0F172A',weight:'bold'},
+    ]});
+  }else rows.push({type:'text',text:'天気情報を取得できませんでした。詳しくはCampusSyncをご確認ください。',size:'sm',color:'#64748B',wrap:true});
+  return {
+    type:'bubble',size:'kilo',
+    header:{type:'box',layout:'vertical',backgroundColor:'#0F3B63',paddingAll:'16px',spacing:'xs',contents:[
+      {type:'text',text:'CAMPUSSYNC / WEATHER',size:'xs',color:'#67E8F9',weight:'bold'},
+      {type:'text',text:'明日の天気',size:'lg',color:'#FFFFFF',weight:'bold'},
+      {type:'text',text:input.dateLabel+' ・ 小平市たかの台周辺',size:'xs',color:'#CBD5E1',wrap:true},
+    ]},
+    ...(iconUrl?{hero:{type:'image',url:iconUrl,size:'full',aspectRatio:'16:5',aspectMode:'fit',backgroundColor:'#EFF6FF'}}:{}),
+    body:{type:'box',layout:'vertical',paddingAll:'16px',spacing:'sm',contents:rows},
+    footer:{type:'box',layout:'vertical',paddingAll:'10px',backgroundColor:'#F8FAFC',contents:[
+      {type:'text',text:'時間ごとの詳しい予報はCampusSyncで確認できます。',size:'xs',color:'#475569',wrap:true,align:'center'},
+    ]},
+  };
+}
+
 function buildDailyDigest(input: {
   dateLabel: string;
   today: string;
@@ -296,41 +333,28 @@ function buildDailyDigest(input: {
   trainError: boolean;
   events: EventRow[];
   eventError: boolean;
-  timetableOnly?: boolean;
+  includeClassTimetable: boolean;
+  weather: WeatherDayForecast | null;
 }) {
   const transitBubble = buildTransitBubble(input);
-  const altText = input.timetableOnly
-    ? '【CampusSync 16:50】' + input.dateLabel + '｜鷹の台駅の電車時刻表'
-    : '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・7組と8組の時間割・学校行事。横にスワイプして確認できます。';
+  const weatherBubble = buildWeatherBubble({dateLabel:input.tomorrowDateLabel,weather:input.weather});
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
     altText: altText.slice(0, 400),
-    contents: input.timetableOnly
-      ? transitBubble
-      : {
-          type: 'carousel',
-          contents: [
-            transitBubble,
-            buildClassTimetableBubble({
-              group: '7組',
-              dateLabel: input.tomorrowDateLabel,
-              dayKey: input.tomorrowDayKey,
-              timetable: input.timetable,
-            }),
-            buildClassTimetableBubble({
-              group: '8組',
-              dateLabel: input.tomorrowDateLabel,
-              dayKey: input.tomorrowDayKey,
-              timetable: input.timetable,
-            }),
-            buildSchoolEventsBubble({
-              today: input.today,
-              events: input.events,
-              eventError: input.eventError,
-            }),
-          ],
-        },
+    contents: {
+      type:'carousel',
+      contents:[
+        transitBubble,
+        weatherBubble,
+        ...(input.includeClassTimetable?[
+          buildClassTimetableBubble({group:'7組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
+          buildClassTimetableBubble({group:'8組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
+        ]:[]),
+        buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
+      ],
+    },
   };
 }
 
@@ -368,29 +392,22 @@ export async function POST(request: Request) {
   const now = new Date();
   const nowParts = tokyoParts(now);
   const today = dateKeyFromParts(nowParts);
+  const weekday = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',weekday:'short'}).format(now);
+  const isWeekday = ['Mon','Tue','Wed','Thu','Fri'].includes(weekday);
+  const includeClassTimetable = ['Mon','Tue','Wed','Thu'].includes(weekday);
   const currentHour = Number(nowParts.hour);
   const currentMinute = Number(nowParts.minute);
-  const regularDispatchWindow = currentHour === 16 && currentMinute < 10;
-  const oneTimeOct30DispatchWindow =
-    today === '2026-10-30' && currentHour === 16 && currentMinute >= 50 && currentMinute < 55;
-  if (!manualRequest && !regularDispatchWindow && !oneTimeOct30DispatchWindow) {
-    return NextResponse.json({
-      success: true,
-      skipped: true,
-      message: '日次まとめは通常16:00（日本時間）、2026年10月30日のみ16:50に配信します。',
-    }, { headers: { 'Cache-Control': 'no-store' } });
+  const inDispatchWindow = currentHour===16 && currentMinute<10;
+  if(!manualRequest&&(!isWeekday||!inDispatchWindow)){
+    return NextResponse.json({success:true,skipped:true,message:!isWeekday?'16:00の日次配信は平日のみです。':'日次まとめは16:00（日本時間）に配信します。'},{headers:{'Cache-Control':'no-store'}});
   }
-
-
-  const todayLabel = Number(nowParts.month) + '月' + Number(nowParts.day) + '日';
-  // 2026-10-30 only: limit the 16:50 digest to the train timetable.
-  const timetableOnlyToday = today === '2026-10-30';
+  const todayLabel = Number(nowParts.month)+'月'+Number(nowParts.day)+'日';
   const tomorrow = getTokyoTomorrowTimetableInfo(now);
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [trainResult, eventResult, classTimetableResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service')
       .order('direction', { ascending: true })
@@ -404,6 +421,7 @@ export async function POST(request: Request) {
     admin.from('class_timetable_slots')
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
+    fetchSchoolWeatherForecast().catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
@@ -414,7 +432,7 @@ export async function POST(request: Request) {
   const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows) : CLASS_TIMETABLE_DATA;
   const trainRows = (trainResult.data || []) as TrainRow[];
   // 10/30臨時配信は16:50から18:00まで。通常の日次まとめは16:00から18:00まで。
-  const timetableStartMinute = timetableOnlyToday ? 16 * 60 + 50 : 16 * 60;
+  const timetableStartMinute = 16 * 60;
   const timetableEndMinute = 18 * 60;
   const departures = (direction: string): TimetableDeparture[] => trainRows
     .filter(row => {
@@ -430,6 +448,8 @@ export async function POST(request: Request) {
   const higashimurayama = departures('higashimurayama');
 
   const events = (eventResult.data || []) as EventRow[];
+  const weatherDays = weatherResult as WeatherDayForecast[] | null;
+  const tomorrowWeather = weatherDays?.find(day=>day.date===tomorrow.dateKey)||null;
   const flex = buildDailyDigest({
     dateLabel: todayLabel,
     today,
@@ -441,7 +461,8 @@ export async function POST(request: Request) {
     trainError: Boolean(trainResult.error),
     events,
     eventError: Boolean(eventResult.error),
-    timetableOnly: timetableOnlyToday,
+    includeClassTimetable,
+    weather:tomorrowWeather,
   });
 
   const retryKey = stableRetryKey(today);
@@ -465,7 +486,7 @@ export async function POST(request: Request) {
       : 'LINEへの日次まとめ配信に失敗しました（HTTP ' + response.status + '）。', 502);
   }
 
-  const digestTitle = timetableOnlyToday ? '16:50 鷹の台駅 電車時刻表' : '16:00 CampusSync 学校情報まとめ';
+  const digestTitle = '16:00 CampusSync 学校情報まとめ';
   const digestText = String((flex as { altText?: unknown }).altText || digestTitle);
   let historySaved = false;
   const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', retryKey).maybeSingle();
@@ -485,9 +506,7 @@ export async function POST(request: Request) {
       else console.error('日次まとめの配信履歴を保存できません:', fallback.error.message);
     }
   }
-  const groupDelivery = await pushLineMessagesToRegisteredChats(
-    accessToken, [flex], retryKey, timetableOnlyToday ? 'train_timetable' : 'daily_digest', retryKey,
-  );
+  const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,[flex],retryKey,'daily_digest',retryKey);
 
   return NextResponse.json({
     success: true,
@@ -495,15 +514,13 @@ export async function POST(request: Request) {
     alreadyAccepted: response.status === 409,
     content: {
       trainDepartures: kokubunji.length + higashimurayama.length,
-      classTimetable: timetableOnlyToday ? false : tomorrow.dayKey !== null,
-      events: timetableOnlyToday ? 0 : events.length,
-      carouselCards: timetableOnlyToday ? 1 : 4,
+      classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
+      events:events.length,
+      weather:Boolean(tomorrowWeather),
+      carouselCards:includeClassTimetable?5:3,
       historySaved,
     },
     groupDelivery,
-    message: (timetableOnlyToday
-      ? todayLabel + 'の16:50配信は電車時刻表のみです。'
-      : todayLabel + 'の16:00配信は、電車・7組・8組・学校行事の4枚カルーセルです。') +
-      summarizeLineGroupDelivery(groupDelivery),
+    message:todayLabel+'の16:00配信は、電車・天気'+(includeClassTimetable?'・7組・8組':'')+'・学校行事をまとめて配信しました。'+summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

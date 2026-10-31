@@ -3,6 +3,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { buildWeeklySchoolScheduleFlexMessage } from '@/lib/line-flex';
+import { CLASS_TIMETABLE_DATA, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
@@ -46,6 +47,36 @@ function retryKeyForWeek(weekStart: string): string {
   chars[16] = ((parseInt(chars[16], 16) & 3) | 8).toString(16);
   const value = chars.join('');
   return value.slice(0, 8) + '-' + value.slice(8, 12) + '-' + value.slice(12, 16) + '-' + value.slice(16, 20) + '-' + value.slice(20);
+}
+
+
+function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timetable: ClassTimetableData) {
+  const accent=group==='7組'?'#0891B2':'#4F46E5';
+  const rows:Record<string,unknown>[]=timetable[group].Mon.map(slot=>({
+    type:'box',layout:'horizontal',alignItems:'center',spacing:'sm',paddingAll:'9px',cornerRadius:'9px',backgroundColor:'#F8FAFC',
+    contents:[
+      {type:'box',layout:'vertical',width:'42px',paddingAll:'6px',cornerRadius:'6px',backgroundColor:accent,justifyContent:'center',
+        contents:[{type:'text',text:slot.period+'限',size:'xs',color:'#FFFFFF',weight:'bold',align:'center'}]},
+      {type:'box',layout:'vertical',flex:1,spacing:'xs',contents:[
+        {type:'text',text:slot.subject,size:'sm',color:'#1E293B',weight:'bold',wrap:true},
+        {type:'text',text:slot.teacher,size:'xs',color:'#64748B',wrap:true},
+      ]},
+    ],
+  }));
+  return {
+    type:'bubble',size:'mega',
+    header:{type:'box',layout:'vertical',backgroundColor:'#0F172A',paddingAll:'18px',spacing:'sm',contents:[
+      {type:'text',text:'CAMPUSSYNC / CLASS TIMETABLE',size:'xs',color:'#67E8F9',weight:'bold'},
+      {type:'text',text:group+'の月曜日の時間割',size:'xl',color:'#FFFFFF',weight:'bold',wrap:true},
+      {type:'text',text:dateLabel+' ・ 翌週月曜日',size:'xs',color:'#CBD5E1',wrap:true},
+    ]},
+    body:{type:'box',layout:'vertical',paddingAll:'14px',spacing:'sm',contents:rows.length?rows:[
+      {type:'text',text:'時間割が登録されていません。',size:'sm',color:'#64748B',wrap:true},
+    ]},
+    footer:{type:'box',layout:'vertical',paddingAll:'10px',backgroundColor:'#F1F5F9',contents:[
+      {type:'text',text:'CAMPUSSYNC・SOKA HIGH SCHOOL',size:'xs',color:'#64748B',align:'center'},
+    ]},
+  };
 }
 
 export async function POST(request: Request) {
@@ -97,7 +128,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, skipped: true, message: '予定・祝日が未入力のため、LINE配信をスキップしました。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
-  const flex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
+  const { data: timetableRows, error: timetableError } = await supabase.from('class_timetable_slots')
+    .select('group_name,day_key,period,subject,teacher')
+    .order('group_name', { ascending: true }).order('period', { ascending: true });
+  if (timetableError) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableError.message);
+  const timetable: ClassTimetableData = timetableRows?.length ? mapClassTimetableRows(timetableRows as ClassTimetableRow[]) : CLASS_TIMETABLE_DATA;
+  const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
+  const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
+  const baseContents = baseFlex.contents as Record<string, unknown> & { contents?: unknown[] };
+  const flex = {
+    ...baseFlex,
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割').slice(0, 400),
+    contents: { ...baseContents, contents: [
+      ...(Array.isArray(baseContents.contents) ? baseContents.contents : []),
+      buildMondayClassBubble('7組', mondayLabel, timetable),
+      buildMondayClassBubble('8組', mondayLabel, timetable),
+    ] },
+  };
   const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -117,7 +164,7 @@ export async function POST(request: Request) {
     const weekEnd = addDays(weekStart, 6);
     return NextResponse.json({
       success: true, weekStart, groupDelivery,
-      message: weekStart + '〜' + weekEnd + ' の学校予定表をLINE公式アカウントへ送信しました。' + groupMessage,
+      message: weekStart + '〜' + weekEnd + ' の学校予定表と月曜日の7組・8組時間割をLINEへ送信しました。' + groupMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学校予定表のLINE配信通信エラー:', error instanceof Error ? error.message : 'unknown error');
