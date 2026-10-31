@@ -52,7 +52,7 @@ function ensureMapStyles(): void {
   if (document.getElementById('campussync-earthquake-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'campussync-earthquake-map-styles';
-  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-station-pin{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:5px;background:#1e293b;color:#fff;font-size:11px;font-weight:1000;line-height:1;box-shadow:0 1px 5px rgba(15,23,42,.48)}.cs-earthquake-regional-square{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:2px solid #fff;border-radius:7px;background:var(--cell-color);color:#fff;font-size:12px;font-weight:1000;line-height:1;text-shadow:0 1px 2px rgba(15,23,42,.38);box-shadow:0 1px 6px rgba(15,23,42,.34)}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
+  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-station-pin{display:flex;align-items:center;justify-content:center;min-width:25px;height:25px;padding:0 3px;border:2px solid #fff;border-radius:6px;background:var(--station-color);color:#fff;font-size:10px;font-weight:1000;line-height:1;white-space:nowrap;text-shadow:0 1px 2px rgba(15,23,42,.35);box-shadow:0 1px 5px rgba(15,23,42,.38)}.cs-earthquake-regional-square{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:2px solid #fff;border-radius:7px;background:var(--cell-color);color:#fff;font-size:12px;font-weight:1000;line-height:1;text-shadow:0 1px 2px rgba(15,23,42,.38);box-shadow:0 1px 6px rgba(15,23,42,.34)}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
   document.head.appendChild(style);
 }
 function loadLeaflet(): Promise<LeafletApi> {
@@ -208,8 +208,9 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
   const [message, setMessage] = useState('震度分布を準備しています…');
   const [rankCounts, setRankCounts] = useState<Record<number, number>>({});
   const [matchedCount, setMatchedCount] = useState(0);
-  const [rankOneStationCount, setRankOneStationCount] = useState(0);
-  const [rankOneStationMappedCount, setRankOneStationMappedCount] = useState(0);
+  const [stationRankCounts, setStationRankCounts] = useState<Record<number, number>>({});
+  const [stationObservationCount, setStationObservationCount] = useState(0);
+  const [stationMappedCount, setStationMappedCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,42 +356,55 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             );
           },
         });
-        const rankOneStationMarkers: LeafletLayer[] = [];
-        const areasWithExactRankOneStation = new Set<MatchedCity>();
-        let rankOneStationsNext = 0;
-        let rankOneStationsMappedNext = 0;
+        const stationMarkers: LeafletLayer[] = [];
+        const stationMapStatus = new Map<MatchedCity, { total: number; mapped: number }>();
+        const stationRankCountsNext: Record<number, number> = {};
+        let stationObservationsNext = 0;
+        let stationMappedNext = 0;
         for (const item of matched) {
           for (const station of item.area.stations || []) {
-            if (getStationRank(station) !== 1) continue;
-            rankOneStationsNext++;
+            const rank = getStationRank(station);
+            if (rank <= 0) continue;
+            stationObservationsNext++;
+            stationRankCountsNext[rank] = (stationRankCountsNext[rank] || 0) + 1;
+            const areaStatus = stationMapStatus.get(item) || { total: 0, mapped: 0 };
+            areaStatus.total++;
+            stationMapStatus.set(item, areaStatus);
             const location = resolveStationLocation(station);
             if (!location) continue;
-            rankOneStationsMappedNext++;
-            areasWithExactRankOneStation.add(item);
+            stationMappedNext++;
+            areaStatus.mapped++;
+            const color = intensityColor(rank);
+            const label = intensityText(rank, station.intensity);
             const stationMarker = L.marker([location.lat, location.lng], {
               icon: L.divIcon({
                 className: 'cs-earthquake-map-icon',
-                html: '<span class="cs-earthquake-station-pin">1</span>',
-                iconSize: [22, 22], iconAnchor: [11, 11],
+                html: '<span class="cs-earthquake-station-pin" style="--station-color:' + color + '">' +
+                  escapeHtml(label) + '</span>',
+                iconSize: [29, 29], iconAnchor: [14.5, 14.5],
               }),
               riseOnHover: true,
-              zIndexOffset: 2400,
+              zIndexOffset: 2400 + rank,
             });
             stationMarker.bindPopup(
               '<div class="cs-earthquake-popup"><strong>' + escapeHtml(station.name) +
-              '</strong><div class="cs-earthquake-popup-rank">観測震度 <b style="color:' + intensityColor(1) +
-              '">震度1</b></div><p class="cs-earthquake-popup-muted">市町村最大震度：震度' +
+              '</strong><div class="cs-earthquake-popup-rank">観測震度 <b style="color:' + color +
+              '">震度' + escapeHtml(label) + '</b></div><p class="cs-earthquake-popup-muted">市町村最大震度：震度' +
               escapeHtml(intensityText(getAreaRank(item.area), item.area.intensity)) + '</p></div>'
             );
-            rankOneStationMarkers.push(stationMarker);
+            stationMarkers.push(stationMarker);
           }
         }
-        setRankOneStationCount(rankOneStationsNext);
-        setRankOneStationMappedCount(rankOneStationsMappedNext);
+        setStationRankCounts(stationRankCountsNext);
+        setStationObservationCount(stationObservationsNext);
+        setStationMappedCount(stationMappedNext);
 
         const cityMarkers = matched.flatMap(item => {
           const rank = getAreaRank(item.area);
-          if (rank === 1 && areasWithExactRankOneStation.has(item)) return [];
+          // Hide the municipal marker only when every valid station is shown at
+          // its exact JMA coordinate. Keep it as a fallback when any point is unmatched.
+          const stationStatus = stationMapStatus.get(item);
+          if (stationStatus && stationStatus.total > 0 && stationStatus.total === stationStatus.mapped) return [];
           const marker = L.marker(item.center, {
             icon: L.divIcon({
               className: 'cs-earthquake-map-icon',
@@ -448,7 +462,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
           for (const marker of mediumRegionalMarkers) ensureLayer(map, marker, medium);
           ensureLayer(map, cityLayer, medium || detailed);
           for (const marker of cityMarkers) ensureLayer(map, marker, detailed);
-          for (const marker of rankOneStationMarkers) ensureLayer(map, marker, medium || detailed);
+          for (const marker of stationMarkers) ensureLayer(map, marker, medium || detailed);
         };
         map.on('zoomend', updateZoomLayers);
         updateZoomLayers();
@@ -478,19 +492,28 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
         {status === 'error' && <div className="absolute inset-x-3 bottom-3 rounded-xl border border-amber-200 bg-white/95 px-3 py-2 text-[10px] leading-relaxed text-amber-800 shadow-sm dark:border-amber-900 dark:bg-slate-900/95 dark:text-amber-200">{message}</div>}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+        <span className="mr-1 text-[9px] font-bold text-slate-400">市町村最大震度</span>
         {[[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5弱'], [6, '5強'], [7, '6弱'], [8, '6強'], [9, '7']].map(([rank, label]) => (
           <span key={rank} className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
             <i className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: intensityColor(Number(rank)) }} />{label}<b className="ml-0.5 tabular-nums text-slate-400">{rankCounts[Number(rank)] || 0}</b>
           </span>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 px-3 py-2 text-[9px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <span className="font-bold text-slate-400">観測地点別</span>
+        {[[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5弱'], [6, '5強'], [7, '6弱'], [8, '6強'], [9, '7']].map(([rank, label]) => (
+          <span key={rank} className="inline-flex items-center gap-1">
+            <i className="inline-block h-2 w-2 rounded-[3px]" style={{ backgroundColor: intensityColor(Number(rank)) }} />{label}<b className="tabular-nums">{stationRankCounts[Number(rank)] || 0}</b>
+          </span>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-1 border-t border-slate-100 px-3 py-2 text-[9px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        <span className="inline-flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded-[3px] border border-slate-400 bg-slate-700" />実際の震度1観測点 {rankOneStationCount}点</span>
-        <span>地図に表示 {rankOneStationMappedCount}点</span>
-        <span>色付き四角＝周辺区画の最大震度</span>
+        <span>観測点 {stationObservationCount}点</span>
+        <span>地図に表示 {stationMappedCount}点</span>
+        <span>四角ピン＝実際の観測点・観測震度</span>
       </div>
       <p className="px-3 pb-2 text-[9px] leading-relaxed text-slate-400">
-        広域表示は都道府県形状の塗り分けに周辺区画の最大震度を四角いラベルで重ねます。中間表示は市町村別の塗り分けと周辺区画ラベル、拡大表示は市町村最大震度の丸印と実際の震度1観測点を表示します。観測点の位置は気象庁の震度観測点一覧に基づき、観測期間も照合しています。出典：気象庁／国土数値情報／OpenStreetMap
+        広域表示は都道府県形状と周辺区画の最大震度、中間表示は市町村境界と周辺区画の最大震度を表示します。中間・詳細表示では気象庁が発表した観測点の各震度を、観測点の実際の座標に四角ピンで表示します。観測期間も照合しています。出典：気象庁／国土数値情報／OpenStreetMap
       </p>
     </div>
   );

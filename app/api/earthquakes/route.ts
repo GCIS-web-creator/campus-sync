@@ -338,7 +338,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
             cityCode,
             intensity: intensityLabel(rank),
             intensityRank: rank,
-            stations: stations.slice(0, 100),
+            stations,
           });
         }
         if (/小平市$/.test(name) && rank !== null) {
@@ -438,7 +438,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
     maxIntensityRank,
     kodairaIntensity,
     kodairaIntensityRank,
-    observedAreas: observedAreas.slice(0, 100),
+    observedAreas,
     eewTargets,
     eewKodairaTarget,
     eewForecastIntensity,
@@ -763,11 +763,23 @@ export async function GET(request: Request) {
             publishedAt: sourceIssuedAt,
           }, xml);
           if (parsed?.observedAreas.length) {
+            const refreshedAt = new Date().toISOString();
             const { error: updateError } = await admin.from('jma_earthquakes')
-              .update({ observed_areas: parsed.observedAreas, updated_at: new Date().toISOString() })
+              .update({
+                observed_areas: parsed.observedAreas,
+                kodaira_intensity: parsed.kodairaIntensity,
+                kodaira_intensity_rank: parsed.kodairaIntensityRank,
+                updated_at: refreshedAt,
+              })
               .eq('event_key', detailEventKey);
             if (updateError) throw updateError;
-            enrichedRow = { ...row, observed_areas: parsed.observedAreas, updated_at: new Date().toISOString() };
+            enrichedRow = {
+              ...row,
+              observed_areas: parsed.observedAreas,
+              kodaira_intensity: parsed.kodairaIntensity,
+              kodaira_intensity_rank: parsed.kodairaIntensityRank,
+              updated_at: refreshedAt,
+            };
           }
         }
       } catch (enrichmentError) {
