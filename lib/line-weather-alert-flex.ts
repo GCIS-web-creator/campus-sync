@@ -60,7 +60,16 @@ export function buildJmaWeatherAlertFlex(payload: JmaWeatherAlertNotificationPay
           layout: 'horizontal',
           alignItems: 'center',
           contents: [
-            { type: 'text', text: isSpecial ? '特別警報' : '警報', size: 'xs', weight: 'bold', color: '#FFFFFF', backgroundColor: accent, paddingAll: '7px', cornerRadius: '6px' },
+            {
+              type: 'box',
+              layout: 'vertical',
+              paddingAll: '7px',
+              cornerRadius: '6px',
+              backgroundColor: accent,
+              contents: [
+                { type: 'text', text: isSpecial ? '特別警報' : '警報', size: 'xs', weight: 'bold', color: '#FFFFFF' },
+              ],
+            },
             { type: 'text', text: issued + ' 発表', size: 'xs', color: '#64748B', align: 'end', flex: 1 },
           ],
         },
