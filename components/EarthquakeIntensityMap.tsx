@@ -35,6 +35,8 @@ type LeafletApi = {
     onEachFeature?: (feature: GeoFeature, layer: LeafletLayer) => void;
   }): LeafletLayer;
   marker(position: LatLng, options?: Record<string, unknown>): LeafletLayer;
+  circleMarker(position: LatLng, options?: Record<string, unknown>): LeafletLayer;
+  canvas(options?: Record<string, unknown>): unknown;
   polygon(points: LatLng[], options?: Record<string, unknown>): LeafletLayer;
   divIcon(options: Record<string, unknown>): unknown;
   latLngBounds(points: LatLng[]): LeafletBounds;
@@ -43,7 +45,7 @@ declare global { interface Window { L?: LeafletApi } }
 
 const RAW_GEOJSON_ROOT = 'https://raw.githubusercontent.com/kaz-ogiwara/japan-topography/main/data/municipality/geojson';
 const CITY_GEOJSON_PATH = (code: string) => RAW_GEOJSON_ROOT + '/s0010/N03-21_' + code.padStart(2, '0') + '_210101.json';
-const MAP_ZOOM_DETAIL_THRESHOLD = 7.8;
+const MAP_ZOOM_DETAIL_THRESHOLD = 9.0;
 const MAP_ZOOM_MEDIUM_THRESHOLD = 5.4;
 let leafletPromise: Promise<LeafletApi> | null = null;
 const geoJsonCache = new Map<string, Promise<GeoCollection>>();
@@ -52,7 +54,7 @@ function ensureMapStyles(): void {
   if (document.getElementById('campussync-earthquake-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'campussync-earthquake-map-styles';
-  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-station-pin{display:flex;align-items:center;justify-content:center;min-width:25px;height:25px;padding:0 3px;border:2px solid #fff;border-radius:6px;background:var(--station-color);color:#fff;font-size:10px;font-weight:1000;line-height:1;white-space:nowrap;text-shadow:0 1px 2px rgba(15,23,42,.35);box-shadow:0 1px 5px rgba(15,23,42,.38)}.cs-earthquake-regional-square{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:2px solid #fff;border-radius:7px;background:var(--cell-color);color:#fff;font-size:12px;font-weight:1000;line-height:1;text-shadow:0 1px 2px rgba(15,23,42,.38);box-shadow:0 1px 6px rgba(15,23,42,.34)}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
+  style.textContent = '.cs-earthquake-map-icon{background:transparent!important;border:0!important}.cs-earthquake-pin{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:2px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.98);color:var(--pin-color);font-size:10px;font-weight:950;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.22)}.cs-earthquake-pin[data-rank="1"]{background:#334155;color:#fff;border-color:#1e293b;border-width:2.5px;box-shadow:0 1px 5px rgba(15,23,42,.42)}.cs-earthquake-region-pin{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:1.8px solid var(--pin-color);border-radius:9999px;background:rgba(255,255,255,.97);color:var(--pin-color);font-size:10px;font-weight:900;line-height:1;box-shadow:0 1px 4px rgba(15,23,42,.2)}.cs-earthquake-epicenter{background:transparent!important;border:0!important}.cs-earthquake-epicenter-dot{display:flex;width:24px;height:24px;border:2px solid #e11d48;border-radius:50%;align-items:center;justify-content:center;background:rgba(255,255,255,.8);box-shadow:0 0 0 5px rgba(225,29,72,.14)}.cs-earthquake-epicenter-dot i{display:block;width:7px;height:7px;border-radius:50%;background:#e11d48}.cs-earthquake-regional-square{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:2px solid #fff;border-radius:7px;background:var(--cell-color);color:#fff;font-size:12px;font-weight:1000;line-height:1;text-shadow:0 1px 2px rgba(15,23,42,.38);box-shadow:0 1px 6px rgba(15,23,42,.34)}.cs-earthquake-popup{min-width:150px;color:#0f172a;font-family:inherit}.cs-earthquake-popup strong{font-size:13px}.cs-earthquake-popup-rank{display:flex;justify-content:space-between;gap:12px;margin-top:5px;font-size:11px;color:#64748b}.cs-earthquake-popup-list{margin-top:8px;max-height:150px;overflow:auto;border-top:1px solid #e2e8f0}.cs-earthquake-popup-station{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:10px}.cs-earthquake-popup-muted{margin-top:8px;font-size:10px;color:#64748b}.leaflet-container{font-family:inherit}';
   document.head.appendChild(style);
 }
 function loadLeaflet(): Promise<LeafletApi> {
@@ -228,6 +230,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             prefectureCode: area.prefectureCode || (area.cityCode ? String(area.cityCode).slice(0, 2) : null),
           }));
         map = L.map(mapElement.current, { zoomControl: true, scrollWheelZoom: true, dragging: true, tap: true, preferCanvas: true });
+        const stationCanvasRenderer = L.canvas({ padding: 0.35 });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 18,
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
@@ -376,15 +379,17 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
             areaStatus.mapped++;
             const color = intensityColor(rank);
             const label = intensityText(rank, station.intensity);
-            const stationMarker = L.marker([location.lat, location.lng], {
-              icon: L.divIcon({
-                className: 'cs-earthquake-map-icon',
-                html: '<span class="cs-earthquake-station-pin" style="--station-color:' + color + '">' +
-                  escapeHtml(label) + '</span>',
-                iconSize: [29, 29], iconAnchor: [14.5, 14.5],
-              }),
-              riseOnHover: true,
-              zIndexOffset: 2400 + rank,
+            // Canvas paths avoid creating hundreds of individual DOM nodes.
+            // Rank and station name remain available in the click popup.
+            const stationMarker = L.circleMarker([location.lat, location.lng], {
+              renderer: stationCanvasRenderer,
+              radius: rank >= 5 ? 6.5 : 5,
+              color: '#ffffff',
+              weight: 1.25,
+              opacity: 0.98,
+              fillColor: color,
+              fillOpacity: 0.98,
+              bubblingMouseEvents: true,
             });
             stationMarker.bindPopup(
               '<div class="cs-earthquake-popup"><strong>' + escapeHtml(station.name) +
@@ -462,7 +467,7 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
           for (const marker of mediumRegionalMarkers) ensureLayer(map, marker, medium);
           ensureLayer(map, cityLayer, medium || detailed);
           for (const marker of cityMarkers) ensureLayer(map, marker, detailed);
-          for (const marker of stationMarkers) ensureLayer(map, marker, medium || detailed);
+          for (const marker of stationMarkers) ensureLayer(map, marker, detailed);
         };
         map.on('zoomend', updateZoomLayers);
         updateZoomLayers();
@@ -509,11 +514,11 @@ export default function EarthquakeIntensityMap({ event }: { event: EarthquakeMap
       </div>
       <div className="flex flex-wrap items-center justify-between gap-1 border-t border-slate-100 px-3 py-2 text-[9px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
         <span>観測点 {stationObservationCount}点</span>
-        <span>地図に表示 {stationMappedCount}点</span>
-        <span>四角ピン＝実際の観測点・観測震度</span>
+        <span>拡大時に表示 {stationMappedCount}点</span>
+        <span>色付き円＝実際の観測点・観測震度（拡大時）</span>
       </div>
       <p className="px-3 pb-2 text-[9px] leading-relaxed text-slate-400">
-        広域表示は都道府県形状と周辺区画の最大震度、中間表示は市町村境界と周辺区画の最大震度を表示します。中間・詳細表示では気象庁が発表した観測点の各震度を、観測点の実際の座標に四角ピンで表示します。観測期間も照合しています。出典：気象庁／国土数値情報／OpenStreetMap
+        広域表示は都道府県形状と周辺区画の最大震度、中間表示は市町村境界と周辺区画の最大震度を表示します。詳細ズーム（9以上）では気象庁の全観測点を実座標に色付きの円で表示します。円を押すと地点名と震度を確認できます。観測期間も照合しています。出典：気象庁／国土数値情報／OpenStreetMap
       </p>
     </div>
   );
