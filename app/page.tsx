@@ -1399,8 +1399,8 @@ export default function CampusSyncApp() {
       setProfileSetupMessage('学年とクラスを選択してください。');
       return;
     }
-    if (profileSetupPassword.length < 12) {
-      setProfileSetupMessage('パスワードは12文字以上にしてください。');
+    if (profileSetupPassword.length < 8) {
+      setProfileSetupMessage('パスワードは8文字以上にしてください。');
       return;
     }
     if (profileSetupPassword !== profileSetupPasswordConfirm) {
@@ -5615,15 +5615,15 @@ Supabaseの設定を確認してください。
           </div>
           <div className="space-y-1.5">
             <label htmlFor="campus-sync-profile-password" className="block text-xs font-bold text-slate-200">パスワード（12文字以上）</label>
-            <input id="campus-sync-profile-password" type="password" autoComplete="new-password" minLength={12} required value={profileSetupPassword} onChange={e => setProfileSetupPassword(e.target.value)} placeholder="他のサービスと異なるパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+            <input id="campus-sync-profile-password" type="password" autoComplete="new-password" minLength={8} required value={profileSetupPassword} onChange={e => setProfileSetupPassword(e.target.value)} placeholder="他のサービスと異なるパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
             <p className="text-[10px] leading-4 text-slate-400">パスワードはSupabase Authに設定します。プロフィール表や管理者向けエクスポートには保存・表示しません。</p>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="campus-sync-profile-password-confirm" className="block text-xs font-bold text-slate-200">パスワード（確認）</label>
-            <input id="campus-sync-profile-password-confirm" type="password" autoComplete="new-password" minLength={12} required value={profileSetupPasswordConfirm} onChange={e => setProfileSetupPasswordConfirm(e.target.value)} placeholder="同じパスワードをもう一度入力" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+            <input id="campus-sync-profile-password-confirm" type="password" autoComplete="new-password" minLength={8} required value={profileSetupPasswordConfirm} onChange={e => setProfileSetupPasswordConfirm(e.target.value)} placeholder="同じパスワードをもう一度入力" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
           </div>
           {profileSetupMessage && <p role="alert" className="rounded-xl border border-rose-300/20 bg-rose-300/10 p-3 text-xs leading-5 text-rose-100">{profileSetupMessage}</p>}
-          <button type="submit" disabled={profileSetupBusy || !studentName.trim() || profileSetupPassword.length<12 || profileSetupPassword!==profileSetupPasswordConfirm} className="w-full rounded-xl bg-cyan-400 py-3.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40">{profileSetupBusy ? '登録中…' : 'プロフィールとパスワードを保存する'}</button>
+          <button type="submit" disabled={profileSetupBusy || !studentName.trim() || profileSetupPassword.length<8 || profileSetupPassword!==profileSetupPasswordConfirm} className="w-full rounded-xl bg-cyan-400 py-3.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40">{profileSetupBusy ? '登録中…' : 'プロフィールとパスワードを保存する'}</button>
           <p className="text-center text-[10px] leading-4 text-slate-400">初回登録を完了するとCampusSyncを利用できます。管理者がパスワードを閲覧・書き出すことはできません。</p>
           <button type="button" onClick={() => void signOutStudent()} className="w-full py-2 text-xs font-bold text-slate-400 underline">ログアウトして後で登録する</button>
         </form>
