@@ -8,6 +8,8 @@ export const maxDuration = 60;
 
 const HIGH_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/extra.xml';
 const LONG_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml';
+const HIGH_REGULAR_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/regular.xml';
+const LONG_REGULAR_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/regular_l.xml';
 const JMA_WARNING_CODES = new Set(['VPWW55', 'VPWW56', 'VPWW57', 'VPWW58', 'VPWW59', 'VPWW60', 'VPWW61', 'VPWS50']);
 const MAX_XML_BYTES = 3 * 1024 * 1024;
 const MAX_FEED_BYTES = 16 * 1024 * 1024;
@@ -116,9 +118,11 @@ function parseFeed(xml: string, feedUrl: string): FeedEntry[] {
   return descendantsNamed(root, 'entry').map(entry => {
     const linkNodes = childrenNamed(entry, 'link');
     const bestLink = linkNodes.find(link => /xml/i.test(link.attributes.type || '') || /alternate/i.test(link.attributes.rel || '')) || linkNodes[0];
+    const entryId = childText(entry, 'id');
+    const rawHref = bestLink?.attributes.href || entryId || '';
     let href = '';
     try {
-      const resolved = new URL(bestLink?.attributes.href || '', feedUrl);
+      const resolved = new URL(rawHref, feedUrl);
       if (resolved.protocol === 'https:' && (resolved.hostname === 'www.data.jma.go.jp' || resolved.hostname === 'xml.kishou.go.jp')) {
         href = resolved.toString();
       }
@@ -352,40 +356,83 @@ async function storeEvent(admin: SupabaseClient, feedMode: 'high' | 'long', entr
 }
 
 async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<Record<string, unknown>> {
-  const feedUrl = mode === 'high' ? HIGH_FEED_URL : LONG_FEED_URL;
   const fetchedAt = new Date().toISOString();
-  const feedXml = await fetchText(feedUrl, 15000, MAX_FEED_BYTES);
-  const allEntries = parseFeed(feedXml, feedUrl)
-    .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''));
-  const latestAggregateEntry = [...allEntries].reverse().find(entry => /集約通報/.test(entry.title));
-  const aggregateFeedTime = latestAggregateEntry?.publishedAt ? Date.parse(latestAggregateEntry.publishedAt) : 0;
-  const candidateEntries = (latestAggregateEntry && aggregateFeedTime
-    ? allEntries.filter(entry => entry.id === latestAggregateEntry.id || Date.parse(entry.publishedAt || '') >= aggregateFeedTime)
-    : allEntries.filter(entry => {
-        const publishedAt = entry.publishedAt ? Date.parse(entry.publishedAt) : 0;
-        return publishedAt > 0 && Date.now() - publishedAt <= (mode === 'high' ? 20 : 180) * 60 * 1000;
-      })
-  ).slice(-MAX_FEED_ITEMS);
-  const known = await existingSourceIds(admin, candidateEntries.map(entry => entry.id));
-  const downloadResult = await downloadEntries(candidateEntries.filter(entry => !known.has(entry.id)));
-  if (downloadResult.failures > 0) throw new Error('気象庁の個別XMLを一部取得できませんでした。次回同期で再試行します。');
-  const downloaded = downloadResult.downloaded;
+  // VPWS50 is a scheduled aggregate bulletin, so regular feeds are checked first.
+  // extra feeds are checked afterwards for immediate per-phenomenon updates.
+  const feedUrls = mode === 'high'
+    ? [HIGH_REGULAR_FEED_URL, HIGH_FEED_URL]
+    : [LONG_REGULAR_FEED_URL, LONG_FEED_URL];
 
-  const aggregateEntries = downloaded.filter(item => item.message.productCode === 'VPWS50');
-  const latestAggregate = [...aggregateEntries].sort((a, b) => Date.parse(b.message.issuedAt) - Date.parse(a.message.issuedAt))[0];
-  const latestAggregateTime = latestAggregate ? Date.parse(latestAggregate.message.issuedAt) : 0;
-  const relevant = latestAggregate
-    ? downloaded.filter(item => item === latestAggregate || (item.message.productCode !== 'VPWS50' && Date.parse(item.message.issuedAt) >= latestAggregateTime))
-    : downloaded.filter(item => Date.now() - Date.parse(item.message.issuedAt) <= (mode === 'high' ? 20 : 180) * 60 * 1000);
-  relevant.sort((a, b) => Date.parse(a.message.issuedAt) - Date.parse(b.message.issuedAt));
+  let totalFeedEntries = 0;
+  let totalNewEntries = 0;
+  let totalProcessed = 0;
+  let totalSavedAlerts = 0;
+  let latestAggregateAt: string | null = null;
+  const feedDiagnostics: Array<Record<string, unknown>> = [];
 
-  let processed = 0;
-  let activeSaved = 0;
-  for (const item of relevant) {
-    const parsedAlerts = await applyMessageState(admin, item.entry, item.message);
-    await storeEvent(admin, mode, item.entry, item.message, parsedAlerts);
-    processed += 1;
-    activeSaved += parsedAlerts.length;
+  for (const feedUrl of feedUrls) {
+    const feedXml = await fetchText(feedUrl, 15000, MAX_FEED_BYTES);
+    const allEntries = parseFeed(feedXml, feedUrl)
+      .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''));
+    const latestAggregateEntry = [...allEntries].reverse().find(entry => /集約通報/.test(entry.title));
+    const aggregateFeedTime = latestAggregateEntry?.publishedAt ? Date.parse(latestAggregateEntry.publishedAt) : 0;
+    const candidateEntries = (latestAggregateEntry && aggregateFeedTime
+      ? allEntries.filter(entry => entry.id === latestAggregateEntry.id || Date.parse(entry.publishedAt || '') >= aggregateFeedTime)
+      : allEntries.filter(entry => {
+          const publishedAt = entry.publishedAt ? Date.parse(entry.publishedAt) : 0;
+          return publishedAt > 0 && Date.now() - publishedAt <= (mode === 'high' ? 20 : 180) * 60 * 1000;
+        })
+    ).slice(-MAX_FEED_ITEMS);
+
+    const known = await existingSourceIds(admin, candidateEntries.map(entry => entry.id));
+    const downloadResult = await downloadEntries(candidateEntries.filter(entry => !known.has(entry.id)));
+    if (downloadResult.failures > 0) {
+      throw new Error('気象庁の個別XMLを一部取得できませんでした。次回同期で再試行します。');
+    }
+    const downloaded = downloadResult.downloaded;
+    const aggregateEntries = downloaded.filter(item => item.message.productCode === 'VPWS50');
+    const latestAggregate = [...aggregateEntries].sort((a, b) => Date.parse(b.message.issuedAt) - Date.parse(a.message.issuedAt))[0];
+    if (latestAggregate && (!latestAggregateAt || Date.parse(latestAggregate.message.issuedAt) > Date.parse(latestAggregateAt))) {
+      latestAggregateAt = latestAggregate.message.issuedAt;
+    }
+    const latestAggregateTime = latestAggregate ? Date.parse(latestAggregate.message.issuedAt) : 0;
+    const relevant = latestAggregate
+      ? downloaded.filter(item => item === latestAggregate || (item.message.productCode !== 'VPWS50' && Date.parse(item.message.issuedAt) >= latestAggregateTime))
+      : downloaded.filter(item => Date.now() - Date.parse(item.message.issuedAt) <= (mode === 'high' ? 20 : 180) * 60 * 1000);
+    relevant.sort((a, b) => Date.parse(a.message.issuedAt) - Date.parse(b.message.issuedAt));
+
+    let processed = 0;
+    let savedAlerts = 0;
+    for (const item of relevant) {
+      const parsedAlerts = await applyMessageState(admin, item.entry, item.message);
+      await storeEvent(admin, mode, item.entry, item.message, parsedAlerts);
+      processed += 1;
+      savedAlerts += parsedAlerts.length;
+    }
+
+    totalFeedEntries += allEntries.length;
+    totalNewEntries += downloaded.length;
+    totalProcessed += processed;
+    totalSavedAlerts += savedAlerts;
+    feedDiagnostics.push({
+      feed: new URL(feedUrl).pathname.split('/').pop(),
+      feedEntries: allEntries.length,
+      candidateCount: candidateEntries.length,
+      knownCount: known.size,
+      attemptedCount: candidateEntries.length - known.size,
+      parsedCount: downloaded.length,
+      parseSkippedCount: downloadResult.skipped.length,
+      parseSkippedSamples: downloadResult.skipped.slice(0, 5),
+      newestFeedEntries: allEntries.slice(-5).map(entry => ({
+        title: entry.title,
+        updatedAt: entry.publishedAt,
+        hasXmlUrl: Boolean(entry.href),
+        id: entry.id,
+      })),
+      latestAggregateFeedTitle: latestAggregateEntry?.title || null,
+      latestAggregateFeedUpdatedAt: latestAggregateEntry?.publishedAt || null,
+      latestAggregateAt: latestAggregate?.message.issuedAt || null,
+    });
   }
 
   const stateUpdate = mode === 'high'
@@ -393,22 +440,16 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long'): Promise<R
     : { long_last_success_at: fetchedAt, last_success_at: fetchedAt, last_attempt_at: fetchedAt, last_error: null, updated_at: fetchedAt };
   const { error: stateError } = await admin.from('jma_weather_sync_state').update(stateUpdate).eq('id', 1);
   if (stateError) throw stateError;
-  const diagnostics = {
-    candidateCount: candidateEntries.length,
-    knownCount: known.size,
-    attemptedCount: candidateEntries.length - known.size,
-    parseSkippedCount: downloadResult.skipped.length,
-    parseSkippedSamples: downloadResult.skipped.slice(0, 5),
-    newestFeedEntries: allEntries.slice(-5).map(entry => ({
-      title: entry.title,
-      updatedAt: entry.publishedAt,
-      hasXmlUrl: Boolean(entry.href),
-      id: entry.id,
-    })),
-    latestAggregateFeedTitle: latestAggregateEntry?.title || null,
-    latestAggregateFeedUpdatedAt: latestAggregateEntry?.publishedAt || null,
+
+  return {
+    mode,
+    feedEntries: totalFeedEntries,
+    newEntries: totalNewEntries,
+    processed: totalProcessed,
+    savedAlerts: totalSavedAlerts,
+    latestAggregateAt,
+    diagnostics: { feeds: feedDiagnostics },
   };
-  return { mode, feedEntries: allEntries.length, newEntries: downloaded.length, processed, savedAlerts: activeSaved, latestAggregateAt: latestAggregate?.message.issuedAt || null, diagnostics };
 }
 
 async function recordFailure(admin: SupabaseClient, error: unknown): Promise<void> {
