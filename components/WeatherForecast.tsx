@@ -5,6 +5,7 @@ type Day={date:string;description:string;iconName:string;highC:number|null;lowC:
 type Data={location:string;updatedAt:string;days:Day[]};
 const fmt=(v:number|null,s='')=>v===null?'—':(Math.round(v*10)/10)+s;
 const fmtDate=(v:string)=>new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric',weekday:'short',timeZone:'Asia/Tokyo'}).format(new Date(v+'T00:00:00+09:00'));
+const WEATHER_ICONS: Array<[string, string]> = [["sunny","晴れ"],["cloudy","くもり"],["rain","雨"],["thunderstorm","雷雨"],["snow","雪"],["hail","ひょう"],["wind","風"],["temperature","気温"],["humidity","湿度"],["umbrella","傘"],["arrow","風向き"],["partly_cloudy","晴れ時々くもり"],["night_clear","夜・晴れ"],["night_cloudy","夜・くもり"],["fog","霧"],["haze","もや"],["sleet","みぞれ"],["rain_light","弱い雨"],["rain_heavy","強い雨"],["shower","にわか雨"],["lightning","稲妻"],["typhoon","台風"],["tornado","竜巻"],["kosa","黄砂"],["pm25","PM2.5"],["sandstorm","砂じん"],["precip_probability","降水確率"],["pressure","気圧"],["uv","紫外線"],["visibility","視程"],["feels_like","体感温度"],["sunrise","日の出"],["sunset","日の入り"],["moon_new","新月"],["moon_waxing_crescent","三日月"],["moon_first_quarter","上弦の月"],["moon_waxing_gibbous","満ちていく月"],["moon_full","満月"],["moon_waning_gibbous","欠けていく月"],["moon_last_quarter","下弦の月"],["moon_waning_crescent","有明月"],["advisory","注意報"],["warning","警報"],["special_warning","特別警報"],["pollen","花粉"],["heatstroke_alert","熱中症警戒"],["temp_high","高温"],["temp_low","低温"]];
 export default function WeatherForecast(){
   const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true);
   useEffect(()=>{
@@ -40,6 +41,20 @@ export default function WeatherForecast(){
         :<p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">明日はまとまった雨の予報はありません。</p>}
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><div><span className="text-slate-400">最大風速</span><p className="font-bold text-slate-800 dark:text-slate-100">{fmt(data.days[1].windMaxKmh,' km/h')}</p></div><div><span className="text-slate-400">紫外線指数</span><p className="font-bold text-slate-800 dark:text-slate-100">{fmt(data.days[1].uvIndexMax)}</p></div><div><span className="text-slate-400">日の出</span><p className="font-bold text-slate-800 dark:text-slate-100">{data.days[1].sunrise?.slice(11,16)||'—'}</p></div><div><span className="text-slate-400">日の入り</span><p className="font-bold text-slate-800 dark:text-slate-100">{data.days[1].sunset?.slice(11,16)||'—'}</p></div></div>
       </div>}
+      <details className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <summary className="cursor-pointer list-none text-sm font-black text-slate-900 dark:text-white">
+          CampusSync 気象アイコンライブラリ（48種類）
+          <span className="mt-1 block text-[10px] font-normal text-slate-500 dark:text-slate-400">天気・気温・大気・警報・月齢などのアイコン一覧</span>
+        </summary>
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+          {WEATHER_ICONS.map(([name, label]) => (
+            <div key={name} className="flex min-w-0 flex-col items-center rounded-xl bg-slate-50 p-2 text-center dark:bg-slate-800">
+              <img src={'/api/weather/icons/' + name} alt="" className="h-10 w-10 object-contain" loading="lazy" />
+              <span className="mt-1 text-[9px] font-bold leading-4 text-slate-600 dark:text-slate-300">{label}</span>
+            </div>
+          ))}
+        </div>
+      </details>
       <p className="text-[10px] text-slate-400">天気データ：Open-Meteo · 予報は更新される場合があります。</p>
     </div>}
   </section>;

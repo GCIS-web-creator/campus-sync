@@ -896,6 +896,7 @@ export default function CampusSyncApp() {
   useEffect(() => {
     const hashRoutes: Record<string, { tab: string; scrollTarget?: string }> = {
       food: { tab: 'cafeteria' },
+      weather: { tab: 'weather' },
       tasks: { tab: 'home', scrollTarget: 'tasks' },
       transit: { tab: 'bus' },
       chat: { tab: 'chat' },
@@ -935,6 +936,7 @@ export default function CampusSyncApp() {
     }
     const hashes: Record<string, string> = {
       home: 'home',
+      weather: 'weather',
       cafeteria: 'food',
       ai: 'ai',
       bus: 'transit',
@@ -4134,7 +4136,6 @@ Supabaseの設定を確認してください。
                 <p className="mt-2 max-w-xl text-xs font-semibold leading-5 text-white/85 sm:text-sm">時間割も、学校予定も、移動も。毎日のキャンパスライフをCampusSyncで。</p>
               </div>
             </section>
-            <WeatherForecast />
 
             {/* ダッシュボード上部・スコアシステム */}
             <div className={`bg-gradient-to-br ${themeCls.gradient} rounded-3xl p-6 shadow-xl text-white relative overflow-hidden transition-all duration-300`}>
@@ -4328,6 +4329,9 @@ Supabaseの設定を確認してください。
             </section>
           </div>
         );
+
+      case 'weather':
+        return <WeatherForecast />;
 
       case 'school-schedule':
         return <WeeklySchoolSchedule />;
@@ -5729,6 +5733,7 @@ Supabaseの設定を確認してください。
           <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
             <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
             <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
+            <SidebarItem icon={<ThermometerSun size={18} />} label="天気予報" isActive={activeTab === 'weather'} onClick={() => setActiveTab('weather')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
             <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
@@ -5817,6 +5822,7 @@ Supabaseの設定を確認してください。
               <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
                 <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => { setShowGlobalSearch(true); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<ThermometerSun size={18} />} label="天気予報" isActive={activeTab === 'weather'} onClick={() => { setActiveTab('weather'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => { setActiveTab('countdowns'); setMobileMenuOpen(false); }} themeCls={themeCls} />

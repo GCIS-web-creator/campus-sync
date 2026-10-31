@@ -316,8 +316,9 @@ function buildWeatherBubble(input: { dateLabel: string; weather: WeatherDayForec
     ]},
     ...(iconUrl?{hero:{type:'image',url:iconUrl,size:'full',aspectRatio:'16:5',aspectMode:'fit',backgroundColor:'#EFF6FF'}}:{}),
     body:{type:'box',layout:'vertical',paddingAll:'16px',spacing:'sm',contents:rows},
-    footer:{type:'box',layout:'vertical',paddingAll:'10px',backgroundColor:'#F8FAFC',contents:[
+    footer:{type:'box',layout:'vertical',paddingAll:'12px',backgroundColor:'#F8FAFC',spacing:'sm',contents:[
       {type:'text',text:'時間ごとの詳しい予報はCampusSyncで確認できます。',size:'xs',color:'#475569',wrap:true,align:'center'},
+      {type:'button',style:'primary',color:'#2563A6',height:'sm',action:{type:'uri',label:'天気の詳細を見る',uri:origin+'/#weather'}},
     ]},
   };
 }
