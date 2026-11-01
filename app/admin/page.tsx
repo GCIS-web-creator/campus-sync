@@ -1,6 +1,7 @@
 'use client';
 
 
+import CafeteriaMenuImport, { type CafeteriaMenuImportRow } from '@/components/CafeteriaMenuImport';
 import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import ChatModerationAdmin from '@/components/ChatModerationAdmin';
@@ -884,6 +885,33 @@ export default function CampusSyncAdmin() {
       row.service_date === serviceDate ? { ...row, ...patch } : row
     ));
     setMenuMessage('');
+  };
+
+  // PDF・写真から読み取った献立を、既存の月間表へ反映する。DB保存は既存の一括保存ボタンで行う。
+  const handleApplyImportedMenus = (importedRows: CafeteriaMenuImportRow[]) => {
+    const importedByDate = new Map(importedRows.map(row => [row.service_date, row]));
+    setDailyMenuRows(current => current.map(row => {
+      const imported = importedByDate.get(row.service_date);
+      if (!imported) return row;
+      const next: DailyMenuRow = {
+        ...row,
+        soka_lunch: imported.is_closed ? '' : imported.soka_lunch,
+        healthy_lunch: imported.is_closed ? '' : imported.healthy_lunch,
+        snack_lunch: imported.is_closed ? '' : imported.snack_lunch,
+        curry: imported.is_closed ? '' : imported.curry,
+        noodles: imported.is_closed ? '' : imported.noodles,
+        is_closed: imported.is_closed,
+      };
+      if (imported.is_closed) {
+        next.soka_lunch_price = ''; next.soka_lunch_calorie = ''; next.soka_lunch_allergy = '';
+        next.healthy_lunch_price = ''; next.healthy_lunch_calorie = ''; next.healthy_lunch_allergy = '';
+        next.snack_lunch_price = ''; next.snack_lunch_calorie = ''; next.snack_lunch_allergy = '';
+        next.curry_price = ''; next.curry_calorie = ''; next.curry_allergy = '';
+        next.noodles_price = ''; next.noodles_calorie = ''; next.noodles_allergy = '';
+      }
+      return next;
+    }));
+    setMenuMessage(importedRows.length + '日分の献立を月間表に反映しました。内容を確認してから「この月の献立を一括保存」を押してください。');
   };
 
   // 選択月の献立をまとめてSupabaseへ保存
@@ -2613,6 +2641,8 @@ export default function CampusSyncAdmin() {
                 {menuMessage}
               </div>
             )}
+
+            <CafeteriaMenuImport selectedMonth={selectedMenuMonth} onApply={handleApplyImportedMenus} />
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
               <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-800">
