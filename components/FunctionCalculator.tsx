@@ -3,7 +3,8 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import {
   Activity, ArrowRightLeft, BarChart3, Calculator, Check, ChevronRight,
-  Copy, Delete, History, LineChart, Loader2, RotateCcw, Sigma, Sparkles
+  Copy, Delete, Grid3X3, History, LineChart, ListOrdered, Loader2,
+  RotateCcw, Sigma, Sparkles
 } from 'lucide-react';
 
 type NerdamerEntity = {
@@ -105,7 +106,7 @@ function readNumeric(engine: NerdamerEngine, expression: string, variable?: stri
 
 type HistoryEntry = { expression: string; result: string; timestamp: string };
 type PlotPoint = { x: number; y: number };
-type ToolTab = 'algebra' | 'calculus' | 'equations' | 'graph' | 'statistics';
+type ToolTab = 'algebra' | 'calculus' | 'equations' | 'graph' | 'statistics' | 'linear' | 'sequences' | 'combinatorics';
 
 const TOOL_TABS: Array<{ id: ToolTab; label: string; icon: React.ReactNode }> = [
   { id: 'algebra', label: '式の変形', icon: <Sigma size={16} /> },
@@ -113,6 +114,9 @@ const TOOL_TABS: Array<{ id: ToolTab; label: string; icon: React.ReactNode }> = 
   { id: 'equations', label: '方程式', icon: <ArrowRightLeft size={16} /> },
   { id: 'graph', label: '関数グラフ', icon: <LineChart size={16} /> },
   { id: 'statistics', label: '統計', icon: <BarChart3 size={16} /> },
+  { id: 'linear', label: '行列・ベクトル', icon: <Grid3X3 size={16} /> },
+  { id: 'sequences', label: '数列・Σ', icon: <ListOrdered size={16} /> },
+  { id: 'combinatorics', label: '順列・組合せ', icon: <Sigma size={16} /> },
 ];
 
 const BASIC_KEYS = [
@@ -167,6 +171,40 @@ export default function FunctionCalculator() {
   const [statisticsInput, setStatisticsInput] = useState('12, 15, 18, 20, 25, 30');
   const [statisticsResult, setStatisticsResult] = useState<Array<{ label: string; value: string }>>([]);
   const [statisticsError, setStatisticsError] = useState('');
+
+  // 行列・ベクトル計算
+  const [matrixAInput, setMatrixAInput] = useState('1, 2\n3, 4');
+  const [matrixBInput, setMatrixBInput] = useState('5, 6\n7, 8');
+  const [matrixOperation, setMatrixOperation] = useState('multiply');
+  const [matrixResult, setMatrixResult] = useState('');
+  const [matrixError, setMatrixError] = useState('');
+  const [vectorAInput, setVectorAInput] = useState('1, 2, 3');
+  const [vectorBInput, setVectorBInput] = useState('4, 5, 6');
+  const [vectorOperation, setVectorOperation] = useState('dot');
+  const [vectorResult, setVectorResult] = useState('');
+  const [vectorError, setVectorError] = useState('');
+
+  // 数列・有限和
+  const [sequenceKind, setSequenceKind] = useState<'arithmetic' | 'geometric' | 'formula' | 'fibonacci'>('arithmetic');
+  const [sequenceFirst, setSequenceFirst] = useState('2');
+  const [sequenceParameter, setSequenceParameter] = useState('3');
+  const [sequenceCount, setSequenceCount] = useState('10');
+  const [sequenceFormula, setSequenceFormula] = useState('n^2+1');
+  const [sequenceResult, setSequenceResult] = useState('');
+  const [sequenceError, setSequenceError] = useState('');
+  const [sigmaFormula, setSigmaFormula] = useState('k^2');
+  const [sigmaIndex, setSigmaIndex] = useState('k');
+  const [sigmaLower, setSigmaLower] = useState('1');
+  const [sigmaUpper, setSigmaUpper] = useState('10');
+  const [sigmaResult, setSigmaResult] = useState('');
+  const [sigmaError, setSigmaError] = useState('');
+
+  // 順列・組合せ
+  const [combinationN, setCombinationN] = useState('10');
+  const [combinationR, setCombinationR] = useState('3');
+  const [combinationOperation, setCombinationOperation] = useState<'permutation' | 'combination' | 'factorial'>('combination');
+  const [combinationResult, setCombinationResult] = useState('');
+  const [combinationError, setCombinationError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -415,6 +453,289 @@ export default function FunctionCalculator() {
     ]);
   };
 
+  const formatNumericValue = (value: number): string => {
+    if (!Number.isFinite(value)) return '—';
+    if (Math.abs(value) < 1e-12) return '0';
+    if (Number.isInteger(value)) return String(value);
+    return String(Number(value.toPrecision(10)));
+  };
+
+  const parseNumericMatrix = (source: string, engine: NerdamerEngine): number[][] => {
+    const rows = source.split(/[;\n]+/).map(row => row.trim()).filter(Boolean);
+    if (!rows.length || rows.length > 5) throw new Error('行列は1〜5行で入力してください。');
+    const parsed = rows.map(row => row.split(/[,\s]+/).map(cell => cell.trim()).filter(Boolean).map(cell => {
+      const expressionValue = normalizeExpression(cell, answer);
+      const numeric = readNumeric(engine, expressionValue);
+      if (!Number.isFinite(numeric)) throw new Error('行列の各成分には数値で計算できる式を入力してください。');
+      return numeric;
+    }));
+    const columns = parsed[0].length;
+    if (!columns || columns > 5 || parsed.some(row => row.length !== columns)) {
+      throw new Error('各行の列数をそろえてください（最大5列）。');
+    }
+    return parsed;
+  };
+
+  const formatMatrix = (matrix: number[][]): string =>
+    matrix.map(row => '[ ' + row.map(formatNumericValue).join('　') + ' ]').join('\n');
+
+  const matrixDeterminant = (matrix: number[][]): number => {
+    if (!matrix.length || matrix.length !== matrix[0].length) throw new Error('行列式は正方行列でのみ計算できます。');
+    const work = matrix.map(row => [...row]);
+    let determinant = 1;
+    for (let column = 0; column < work.length; column += 1) {
+      let pivot = column;
+      for (let row = column + 1; row < work.length; row += 1) {
+        if (Math.abs(work[row][column]) > Math.abs(work[pivot][column])) pivot = row;
+      }
+      if (Math.abs(work[pivot][column]) < 1e-12) return 0;
+      if (pivot !== column) {
+        [work[pivot], work[column]] = [work[column], work[pivot]];
+        determinant *= -1;
+      }
+      const value = work[column][column];
+      determinant *= value;
+      for (let row = column + 1; row < work.length; row += 1) {
+        const ratio = work[row][column] / value;
+        for (let col = column + 1; col < work.length; col += 1) work[row][col] -= ratio * work[column][col];
+      }
+    }
+    return determinant;
+  };
+
+  const matrixInverse = (matrix: number[][]): number[][] => {
+    if (!matrix.length || matrix.length !== matrix[0].length) throw new Error('逆行列は正方行列でのみ求められます。');
+    const size = matrix.length;
+    const work = matrix.map((row, index) => [...row, ...Array.from({ length: size }, (_, column) => index === column ? 1 : 0)]);
+    for (let column = 0; column < size; column += 1) {
+      let pivot = column;
+      for (let row = column + 1; row < size; row += 1) {
+        if (Math.abs(work[row][column]) > Math.abs(work[pivot][column])) pivot = row;
+      }
+      if (Math.abs(work[pivot][column]) < 1e-12) throw new Error('この行列は正則ではないため、逆行列が存在しません。');
+      [work[pivot], work[column]] = [work[column], work[pivot]];
+      const divisor = work[column][column];
+      for (let col = 0; col < 2 * size; col += 1) work[column][col] /= divisor;
+      for (let row = 0; row < size; row += 1) {
+        if (row === column) continue;
+        const factor = work[row][column];
+        for (let col = 0; col < 2 * size; col += 1) work[row][col] -= factor * work[column][col];
+      }
+    }
+    return work.map(row => row.slice(size));
+  };
+
+  const matrixRref = (matrix: number[][]): number[][] => {
+    const work = matrix.map(row => [...row]);
+    const rowCount = work.length;
+    const columnCount = work[0].length;
+    let lead = 0;
+    for (let row = 0; row < rowCount && lead < columnCount; row += 1) {
+      let pivot = row;
+      while (pivot < rowCount && Math.abs(work[pivot][lead]) < 1e-12) pivot += 1;
+      if (pivot === rowCount) { lead += 1; row -= 1; continue; }
+      [work[pivot], work[row]] = [work[row], work[pivot]];
+      const divisor = work[row][lead];
+      for (let col = 0; col < columnCount; col += 1) work[row][col] /= divisor;
+      for (let other = 0; other < rowCount; other += 1) {
+        if (other === row) continue;
+        const factor = work[other][lead];
+        for (let col = 0; col < columnCount; col += 1) work[other][col] -= factor * work[row][col];
+      }
+      lead += 1;
+    }
+    return work;
+  };
+
+  const runMatrixCalculation = async () => {
+    setMatrixError(''); setMatrixResult('');
+    try {
+      const engine = await loadNerdamer();
+      const matrixA = parseNumericMatrix(matrixAInput, engine);
+      let resultText = '';
+      if (matrixOperation === 'transpose') {
+        resultText = formatMatrix(matrixA[0].map((_, column) => matrixA.map(row => row[column])));
+      } else if (matrixOperation === 'determinant') {
+        resultText = 'det(A) = ' + formatNumericValue(matrixDeterminant(matrixA));
+      } else if (matrixOperation === 'inverse') {
+        resultText = 'A⁻¹ =\n' + formatMatrix(matrixInverse(matrixA));
+      } else if (matrixOperation === 'rref') {
+        resultText = '簡約階段形 =\n' + formatMatrix(matrixRref(matrixA));
+      } else {
+        const matrixB = parseNumericMatrix(matrixBInput, engine);
+        if (matrixOperation === 'add' || matrixOperation === 'subtract') {
+          if (matrixA.length !== matrixB.length || matrixA[0].length !== matrixB[0].length) {
+            throw new Error('加法・減法ではAとBの行数・列数を一致させてください。');
+          }
+          const sign = matrixOperation === 'add' ? 1 : -1;
+          resultText = formatMatrix(matrixA.map((row, i) => row.map((value, j) => value + sign * matrixB[i][j])));
+        } else if (matrixOperation === 'multiply') {
+          if (matrixA[0].length !== matrixB.length) throw new Error('積 AB では、Aの列数とBの行数を一致させてください。');
+          const result = matrixA.map(row => Array.from({ length: matrixB[0].length }, (_, column) =>
+            row.reduce((sum, value, index) => sum + value * matrixB[index][column], 0)
+          ));
+          resultText = formatMatrix(result);
+        }
+      }
+      setMatrixResult(resultText);
+    } catch (caught) {
+      setMatrixError(caught instanceof Error ? caught.message : '行列を計算できませんでした。');
+    }
+  };
+
+  const parseVector = (source: string, engine: NerdamerEngine): number[] => {
+    const cells = source.split(/[,\s]+/).map(cell => cell.trim()).filter(Boolean);
+    if (cells.length < 2 || cells.length > 3) throw new Error('ベクトルは2次元または3次元で、成分をカンマ区切りで入力してください。');
+    return cells.map(cell => {
+      const numeric = readNumeric(engine, normalizeExpression(cell, answer));
+      if (!Number.isFinite(numeric)) throw new Error('ベクトルの成分には数値で計算できる式を入力してください。');
+      return numeric;
+    });
+  };
+
+  const runVectorCalculation = async () => {
+    setVectorError(''); setVectorResult('');
+    try {
+      const engine = await loadNerdamer();
+      const a = parseVector(vectorAInput, engine);
+      const magnitude = (v: number[]) => Math.sqrt(v.reduce((sum, value) => sum + value * value, 0));
+      if (vectorOperation === 'magnitudeA') {
+        setVectorResult('|a| = ' + formatNumericValue(magnitude(a)));
+        return;
+      }
+      const b = parseVector(vectorBInput, engine);
+      if (a.length !== b.length) throw new Error('ベクトルAとBの次元を一致させてください。');
+      if (vectorOperation === 'add' || vectorOperation === 'subtract') {
+        const sign = vectorOperation === 'add' ? 1 : -1;
+        setVectorResult('a ' + (sign > 0 ? '+ b = ' : '− b = ') + '[' + a.map((value, index) => formatNumericValue(value + sign * b[index])).join(', ') + ']');
+      } else if (vectorOperation === 'dot') {
+        setVectorResult('a・b = ' + formatNumericValue(a.reduce((sum, value, index) => sum + value * b[index], 0)));
+      } else if (vectorOperation === 'cross') {
+        if (a.length !== 3) throw new Error('外積は3次元ベクトル同士で計算します。');
+        setVectorResult('a × b = [' +
+          formatNumericValue(a[1] * b[2] - a[2] * b[1]) + ', ' +
+          formatNumericValue(a[2] * b[0] - a[0] * b[2]) + ', ' +
+          formatNumericValue(a[0] * b[1] - a[1] * b[0]) + ']');
+      } else if (vectorOperation === 'angle') {
+        const denominator = magnitude(a) * magnitude(b);
+        if (denominator < 1e-12) throw new Error('零ベクトルとのなす角は定義できません。');
+        const cosine = Math.max(-1, Math.min(1, a.reduce((sum, value, index) => sum + value * b[index], 0) / denominator));
+        const radians = Math.acos(cosine);
+        const angle = angleMode === 'DEG' ? radians * 180 / Math.PI : radians;
+        setVectorResult('なす角 = ' + formatNumericValue(angle) + (angleMode === 'DEG' ? '°' : ' rad'));
+      }
+    } catch (caught) {
+      setVectorError(caught instanceof Error ? caught.message : 'ベクトルを計算できませんでした。');
+    }
+  };
+
+  const runSequence = async () => {
+    setSequenceError(''); setSequenceResult('');
+    try {
+      const count = Number(sequenceCount);
+      if (!Number.isInteger(count) || count < 1 || count > 100) throw new Error('項数は1〜100の整数で指定してください。');
+      const terms: string[] = [];
+      let sum = 0;
+      if (sequenceKind === 'fibonacci') {
+        let previous = 0n, current = 1n, total = 0n;
+        for (let index = 1; index <= count; index += 1) {
+          const value = index === 1 ? previous : current;
+          const actual = index === 1 ? 0n : value;
+          terms.push(actual.toString());
+          total += actual;
+          const next = previous + current;
+          previous = current;
+          current = next;
+        }
+        setSequenceResult('初項からの項：' + terms.join(', ') + '\n最初の' + count + '項の和：' + total.toString());
+        return;
+      }
+      if (sequenceKind === 'formula') {
+        const engine = await loadNerdamer();
+        const formula = normalizeExpression(sequenceFormula, answer);
+        for (let index = 1; index <= count; index += 1) {
+          const value = readNumeric(engine, formula, 'n', index);
+          if (!Number.isFinite(value)) throw new Error('この項を数値化できません。nを使った式を確認してください。');
+          terms.push(formatNumericValue(value));
+          sum += value;
+        }
+      } else {
+        const first = Number(sequenceFirst);
+        const parameter = Number(sequenceParameter);
+        if (!Number.isFinite(first) || !Number.isFinite(parameter)) throw new Error('初項と公差・公比には数値を入力してください。');
+        for (let index = 0; index < count; index += 1) {
+          const value = sequenceKind === 'arithmetic' ? first + index * parameter : first * Math.pow(parameter, index);
+          if (!Number.isFinite(value)) throw new Error('数列の値が計算範囲を超えました。');
+          terms.push(formatNumericValue(value));
+          sum += value;
+        }
+      }
+      setSequenceResult('数列：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(sum));
+    } catch (caught) {
+      setSequenceError(caught instanceof Error ? caught.message : '数列を計算できませんでした。');
+    }
+  };
+
+  const runSigma = async () => {
+    setSigmaError(''); setSigmaResult('');
+    try {
+      const engine = await loadNerdamer();
+      const index = sigmaIndex.trim();
+      if (!['k', 'n', 'i'].includes(index)) throw new Error('Σの添字には k・n・i のいずれかを指定してください。');
+      const lower = Number(sigmaLower), upper = Number(sigmaUpper);
+      if (!Number.isInteger(lower) || !Number.isInteger(upper) || lower > upper) throw new Error('下端・上端には、下端≦上端となる整数を入力してください。');
+      if (upper - lower > 999) throw new Error('一度に計算できる項数は最大1,000項です。');
+      const formula = normalizeExpression(sigmaFormula, answer);
+      const total = engine('sum(' + formula + ',' + index + ',' + lower + ',' + upper + ')').text();
+      let preview = '';
+      if (upper - lower <= 14) {
+        const terms = [];
+        for (let value = lower; value <= upper; value += 1) {
+          terms.push(formatNumericValue(readNumeric(engine, formula, index, value)));
+        }
+        preview = '\n各項：' + terms.join(' + ');
+      }
+      setSigmaResult('Σ = ' + displayMath(total) + preview);
+    } catch (caught) {
+      setSigmaError(caught instanceof Error ? caught.message : 'Σを計算できませんでした。');
+    }
+  };
+
+  const runCombinatorics = () => {
+    setCombinationError(''); setCombinationResult('');
+    const n = Number(combinationN), r = Number(combinationR);
+    const factorial = (value: number): bigint => {
+      let total = 1n;
+      for (let factor = 2; factor <= value; factor += 1) total *= BigInt(factor);
+      return total;
+    };
+    const groupDigits = (value: bigint) => value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    try {
+      if (combinationOperation === 'factorial') {
+        if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('階乗は0〜500の整数で指定してください。');
+        setCombinationResult(n + '! = ' + groupDigits(factorial(n)));
+        return;
+      }
+      if (!Number.isInteger(n) || !Number.isInteger(r) || n < 0 || r < 0 || r > n || n > 500) {
+        throw new Error('n・r は 0≦r≦n≦500 を満たす整数にしてください。');
+      }
+      if (combinationOperation === 'permutation') {
+        let result = 1n;
+        for (let index = 0; index < r; index += 1) result *= BigInt(n - index);
+        setCombinationResult(n + 'P' + r + ' = ' + groupDigits(result));
+      } else {
+        const smaller = Math.min(r, n - r);
+        let result = 1n;
+        for (let index = 1; index <= smaller; index += 1) {
+          result = result * BigInt(n - smaller + index) / BigInt(index);
+        }
+        setCombinationResult(n + 'C' + r + ' = ' + groupDigits(result));
+      }
+    } catch (caught) {
+      setCombinationError(caught instanceof Error ? caught.message : '組合せを計算できませんでした。');
+    }
+  };
+
   const copyValue = async (value: string) => {
     try { await navigator.clipboard.writeText(value); } catch { setError('コピーできませんでした。ブラウザの権限を確認してください。'); }
   };
@@ -474,6 +795,9 @@ export default function FunctionCalculator() {
               </div>
             </div>
             <div className="space-y-3 p-4 sm:p-5">
+              <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-3 py-2.5 text-xs leading-relaxed text-slate-400">
+                <span className="font-bold text-cyan-200">使い方：</span> 数式を入力して計算します。例：<code className="text-slate-200">2+3*4</code>、<code className="text-slate-200">sin(30)</code>、<code className="text-slate-200">log(100)</code>。Ansは直前の答え、Mはメモリーです。三角関数の角度は右上のDEG/RADで切り替えます。
+              </div>
               <form onSubmit={handleMainSubmit} className="space-y-3">
                 <label className="block">
                   <span className={labelClass}>数式入力</span>
@@ -683,6 +1007,117 @@ export default function FunctionCalculator() {
               </div>
             )}
 
+            {activeTool === 'linear' && (
+              <div className="space-y-6">
+                <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-xs leading-relaxed text-slate-300">
+                  <p className="font-black text-cyan-200">行列・ベクトルでできること</p>
+                  行列は数を長方形に並べたもので、連立一次方程式・変換・データ整理などに使います。転置、和・差・積、行列式、逆行列、簡約階段形を計算できます。ベクトルは大きさと向きを持つ量で、和・差、内積・外積・なす角を求められます。
+                  <p className="mt-2 text-slate-400">入力例：行列Aは <code className="text-slate-200">1, 2 / 3, 4</code> のように1行ずつ入力。ベクトルは <code className="text-slate-200">1, 2, 3</code> と入力します。</p>
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-800 bg-[#091625] p-4 space-y-3">
+                    <div><h4 className="font-black text-white">行列計算</h4><p className="mt-1 text-[11px] text-slate-500">数値成分の行列（最大5×5）</p></div>
+                    <div><label className={labelClass} htmlFor="matrix-a">行列 A</label><textarea id="matrix-a" rows={4} value={matrixAInput} onChange={event => setMatrixAInput(event.target.value)} className={fieldClass + ' resize-y font-mono'} /></div>
+                    <div><label className={labelClass} htmlFor="matrix-operation">計算内容</label>
+                      <select id="matrix-operation" value={matrixOperation} onChange={event => setMatrixOperation(event.target.value)} className={fieldClass}>
+                        <option value="add">A + B（加法）</option><option value="subtract">A − B（減法）</option><option value="multiply">AB（行列の積）</option><option value="transpose">Aᵀ（転置）</option><option value="determinant">det(A)（行列式）</option><option value="inverse">A⁻¹（逆行列）</option><option value="rref">簡約階段形（掃き出し法）</option>
+                      </select>
+                    </div>
+                    {['add', 'subtract', 'multiply'].includes(matrixOperation) && <div><label className={labelClass} htmlFor="matrix-b">行列 B</label><textarea id="matrix-b" rows={4} value={matrixBInput} onChange={event => setMatrixBInput(event.target.value)} className={fieldClass + ' resize-y font-mono'} /></div>}
+                    <button type="button" onClick={() => void runMatrixCalculation()} className={primaryButton}>行列を計算</button>
+                    {matrixError && <p role="alert" className="text-xs text-rose-300">{matrixError}</p>}
+                    {matrixResult && <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3"><p className="text-[10px] font-black text-cyan-300">RESULT</p><pre className="mt-2 whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-cyan-100">{matrixResult}</pre><button type="button" onClick={() => void copyValue(matrixResult)} className="mt-2 text-[11px] text-slate-400 hover:text-cyan-200">結果をコピー</button></div>}
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-[#091625] p-4 space-y-3">
+                    <div><h4 className="font-black text-white">ベクトル計算</h4><p className="mt-1 text-[11px] text-slate-500">2次元・3次元ベクトル</p></div>
+                    <div><label className={labelClass} htmlFor="vector-a">ベクトル a</label><input id="vector-a" value={vectorAInput} onChange={event => setVectorAInput(event.target.value)} className={fieldClass + ' font-mono'} /></div>
+                    <div><label className={labelClass} htmlFor="vector-operation">計算内容</label>
+                      <select id="vector-operation" value={vectorOperation} onChange={event => setVectorOperation(event.target.value)} className={fieldClass}>
+                        <option value="add">a + b（和）</option><option value="subtract">a − b（差）</option><option value="dot">a・b（内積）</option><option value="cross">a × b（外積・3次元）</option><option value="magnitudeA">|a|（大きさ）</option><option value="angle">aとbのなす角</option>
+                      </select>
+                    </div>
+                    {vectorOperation !== 'magnitudeA' && <div><label className={labelClass} htmlFor="vector-b">ベクトル b</label><input id="vector-b" value={vectorBInput} onChange={event => setVectorBInput(event.target.value)} className={fieldClass + ' font-mono'} /></div>}
+                    <button type="button" onClick={() => void runVectorCalculation()} className={primaryButton}>ベクトルを計算</button>
+                    {vectorError && <p role="alert" className="text-xs text-rose-300">{vectorError}</p>}
+                    {vectorResult && <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3"><p className="text-[10px] font-black text-cyan-300">RESULT</p><p className="mt-2 break-all font-mono text-sm text-cyan-100">{vectorResult}</p></div>}
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">この行列・ベクトル機能は数値成分を使う近似計算です。分数は小数に変換して処理します。厳密な記号行列の演算ではありません。</p>
+              </div>
+            )}
+
+            {activeTool === 'sequences' && (
+              <div className="space-y-6">
+                <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-xs leading-relaxed text-slate-300">
+                  <p className="font-black text-cyan-200">数列・Σでできること</p>
+                  数列は一定の規則で並ぶ数です。等差数列・等比数列の一般項と和、式で定義された数列の各項、フィボナッチ数列を求められます。Σでは指定した範囲の項を合計します。
+                  <p className="mt-2 text-slate-400">例：初項2・公差3なら 2, 5, 8, …。式の数列は <code className="text-slate-200">n^2+1</code>、Σは <code className="text-slate-200">k^2</code> と入力します。</p>
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-800 bg-[#091625] p-4 space-y-3">
+                    <h4 className="font-black text-white">数列の一般項・各項・和</h4>
+                    <div><label className={labelClass} htmlFor="sequence-kind">数列の種類</label>
+                      <select id="sequence-kind" value={sequenceKind} onChange={event => setSequenceKind(event.target.value as typeof sequenceKind)} className={fieldClass}>
+                        <option value="arithmetic">等差数列</option><option value="geometric">等比数列</option><option value="formula">式で定義された数列</option><option value="fibonacci">フィボナッチ数列</option>
+                      </select>
+                    </div>
+                    {sequenceKind !== 'fibonacci' && sequenceKind !== 'formula' && <div className="grid grid-cols-2 gap-2">
+                      <div><label className={labelClass} htmlFor="sequence-first">初項 a₁</label><input id="sequence-first" value={sequenceFirst} onChange={event => setSequenceFirst(event.target.value)} className={fieldClass} /></div>
+                      <div><label className={labelClass} htmlFor="sequence-parameter">{sequenceKind === 'arithmetic' ? '公差 d' : '公比 r'}</label><input id="sequence-parameter" value={sequenceParameter} onChange={event => setSequenceParameter(event.target.value)} className={fieldClass} /></div>
+                    </div>}
+                    {sequenceKind === 'formula' && <div><label className={labelClass} htmlFor="sequence-formula">一般項 aₙ（nを使用）</label><input id="sequence-formula" value={sequenceFormula} onChange={event => setSequenceFormula(event.target.value)} className={fieldClass + ' font-mono'} /></div>}
+                    <div><label className={labelClass} htmlFor="sequence-count">何項まで求める？</label><input id="sequence-count" type="number" min="1" max="100" value={sequenceCount} onChange={event => setSequenceCount(event.target.value)} className={fieldClass} /></div>
+                    <button type="button" onClick={() => void runSequence()} className={primaryButton}>数列を計算</button>
+                    {sequenceError && <p role="alert" className="text-xs text-rose-300">{sequenceError}</p>}
+                    {sequenceResult && <pre className="whitespace-pre-wrap break-all rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 font-mono text-sm leading-relaxed text-cyan-100">{sequenceResult}</pre>}
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-[#091625] p-4 space-y-3">
+                    <h4 className="font-black text-white">Σ（シグマ）の有限和</h4>
+                    <p className="text-xs leading-relaxed text-slate-400">Σの中の式・添字・開始値・終了値を指定して、範囲内の項を足します。</p>
+                    <div><label className={labelClass} htmlFor="sigma-formula">Σの中の式</label><input id="sigma-formula" value={sigmaFormula} onChange={event => setSigmaFormula(event.target.value)} className={fieldClass + ' font-mono'} /></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><label className={labelClass} htmlFor="sigma-index">添字</label><select id="sigma-index" value={sigmaIndex} onChange={event => setSigmaIndex(event.target.value)} className={fieldClass}><option value="k">k</option><option value="n">n</option><option value="i">i</option></select></div>
+                      <div><label className={labelClass} htmlFor="sigma-lower">下端</label><input id="sigma-lower" value={sigmaLower} onChange={event => setSigmaLower(event.target.value)} className={fieldClass} /></div>
+                      <div><label className={labelClass} htmlFor="sigma-upper">上端</label><input id="sigma-upper" value={sigmaUpper} onChange={event => setSigmaUpper(event.target.value)} className={fieldClass} /></div>
+                    </div>
+                    <button type="button" onClick={() => void runSigma()} className={primaryButton}>Σを計算</button>
+                    {sigmaError && <p role="alert" className="text-xs text-rose-300">{sigmaError}</p>}
+                    {sigmaResult && <pre className="whitespace-pre-wrap break-all rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 font-mono text-sm leading-relaxed text-cyan-100">{sigmaResult}</pre>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTool === 'combinatorics' && (
+              <div className="space-y-5">
+                <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-xs leading-relaxed text-slate-300">
+                  <p className="font-black text-cyan-200">順列・組合せでできること</p>
+                  順列 nPr は「順番を区別して r 個選ぶ」場合の数、組合せ nCr は「順番を区別せず r 個選ぶ」場合の数です。階乗 n! も計算できます。
+                  <p className="mt-2 text-slate-400">例：5人から2人を順番ありで選ぶと 5P2 = 20、順番なしなら 5C2 = 10。</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+                  <div className="space-y-3 rounded-2xl border border-slate-800 bg-[#091625] p-4">
+                    <div><label className={labelClass} htmlFor="combination-operation">計算内容</label>
+                      <select id="combination-operation" value={combinationOperation} onChange={event => setCombinationOperation(event.target.value as typeof combinationOperation)} className={fieldClass}>
+                        <option value="combination">nCr（組合せ）</option><option value="permutation">nPr（順列）</option><option value="factorial">n!（階乗）</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className={labelClass} htmlFor="combination-n">n</label><input id="combination-n" type="number" min="0" max="500" value={combinationN} onChange={event => setCombinationN(event.target.value)} className={fieldClass} /></div>
+                      {combinationOperation !== 'factorial' && <div><label className={labelClass} htmlFor="combination-r">r</label><input id="combination-r" type="number" min="0" max="500" value={combinationR} onChange={event => setCombinationR(event.target.value)} className={fieldClass} /></div>}
+                    </div>
+                    <button type="button" onClick={runCombinatorics} className={primaryButton}>計算する</button>
+                    {combinationError && <p role="alert" className="text-xs text-rose-300">{combinationError}</p>}
+                  </div>
+                  <div className="flex min-h-40 flex-col justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                    <p className="text-[10px] font-black tracking-[0.16em] text-cyan-300">RESULT</p>
+                    {combinationResult ? <p className="mt-3 break-all font-mono text-xl font-bold text-cyan-100">{combinationResult}</p> : <p className="mt-3 text-sm text-slate-500">計算結果がここに表示されます。</p>}
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">この計算は0〜500の整数を対象とし、BigIntで整数の正確な値を計算します。</p>
+              </div>
+            )}
+
             {activeTool === 'statistics' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1fr]">
                 <div className="space-y-3">
@@ -699,12 +1134,29 @@ export default function FunctionCalculator() {
           </div>
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3">
-          {[
-            { title: '関数・三角比', text: 'sin / cos / tan、逆三角関数、双曲線関数、平方根、絶対値' },
-            { title: '指数・対数', text: '指数関数 exp、自然対数 ln、常用対数 log、任意底の log(x,b)' },
-            { title: '数式処理', text: '因数分解、展開、簡単化、方程式、導関数、原始関数、極限' },
-          ].map(item => <div key={item.title} className="rounded-2xl border border-slate-800/80 bg-[#0d1b2b]/75 p-4"><h4 className="text-sm font-black text-slate-200">{item.title}</h4><p className="mt-2 text-xs leading-relaxed text-slate-500">{item.text}</p></div>)}
+        <section className="space-y-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">QUICK GUIDE</p>
+            <h3 className="mt-1 text-lg font-black text-white">どの機能で何ができる？</h3>
+            <p className="mt-1 text-xs text-slate-500">上のタブを選ぶと、入力欄の近くにも使い方と例が表示されます。</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              { title: '基本の関数電卓', text: '四則演算、括弧、累乗、平方根、階乗、三角関数、指数・対数を計算。DEG/RADで角度単位を変更。', example: 'sin(30) / log(100)' },
+              { title: '式の変形', text: '式を簡単にしたり、因数分解したり、展開したりします。', example: 'x^2-5*x+6 → (x-2)(x-3)' },
+              { title: '微分・積分・極限', text: '導関数、高階導関数、不定積分、定積分、極限を求めます。', example: 'diff(x^3,x) → 3*x^2' },
+              { title: '方程式', text: '変数を指定して、多項式などの方程式の解を求めます。', example: 'x^2-5*x+6=0' },
+              { title: '関数グラフ', text: '関数の形を描き、指定したxの範囲で増減や交点などを確認します。', example: 'y=x^2-4' },
+              { title: '統計', text: 'データの平均・中央値・四分位数・分散・標準偏差などを計算します。', example: '12, 15, 18, 20' },
+              { title: '行列・ベクトル', text: '行列の和・差・積、転置、行列式、逆行列、掃き出し法。ベクトルの内積・外積・大きさ・なす角。', example: 'A: 1,2 / 3,4' },
+              { title: '数列・Σ', text: '等差・等比・式で定義された数列、フィボナッチ数列の各項と和。Σの有限和。', example: 'aₙ=n^2+1 / Σk²' },
+              { title: '順列・組合せ', text: '順番を区別するnPr、順番を区別しないnCr、階乗n!を整数で正確に計算。', example: '5P2=20 / 5C2=10' },
+            ].map(item => <div key={item.title} className="rounded-2xl border border-slate-800/80 bg-[#0d1b2b]/75 p-4">
+              <h4 className="text-sm font-black text-slate-100">{item.title}</h4>
+              <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.text}</p>
+              <p className="mt-2 rounded-lg bg-slate-950/70 px-2.5 py-2 font-mono text-[11px] text-cyan-200">{item.example}</p>
+            </div>)}
+          </div>
         </section>
 
         <footer className="flex flex-col items-center justify-between gap-2 border-t border-slate-800/80 py-5 text-center text-[10px] text-slate-600 sm:flex-row sm:text-left">
