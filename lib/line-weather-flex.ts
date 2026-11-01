@@ -2,6 +2,13 @@ import type { WeatherDayForecast } from '@/lib/weather';
 
 type WeatherShareItem = { key: 'sunny' | 'cloudy' | 'precipitation'; label: string; emoji: string; color: string; count: number; percent: number };
 
+function formatWeatherDateLabel(date: string): string {
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(date);
+  if (!match) return date;
+  const weekday = ['日', '月', '火', '水', '木', '金', '土'][new Date(date + 'T00:00:00Z').getUTCDay()];
+  return Number(match[2]) + '/' + Number(match[3]) + '（' + weekday + '）';
+}
+
 function summarizeWeatherHours(day: WeatherDayForecast): WeatherShareItem[] | null {
   const categories = [
     { key: 'sunny' as const, label: '晴れ', emoji: '☀', color: '#FBBF24', count: 0 },
@@ -29,8 +36,7 @@ function summarizeWeatherHours(day: WeatherDayForecast): WeatherShareItem[] | nu
 
 function buildWeatherShareRow(day: WeatherDayForecast, index: number) {
   const shares = summarizeWeatherHours(day);
-  const dayLabels = ['明日', '明後日', '明々後日'];
-  const dateLabel = day.date.slice(5).replace('-', '/');
+  const dateLabel = formatWeatherDateLabel(day.date);
   const barContents = shares
     ? shares.filter(item => item.count > 0).map(item => ({
         type: 'box', layout: 'vertical', flex: item.count, height: '9px',
@@ -51,7 +57,7 @@ function buildWeatherShareRow(day: WeatherDayForecast, index: number) {
     backgroundColor: index === 0 ? '#EFF6FF' : '#F8FAFC', cornerRadius: '10px',
     contents: [
       { type: 'box', layout: 'horizontal', alignItems: 'center', contents: [
-        { type: 'text', text: dayLabels[index] + '  ' + dateLabel, size: 'xs', color: '#334155', weight: 'bold', flex: 1 },
+        { type: 'text', text: dateLabel, size: 'xs', color: '#334155', weight: 'bold', flex: 1 },
         { type: 'text', text: shares ? '1日の予報内訳' : '内訳なし', size: 'xxs', color: '#94A3B8', align: 'end' },
       ] },
       { type: 'box', layout: 'horizontal', cornerRadius: '6px', height: '9px', spacing: 'none', contents: barContents },
@@ -69,7 +75,7 @@ export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
     type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', paddingAll: '8px', cornerRadius: '10px',
     backgroundColor: index === 0 ? '#EFF6FF' : '#F8FAFC',
     contents: [
-      { type: 'text', text: ['明日', '明後日', '明々後日'][index] + ' ' + day.date.slice(5).replace('-', '/'), size: 'xs', weight: 'bold', color: '#334155', align: 'center', wrap: true },
+      { type: 'text', text: formatWeatherDateLabel(day.date), size: 'xs', weight: 'bold', color: '#334155', align: 'center', wrap: true },
       { type: 'image', url: icon(day.iconName), size: 'lg', aspectRatio: '1:1', aspectMode: 'fit', align: 'center' },
       { type: 'text', text: day.description, size: 'xs', weight: 'bold', color: '#0F172A', align: 'center', wrap: true },
       { type: 'box', layout: 'horizontal', spacing: 'xs', alignItems: 'center', contents: [

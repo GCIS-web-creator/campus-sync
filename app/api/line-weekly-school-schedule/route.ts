@@ -70,7 +70,7 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
     header:{type:'box',layout:'vertical',backgroundColor:'#0F172A',paddingAll:'18px',spacing:'sm',contents:[
       {type:'text',text:'CAMPUSSYNC / CLASS TIMETABLE',size:'xs',color:'#67E8F9',weight:'bold'},
       {type:'text',text:group+'の月曜日の時間割',size:'xl',color:'#FFFFFF',weight:'bold',wrap:true},
-      {type:'text',text:dateLabel+' ・ 翌週月曜日',size:'xs',color:'#CBD5E1',wrap:true},
+      {type:'text',text:dateLabel+' ・ 月曜日',size:'xs',color:'#CBD5E1',wrap:true},
     ]},
     body:{type:'box',layout:'vertical',paddingAll:'14px',spacing:'sm',contents:rows.length?rows:[
       {type:'text',text:'時間割が登録されていません。',size:'sm',color:'#64748B',wrap:true},
@@ -140,7 +140,11 @@ export async function POST(request: Request) {
     console.error('週間学校予定表：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
     return [];
   });
-  const weeklyWeather = forecast.filter(day => day.date >= weekStart).slice(0, 3);
+  const weatherTargetDates = [weekStart, addDays(weekStart, 1), addDays(weekStart, 2)];
+  const weeklyWeather = forecast
+    .filter(day => weatherTargetDates.includes(day.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 3);
   const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
   const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
   const weeklyScheduleBubble = baseFlex.contents as Record<string, unknown>;
