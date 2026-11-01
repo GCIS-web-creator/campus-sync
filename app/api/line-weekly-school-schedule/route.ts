@@ -84,6 +84,7 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; weekStart?: unknown };
   const manualRequest = payload.mode === 'manual';
+  const repairAndSendGroups = payload.mode === 'group_repair_and_send';
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
     const receivedPassword = request.headers.get('x-admin-password') || '';
@@ -157,6 +158,148 @@ export async function POST(request: Request) {
     },
   };
   const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
+  if (repairAndSendGroups) {
+    const { data: registeredChats, error: chatsError } = await supabase
+      .from('line_group_chats')
+      .select('chat_id,chat_type,active,bot_slot,receive_school_schedule')
+      .eq('active', true);
+    if (chatsError) {
+      console.error('LINEグループ診断：登録先を取得できません:', chatsError.message);
+      return jsonError('登録済みLINEグループを取得できません。', 500);
+    }
+
+    const candidates = (registeredChats || []).filter(chat => chat.chat_type === 'group');
+    if (candidates.length === 0) {
+      return NextResponse.json({
+        success: false,
+        activeBotSlot: activeLineBot.slot,
+        checkedGroups: [],
+        message: '有効なグループIDが登録されていません。現在のBOTをグループへ招待し、グループ内で発言してWebhook登録してください。',
+      }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    const botInfoResponse = await fetch('https://api.line.me/v2/bot/info', {
+      headers: { Authorization: 'Bearer ' + accessToken },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null);
+    const botInfo = botInfoResponse?.ok
+      ? await botInfoResponse.json().catch(() => null) as { displayName?: string; basicId?: string } | null
+      : null;
+
+    // LINEの公式グループ概要APIで、現在のアクセストークンのBOTが
+    // そのIDのグループに本当に参加しているかを検証する。
+    const checkedGroups = await Promise.all(candidates.map(async chat => {
+      const response = await fetch(
+        'https://api.line.me/v2/bot/group/' + encodeURIComponent(chat.chat_id) + '/summary',
+        {
+          headers: { Authorization: 'Bearer ' + accessToken },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(10000),
+        },
+      ).catch(() => null);
+      const summary = response?.ok
+        ? await response.json().catch(() => null) as { groupId?: string; groupName?: string } | null
+        : null;
+      return {
+        chatId: chat.chat_id,
+        httpStatus: response?.status || 0,
+        verified: Boolean(response?.ok && summary?.groupId === chat.chat_id),
+        groupName: summary?.groupName || null,
+        error: response && !response.ok
+          ? (await response.text().catch(() => '')).slice(0, 300)
+          : null,
+      };
+    }));
+
+    const verifiedGroups = checkedGroups.filter(group => group.verified);
+    if (verifiedGroups.length === 0) {
+      return NextResponse.json({
+        success: false,
+        activeBotSlot: activeLineBot.slot,
+        botName: botInfo?.displayName || null,
+        botBasicId: botInfo?.basicId || null,
+        checkedGroups,
+        message: '登録済みグループIDを現在のBOTのアクセストークンで照合しましたが、参加中のグループは見つかりませんでした。グループIDが古いか、現在のBOTがそのグループに参加していない可能性があります。',
+      }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    // 現在のBOTで参加を確認できたグループだけ、週間学校予定表の受信を有効化する。
+    for (const group of verifiedGroups) {
+      const { error: updateError } = await supabase.from('line_group_chats').update({
+        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 3 ? activeLineBot.slot : null,
+        receive_school_schedule: true,
+      }).eq('chat_id', group.chatId).eq('active', true);
+      if (updateError) {
+        console.error('LINEグループのBOT情報・配信設定を更新できません:', updateError.message);
+        return jsonError('参加確認済みグループの配信設定を更新できません。', 500);
+      }
+    }
+
+    const deliveryBatchId = randomUUID();
+    const deliveries = await Promise.all(verifiedGroups.map(async group => {
+      try {
+        const response = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + accessToken,
+            'Content-Type': 'application/json',
+            'X-Line-Retry-Key': randomUUID(),
+          },
+          body: JSON.stringify({ to: group.chatId, messages: [flex] }),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        const responseBody = response.ok ? '' : (await response.text().catch(() => '')).slice(0, 500);
+        return {
+          chatId: group.chatId,
+          groupName: group.groupName,
+          success: response.ok || response.status === 409,
+          status: response.status,
+          errorMessage: responseBody || null,
+        };
+      } catch (error) {
+        return {
+          chatId: group.chatId,
+          groupName: group.groupName,
+          success: false,
+          status: 0,
+          errorMessage: error instanceof Error ? error.message.slice(0, 500) : '通信エラー',
+        };
+      }
+    }));
+
+    const { error: deliveryLogError } = await supabase.from('line_group_delivery_logs').insert(
+      deliveries.map(delivery => ({
+        delivery_batch_id: deliveryBatchId,
+        kind: 'school_schedule',
+        chat_id: delivery.chatId,
+        chat_type: 'group',
+        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 3 ? activeLineBot.slot : null,
+        status: delivery.success ? 'success' : 'failure',
+        http_status: delivery.status,
+        error_message: delivery.errorMessage,
+        sent_at: new Date().toISOString(),
+      })),
+    );
+    if (deliveryLogError) console.error('LINEグループ配信結果を記録できません:', deliveryLogError.message);
+
+    const sent = deliveries.filter(delivery => delivery.success).length;
+    const failed = deliveries.length - sent;
+    return NextResponse.json({
+      success: failed === 0 && sent > 0,
+      mode: 'group_repair_and_send',
+      weekStart,
+      bot: { slot: activeLineBot.slot, displayName: botInfo?.displayName || null, basicId: botInfo?.basicId || null },
+      checkedGroups,
+      deliveries,
+      deliveryLogSaved: !deliveryLogError,
+      deliveryBatchId,
+      message: sent + '/' + deliveries.length + '件の参加確認済みLINEグループへ週間予定表を送信しました。' +
+        (failed > 0 ? ' 失敗したグループがあります。HTTPステータスを確認してください。' : ''),
+    }, { status: failed > 0 || sent === 0 ? 502 : 200, headers: { 'Cache-Control': 'no-store' } });
+  }
+
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
@@ -170,7 +313,8 @@ export async function POST(request: Request) {
       console.error('学校予定表のLINE配信に失敗:', response.status, errorBody.slice(0, 500));
       return jsonError(response.status === 429 ? 'LINEの送信上限・レート制限に達した可能性があります。' : 'LINEへの学校予定表配信に失敗しました（HTTP ' + response.status + '）。', 502);
     }
-    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'school_schedule');
+    const deliveryBatchId = randomUUID();
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'school_schedule', deliveryBatchId);
     const groupMessage = summarizeLineGroupDelivery(groupDelivery);
     const weekEnd = addDays(weekStart, 6);
     return NextResponse.json({
