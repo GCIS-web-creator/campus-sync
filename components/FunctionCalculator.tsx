@@ -3,8 +3,7 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import {
   Activity, ArrowRightLeft, BarChart3, Calculator, Check, ChevronRight,
-  Copy, Delete, History, LineChart, Loader2, Pi, RotateCcw, Sigma,
-  Sparkles, Trash2, X
+  Copy, Delete, History, LineChart, Loader2, RotateCcw, Sigma, Sparkles
 } from 'lucide-react';
 
 type NerdamerEntity = {
@@ -64,8 +63,8 @@ function normalizeExpression(value: string, answer: string, allowEquation = fals
     .replace(/²/g, '^2')
     .replace(/³/g, '^3')
     .replace(/Ans/gi, '(' + (answer || '0') + ')')
-    .replace(/(^|[^A-Za-z])ln\s*\(/gi, '$1log(')
-    .replace(/(^|[^A-Za-z])log\s*\(/gi, '$1log10(');
+    .replace(/(^|[^A-Za-z])log\s*\(/gi, '$1log10(')
+    .replace(/(^|[^A-Za-z])ln\s*\(/gi, '$1log(');
   expression = expression.replace(/\s+/g, '');
   if (!expression) throw new Error('数式を入力してください。');
   if (expression.length > 180) throw new Error('数式は180文字以内にしてください。');
@@ -492,7 +491,7 @@ export default function FunctionCalculator() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-bold text-slate-500">M</span>
-                    <button type="button" className={smallButton} onClick={() => setMemory(answer || result)} disabled={!answer && !result}>M+</button>
+                    <button type="button" className={smallButton} onClick={() => setMemory(answer || result)} disabled={!answer && !result}>MS</button>
                     <button type="button" className={smallButton} onClick={() => insert('(' + memory + ')')} disabled={!memory}>MR</button>
                     <button type="button" className={smallButton} onClick={() => setMemory('')} disabled={!memory}>MC</button>
                   </div>
