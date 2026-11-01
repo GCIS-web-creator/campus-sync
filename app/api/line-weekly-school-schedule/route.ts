@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   const supabase = getAdminSupabase();
   if (!supabase) return jsonError('Supabaseのサーバー設定が不足しています。', 503);
 
-  const weekStart = manualRequest ? String(payload.weekStart || '') : getNextSchoolWeekStart();
+  const weekStart = manualRequest || repairAndSendGroups ? String(payload.weekStart || '') : getNextSchoolWeekStart();
   if (!isDateKey(weekStart) || !isMonday(weekStart)) return jsonError('送信週は月曜日の日付で指定してください。', 400);
 
   const { data: schedule, error } = await supabase.from('school_weekly_schedules')
