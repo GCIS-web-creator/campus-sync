@@ -637,17 +637,17 @@ export default function FunctionCalculator() {
       const terms: string[] = [];
       let sum = 0;
       if (sequenceKind === 'fibonacci') {
-        let previous = 0n, current = 1n, total = 0n;
+        if (count > 76) throw new Error('正確な整数で表示するため、フィボナッチ数列は76項までにしてください。');
+        let previous = 0, current = 1, total = 0;
         for (let index = 1; index <= count; index += 1) {
-          const value = index === 1 ? previous : current;
-          const actual = index === 1 ? 0n : value;
-          terms.push(actual.toString());
+          const actual = index === 1 ? previous : current;
+          terms.push(formatNumericValue(actual));
           total += actual;
           const next = previous + current;
           previous = current;
           current = next;
         }
-        setSequenceResult('初項からの項：' + terms.join(', ') + '\n最初の' + count + '項の和：' + total.toString());
+        setSequenceResult('初項からの項：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(total));
         return;
       }
       if (sequenceKind === 'formula') {
@@ -704,15 +704,23 @@ export default function FunctionCalculator() {
   const runCombinatorics = () => {
     setCombinationError(''); setCombinationResult('');
     const n = Number(combinationN), r = Number(combinationR);
-    const factorial = (value: number): bigint => {
-      let total = 1n;
-      for (let factor = 2; factor <= value; factor += 1) total *= BigInt(factor);
+    const factorial = (value: number): number => {
+      let total = 1;
+      for (let factor = 2; factor <= value; factor += 1) {
+        total *= factor;
+        if (!Number.isSafeInteger(total)) throw new Error('結果が安全に正確表示できる整数の範囲を超えました。');
+      }
       return total;
     };
-    const groupDigits = (value: bigint) => value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const groupDigits = (value: number) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const gcd = (left: number, right: number): number => {
+      let a = Math.abs(left), b = Math.abs(right);
+      while (b !== 0) { const remainder = a % b; a = b; b = remainder; }
+      return a || 1;
+    };
     try {
       if (combinationOperation === 'factorial') {
-        if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('階乗は0〜500の整数で指定してください。');
+        if (!Number.isInteger(n) || n < 0 || n > 18) throw new Error('階乗は0〜18の整数で指定してください。');
         setCombinationResult(n + '! = ' + groupDigits(factorial(n)));
         return;
       }
@@ -720,14 +728,27 @@ export default function FunctionCalculator() {
         throw new Error('n・r は 0≦r≦n≦500 を満たす整数にしてください。');
       }
       if (combinationOperation === 'permutation') {
-        let result = 1n;
-        for (let index = 0; index < r; index += 1) result *= BigInt(n - index);
+        let result = 1;
+        for (let index = 0; index < r; index += 1) {
+          result *= n - index;
+          if (!Number.isSafeInteger(result)) throw new Error('このnPrは安全に正確表示できる整数の範囲を超えています。nまたはrを小さくしてください。');
+        }
         setCombinationResult(n + 'P' + r + ' = ' + groupDigits(result));
       } else {
         const smaller = Math.min(r, n - r);
-        let result = 1n;
+        let result = 1;
         for (let index = 1; index <= smaller; index += 1) {
-          result = result * BigInt(n - smaller + index) / BigInt(index);
+          let numerator = n - smaller + index;
+          let denominator = index;
+          const firstGcd = gcd(numerator, denominator);
+          numerator /= firstGcd;
+          denominator /= firstGcd;
+          const secondGcd = gcd(result, denominator);
+          result /= secondGcd;
+          denominator /= secondGcd;
+          if (denominator !== 1) throw new Error('整数として正確に計算できませんでした。');
+          result *= numerator;
+          if (!Number.isSafeInteger(result)) throw new Error('このnCrは安全に正確表示できる整数の範囲を超えています。nまたはrを小さくしてください。');
         }
         setCombinationResult(n + 'C' + r + ' = ' + groupDigits(result));
       }
@@ -1103,7 +1124,7 @@ export default function FunctionCalculator() {
                       </select>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><label className={labelClass} htmlFor="combination-n">n</label><input id="combination-n" type="number" min="0" max="500" value={combinationN} onChange={event => setCombinationN(event.target.value)} className={fieldClass} /></div>
+                      <div><label className={labelClass} htmlFor="combination-n">n</label><input id="combination-n" type="number" min="0" max={combinationOperation === 'factorial' ? 18 : 500} value={combinationN} onChange={event => setCombinationN(event.target.value)} className={fieldClass} /></div>
                       {combinationOperation !== 'factorial' && <div><label className={labelClass} htmlFor="combination-r">r</label><input id="combination-r" type="number" min="0" max="500" value={combinationR} onChange={event => setCombinationR(event.target.value)} className={fieldClass} /></div>}
                     </div>
                     <button type="button" onClick={runCombinatorics} className={primaryButton}>計算する</button>
@@ -1114,7 +1135,7 @@ export default function FunctionCalculator() {
                     {combinationResult ? <p className="mt-3 break-all font-mono text-xl font-bold text-cyan-100">{combinationResult}</p> : <p className="mt-3 text-sm text-slate-500">計算結果がここに表示されます。</p>}
                   </div>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">この計算は0〜500の整数を対象とし、BigIntで整数の正確な値を計算します。</p>
+                <p className="text-[11px] leading-relaxed text-slate-500">この計算は0〜500の整数を対象とし、整数として正確に表示できる範囲を確認しながら計算します。</p>
               </div>
             )}
 
