@@ -636,6 +636,7 @@ export default function FunctionCalculator() {
       if (!Number.isInteger(count) || count < 1 || count > 100) throw new Error('項数は1〜100の整数で指定してください。');
       const terms: string[] = [];
       let sum = 0;
+      let generalTerm = '';
       if (sequenceKind === 'fibonacci') {
         if (count > 76) throw new Error('正確な整数で表示するため、フィボナッチ数列は76項までにしてください。');
         let previous = 0, current = 1, total = 0;
@@ -647,12 +648,13 @@ export default function FunctionCalculator() {
           previous = current;
           current = next;
         }
-        setSequenceResult('初項からの項：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(total));
+        setSequenceResult('規則：前の2項を足す（a₁=0, a₂=1）\n数列：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(total));
         return;
       }
       if (sequenceKind === 'formula') {
         const engine = await loadNerdamer();
         const formula = normalizeExpression(sequenceFormula, answer);
+        generalTerm = '一般項：aₙ = ' + displayMath(formula);
         for (let index = 1; index <= count; index += 1) {
           const value = readNumeric(engine, formula, 'n', index);
           if (!Number.isFinite(value)) throw new Error('この項を数値化できません。nを使った式を確認してください。');
@@ -663,6 +665,11 @@ export default function FunctionCalculator() {
         const first = Number(sequenceFirst);
         const parameter = Number(sequenceParameter);
         if (!Number.isFinite(first) || !Number.isFinite(parameter)) throw new Error('初項と公差・公比には数値を入力してください。');
+        if (sequenceKind === 'arithmetic') {
+          generalTerm = '一般項：aₙ = ' + formatNumericValue(first) + ' + (n−1) × ' + formatNumericValue(parameter);
+        } else {
+          generalTerm = '一般項：aₙ = ' + formatNumericValue(first) + ' × (' + formatNumericValue(parameter) + ')^(n−1)';
+        }
         for (let index = 0; index < count; index += 1) {
           const value = sequenceKind === 'arithmetic' ? first + index * parameter : first * Math.pow(parameter, index);
           if (!Number.isFinite(value)) throw new Error('数列の値が計算範囲を超えました。');
@@ -670,7 +677,7 @@ export default function FunctionCalculator() {
           sum += value;
         }
       }
-      setSequenceResult('数列：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(sum));
+      setSequenceResult(generalTerm + '\n数列：' + terms.join(', ') + '\n最初の' + count + '項の和：' + formatNumericValue(sum));
     } catch (caught) {
       setSequenceError(caught instanceof Error ? caught.message : '数列を計算できませんでした。');
     }
