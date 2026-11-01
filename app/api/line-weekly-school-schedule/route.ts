@@ -104,7 +104,7 @@ export async function POST(request: Request) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const activeLineBot = await getActiveLineBot();
   const accessToken = activeLineBot?.accessToken || null;
-  if (!supabaseUrl || !serviceKey || !accessToken) {
+  if (!supabaseUrl || !serviceKey || !activeLineBot || !accessToken) {
     return jsonError('Supabaseの設定と現在使用中のLINE BOTのアクセストークンを確認してください。', 503);
   }
   const supabase = getAdminSupabase();
