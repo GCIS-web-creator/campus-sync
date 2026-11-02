@@ -53,6 +53,23 @@ const ALLOWED_NAMES = new Set([
   'min', 'max', 'gcd', 'lcm', 'fact', 'factorial', 'dfact'
 ]);
 
+const SUPERSCRIPT_TO_ASCII: Record<string, string> = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+  '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+  'ⁿ': 'n', 'ˣ': 'x', 'ʸ': 'y', 'ᵗ': 't', '⁺': '+', '⁻': '-'
+};
+const ASCII_TO_SUPERSCRIPT: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  'n': 'ⁿ', 'x': 'ˣ', 'y': 'ʸ', 't': 'ᵗ', '+': '⁺',
+  '-': '⁻', '−': '⁻', '(': '⁽', ')': '⁾'
+};
+const ASCII_TO_SUBSCRIPT: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+  '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  'n': 'ₙ', 'i': 'ᵢ', 'j': 'ⱼ', 'k': 'ₖ'
+};
+
 function normalizeExpression(value: string, answer: string, allowEquation = false): string {
   let expression = value.trim()
     .replace(/[０-９]/g, character => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
@@ -61,8 +78,8 @@ function normalizeExpression(value: string, answer: string, allowEquation = fals
     .replace(/[−―]/g, '-')
     .replace(/π/g, 'pi')
     .replace(/√\s*\(/g, 'sqrt(')
-    .replace(/²/g, '^2')
-    .replace(/³/g, '^3')
+    .replace(/([A-Za-z0-9)])([⁰¹²³⁴⁵⁶⁷⁸⁹ⁿˣʸᵗ⁺⁻]+)/g, (_all, base: string, exponent: string) =>
+      base + '^(' + [...exponent].map(character => SUPERSCRIPT_TO_ASCII[character] || character).join('') + ')')
     .replace(/Ans/gi, '(' + (answer || '0') + ')')
     .replace(/(^|[^A-Za-z])log\s*\(/gi, '$1log10(')
     .replace(/(^|[^A-Za-z])ln\s*\(/gi, '$1log(');
@@ -94,7 +111,21 @@ function applyDegreeMode(expression: string, mode: 'DEG' | 'RAD'): string {
 }
 
 function displayMath(value: string): string {
-  return value.replace(/\bpi\b/g, 'π').replace(/\*/g, ' × ').replace(/\s+/g, ' ').trim();
+  return value
+    .replace(/\bpi\b/gi, 'π')
+    .replace(/\*/g, ' × ')
+    .replace(/\bsqrt\(/gi, '√(')
+    .replace(/infinity/gi, '∞')
+    .replace(/->/g, '→')
+    .replace(/\^(\([^()]*\)|[A-Za-z0-9+-]+)/g, (_all, exponent: string) => {
+      const raw = exponent.startsWith('(') ? exponent.slice(1, -1) : exponent;
+      const rendered = [...raw].map(character => ASCII_TO_SUPERSCRIPT[character] || character).join('');
+      return [...raw].every(character => Boolean(ASCII_TO_SUPERSCRIPT[character])) ? rendered : '^' + exponent;
+    })
+    .replace(/_([A-Za-z0-9]+)/g, (_all, index: string) =>
+      [...index].map(character => ASCII_TO_SUBSCRIPT[character] || character).join(''))
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function readNumeric(engine: NerdamerEngine, expression: string, variable?: string, value?: number): number {
@@ -121,14 +152,14 @@ const TOOL_TABS: Array<{ id: ToolTab; label: string; icon: React.ReactNode }> = 
 
 const BASIC_KEYS = [
   ['AC', '⌫', '(', ')', '÷'],
-  ['7', '8', '9', '×', '^'],
+  ['7', '8', '9', '×', 'x²'],
   ['4', '5', '6', '-', 'sqrt('],
   ['1', '2', '3', '+', 'x'],
   ['0', '.', 'Ans', 'π', '='],
 ];
 
 export default function FunctionCalculator() {
-  const [expression, setExpression] = useState('2+3*4');
+  const [expression, setExpression] = useState('2+3×4');
   const [result, setResult] = useState('');
   const [approximation, setApproximation] = useState('');
   const [error, setError] = useState('');
@@ -141,12 +172,12 @@ export default function FunctionCalculator() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeTool, setActiveTool] = useState<ToolTab>('calculus');
 
-  const [algebraExpression, setAlgebraExpression] = useState('x^3-3*x^2-4*x+12');
+  const [algebraExpression, setAlgebraExpression] = useState('x³−3×x²−4×x+12');
   const [algebraAction, setAlgebraAction] = useState<'simplify' | 'factor' | 'expand'>('factor');
   const [algebraResult, setAlgebraResult] = useState('');
   const [algebraError, setAlgebraError] = useState('');
 
-  const [calculusExpression, setCalculusExpression] = useState('x^3+2*x^2-5*x+1');
+  const [calculusExpression, setCalculusExpression] = useState('x³+2×x²−5×x+1');
   const [calculusVariable, setCalculusVariable] = useState('x');
   const [derivativeOrder, setDerivativeOrder] = useState(1);
   const [derivativeAt, setDerivativeAt] = useState('2');
@@ -156,12 +187,12 @@ export default function FunctionCalculator() {
   const [calculusResult, setCalculusResult] = useState('');
   const [calculusError, setCalculusError] = useState('');
 
-  const [equationExpression, setEquationExpression] = useState('x^2-5*x+6');
+  const [equationExpression, setEquationExpression] = useState('x²−5×x+6');
   const [equationVariable, setEquationVariable] = useState('x');
   const [equationResult, setEquationResult] = useState('');
   const [equationError, setEquationError] = useState('');
 
-  const [graphExpression, setGraphExpression] = useState('x^2-4');
+  const [graphExpression, setGraphExpression] = useState('x²−4');
   const [graphMin, setGraphMin] = useState('-5');
   const [graphMax, setGraphMax] = useState('5');
   const [plotPoints, setPlotPoints] = useState<PlotPoint[]>([]);
@@ -189,10 +220,10 @@ export default function FunctionCalculator() {
   const [sequenceFirst, setSequenceFirst] = useState('2');
   const [sequenceParameter, setSequenceParameter] = useState('3');
   const [sequenceCount, setSequenceCount] = useState('10');
-  const [sequenceFormula, setSequenceFormula] = useState('n^2+1');
+  const [sequenceFormula, setSequenceFormula] = useState('n²+1');
   const [sequenceResult, setSequenceResult] = useState('');
   const [sequenceError, setSequenceError] = useState('');
-  const [sigmaFormula, setSigmaFormula] = useState('k^2');
+  const [sigmaFormula, setSigmaFormula] = useState('k²');
   const [sigmaIndex, setSigmaIndex] = useState('k');
   const [sigmaLower, setSigmaLower] = useState('1');
   const [sigmaUpper, setSigmaUpper] = useState('10');
@@ -323,7 +354,7 @@ export default function FunctionCalculator() {
     if (token === 'AC') { setExpression(''); setResult(''); setApproximation(''); setError(''); return; }
     if (token === '⌫') { setExpression(current => current.slice(0, -1)); setResult(''); return; }
     if (token === '=') { void calculate(); return; }
-    const mapped = token === '×' ? '*' : token === '÷' ? '/' : token === 'π' ? 'pi' : token;
+    const mapped = token === 'sqrt(' ? '√(' : token === 'x²' ? '²' : token === 'x^2' ? '²' : token === 'x^3' ? '³' : token;
     setExpression(current => current + mapped);
     setResult(''); setError('');
   };
@@ -824,7 +855,7 @@ export default function FunctionCalculator() {
             </div>
             <div className="space-y-3 p-4 sm:p-5">
               <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-3 py-2.5 text-xs leading-relaxed text-slate-400">
-                <span className="font-bold text-cyan-200">使い方：</span> 数式を入力して計算します。例：<code className="text-slate-200">2+3*4</code>、<code className="text-slate-200">sin(30)</code>、<code className="text-slate-200">log(100)</code>。Ansは直前の答え、Mはメモリーです。三角関数の角度は右上のDEG/RADで切り替えます。
+                <span className="font-bold text-cyan-200">使い方：</span> 数式は <code className="text-slate-200">×</code>・<code className="text-slate-200">÷</code>・<code className="text-slate-200">²</code> のような数学記号で入力できます。例：<code className="text-slate-200">2+3×4</code>、<code className="text-slate-200">sin(30)</code>、<code className="text-slate-200">log(100)</code>。従来の <code className="text-slate-200">*</code>・<code className="text-slate-200">^</code> も使用できます。Ansは直前の答え、Mはメモリーです。三角関数の角度は右上のDEG/RADで切り替えます。
               </div>
               <form onSubmit={handleMainSubmit} className="space-y-3">
                 <label className="block">
@@ -835,7 +866,7 @@ export default function FunctionCalculator() {
                     value={expression}
                     onChange={event => { setExpression(event.target.value); setError(''); }}
                     onKeyDown={handleKeyDown}
-                    placeholder="例：sin(30)+sqrt(16)"
+                    placeholder="例：sin(30)+√(16)"
                     className="w-full rounded-2xl border border-slate-700 bg-[#071321] px-4 py-4 font-mono text-xl tracking-wide text-white outline-none transition placeholder:text-slate-700 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 sm:text-2xl"
                     aria-label="数式入力"
                   />
@@ -870,7 +901,7 @@ export default function FunctionCalculator() {
               <div className="grid grid-cols-5 gap-2">
                 {BASIC_KEYS.flat().map((key, index) => {
                   const isAction = key === '=' || key === 'AC';
-                  const isOperator = ['÷', '×', '^', '-', '+'].includes(key);
+                  const isOperator = ['÷', '×', '^', '-', '+', 'x²'].includes(key);
                   const isUtility = key === '⌫' || key === 'sqrt(';
                   return (
                     <button
@@ -967,6 +998,10 @@ export default function FunctionCalculator() {
                   <div className="rounded-2xl border border-slate-800 bg-[#091625] p-3.5">
                     <p className="text-sm font-black text-cyan-200">微分</p>
                     <p className="mt-1 text-[11px] text-slate-500">導関数・高階導関数</p>
+                    <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-900/80 p-3 font-serif text-lg text-slate-200">
+                      <span className="italic">f′(x) =</span>
+                      <span className="inline-flex flex-col items-center leading-tight"><span>d<sup>{derivativeOrder > 1 ? derivativeOrder : ''}</sup>f(x)</span><span className="w-full border-t border-slate-500 text-center">dx<sup>{derivativeOrder > 1 ? derivativeOrder : ''}</sup></span></span>
+                    </div>
                     <label className={labelClass + ' mt-3'} htmlFor="derivative-order">何階導関数</label>
                     <select id="derivative-order" value={derivativeOrder} onChange={event => setDerivativeOrder(Number(event.target.value))} className={fieldClass}><option value={1}>1階</option><option value={2}>2階</option><option value={3}>3階</option><option value={4}>4階</option></select>
                     <label className={labelClass + ' mt-3'} htmlFor="derivative-at">x の値（任意）</label>
@@ -976,12 +1011,17 @@ export default function FunctionCalculator() {
                   <div className="rounded-2xl border border-slate-800 bg-[#091625] p-3.5">
                     <p className="text-sm font-black text-cyan-200">不定積分</p>
                     <p className="mt-1 text-[11px] text-slate-500">原始関数を求める</p>
-                    <div className="mt-7 rounded-xl bg-slate-900/80 p-3 text-center font-mono text-lg text-slate-300">∫ f(x) dx</div>
+                    <div className="mt-7 flex items-center justify-center gap-2 rounded-xl bg-slate-900/80 p-3 text-center font-serif text-2xl text-slate-200"><span>∫</span><span className="text-base italic">f(x) dx</span></div>
                     <button type="button" onClick={() => void runCalculus('integral')} className={primaryButton + ' mt-3 w-full'}>積分する</button>
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-[#091625] p-3.5">
                     <p className="text-sm font-black text-cyan-200">定積分</p>
-                    <p className="mt-1 text-[11px] text-slate-500">数値積分（適応型 Simpson 法）</p>
+                    <p className="mt-1 text-[11px] text-slate-500">上下限を付けた定積分</p>
+                    <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-900/80 p-3 text-slate-200">
+                      <span className="font-serif text-4xl leading-none">∫</span>
+                      <span className="flex h-12 flex-col justify-between text-xs leading-none"><sup className="text-center">{displayMath(integralUpper) || 'b'}</sup><sub className="text-center">{displayMath(integralLower) || 'a'}</sub></span>
+                      <span className="font-serif text-base italic">f(x) dx</span>
+                    </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <div><label className={labelClass} htmlFor="integral-lower">下端 a</label><input id="integral-lower" value={integralLower} onChange={event => setIntegralLower(event.target.value)} className={fieldClass} /></div>
                       <div><label className={labelClass} htmlFor="integral-upper">上端 b</label><input id="integral-upper" value={integralUpper} onChange={event => setIntegralUpper(event.target.value)} className={fieldClass} /></div>
@@ -992,7 +1032,10 @@ export default function FunctionCalculator() {
                     <p className="text-sm font-black text-cyan-200">極限</p>
                     <p className="mt-1 text-[11px] text-slate-500">x が a に近づくとき</p>
                     <div className="mt-3"><label className={labelClass} htmlFor="limit-at">近づく値 a</label><input id="limit-at" value={limitAt} onChange={event => setLimitAt(event.target.value)} className={fieldClass} /></div>
-                    <div className="mt-3 rounded-xl bg-slate-900/80 p-3 text-center font-mono text-lg text-slate-300">lim f(x)</div>
+                    <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-900/80 p-3 text-slate-200">
+                      <span className="flex flex-col items-center leading-none"><span className="font-serif text-2xl italic">lim</span><sub className="mt-1 text-[11px]">x → {displayMath(limitAt) || 'a'}</sub></span>
+                      <span className="font-serif text-base italic">f(x)</span>
+                    </div>
                     <button type="button" onClick={() => void runCalculus('limit')} className={primaryButton + ' mt-3 w-full'}>極限を求める</button>
                   </div>
                 </div>
@@ -1002,7 +1045,7 @@ export default function FunctionCalculator() {
                     {calculusError ? <p className="mt-2 text-sm text-rose-300">{calculusError}</p> : <p className="mt-2 whitespace-pre-wrap break-all font-mono text-lg leading-relaxed text-cyan-100">{displayMath(calculusResult)}</p>}
                   </div>
                 )}
-                <p className="text-[11px] leading-relaxed text-slate-500">不定積分は数式エンジンが対応する初等関数を記号的に処理します。定積分は数値計算です。微分・積分・極限の数式は数学標準のラジアン表記として扱います。</p>
+                <p className="text-[11px] leading-relaxed text-slate-500">不定積分は数式エンジンが対応する初等関数を記号的に処理します。定積分は数式エンジンで評価します。微分・積分・極限の数式は数学標準のラジアン表記として扱います。</p>
               </div>
             )}
 
@@ -1097,11 +1140,16 @@ export default function FunctionCalculator() {
                     <div><label className={labelClass} htmlFor="sequence-count">何項まで求める？</label><input id="sequence-count" type="number" min="1" max="100" value={sequenceCount} onChange={event => setSequenceCount(event.target.value)} className={fieldClass} /></div>
                     <button type="button" onClick={() => void runSequence()} className={primaryButton}>数列を計算</button>
                     {sequenceError && <p role="alert" className="text-xs text-rose-300">{sequenceError}</p>}
-                    {sequenceResult && <pre className="whitespace-pre-wrap break-all rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 font-mono text-sm leading-relaxed text-cyan-100">{sequenceResult}</pre>}
+                    {sequenceResult && <pre className="whitespace-pre-wrap break-all rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 font-mono text-sm leading-relaxed text-cyan-100">{displayMath(sequenceResult)}</pre>}
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-[#091625] p-4 space-y-3">
                     <h4 className="font-black text-white">Σ（シグマ）の有限和</h4>
                     <p className="text-xs leading-relaxed text-slate-400">Σの中の式・添字・開始値・終了値を指定して、範囲内の項を足します。</p>
+                    <div className="flex items-center justify-center gap-3 rounded-xl bg-slate-900/80 p-3 text-slate-200">
+                      <span className="font-serif text-4xl leading-none">∑</span>
+                      <span className="flex h-12 flex-col justify-between text-xs leading-none"><sup className="text-center">{displayMath(sigmaUpper) || 'n'}</sup><sub className="text-center">{sigmaIndex} = {displayMath(sigmaLower) || '1'}</sub></span>
+                      <span className="font-serif text-lg italic">{displayMath(sigmaFormula)}</span>
+                    </div>
                     <div><label className={labelClass} htmlFor="sigma-formula">Σの中の式</label><input id="sigma-formula" value={sigmaFormula} onChange={event => setSigmaFormula(event.target.value)} className={fieldClass + ' font-mono'} /></div>
                     <div className="grid grid-cols-3 gap-2">
                       <div><label className={labelClass} htmlFor="sigma-index">添字</label><select id="sigma-index" value={sigmaIndex} onChange={event => setSigmaIndex(event.target.value)} className={fieldClass}><option value="k">k</option><option value="n">n</option><option value="i">i</option></select></div>
@@ -1171,13 +1219,13 @@ export default function FunctionCalculator() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[
               { title: '基本の関数電卓', text: '四則演算、括弧、累乗、平方根、階乗、三角関数、指数・対数を計算。DEG/RADで角度単位を変更。', example: 'sin(30) / log(100)' },
-              { title: '式の変形', text: '式を簡単にしたり、因数分解したり、展開したりします。', example: 'x^2-5*x+6 → (x-2)(x-3)' },
-              { title: '微分・積分・極限', text: '導関数、高階導関数、不定積分、定積分、極限を求めます。', example: 'diff(x^3,x) → 3*x^2' },
+              { title: '式の変形', text: '式を簡単にしたり、因数分解したり、展開したりします。', example: 'x² − 5×x + 6 → (x−2)(x−3)' },
+              { title: '微分・積分・極限', text: '導関数、高階導関数、不定積分、定積分、極限を求めます。', example: 'd/dx (x³) = 3x²' },
               { title: '方程式', text: '変数を指定して、多項式などの方程式の解を求めます。', example: 'x^2-5*x+6=0' },
               { title: '関数グラフ', text: '関数の形を描き、指定したxの範囲で増減や交点などを確認します。', example: 'y=x^2-4' },
               { title: '統計', text: 'データの平均・中央値・四分位数・分散・標準偏差などを計算します。', example: '12, 15, 18, 20' },
               { title: '行列・ベクトル', text: '行列の和・差・積、転置、行列式、逆行列、掃き出し法。ベクトルの内積・外積・大きさ・なす角。', example: 'A: 1,2 / 3,4' },
-              { title: '数列・Σ', text: '等差・等比・式で定義された数列、フィボナッチ数列の各項と和。Σの有限和。', example: 'aₙ=n^2+1 / Σk²' },
+              { title: '数列・Σ', text: '等差・等比・式で定義された数列、フィボナッチ数列の各項と和。Σの有限和。', example: 'aₙ = n²+1 / ∑ k²' },
               { title: '順列・組合せ', text: '順番を区別するnPr、順番を区別しないnCr、階乗n!を整数で正確に計算。', example: '5P2=20 / 5C2=10' },
             ].map(item => <div key={item.title} className="rounded-2xl border border-slate-800/80 bg-[#0d1b2b]/75 p-4">
               <h4 className="text-sm font-black text-slate-100">{item.title}</h4>
