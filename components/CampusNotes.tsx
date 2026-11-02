@@ -7,7 +7,7 @@ import {
   Italic, Link2, List, ListOrdered, Loader2, MessageCircle, Paperclip, PenLine,
   Plus, Printer, Quote, Redo2, Search, Send, Share2, ShieldCheck, Sigma, Star,
   Strikethrough, Table2, Tag, Trash2, Underline, Undo2, Upload, Users,
-  WandSparkles, X, Eye, Lock, Copy, MoreHorizontal, Palette
+  X, Eye, Lock, Copy, MoreHorizontal, Palette
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -24,8 +24,6 @@ type NoteVersion = { id:string; note_id:string; editor_id:string; title:string; 
 type NoteAssignment = { id:string; title:string; due?:string|null; due_at?:string|null };
 type ShareEntry = { user_id:string; student_id:string; student_name:string; role:'viewer'|'editor' };
 type NoteTab = 'all'|'recent'|'pinned'|'favorites'|'shared'|'archived'|'trash';
-type AiAction = 'summary'|'keywords'|'flashcards'|'organize'|'todos';
-type AiCard = { question:string; answer:string };
 
 const COLORS = [
   {id:'slate',name:'グレー',hex:'#64748b'},{id:'blue',name:'ブルー',hex:'#3b82f6'},
@@ -198,9 +196,7 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
   const [shareRole,setShareRole]=useState<'viewer'|'editor'>('editor');
   const [commentText,setCommentText]=useState('');
   const [showShare,setShowShare]=useState(false);const [showComments,setShowComments]=useState(false);
-  const [showVersions,setShowVersions]=useState(false);const [showAi,setShowAi]=useState(false);
-  const [aiAction,setAiAction]=useState<AiAction>('summary');const [aiOutput,setAiOutput]=useState('');
-  const [aiCards,setAiCards]=useState<AiCard[]>([]);const [aiBusy,setAiBusy]=useState(false);
+  const [showVersions,setShowVersions]=useState(false);
   const [handwriting,setHandwriting]=useState(false);const [penColor,setPenColor]=useState('#172554');
   const [ocrBusy,setOcrBusy]=useState(false);const [ocrStatus,setOcrStatus]=useState('');const [ocrOutput,setOcrOutput]=useState('');
   const [online,setOnline]=useState(true);const [remoteChanged,setRemoteChanged]=useState(false);const [present,setPresent]=useState<string[]>([]);
@@ -563,59 +559,6 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
     await uploadFile(new File([blob],'手書きノート.png',{type:'image/png'}),true);setHandwriting(false);
   };
 
-  const localAi=(action:AiAction,text:string)=>{
-    const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-    const sentences=text.split(/(?<=[。！？.!?])\s*/).map(x=>x.trim()).filter(x=>x.length>8);
-    if(action==='summary')return sentences.slice(0,5).join('\n')||text.slice(0,500);
-    if(action==='keywords'){
-      const words=text.match(/[一-龠々ぁ-んァ-ヶ]{2,10}|[A-Za-z][A-Za-z0-9_-]{2,}/g)||[];
-      const stop=new Set(['これ','それ','ため','こと','もの','よう','ところ','について','そして','また','です','ます','する','いる','ある','など','から','まで','ので']);
-      const counts=new Map<string,number>();words.forEach(w=>{if(!stop.has(w))counts.set(w,(counts.get(w)||0)+1);});
-      return [...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(x=>x[0]).join('、')||'キーワードを抽出できませんでした。';
-    }
-    if(action==='flashcards'){
-      const cards:AiCard[]=[];
-      lines.forEach(line=>{const m=line.match(/^(.{2,40}?)[：:＝=]\s*(.{3,180})$/);if(m)cards.push({question:m[1]+'とは？',answer:m[2]});});
-      setAiCards(cards.slice(0,12));return cards.length+'件のカード候補を作成しました。';
-    }
-    if(action==='organize')return lines.map(x=>/^(#{1,3}|[-・＊*]|[0-9]+[.)])/.test(x)?x:'・ '+x).join('\n');
-    const tasks=lines.filter(x=>/(する|提出|確認|復習|調べ|作成|準備|読む|解く|送る)/.test(x));
-    return tasks.length?tasks.map(x=>'□ '+x.replace(/^[-・□☐]\s*/, '')).join('\n'):'ToDo候補が見つかりませんでした。';
-  };
-  const runAi=async(action:AiAction)=>{
-    if(!selected)return;setAiAction(action);setAiBusy(true);setAiOutput('');setAiCards([]);
-    if(dirty.current)await saveNow();
-    const text=editor.current?.innerText||selected.content_text||'';
-    if(dirty.current){
-      const local=localAi(action,text);
-      setAiOutput(local+'\n\n（保存できなかったため、外部AIには送信せず端末内で処理しました。）');
-      setAiBusy(false);
-      return;
-    }
-    try{
-      const {data:session}=await supabase.auth.getSession();
-      const response=await fetch('/api/notes/assist',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+(session.session?.access_token||'')},
-        body:JSON.stringify({noteId:selected.id,action})
-      });
-      if(!response.ok)throw new Error('AI API unavailable');
-      const result=await response.json();
-      setAiOutput(String(result.result||''));
-      if(Array.isArray(result.cards))setAiCards(result.cards as AiCard[]);
-    }catch{
-      setAiOutput(localAi(action,text)+'\n\n（外部AIを利用できないため、端末内の文章整理に切り替えました。AI APIが設定されている場合は、操作時にメモ本文がAIサービスへ送信されます。）');
-    }finally{setAiBusy(false);}
-  };
-  const addTodos=async(value:string)=>{
-    const items=value.split('\n').map(x=>x.replace(/^\s*(?:[-*]|\d+[.)]|□|☐|☑)\s*/, '').trim()).filter(x=>x.length>1&&x.length<240);
-    if(!items.length){setError('ToDo候補がありません。');return;}
-    const {error:todoError}=await supabase.from('todos').insert(items.slice(0,20).map(text=>({
-      student_id:studentId,title:text,source:'メモ',type:'other',details:'メモから作成',completed:false
-    })));
-    if(todoError){setError('Todoへの追加に失敗しました: '+todoError.message);return;}
-    setAiOutput(items.length+'件をCampusSyncのToDoに追加しました。');
-  };
   const addCheckedTodos=async()=>{
     if(!editor.current)return;
     const items=Array.from(editor.current.querySelectorAll('li')).filter(li=>{
@@ -788,7 +731,6 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
                   {owner&&<button type="button" onClick={()=>setShowShare(v=>!v)} title="共有" className="rounded-lg p-2 text-slate-500 hover:bg-cyan-50"><Share2 size={16}/></button>}
                   <button type="button" onClick={()=>setShowComments(v=>!v)} title="コメント" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><MessageCircle size={16}/></button>
                   <button type="button" onClick={()=>setShowVersions(v=>!v)} title="編集履歴" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Clock3 size={16}/></button>
-                  <button type="button" onClick={()=>setShowAi(v=>!v)} title="AI文章アシスタント" className="rounded-lg p-2 text-violet-600 hover:bg-violet-50"><WandSparkles size={16}/></button>
                   <button type="button" onClick={()=>exportNote('pdf')} title="PDF出力" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Printer size={16}/></button>
                 </div>
               </div>
@@ -859,7 +801,6 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
       {showShare&&selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="text-base font-black">メモを共有</h2><button type="button" onClick={()=>setShowShare(false)}><X size={18}/></button></div><p className="mt-2 text-xs leading-5 text-slate-500">共有相手の学校アカウントの6桁の学籍番号を入力します。閲覧のみ、または編集可能を選べます。</p><div className="mt-4 grid grid-cols-[1fr_120px] gap-2"><input inputMode="numeric" maxLength={6} value={shareId} onChange={event=>setShareId(event.target.value.replace(/\D/g,''))} placeholder="6桁の学籍番号" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/><select value={shareRole} onChange={event=>setShareRole(event.target.value as 'viewer'|'editor')} className="rounded-xl border border-slate-200 px-2 text-xs"><option value="viewer">閲覧のみ</option><option value="editor">編集可能</option></select></div><button type="button" onClick={()=>void invite()} className="mt-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-xs font-black text-white"><Users size={14} className="mr-1 inline"/>共有相手を追加</button><div className="mt-4 space-y-2"><h3 className="text-xs font-black">共有メンバー</h3>{shares.length===0?<p className="text-xs text-slate-400">まだ共有していません。</p>:shares.map(share=><div key={share.user_id} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{share.student_name}</p><p className="text-[10px] text-slate-400">{share.student_id} ・ {share.role==='editor'?'編集可能':'閲覧のみ'}</p></div><button type="button" onClick={()=>void removeShare(share.user_id)} className="text-[10px] font-bold text-rose-600">解除</button></div>)}</div></div></div>}
       {showComments&&selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-black">コメント・共同メモ</h2><button type="button" onClick={()=>setShowComments(false)}><X size={18}/></button></div><div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">{comments.map(comment=><div key={comment.id} className="rounded-xl bg-slate-50 p-3"><p className="whitespace-pre-wrap text-xs leading-5 text-slate-700">{comment.body}</p><p className="mt-1 text-[10px] text-slate-400">{comment.user_id===userId?'自分':'共同編集者'} ・ {dateText(comment.created_at)}</p></div>)}{comments.length===0&&<p className="py-8 text-center text-xs text-slate-400">まだコメントはありません。</p>}</div><form onSubmit={addComment} className="mt-3 flex gap-2"><input value={commentText} onChange={event=>setCommentText(event.target.value)} placeholder="コメントを書く" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-xs"/><button type="submit" className="rounded-xl bg-cyan-700 px-3 text-white"><Send size={15}/></button></form></div></div>}
       {showVersions&&selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-black">編集履歴</h2><button type="button" onClick={()=>setShowVersions(false)}><X size={18}/></button></div><div className="mt-4 space-y-2">{versions.map(version=><div key={version.id} className="rounded-xl border border-slate-200 p-3"><p className="text-xs font-bold">{version.title}</p><p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[11px] text-slate-500">{version.content_text}</p><div className="mt-2 flex items-center justify-between"><span className="text-[10px] text-slate-400">{dateText(version.created_at)}</span><button type="button" disabled={!canEdit} onClick={()=>void restoreVersion(version)} className="text-[10px] font-bold text-cyan-700 disabled:opacity-40">この版に戻す</button></div></div>)}{versions.length===0&&<p className="py-8 text-center text-xs text-slate-400">編集・保存すると履歴が作られます。</p>}</div></div></div>}
-      {showAi&&selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 font-black"><WandSparkles size={17} className="text-violet-600"/>メモ文章アシスタント</h2><button type="button" onClick={()=>setShowAi(false)}><X size={18}/></button></div><p className="mt-2 text-xs leading-5 text-slate-500">要約・語句抽出・暗記カード・見出し整理・ToDo候補を作成します。AI APIが設定されている場合は、操作したときだけ本文をAIサービスへ送信します。未設定なら端末内の文章整理を使います。</p><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{([['summary','要約'],['keywords','重要語句'],['flashcards','暗記カード'],['organize','見出し整理'],['todos','ToDo候補']] as Array<[AiAction,string]>).map(([action,label])=><button type="button" key={action} onClick={()=>void runAi(action)} disabled={aiBusy} className={'rounded-xl border px-3 py-2.5 text-xs font-bold '+(aiAction===action?'border-violet-300 bg-violet-50 text-violet-800':'border-slate-200 text-slate-600 hover:bg-slate-50')}>{label}</button>)}</div>{aiBusy&&<div className="mt-4 flex items-center gap-2 text-xs text-violet-700"><Loader2 size={15} className="animate-spin"/>文章を整理しています…</div>}{aiOutput&&<div className="mt-4 rounded-xl border border-violet-100 bg-violet-50 p-3"><pre className="whitespace-pre-wrap break-words text-xs leading-6 text-slate-700">{aiOutput}</pre>{aiAction==='todos'&&<button type="button" onClick={()=>void addTodos(aiOutput)} className="mt-3 rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white">CampusSync ToDoに追加</button>}</div>}{aiCards.length>0&&<div className="mt-3 grid gap-2 sm:grid-cols-2">{aiCards.map((card,index)=><div key={index} className="rounded-xl border border-slate-200 p-3"><p className="text-xs font-black text-violet-800">Q. {card.question}</p><p className="mt-2 text-xs leading-5 text-slate-600">A. {card.answer}</p></div>)}</div>}</div></div>}
       {handwriting&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3"><div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-2xl"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-black">手書きノート</h2><div className="flex items-center gap-2"><label className="text-xs text-slate-500">ペン色 <input type="color" value={penColor} onChange={event=>setPenColor(event.target.value)}/></label><button type="button" onClick={()=>{const ctx=canvas.current?.getContext('2d');if(canvas.current&&ctx){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.current.width,canvas.current.height);}}} className="rounded-lg border px-3 py-2 text-xs">消去</button><button type="button" onClick={()=>setHandwriting(false)}><X size={18}/></button></div></div><p className="mt-1 text-[11px] text-slate-500">マウス・タッチ・ペンで書けます。保存するとノートの添付画像になります。</p><canvas ref={canvas} width={1400} height={650} onPointerDown={startDrawing} onPointerMove={moveDrawing} className="mt-3 h-[55vh] w-full touch-none rounded-xl border border-slate-200 bg-white"/><button type="button" onClick={()=>void saveDrawing()} className="mt-3 rounded-xl bg-cyan-700 px-4 py-2.5 text-xs font-black text-white">手書き画像を保存</button></div></div>}
       {loading===false&&notes.length===0&&null}
     </div>
