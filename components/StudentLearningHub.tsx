@@ -61,6 +61,8 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
   const [finishKind, setFinishKind] = useState<'completed' | 'stopped'>('completed');
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
+  const remainingRef = useRef(1500);
+  const setTimerRemaining = (value: number) => { remainingRef.current = value; setRemaining(value); };
 
   const dark = isDarkMode;
   const panel = 'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
@@ -105,9 +107,10 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
       const elapsed = Math.floor((now - lastTick.current) / 1000);
       if (elapsed < 1) return;
       lastTick.current += elapsed * 1000;
-      setRemaining(value => Math.max(0, value - elapsed));
-      if (phase === 'focus') setFocusSeconds(value => value + elapsed);
-      else setBreakSeconds(value => value + elapsed);
+      const counted = Math.min(elapsed, Math.max(0, remainingRef.current));
+      setTimerRemaining(Math.max(0, remainingRef.current - elapsed));
+      if (counted > 0 && phase === 'focus') setFocusSeconds(value => value + counted);
+      else if (counted > 0) setBreakSeconds(value => value + counted);
     }, 250);
     return () => window.clearInterval(timer);
   }, [timerState, phase]);
@@ -115,9 +118,9 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
   useEffect(() => {
     if (timerState !== 'running' || remaining > 0) return;
     if (phase === 'focus') {
-      setPhase('break'); setRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
+      setPhase('break'); setTimerRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
     } else {
-      setPhase('focus'); setRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
+      setPhase('focus'); setTimerRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
     }
   }, [timerState, remaining, phase, breakMinutes, focusMinutes]);
 
@@ -190,13 +193,13 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
 
   const setPreset = (focus: number, rest: number) => {
     setFocusMinutes(focus); setBreakMinutes(rest); setCustomFocus(String(focus)); setCustomBreak(String(rest));
-    if (timerState === 'idle') { setPhase('focus'); setRemaining(focus * 60); }
+    if (timerState === 'idle') { setPhase('focus'); setTimerRemaining(focus * 60); }
   };
   const begin = () => {
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
     setError(''); setMessage('');
     if (timerState === 'idle') {
-      startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setRemaining(focusMinutes * 60);
+      startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
   };
@@ -217,7 +220,7 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
         reflection: reflection.trim(), next_action: nextAction.trim(), finish_kind: finishKind,
       });
       if (insertError) throw insertError;
-      setShowRecord(false); setTimerState('idle'); setFocusSeconds(0); setBreakSeconds(0); setRemaining(focusMinutes * 60);
+      setShowRecord(false); setTimerState('idle'); setFocusSeconds(0); setBreakSeconds(0); setTimerRemaining(focusMinutes * 60);
       startedAt.current = null; setTask(''); setRangeId(''); setReflection(''); setNextAction('');
       setMessage('学習記録を保存しました。'); await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '学習記録を保存できませんでした。'); }
@@ -287,11 +290,11 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     </div>}
 
     {tab === 'focus' && <div className="space-y-4">
-      <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
+      <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
       <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">FOCUS SESSION</p><h2 className="mt-1 text-lg font-black">今日の自習</h2></div><span className={'rounded-full px-3 py-1.5 text-[10px] font-black '+(phase==='focus'?'bg-cyan-100 text-cyan-900':'bg-amber-100 text-amber-900')}>{phase==='focus'?'集中時間':'休憩時間'}</span></div>
         <div className="mb-5 flex flex-col items-center rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 px-4 py-7 text-white"><p className="text-[10px] font-bold tracking-[.2em] text-cyan-200">{phase==='focus'?'FOCUS':'BREAK'}</p><p className="my-2 font-mono text-6xl font-black tabular-nums sm:text-7xl">{timeText}</p><p className="text-xs text-white/70">勉強 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={()=>setTimerState('paused')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={()=>setTimerState('running')} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button><button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button></>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">途中終了</button>}</div>
-          {timerState==='running'&&<button type="button" onClick={()=>{setPhase(phase==='focus'?'break':'focus');setRemaining((phase==='focus'?breakMinutes:focusMinutes)*60)}} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
+          {timerState==='running'&&<button type="button" onClick={()=>{setPhase(phase==='focus'?'break':'focus');setTimerRemaining((phase==='focus'?breakMinutes:focusMinutes)*60)}} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
       </section>
