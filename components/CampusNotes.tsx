@@ -27,10 +27,6 @@ type NoteTab = 'all'|'recent'|'pinned'|'favorites'|'shared'|'archived'|'trash';
 type AiAction = 'summary'|'keywords'|'flashcards'|'organize'|'todos';
 type AiCard = { question:string; answer:string };
 
-declare global {
-  interface Window { Tesseract?:any; pdfjsLib?:any; }
-}
-
 const COLORS = [
   {id:'slate',name:'グレー',hex:'#64748b'},{id:'blue',name:'ブルー',hex:'#3b82f6'},
   {id:'cyan',name:'シアン',hex:'#0891b2'},{id:'green',name:'グリーン',hex:'#16a34a'},
