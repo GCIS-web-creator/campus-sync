@@ -559,3 +559,37 @@ body {
 .campus-admin-console .campus-admin-sidebar>div:last-child{border-color:rgba(133,169,202,.18)}
 .campus-admin-console .campus-admin-sidebar .text-slate-500{color:#7892ab!important}
 @media(max-width:767px){.campus-admin-console .campus-admin-main{padding:14px 10px 24px!important}.campus-admin-console .campus-admin-sidebar nav button{min-height:50px;padding-inline:4px}}
+
+
+/* CampusSync Notes rich editor */
+.campus-note-editor {
+  min-height: 48vh;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.9;
+}
+.campus-note-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  pointer-events: none;
+}
+.campus-note-editor h1 { margin: 1.25rem 0 .65rem; font-size: 1.8rem; line-height: 1.3; font-weight: 850; }
+.campus-note-editor h2 { margin: 1.15rem 0 .5rem; font-size: 1.45rem; line-height: 1.4; font-weight: 800; }
+.campus-note-editor h3 { margin: 1rem 0 .45rem; font-size: 1.2rem; line-height: 1.45; font-weight: 750; }
+.campus-note-editor h4 { margin: .9rem 0 .35rem; font-size: 1.05rem; font-weight: 700; }
+.campus-note-editor p { margin: .45rem 0; min-height: 1.4em; }
+.campus-note-editor ul { margin: .55rem 0; padding-left: 1.6rem; list-style: disc; }
+.campus-note-editor ol { margin: .55rem 0; padding-left: 1.6rem; list-style: decimal; }
+.campus-note-editor li { margin: .18rem 0; padding-left: .15rem; }
+.campus-note-editor blockquote { margin: .8rem 0; border-left: 4px solid #22d3ee; padding: .35rem 0 .35rem 1rem; color: #475569; background: #f8fafc; }
+.campus-note-editor pre { margin: .8rem 0; overflow-x: auto; border-radius: .75rem; padding: 1rem; background: #0f172a; color: #e2e8f0; font-family: ui-monospace, monospace; font-size: .9rem; }
+.campus-note-editor code { border-radius: .25rem; padding: .08rem .25rem; background: #f1f5f9; font-family: ui-monospace, monospace; }
+.campus-note-editor pre code { padding: 0; background: transparent; }
+.campus-note-editor hr { margin: 1rem 0; border-color: #cbd5e1; }
+.campus-note-editor table { width: 100%; margin: .8rem 0; border-collapse: collapse; table-layout: fixed; }
+.campus-note-editor th, .campus-note-editor td { min-width: 3rem; border: 1px solid #cbd5e1; padding: .5rem .65rem; vertical-align: top; }
+.campus-note-editor th { background: #f1f5f9; font-weight: 750; }
+.campus-note-editor img { display: inline-block; max-width: 100%; max-height: 640px; object-fit: contain; border-radius: .65rem; }
+.campus-note-editor input[type="checkbox"] { width: 1rem; height: 1rem; margin-right: .45rem; vertical-align: -2px; accent-color: #0e7490; }
+.campus-note-editor details { margin: .7rem 0; border: 1px solid #cbd5e1; border-radius: .75rem; padding: .7rem .9rem; background: #f8fafc; }
+.campus-note-editor summary { cursor: pointer; font-weight: 750; color: #155e75; }

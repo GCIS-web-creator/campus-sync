@@ -6,6 +6,7 @@ import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
 import CampusAIChat from '@/components/CampusAIChat';
+import CampusNotes from '@/components/CampusNotes';
 import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGlobalSearch';
 import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacilityMap';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
@@ -966,6 +967,7 @@ export default function CampusSyncApp() {
       timetable: { tab: 'timetable' },
       schedule: { tab: 'school-schedule' },
       notices: { tab: 'notifications' },
+      notes: { tab: 'notes' },
     };
 
     const applyHashRoute = () => {
@@ -1001,6 +1003,7 @@ export default function CampusSyncApp() {
       weather: 'weather',
       cafeteria: 'food',
       ai: 'ai',
+      notes: 'notes',
       bus: 'transit',
       chat: 'chat',
       facilities: 'campus',
@@ -4171,6 +4174,11 @@ Supabaseの設定を確認してください。
       case 'ai':
         return <CampusAIChat mode="full" />;
 
+      case 'notes':
+        return authUser?.id && !isGuestMode
+          ? <CampusNotes userId={String(authUser.id)} studentId={studentId} studentName={studentName} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm"><BookOpenCheck size={32} className="mx-auto text-cyan-700"/><h2 className="mt-3 text-lg font-black text-slate-800">メモはログイン後に利用できます</h2><p className="mt-2 text-sm leading-6 text-slate-500">学校アカウントでログインすると、自分のノートや共有されたメモを利用できます。</p></div>;
+
       case 'home':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -5812,6 +5820,7 @@ Supabaseの設定を確認してください。
             <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); }} themeCls={themeCls} />
             <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
             <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
+            {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => setActiveTab('notes')} themeCls={themeCls} />}
             <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
             <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
             <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
@@ -5824,7 +5833,7 @@ Supabaseの設定を確認してください。
       </aside>
 
       {/* メインビューポートエリア */}
-      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
+      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">
@@ -5901,6 +5910,7 @@ Supabaseの設定を確認してください。
                 <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => { setActiveTab('bus'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => { setActiveTab('notes'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
                 <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); setMobileMenuOpen(false); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
                 <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => { setActiveTab('club'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => { setActiveTab('notifications'); setMobileMenuOpen(false); }} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
@@ -5915,10 +5925,10 @@ Supabaseの設定を確認してください。
 
 
         {/* スクロールコンテンツコンテナ */}
-        <main className={activeTab === 'chat' || activeTab === 'ai' ? "campus-student-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "campus-student-main flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
+        <main className={activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes' ? "campus-student-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "campus-student-main flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
           <div
             key={activeTab}
-            className={activeTab === 'chat' || activeTab === 'ai'
+            className={activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes'
               ? 'campus-page-transition campus-page-transition--chat flex min-h-0 flex-1 flex-col'
               : 'campus-page-transition'}
           >
