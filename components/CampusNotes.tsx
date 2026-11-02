@@ -223,7 +223,7 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
       if(tab==='favorites'&&!note.is_favorite)return false;
       if(tab==='shared'&&note.owner_id===userId)return false;
       if(tab==='archived'&&!note.is_archived)return false;
-      if(tab!=='archived'&&note.is_archived&&tab!=='trash')return false;
+      if(tab!=='archived'&&note.is_archived)return false;
       if(tab==='all'&&folderId&&note.folder_id!==folderId)return false;
       if(tagFilter&&!(note.tags||[]).includes(tagFilter))return false;
       if(fromDate&&note.created_at.slice(0,10)<fromDate)return false;
@@ -495,6 +495,7 @@ export default function CampusNotes({userId,studentId,studentName}:{userId:strin
     try{
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js','campus-note-pdfjs');
       await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','campus-note-tesseract');
+      if(!window.pdfjsLib)throw new Error('PDF読み取りライブラリを初期化できませんでした。');
       if(!window.Tesseract)throw new Error('OCRを初期化できませんでした。');
       const canvases:HTMLCanvasElement[]=[];
       if(file.type==='application/pdf'){
