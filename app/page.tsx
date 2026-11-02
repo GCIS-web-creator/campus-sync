@@ -7,6 +7,7 @@ import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
 import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
+import CampusCalculator from '@/components/CampusCalculator';
 import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGlobalSearch';
 import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacilityMap';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
@@ -19,7 +20,7 @@ import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-uti
 import { CLASS_TIMETABLE_DATA, type ClassTimetableData, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle,
+  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator,
   ThermometerSun, Info, Users, Check, X,
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon,
   MapPin, User, Palette, BellRing, Sparkle,
@@ -725,7 +726,7 @@ const getOrCreateVoteId = (studentId: string): string => {
   return newId;
 };
 
-type GuestPreviewTab = 'home' | 'timetable' | 'cafeteria' | 'facilities' | 'transport' | 'chat' | 'club' | 'notifications' | 'settings';
+type GuestPreviewTab = 'home' | 'timetable' | 'cafeteria' | 'facilities' | 'transport' | 'calculator' | 'chat' | 'club' | 'notifications' | 'settings';
 
 const GUEST_PREVIEW_NAV: Array<{ id: GuestPreviewTab; label: string; icon: React.ElementType }> = [
   { id: 'home', label: 'ホーム', icon: Home },
@@ -733,6 +734,7 @@ const GUEST_PREVIEW_NAV: Array<{ id: GuestPreviewTab; label: string; icon: React
   { id: 'cafeteria', label: '学食', icon: Utensils },
   { id: 'facilities', label: '校内施設', icon: BookOpen },
   { id: 'transport', label: '電車案内', icon: Train },
+  { id: 'calculator', label: '電卓', icon: Calculator },
   { id: 'chat', label: 'チャット', icon: MessageCircle },
   { id: 'club', label: '部活ノート', icon: MessageSquare },
   { id: 'notifications', label: '通知', icon: Bell },
@@ -802,6 +804,8 @@ function GuestPreviewApp({ onExit }: { onExit: () => void }) {
         return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">校内施設の状況</h3>{sampleTag}</div><div className="grid gap-3 sm:grid-cols-2">{[{name:'キャリアセンター自習室',sub:'利用中 22 / 35席',label:'余裕あり',tone:'text-emerald-700 bg-emerald-50'},{name:'図書室',sub:'開館中（サンプル）',label:'閲覧可',tone:'text-cyan-800 bg-cyan-50'},{name:'普通教室（1-1）',sub:'空調 25℃（サンプル）',label:'快適',tone:'text-emerald-700 bg-emerald-50'},{name:'グローリーホール',sub:'現在の利用状況は架空',label:'確認用',tone:'text-slate-600 bg-slate-100'}].map(item=><div key={item.name} className="rounded-xl border border-slate-100 p-3"><p className="text-sm font-black text-slate-800">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.sub}</p><span className={'mt-2 inline-block rounded-full px-2.5 py-1 text-[10px] font-black '+item.tone}>{item.label}</span></div>)}</div></section></div>;
       case 'transport':
         return <div className="space-y-4"><section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">電車発車案内</h3>{sampleTag}</div><div className="rounded-2xl bg-gradient-to-r from-cyan-700 to-blue-700 p-5 text-white"><p className="text-xs font-bold text-cyan-100">鷹の台駅 ・ サンプル時刻表</p><p className="mt-2 text-3xl font-black">16:12</p><p className="mt-1 text-sm font-bold">国分寺方面（デモ表示）</p><p className="mt-3 rounded-lg bg-white/10 p-2 text-xs">次発の時刻・カウントダウンは実際の運行情報ではありません。</p></div><div className="mt-3 grid gap-3 sm:grid-cols-2">{[{destination:'国分寺方面',times:'16:12 / 16:24 / 16:36'},{destination:'東村山方面',times:'16:18 / 16:30 / 16:42'}].map(item=><div key={item.destination} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-800">{item.destination}</p><p className="mt-2 font-mono text-sm text-slate-600">{item.times}</p></div>)}</div></section></div>;
+      case 'calculator':
+        return <CampusCalculator />;
       case 'chat':
         return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">クラスチャット</h3><p className={mutedClass}>デモ用の架空メッセージのみ表示しています。</p></div>{sampleTag}</div><div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">ゲストモードでは実際のクラス・学年・全校チャットに接続しません。投稿、返信、リアクション、通報、添付ファイルも利用できません。</div><div className="space-y-3">{GUEST_PREVIEW_MESSAGES.map((message,i)=><div key={message.name+message.time} className={'flex gap-2 ' +(i===1?'flex-row-reverse':'')}><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-black text-cyan-900">{message.name.slice(0,1)}</div><div className={'max-w-[85%] rounded-2xl p-3 '+(i===1?'bg-cyan-50':'bg-slate-100')}><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-black text-slate-700">{message.name}</span><span className="text-[10px] text-slate-400">{message.className} ・ {message.time}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.body}</p></div></div>)}</div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-4"><input disabled value="" placeholder="ゲストはメッセージを送信できません" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-xs text-slate-400" /><button type="button" disabled className="rounded-xl bg-slate-200 px-4 text-xs font-black text-slate-400">送信</button></div></section>;
       case 'club':
@@ -968,6 +972,8 @@ export default function CampusSyncApp() {
       schedule: { tab: 'school-schedule' },
       notices: { tab: 'notifications' },
       notes: { tab: 'notes' },
+      calculator: { tab: 'calculator' },
+      calc: { tab: 'calculator' },
     };
 
     const applyHashRoute = () => {
@@ -1004,6 +1010,7 @@ export default function CampusSyncApp() {
       cafeteria: 'food',
       ai: 'ai',
       notes: 'notes',
+      calculator: 'calculator',
       bus: 'transit',
       chat: 'chat',
       facilities: 'campus',
@@ -4174,6 +4181,9 @@ Supabaseの設定を確認してください。
       case 'ai':
         return <CampusAIChat mode="full" />;
 
+      case 'calculator':
+        return <CampusCalculator isDarkMode={isDarkMode} />;
+
       case 'notes':
         return authUser?.id && !isGuestMode
           ? <CampusNotes userId={String(authUser.id)} studentId={studentId} studentName={studentName} />
@@ -5819,6 +5829,7 @@ Supabaseの設定を確認してください。
             <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); }} themeCls={themeCls} />
             <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); }} themeCls={themeCls} />
             <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
+            <SidebarItem icon={<Calculator size={18} />} label="電卓" isActive={activeTab === 'calculator'} onClick={() => setActiveTab('calculator')} themeCls={themeCls} />
             <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
             {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => setActiveTab('notes')} themeCls={themeCls} />}
             <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
@@ -5909,6 +5920,7 @@ Supabaseの設定を確認してください。
                 <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => { setActiveTab('bus'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+                <SidebarItem icon={<Calculator size={18} />} label="電卓" isActive={activeTab === 'calculator'} onClick={() => { setActiveTab('calculator'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => { setActiveTab('notes'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
                 <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); setMobileMenuOpen(false); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
