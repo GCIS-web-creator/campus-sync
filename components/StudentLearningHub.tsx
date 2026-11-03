@@ -10,6 +10,43 @@ type Exam = { id: string; school_year: number; term: number; exam_type: string; 
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
 type Range = { id: string; subject_id: string; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
+type TimerSnapshot = {
+  version: 1;
+  savedAt: number;
+  phase: 'focus' | 'break';
+  timerState: 'running' | 'paused' | 'idle';
+  remaining: number;
+  focusSeconds: number;
+  breakSeconds: number;
+  focusMinutes: number;
+  breakMinutes: number;
+  focusSubject: Subject;
+  focusSubjectId: string;
+  task: string;
+  rangeId: string;
+  startedAt: string | null;
+  showRecord: boolean;
+  reflection: string;
+  nextAction: string;
+  finishKind: 'completed' | 'stopped';
+};
+function readTimerSnapshot(userId: string): TimerSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('campus-sync-study-timer:' + userId);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<TimerSnapshot>;
+    if (value.version !== 1 || !Number.isFinite(value.savedAt) ||
+        (value.phase !== 'focus' && value.phase !== 'break') ||
+        !['running', 'paused', 'idle'].includes(String(value.timerState)) ||
+        !Number.isFinite(value.remaining) || !Number.isFinite(value.focusSeconds) ||
+        !Number.isFinite(value.breakSeconds) || !Number.isFinite(value.focusMinutes) ||
+        !Number.isFinite(value.breakMinutes) || !SUBJECTS.includes(value.focusSubject as Subject)) return null;
+    return value as TimerSnapshot;
+  } catch {
+    return null;
+  }
+}
 const STATUS: Record<Range['status'], string> = { not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' };
 
 const dayKey = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -59,6 +96,7 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
   const [reflection, setReflection] = useState('');
   const [nextAction, setNextAction] = useState('');
   const [finishKind, setFinishKind] = useState<'completed' | 'stopped'>('completed');
+  const [timerReady, setTimerReady] = useState(false);
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
   const remainingRef = useRef(1500);
@@ -94,6 +132,96 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
   }, [userId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // 集中モードを別タブへ移動したり、ページを再読み込みしても同じ端末で復元する。
+  useEffect(() => {
+    const snapshot = readTimerSnapshot(userId);
+    if (!snapshot) {
+      setTimerReady(true);
+      return;
+    }
+
+    setPhase(snapshot.phase);
+    setFocusMinutes(snapshot.focusMinutes);
+    setBreakMinutes(snapshot.breakMinutes);
+    setCustomFocus(String(snapshot.focusMinutes));
+    setCustomBreak(String(snapshot.breakMinutes));
+    setFocusSubject(snapshot.focusSubject);
+    setFocusSubjectId(snapshot.focusSubjectId || '');
+    setTask(snapshot.task || '');
+    setRangeId(snapshot.rangeId || '');
+    setFocusSeconds(snapshot.focusSeconds);
+    setBreakSeconds(snapshot.breakSeconds);
+    setShowRecord(snapshot.showRecord);
+    setReflection(snapshot.reflection || '');
+    setNextAction(snapshot.nextAction || '');
+    setFinishKind(snapshot.finishKind || 'completed');
+    startedAt.current = snapshot.startedAt;
+
+    let restoredPhase = snapshot.phase;
+    let restoredRemaining = Math.max(0, Math.floor(snapshot.remaining));
+    let restoredFocus = Math.max(0, Math.floor(snapshot.focusSeconds));
+    let restoredBreak = Math.max(0, Math.floor(snapshot.breakSeconds));
+    let elapsed = snapshot.timerState === 'running'
+      ? Math.max(0, Math.floor((Date.now() - snapshot.savedAt) / 1000))
+      : 0;
+    let phaseChanges = 0;
+
+    // 非表示中の経過も実際の集中・休憩時間に振り分ける。長期間放置時は安全のため一時停止する。
+    while (elapsed > 0 && phaseChanges < 10000) {
+      if (restoredRemaining <= 0) {
+        restoredPhase = restoredPhase === 'focus' ? 'break' : 'focus';
+        restoredRemaining = (restoredPhase === 'focus' ? snapshot.focusMinutes : snapshot.breakMinutes) * 60;
+        phaseChanges += 1;
+      }
+      const consumed = Math.min(elapsed, restoredRemaining);
+      if (restoredPhase === 'focus') restoredFocus += consumed;
+      else restoredBreak += consumed;
+      elapsed -= consumed;
+      restoredRemaining -= consumed;
+    }
+
+    setFocusSeconds(restoredFocus);
+    setBreakSeconds(restoredBreak);
+    setPhase(restoredPhase);
+    setTimerRemaining(restoredRemaining);
+    setTimerState(phaseChanges >= 10000 ? 'paused' : snapshot.timerState);
+    if (snapshot.timerState === 'running' && Date.now() - snapshot.savedAt > 1000) {
+      setMessage('集中モードを前回の状態から復元しました。');
+    }
+    setTimerReady(true);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!timerReady) return;
+    const key = 'campus-sync-study-timer:' + userId;
+    if (timerState === 'idle' && !showRecord) {
+      try { window.localStorage.removeItem(key); } catch {}
+      return;
+    }
+    const snapshot: TimerSnapshot = {
+      version: 1,
+      savedAt: Date.now(),
+      phase,
+      timerState,
+      remaining,
+      focusSeconds,
+      breakSeconds,
+      focusMinutes,
+      breakMinutes,
+      focusSubject,
+      focusSubjectId,
+      task,
+      rangeId,
+      startedAt: startedAt.current,
+      showRecord,
+      reflection,
+      nextAction,
+      finishKind,
+    };
+    try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
+  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind]);
+
   useEffect(() => {
     if (term === '3') setExamType('学年末考査');
     else if (examType === '学年末考査') setExamType('中間考査');
