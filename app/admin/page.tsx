@@ -11,7 +11,6 @@ import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
 import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
 import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
 import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
-import ClassroomConnectionAdmin from '@/components/ClassroomConnectionAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -19,7 +18,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, GraduationCap
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -1829,9 +1828,6 @@ export default function CampusSyncAdmin() {
             <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
             </button>
-            <button aria-label="Google Classroom接続テスト" title="Google Classroom接続テスト" onClick={() => setActiveTab('classroom-connection')} className={activeTab === 'classroom-connection' ? 'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all text-slate-400 hover:bg-slate-900 hover:text-white'}>
-              <GraduationCap size={18} /><span className="sr-only md:not-sr-only">Classroom接続テスト</span>
-            </button>
             <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
             </button>
@@ -1888,7 +1884,6 @@ export default function CampusSyncAdmin() {
       <main className="campus-admin-main min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
         {activeTab === 'class-timetable' && <ClassTimetableAdmin />}
-        {activeTab === 'classroom-connection' && <ClassroomConnectionAdmin />}
 
         {activeTab === 'school-schedule' && (
           <SchoolScheduleAdmin adminPassword={adminApiPassword} />
