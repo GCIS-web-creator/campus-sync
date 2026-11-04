@@ -332,7 +332,7 @@ function detectDateRowBands(words: OcrWord[], x0: number, x1: number, height: nu
 
   const anchors = lines.map(line => {
     const text = normalizeDigits(line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(word => word.text).join(''))
-      .replace(/[^0-9月日]/g, '');
+      .replace(/[晶曰目]/g, '日').replace(/[^0-9月日]/g, '');
     const match = text.match(/(\d{1,2})月(\d{1,2})日/);
     if (!match) return null;
     const month = Number(match[1]);
