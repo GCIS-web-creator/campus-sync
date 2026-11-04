@@ -182,8 +182,8 @@ function buildClassTimetableBubble(input: {
   timetable: ClassTimetableData;
 }) {
   const isSeven = input.group === '7組';
-  const accent = isSeven ? '#0891B2' : '#4F46E5';
-  const rowBackground = isSeven ? '#F0F9FF' : '#F5F3FF';
+  const accent = isSeven ? '#5C9291' : '#0891B2';
+  const rowBackground = isSeven ? '#EEF5F4' : '#F0F9FF';
   const rows: Record<string, unknown>[] = [];
 
   if (!input.dayKey) {
@@ -264,32 +264,24 @@ function buildSchoolEventsBubble(input: {
       type: 'box',
       layout: 'vertical',
       paddingAll: '14px',
-      cornerRadius: '10px',
-      backgroundColor: '#FFF7ED',
+      cornerRadius: '12px',
+      backgroundColor: '#EAF2F1',
       contents: [
-        { type: 'text', text: '現在、登録されている今後の学校行事はありません。', size: 'sm', color: '#7C2D12', weight: 'bold', wrap: true },
+        { type: 'text', text: '現在、登録されている今後の学校行事はありません。', size: 'sm', color: '#315B59', weight: 'bold', wrap: true },
       ],
     });
   } else {
     for (const event of input.events) {
       const remaining = daysUntil(input.today, event.event_date);
       const remainingText = remaining === 0 ? '本日' : remaining === 1 ? 'あと1日' : 'あと' + remaining + '日';
-      const remainingColor = remaining <= 3 ? '#B91C1C' : remaining <= 7 ? '#C2410C' : '#4338CA';
-      const contents: Record<string, unknown>[] = [
-        {
-          type: 'box',
-          layout: 'horizontal',
-          alignItems: 'center',
-          spacing: 'sm',
-          contents: [
-            { type: 'text', text: formatDateKey(event.event_date), size: 'lg', color: '#C2410C', weight: 'bold', flex: 1 },
-            { type: 'text', text: remainingText, size: 'xs', color: remainingColor, weight: 'bold', align: 'end' },
-          ],
-        },
-        { type: 'text', text: String(event.title || '学校行事').slice(0, 70), size: 'sm', color: '#1E293B', weight: 'bold', wrap: true },
+      const countdownBackground = remaining <= 3 ? '#FCE8E7' : '#E2EFED';
+      const countdownColor = remaining <= 3 ? '#B42318' : '#376C69';
+      const title = String(event.title || '学校行事').slice(0, 70);
+      const eventDetails: Record<string, unknown>[] = [
+        { type: 'text', text: title, size: 'md', color: '#0F172A', weight: 'bold', wrap: true },
       ];
       if (event.summary) {
-        contents.push({
+        eventDetails.push({
           type: 'text',
           text: String(event.summary).slice(0, 100),
           size: 'xs',
@@ -297,14 +289,81 @@ function buildSchoolEventsBubble(input: {
           wrap: true,
         });
       }
+
       bodyContents.push({
         type: 'box',
         layout: 'vertical',
-        paddingAll: '10px',
-        cornerRadius: '10px',
-        backgroundColor: '#FFF7ED',
-        spacing: 'xs',
-        contents,
+        paddingAll: '2px',
+        cornerRadius: '14px',
+        backgroundColor: '#C6D6D6',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '12px',
+            cornerRadius: '12px',
+            backgroundColor: '#F8FAFC',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'box',
+                layout: 'vertical',
+                height: '3px',
+                cornerRadius: '2px',
+                backgroundColor: '#5C9291',
+                contents: [{ type: 'filler' }],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                alignItems: 'center',
+                contents: [
+                  { type: 'text', text: 'SCHOOL CALENDAR', size: 'xxs', color: '#5C9291', weight: 'bold', flex: 1 },
+                  {
+                    type: 'box',
+                    layout: 'vertical',
+                    paddingAll: '6px',
+                    cornerRadius: '18px',
+                    backgroundColor: countdownBackground,
+                    contents: [
+                      { type: 'text', text: remainingText, size: 'xs', color: countdownColor, weight: 'bold', align: 'center' },
+                    ],
+                  },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                alignItems: 'center',
+                spacing: 'md',
+                contents: [
+                  {
+                    type: 'box',
+                    layout: 'vertical',
+                    width: '72px',
+                    paddingAll: '10px',
+                    cornerRadius: '10px',
+                    backgroundColor: '#163A40',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    spacing: 'xs',
+                    contents: [
+                      { type: 'text', text: formatDateKey(event.event_date), size: 'lg', color: '#FFFFFF', weight: 'bold', align: 'center' },
+                      { type: 'text', text: 'EVENT', size: 'xxs', color: '#A7D3CD', weight: 'bold', align: 'center' },
+                    ],
+                  },
+                  {
+                    type: 'box',
+                    layout: 'vertical',
+                    flex: 1,
+                    spacing: 'xs',
+                    contents: eventDetails,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       });
     }
   }
@@ -316,7 +375,6 @@ function buildSchoolEventsBubble(input: {
     bodyContents,
   });
 }
-
 
 function buildDailyDigest(input: {
   dateLabel: string;
