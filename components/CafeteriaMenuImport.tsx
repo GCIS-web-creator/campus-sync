@@ -479,13 +479,14 @@ async function extractRows(
         const confidence = Number.isFinite(result.data.confidence) ? Number(result.data.confidence) : 0;
 
         // 低信頼の文字列はそのまま献立として採用せず、空欄にして手修正を促す。
-        if (text && confidence >= 38) {
+        if (text && confidence >= 50) {
           values.push(text);
         } else {
           values.push('');
-          if (text || confidence < 38) lowConfidence += 1;
+          if (text) lowConfidence += 1;
         }
       }
+      if (values.every(value => !value)) lowConfidence += 1;
     } else {
       values.push('', '', '', '', '');
       if (isSpecialMenu) lowConfidence += 1;
