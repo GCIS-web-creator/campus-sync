@@ -72,11 +72,11 @@ export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
   const icon = (name: string) => origin + '/api/weather/icons/' + name + '?format=png';
   const days = weather.slice(0, 3);
   const dayCards: Record<string, unknown>[] = days.map((day, index) => ({
-    type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', paddingAll: '8px', cornerRadius: '10px',
+    type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', paddingAll: '6px', cornerRadius: '10px',
     backgroundColor: index === 0 ? '#EFF6FF' : '#F8FAFC',
     contents: [
       { type: 'text', text: formatWeatherDateLabel(day.date), size: 'xs', weight: 'bold', color: '#334155', align: 'center', wrap: true },
-      { type: 'image', url: icon(day.iconName), size: 'lg', aspectRatio: '1:1', aspectMode: 'fit', align: 'center' },
+      { type: 'image', url: icon(day.iconName), size: 'md', aspectRatio: '1:1', aspectMode: 'fit', align: 'center' },
       { type: 'text', text: day.description, size: 'xs', weight: 'bold', color: '#0F172A', align: 'center', wrap: true },
       { type: 'box', layout: 'horizontal', spacing: 'xs', alignItems: 'center', contents: [
         { type: 'image', url: icon('temp_high'), size: 'xs', aspectRatio: '1:1', aspectMode: 'fit' },
