@@ -333,7 +333,7 @@ function detectDateRowBands(words: OcrWord[], x0: number, x1: number, height: nu
   const anchors = lines.map(line => {
     const text = normalizeDigits(line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(word => word.text).join(''))
       .replace(/[^0-9月日]/g, '');
-    const match = text.match(/(\\d{1,2})月(\\d{1,2})日/);
+    const match = text.match(/(\d{1,2})月(\d{1,2})日/);
     if (!match) return null;
     const month = Number(match[1]);
     const day = Number(match[2]);
@@ -388,7 +388,7 @@ function extractRows(canvas: HTMLCanvasElement, words: OcrWord[], selectedMonth:
   for (const band of bands) {
     const { top, bottom } = band;
     const date = readRegion(words, columns[0], columns[1], top, bottom);
-    const match = normalizeDigits(date.text).match(/(\\d{1,2})月(\\d{1,2})日/);
+    const match = normalizeDigits(date.text).match(/(\d{1,2})月(\d{1,2})日/);
     const month = band.month ?? (match ? Number(match[1]) : 0);
     const day = band.day ?? (match ? Number(match[2]) : 0);
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
