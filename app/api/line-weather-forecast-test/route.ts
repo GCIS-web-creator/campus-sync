@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   let forecast;
   try {
-    forecast = await fetchSchoolWeatherForecast(4);
+    forecast = await fetchSchoolWeatherForecast(5);
   } catch (error) {
     console.error('LINE天気予報テスト：天気データ取得失敗:', error instanceof Error ? error.message : 'unknown');
     return jsonError('天気予報を取得できませんでした。Open-Meteoの応答を確認してください。', 502);
