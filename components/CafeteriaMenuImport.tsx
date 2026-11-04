@@ -304,17 +304,38 @@ function readRegion(words: OcrWord[], x0: number, x1: number, y0: number, y1: nu
   return { text, confidence };
 }
 
-type DateRowBand = { top: number; bottom: number; month: number; day: number; confidence: number };
+type DateRowBand = {
+  top: number;
+  bottom: number;
+  month?: number;
+  day?: number;
+  confidence: number;
+  center: number;
+};
 
-// 日付欄のOCR文字を行単位でまとめ、日付の中心位置から各行の上下端を推定する。
-// 写真で罫線が斜めになり、横罫線を水平線として検出できないケースにも対応する。
+function parseMenuDate(value: string): { month: number; day: number } | null {
+  const normalized = normalizeDigits(value)
+    .replace(/[晶曰目]/g, '日')
+    .replace(/[\s　]/g, '')
+    .replace(/[^0-9月日]/g, '');
+  const match = normalized.match(/(\d{1,2})月(\d{1,2})日/);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { month, day };
+}
+
+// 日付文字列が一部読めなくても、日付欄に文字がある行はすべて行位置として残す。
+// 先にすべての行の中心を確保することで、1日分の日付OCR失敗が前後のセル範囲を
+// 2～3日分まとめてしまう事故を防ぐ。
 function detectDateRowBands(words: OcrWord[], x0: number, x1: number, height: number): DateRowBand[] {
   const selected = wordsInRegion(words, x0, x1, height * 0.055, height * 0.99);
   if (!selected.length) return [];
 
   const heights = selected.map(word => Math.max(1, word.bbox.y1 - word.bbox.y0)).sort((a, b) => a - b);
   const medianHeight = heights[Math.floor(heights.length / 2)] || 8;
-  const tolerance = Math.max(6, medianHeight * 0.85);
+  const tolerance = Math.max(6, medianHeight * 0.75);
   const lines: Array<{ y: number; words: OcrWord[] }> = [];
 
   for (const word of [...selected].sort((a, b) =>
@@ -331,31 +352,53 @@ function detectDateRowBands(words: OcrWord[], x0: number, x1: number, height: nu
   }
 
   const anchors = lines.map(line => {
-    const text = normalizeDigits(line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(word => word.text).join(''))
-      .replace(/[晶曰目]/g, '日').replace(/[^0-9月日]/g, '');
-    const match = text.match(/(\d{1,2})月(\d{1,2})日/);
-    if (!match) return null;
-    const month = Number(match[1]);
-    const day = Number(match[2]);
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    const confidence = line.words.reduce((sum, word) => sum + (Number.isFinite(word.confidence) ? Number(word.confidence) : 100), 0) / line.words.length;
-    return { center: line.y, month, day, confidence };
-  }).filter((value): value is { center: number; month: number; day: number; confidence: number } => value !== null)
-    .sort((a, b) => a.center - b.center);
+    const text = line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(word => word.text).join('');
+    const parsed = parseMenuDate(text);
+    const confidence = line.words.reduce((sum, word) =>
+      sum + (Number.isFinite(word.confidence) ? Number(word.confidence) : 100), 0) / line.words.length;
+    return { center: line.y, month: parsed?.month, day: parsed?.day, confidence };
+  }).sort((a, b) => a.center - b.center);
 
   if (!anchors.length) return [];
 
-  return anchors.map((anchor, index) => {
-    const previous = anchors[index - 1];
-    const next = anchors[index + 1];
-    const halfBefore = previous ? (anchor.center - previous.center) / 2 : next ? (next.center - anchor.center) / 2 : medianHeight * 1.8;
-    const halfAfter = next ? (next.center - anchor.center) / 2 : previous ? (anchor.center - previous.center) / 2 : medianHeight * 1.8;
+  // 日付欄の文字そのものが丸ごと欠けた行も、通常の行間隔から補間する。
+  const gaps = anchors.slice(1).map((anchor, index) => anchor.center - anchors[index].center)
+    .filter(gap => gap >= height * 0.012 && gap <= height * 0.15)
+    .sort((a, b) => a - b);
+  const typicalGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : medianHeight * 2.5;
+  const expanded: typeof anchors = [];
+
+  anchors.forEach((anchor, index) => {
+    if (index > 0 && typicalGap > 0) {
+      const previous = anchors[index - 1];
+      const gap = anchor.center - previous.center;
+      const steps = Math.round(gap / typicalGap);
+      if (steps >= 2 && steps <= 5 && gap > typicalGap * 1.45) {
+        for (let step = 1; step < steps; step += 1) {
+          expanded.push({
+            center: previous.center + (gap * step) / steps,
+            month: undefined,
+            day: undefined,
+            confidence: 0,
+          });
+        }
+      }
+    }
+    expanded.push(anchor);
+  });
+
+  return expanded.map((anchor, index) => {
+    const previous = expanded[index - 1];
+    const next = expanded[index + 1];
+    const top = previous ? (previous.center + anchor.center) / 2 : anchor.center - typicalGap / 2;
+    const bottom = next ? (anchor.center + next.center) / 2 : anchor.center + typicalGap / 2;
     return {
-      top: Math.max(height * 0.055, anchor.center - Math.max(halfBefore, medianHeight * 0.9)),
-      bottom: Math.min(height * 0.99, anchor.center + Math.max(halfAfter, medianHeight * 0.9)),
+      top: Math.max(height * 0.055, top),
+      bottom: Math.min(height * 0.99, bottom),
       month: anchor.month,
       day: anchor.day,
       confidence: anchor.confidence,
+      center: anchor.center,
     };
   });
 }
@@ -365,12 +408,33 @@ function cleanMenuName(value: string): string {
     .replace(/[|｜•·]+/g, '').replace(/\s/g, '').trim().slice(0, 100);
 }
 
+function menuTextSimilarity(a: string, b: string): number {
+  const left = cleanMenuName(a).replace(/[、。,.・･]/g, '');
+  const right = cleanMenuName(b).replace(/[、。,.・･]/g, '');
+  if (!left || !right) return 0;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return 1 - previous[right.length] / Math.max(left.length, right.length);
+}
+
 function createCellOcrCanvas(
   source: HTMLCanvasElement,
   x0: number,
   x1: number,
   y0: number,
   y1: number,
+  enhance = true,
 ): HTMLCanvasElement {
   // 罫線・セルの外側を少し除き、メニュー文字だけを十分な大きさでOCRへ渡す。
   const padX = Math.max(5, Math.round((x1 - x0) * 0.015));
@@ -394,6 +458,9 @@ function createCellOcrCanvas(
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
   context.drawImage(source, left, top, cropWidth, cropHeight, 0, 0, output.width, output.height);
+
+  // 2回目は元画像の色と濃淡を維持し、異なる条件で認識結果を照合する。
+  if (!enhance) return output;
 
   // 色付き背景・影の影響を抑え、文字のコントラストを上げる。
   const image = context.getImageData(0, 0, output.width, output.height);
@@ -435,55 +502,89 @@ async function extractRows(
   const rows: CafeteriaMenuImportRow[] = [];
   const detectedMonths: number[] = [];
   let lowConfidence = 0;
-  const targetBands = bands.filter(band => {
-    const date = readRegion(words, columns[0], columns[1], band.top, band.bottom);
-    const match = normalizeDigits(date.text).replace(/[晶曰目]/g, '日').match(/(\d{1,2})月(\d{1,2})日/);
-    const month = band.month ?? (match ? Number(match[1]) : 0);
-    if (month >= 1 && month <= 12) detectedMonths.push(month);
-    return month === targetMonth;
-  });
 
-  // 全ページOCRは日付と行位置の検出にだけ使う。
-  // 献立名は1セルずつ拡大・補正し、複数列を混ぜずに認識させる。
-  await worker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
-  for (let rowIndex = 0; rowIndex < targetBands.length; rowIndex += 1) {
-    const band = targetBands[rowIndex];
+  // 日付の読めた行だけに絞らず、日付欄の文字位置から検出した全行を処理する。
+  for (let rowIndex = 0; rowIndex < bands.length; rowIndex += 1) {
+    const band = bands[rowIndex];
     const { top, bottom } = band;
-    const date = readRegion(words, columns[0], columns[1], top, bottom);
-    const dateMatch = normalizeDigits(date.text).replace(/[晶曰目]/g, '日').match(/(\d{1,2})月(\d{1,2})日/);
-    const month = band.month ?? (dateMatch ? Number(dateMatch[1]) : 0);
-    const day = band.day ?? (dateMatch ? Number(dateMatch[2]) : 0);
+    const dateRegion = readRegion(words, columns[0], columns[1], top, bottom);
+    let parsedDate = band.month && band.day
+      ? { month: band.month, day: band.day }
+      : parseMenuDate(dateRegion.text);
+    let dateConfidence = band.confidence ?? dateRegion.confidence;
+
+    // 全ページOCRで日付の数字が欠けたときは、その日付セルだけを切り出して再認識する。
+    if (!parsedDate) {
+      await worker.setParameters({
+        tessedit_pageseg_mode: '7',
+        tessedit_char_whitelist: '0123456789０１２３４５６７８９月日',
+        preserve_interword_spaces: '0',
+      });
+      const dateCanvas = createCellOcrCanvas(canvas, columns[0], columns[1], top, bottom, false);
+      const dateResult = await worker.recognize(dateCanvas);
+      parsedDate = parseMenuDate(typeof dateResult.data.text === 'string' ? dateResult.data.text : '');
+      dateConfidence = Number.isFinite(dateResult.data.confidence) ? Number(dateResult.data.confidence) : 0;
+    }
+
+    if (!parsedDate) {
+      lowConfidence += 1;
+      onProgress(rowIndex + 1, bands.length);
+      continue;
+    }
+
+    const { month, day } = parsedDate;
+    if (month >= 1 && month <= 12) detectedMonths.push(month);
     if (month !== targetMonth || day < 1 || day > 31) {
-      onProgress(rowIndex + 1, targetBands.length);
+      onProgress(rowIndex + 1, bands.length);
       continue;
     }
 
     const allMenus = readRegion(words, columns[2], columns[7], top, bottom);
-    const normalizedMenus = normalizeDigits(allMenus.text);
-    const isClosed = /営業はありません|営業しておりません|休業/.test(normalizedMenus);
+    const normalizedMenus = normalizeDigits(allMenus.text).replace(/[\s　]/g, '');
+    const isClosed = /営業はありません|営業しておりません|本日休業|休業/.test(normalizedMenus);
     const isSpecialMenu = /特別メニュー/.test(normalizedMenus);
     const values: string[] = [];
 
     if (!isClosed && !isSpecialMenu) {
       for (let columnIndex = 0; columnIndex < 5; columnIndex += 1) {
-        const cellCanvas = createCellOcrCanvas(
-          canvas,
-          columns[columnIndex + 2],
-          columns[columnIndex + 3],
-          top,
-          bottom,
-        );
-        const result = await worker.recognize(cellCanvas);
-        const rawText = typeof result.data.text === 'string' ? result.data.text : '';
-        const text = cleanMenuName(rawText);
-        const confidence = Number.isFinite(result.data.confidence) ? Number(result.data.confidence) : 0;
+        const x0 = columns[columnIndex + 2];
+        const x1 = columns[columnIndex + 3];
+        const enhancedCanvas = createCellOcrCanvas(canvas, x0, x1, top, bottom, true);
+        const originalCanvas = createCellOcrCanvas(canvas, x0, x1, top, bottom, false);
 
-        // 低信頼の文字列はそのまま献立として採用せず、空欄にして手修正を促す。
-        if (text && confidence >= 50) {
-          values.push(text);
+        // 前処理画像と元画像を異なる文字領域モードで読み、文字列そのものも照合する。
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: '',
+          preserve_interword_spaces: '0',
+        });
+        const primary = await worker.recognize(enhancedCanvas);
+        const primaryText = cleanMenuName(typeof primary.data.text === 'string' ? primary.data.text : '');
+        const primaryConfidence = Number.isFinite(primary.data.confidence) ? Number(primary.data.confidence) : 0;
+
+        await worker.setParameters({
+          tessedit_pageseg_mode: '11',
+          tessedit_char_whitelist: '',
+          preserve_interword_spaces: '0',
+        });
+        const secondary = await worker.recognize(originalCanvas);
+        const secondaryText = cleanMenuName(typeof secondary.data.text === 'string' ? secondary.data.text : '');
+        const secondaryConfidence = Number.isFinite(secondary.data.confidence) ? Number(secondary.data.confidence) : 0;
+
+        const usePrimary = primaryConfidence >= secondaryConfidence;
+        const bestText = usePrimary ? primaryText : secondaryText;
+        const bestConfidence = Math.max(primaryConfidence, secondaryConfidence);
+        const bothRecognized = Boolean(primaryText && secondaryText);
+        const agreement = bothRecognized ? menuTextSimilarity(primaryText, secondaryText) : 0;
+        const agreed = bothRecognized && agreement >= 0.66;
+        const singleStrong = !bothRecognized && bestConfidence >= 88;
+
+        // OCRの信頼度だけでは誤字を防げないため、2方式が一致した箇所を優先する。
+        if (bestText && bestConfidence >= 62 && (agreed || singleStrong)) {
+          values.push(bestText);
         } else {
           values.push('');
-          if (text) lowConfidence += 1;
+          if (primaryText || secondaryText) lowConfidence += 1;
         }
       }
       if (values.every(value => !value)) lowConfidence += 1;
@@ -492,7 +593,6 @@ async function extractRows(
       if (isSpecialMenu) lowConfidence += 1;
     }
 
-    const dateConfidence = band.confidence ?? date.confidence;
     if (dateConfidence < 45) lowConfidence += 1;
 
     rows.push({
@@ -505,7 +605,7 @@ async function extractRows(
       is_closed: isClosed,
     });
 
-    onProgress(rowIndex + 1, targetBands.length);
+    onProgress(rowIndex + 1, bands.length);
   }
 
   const unique = new Map<string, CafeteriaMenuImportRow>();
@@ -574,7 +674,7 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
           result.data.words || [],
           selectedMonth,
           worker,
-          (completed, total) => setProgress('献立名をセルごとに高解像度で読み取り中... ' + completed + '/' + total + '日分'),
+          (completed, total) => setProgress('献立名を2方式で照合中... ' + completed + '/' + total + '日分'),
         );
         extracted.push(...page.rows); detectedMonths.push(...page.detectedMonths); lowConfidence += page.lowConfidence;
       }
@@ -590,7 +690,7 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
       }
       setRows(finalRows);
       setWarning(lowConfidence > 0
-        ? '読み取りに自信がない箇所が' + lowConfidence + '件あります。空欄や文字を確認・修正してください。'
+        ? '日付または2方式の読み取りが一致しない箇所が' + lowConfidence + '件あります。空欄や文字を確認・修正してください。'
         : '読み取り結果を確認してください。表に載っていない日付は変更されません。');
       setProgress(finalRows.length + '日分を読み取りました。');
     } catch (caught) {
@@ -608,7 +708,7 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
         <div className="rounded-xl bg-cyan-500/10 p-2.5 text-cyan-300"><ScanText size={21} /></div>
         <div className="min-w-0 flex-1">
           <h3 className="font-black text-white">PDF・写真から献立を自動入力</h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">月間献立表を選ぶと、日付を検出した後、5区分の各セルを拡大して個別に読み取ります。確認・修正してから月間表へ反映できます。</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">日付欄から全行の位置を先に検出し、5区分の献立は画像処理を変えた2方式のOCR結果を照合します。一致しない箇所は空欄にして誤入力を防ぎます。確認・修正してから月間表へ反映できます。</p>
         </div>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
