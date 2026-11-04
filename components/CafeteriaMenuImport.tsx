@@ -150,38 +150,126 @@ function detectLines(canvas: HTMLCanvasElement, axis: 'horizontal' | 'vertical')
   const pixels = context.getImageData(0, 0, width, height).data;
   const isDark = (x: number, y: number) => {
     const index = (y * width + x) * 4;
-    return pixels[index] < 115 && pixels[index + 1] < 115 && pixels[index + 2] < 115;
+    const brightness = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+    return brightness < 150;
   };
   const found: number[] = [];
   if (axis === 'horizontal') {
-    const x0 = Math.round(width * 0.05), x1 = Math.round(width * 0.95);
-    const y0 = Math.round(height * 0.065), y1 = Math.round(height * 0.98);
+    const x0 = Math.round(width * 0.015), x1 = Math.round(width * 0.985);
+    const y0 = Math.round(height * 0.065), y1 = Math.round(height * 0.985);
     for (let y = y0; y < y1; y += 1) {
       let count = 0;
       for (let x = x0; x < x1; x += 1) if (isDark(x, y)) count += 1;
-      if (count >= (x1 - x0) * 0.62) found.push(y);
+      // 写真の傾きや薄い罫線を考慮し、全幅の一部が検出できれば候補にする。
+      if (count >= (x1 - x0) * 0.38) found.push(y);
     }
-    return cluster(found, 3);
+    return cluster(found, 4);
   }
-  const y0 = Math.round(height * 0.075), y1 = Math.round(height * 0.98);
-  const x0 = Math.round(width * 0.035), x1 = Math.round(width * 0.965);
+  const y0 = Math.round(height * 0.075), y1 = Math.round(height * 0.985);
+  const x0 = Math.round(width * 0.025), x1 = Math.round(width * 0.975);
   for (let x = x0; x < x1; x += 1) {
     let count = 0;
     for (let y = y0; y < y1; y += 1) if (isDark(x, y)) count += 1;
-    if (count >= (y1 - y0) * 0.55) found.push(x);
+    if (count >= (y1 - y0) * 0.16) found.push(x);
   }
-  return cluster(found, 3);
+  return cluster(found, 4);
 }
 
+// 献立表は画像の幅いっぱいに配置される場合と、左右に余白がある場合がある。
+// 画像上の縦罫線を検出し、日付列・曜日列・5つのメニュー列の比率に合わせて
+// 表の左右端と6本の区切り線を推定する。
 function getColumnBounds(canvas: HTMLCanvasElement): number[] {
   const width = canvas.width;
-  const expected = [0.062, 0.162, 0.201, 0.348, 0.495, 0.643, 0.790, 0.938].map(value => value * width);
-  const detected = detectLines(canvas, 'vertical');
-  return expected.map(position => {
-    const near = detected.filter(value => Math.abs(value - position) <= width * 0.035)
-      .sort((a, b) => Math.abs(a - position) - Math.abs(b - position))[0];
-    return Math.round(near ?? position);
-  });
+  const height = canvas.height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return [0.062, 0.162, 0.201, 0.348, 0.495, 0.643, 0.790, 0.938].map(value => Math.round(value * width));
+
+  const pixels = context.getImageData(0, 0, width, height).data;
+  const y0 = Math.round(height * 0.075);
+  const y1 = Math.round(height * 0.985);
+  const sampleHeight = Math.max(1, y1 - y0);
+  const scores = new Float32Array(width);
+
+  for (let x = 0; x < width; x += 1) {
+    let dark = 0;
+    for (let y = y0; y < y1; y += 1) {
+      const index = (y * width + x) * 4;
+      const brightness = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+      if (brightness < 155) dark += 1;
+    }
+    scores[x] = dark / sampleHeight;
+  }
+
+  const candidates: Array<{ position: number; strength: number }> = [];
+  const minX = Math.round(width * 0.025);
+  const maxX = Math.round(width * 0.975);
+  let run: number[] = [];
+  const flushRun = () => {
+    if (!run.length) return;
+    let peak = run[0];
+    for (const x of run) if (scores[x] > scores[peak]) peak = x;
+    if (scores[peak] >= 0.16) candidates.push({ position: peak, strength: scores[peak] });
+    run = [];
+  };
+
+  for (let x = minX; x <= maxX; x += 1) {
+    if (scores[x] >= 0.14) {
+      if (run.length && x - run[run.length - 1] > 4) flushRun();
+      run.push(x);
+    } else {
+      flushRun();
+    }
+  }
+  flushRun();
+
+  // 表の列比率（表の左端から）：日付、曜日、創価、ヘルシー、スナック、カレー、麺類
+  const internalRatios = [0.115, 0.159, 0.325, 0.492, 0.659, 0.827];
+  const edges = [
+    { position: 0, strength: 0 },
+    ...candidates,
+    { position: width, strength: 0 },
+  ];
+  let best: { bounds: number[]; error: number } | null = null;
+
+  for (const left of edges) {
+    for (const right of edges) {
+      const span = right.position - left.position;
+      if (span < width * 0.70 || span > width * 1.005) continue;
+      const used = new Set<number>();
+      const matched: number[] = [];
+      let totalError = 0;
+      let valid = true;
+
+      for (const ratio of internalRatios) {
+        const expected = left.position + span * ratio;
+        const options = candidates
+          .map((candidate, index) => ({ ...candidate, index, distance: Math.abs(candidate.position - expected) }))
+          .filter(candidate => candidate.position > left.position + span * 0.025
+            && candidate.position < right.position - span * 0.025
+            && !used.has(candidate.index)
+            && candidate.distance <= span * 0.045)
+          .sort((a, b) => (a.distance / span - a.strength * 0.012) - (b.distance / span - b.strength * 0.012));
+
+        const choice = options[0];
+        if (!choice) { valid = false; break; }
+        used.add(choice.index);
+        matched.push(choice.position);
+        totalError += choice.distance / span;
+      }
+
+      if (!valid) continue;
+      const averageError = totalError / internalRatios.length;
+      if (!best || averageError < best.error) {
+        best = { bounds: [left.position, ...matched, right.position].map(Math.round), error: averageError };
+      }
+    }
+  }
+
+  // 縦罫線を十分に検出できない画像では、従来の余白付き配置を保険として使う。
+  if (best && best.error <= 0.025 && best.bounds.every((value, index, all) => index === 0 || value > all[index - 1])) {
+    return best.bounds;
+  }
+  return [0.062, 0.162, 0.201, 0.348, 0.495, 0.643, 0.790, 0.938].map(value => Math.round(value * width));
 }
 
 function normalizeDigits(value: string): string {
@@ -216,6 +304,62 @@ function readRegion(words: OcrWord[], x0: number, x1: number, y0: number, y1: nu
   return { text, confidence };
 }
 
+type DateRowBand = { top: number; bottom: number; month: number; day: number; confidence: number };
+
+// 日付欄のOCR文字を行単位でまとめ、日付の中心位置から各行の上下端を推定する。
+// 写真で罫線が斜めになり、横罫線を水平線として検出できないケースにも対応する。
+function detectDateRowBands(words: OcrWord[], x0: number, x1: number, height: number): DateRowBand[] {
+  const selected = wordsInRegion(words, x0, x1, height * 0.055, height * 0.99);
+  if (!selected.length) return [];
+
+  const heights = selected.map(word => Math.max(1, word.bbox.y1 - word.bbox.y0)).sort((a, b) => a - b);
+  const medianHeight = heights[Math.floor(heights.length / 2)] || 8;
+  const tolerance = Math.max(6, medianHeight * 0.85);
+  const lines: Array<{ y: number; words: OcrWord[] }> = [];
+
+  for (const word of [...selected].sort((a, b) =>
+    (a.bbox.y0 + a.bbox.y1) / 2 - (b.bbox.y0 + b.bbox.y1) / 2 || a.bbox.x0 - b.bbox.x0
+  )) {
+    const y = (word.bbox.y0 + word.bbox.y1) / 2;
+    let line = lines.find(candidate => Math.abs(candidate.y - y) <= tolerance);
+    if (!line) {
+      line = { y, words: [] };
+      lines.push(line);
+    }
+    line.words.push(word);
+    line.y = line.words.reduce((sum, item) => sum + (item.bbox.y0 + item.bbox.y1) / 2, 0) / line.words.length;
+  }
+
+  const anchors = lines.map(line => {
+    const text = normalizeDigits(line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(word => word.text).join(''))
+      .replace(/[^0-9月日]/g, '');
+    const match = text.match(/(\\d{1,2})月(\\d{1,2})日/);
+    if (!match) return null;
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const confidence = line.words.reduce((sum, word) => sum + (Number.isFinite(word.confidence) ? Number(word.confidence) : 100), 0) / line.words.length;
+    return { center: line.y, month, day, confidence };
+  }).filter((value): value is { center: number; month: number; day: number; confidence: number } => value !== null)
+    .sort((a, b) => a.center - b.center);
+
+  if (!anchors.length) return [];
+
+  return anchors.map((anchor, index) => {
+    const previous = anchors[index - 1];
+    const next = anchors[index + 1];
+    const halfBefore = previous ? (anchor.center - previous.center) / 2 : next ? (next.center - anchor.center) / 2 : medianHeight * 1.8;
+    const halfAfter = next ? (next.center - anchor.center) / 2 : previous ? (anchor.center - previous.center) / 2 : medianHeight * 1.8;
+    return {
+      top: Math.max(height * 0.055, anchor.center - Math.max(halfBefore, medianHeight * 0.9)),
+      bottom: Math.min(height * 0.99, anchor.center + Math.max(halfAfter, medianHeight * 0.9)),
+      month: anchor.month,
+      day: anchor.day,
+      confidence: anchor.confidence,
+    };
+  });
+}
+
 function cleanMenuName(value: string): string {
   return value.replace(/おすすめ|大人気|新登場|期間限定|今月のおすすめ/g, '')
     .replace(/[|｜•·]+/g, '').replace(/\s/g, '').trim().slice(0, 100);
@@ -223,24 +367,32 @@ function cleanMenuName(value: string): string {
 
 function extractRows(canvas: HTMLCanvasElement, words: OcrWord[], selectedMonth: string) {
   const columns = getColumnBounds(canvas);
+  const dateBands = detectDateRowBands(words, columns[0], columns[1], canvas.height);
   const horizontal = detectLines(canvas, 'horizontal');
-  const bands: Array<[number, number]> = [];
+  const fallbackBands: Array<[number, number]> = [];
   for (let index = 0; index < horizontal.length - 1; index += 1) {
     const top = horizontal[index], bottom = horizontal[index + 1];
-    if (bottom - top >= 15 && bottom - top <= canvas.height * 0.16) bands.push([top, bottom]);
+    if (bottom - top >= 15 && bottom - top <= canvas.height * 0.16) fallbackBands.push([top, bottom]);
   }
+  const bands: Array<{ top: number; bottom: number; month?: number; day?: number; confidence?: number }> =
+    dateBands.length
+      ? dateBands
+      : fallbackBands.map(([top, bottom]) => ({ top, bottom }));
+
   const year = Number(selectedMonth.slice(0, 4));
   const targetMonth = Number(selectedMonth.slice(5, 7));
   const rows: CafeteriaMenuImportRow[] = [];
   const detectedMonths: number[] = [];
   let lowConfidence = 0;
 
-  for (const [top, bottom] of bands) {
+  for (const band of bands) {
+    const { top, bottom } = band;
     const date = readRegion(words, columns[0], columns[1], top, bottom);
-    const match = normalizeDigits(date.text).match(/(\d{1,2})月(\d{1,2})日/);
-    if (!match) continue;
-    const month = Number(match[1]), day = Number(match[2]);
+    const match = normalizeDigits(date.text).match(/(\\d{1,2})月(\\d{1,2})日/);
+    const month = band.month ?? (match ? Number(match[1]) : 0);
+    const day = band.day ?? (match ? Number(match[2]) : 0);
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+
     detectedMonths.push(month);
     if (month !== targetMonth) continue;
 
@@ -251,7 +403,8 @@ function extractRows(canvas: HTMLCanvasElement, words: OcrWord[], selectedMonth:
       return { text: cleanMenuName(cell.text), confidence: cell.confidence };
     });
     if (!isClosed && cells.every(cell => !cell.text)) lowConfidence += 1;
-    if (date.confidence < 45 || cells.some(cell => cell.text && cell.confidence < 45)) lowConfidence += 1;
+    const dateConfidence = band.confidence ?? date.confidence;
+    if (dateConfidence < 45 || cells.some(cell => cell.text && cell.confidence < 45)) lowConfidence += 1;
 
     rows.push({
       service_date: String(year) + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0'),
@@ -332,7 +485,7 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
         if (months && !months.includes(Number(selectedMonth.slice(5, 7)) + '月')) {
           throw new Error('PDF・写真から' + months + 'の日付を検出しました。対象年月を合わせてから再度読み取ってください。');
         }
-        throw new Error('日付と5区分の表を検出できませんでした。表全体が写るPDF・写真を選び直してください。');
+        throw new Error('日付欄を読み取れませんでした。日付の列がはっきり写っているか確認してください。罫線が斜めでも、日付の文字が読めれば自動で行を検出できます。');
       }
       setRows(finalRows);
       setWarning(lowConfidence > 0
