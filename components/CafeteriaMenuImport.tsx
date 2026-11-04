@@ -408,6 +408,25 @@ function cleanMenuName(value: string): string {
     .replace(/[|｜•·]+/g, '').replace(/\s/g, '').trim().slice(0, 100);
 }
 
+// 給食・学食メニューで頻出する語に限り、文脈が明確なOCR誤認識を補正する。
+// 曖昧な文字列全般を推測で置き換えず、読み取れないものは従来どおり確認対象に残す。
+function normalizeMenuOcrText(value: string): string {
+  let text = cleanMenuName(value)
+    .replace(/南奏/g, '南蛮')
+    .replace(/南蠻/g, '南蛮')
+    .replace(/ね[きぎ]{1,4}(?=味噌)/g, 'ねぎ');
+
+  // 「チキンかつ」と「タルタルソース」の間にOCR特有の崩れが入った場合だけ補正。
+  text = text.replace(/チキンかつ(.{1,4})タルタルソース/g, (match, middle: string) => {
+    if (middle === '南蛮') return match;
+    return /[調意訟褒論]/.test(middle)
+      ? 'チキンかつ南蛮タルタルソース'
+      : match;
+  });
+
+  return text;
+}
+
 function menuTextSimilarity(a: string, b: string): number {
   const left = cleanMenuName(a).replace(/[、。,.・･]/g, '');
   const right = cleanMenuName(b).replace(/[、。,.・･]/g, '');
@@ -559,16 +578,18 @@ async function extractRows(
           preserve_interword_spaces: '0',
         });
         const primary = await worker.recognize(enhancedCanvas);
-        const primaryText = cleanMenuName(typeof primary.data.text === 'string' ? primary.data.text : '');
+        const primaryText = normalizeMenuOcrText(typeof primary.data.text === 'string' ? primary.data.text : '');
         const primaryConfidence = Number.isFinite(primary.data.confidence) ? Number(primary.data.confidence) : 0;
 
+        // セル内の複数行テキストには自動レイアウト解析（PSM 3）を使い、
+        // PSM 6の結果と照合する。
         await worker.setParameters({
-          tessedit_pageseg_mode: '11',
+          tessedit_pageseg_mode: '3',
           tessedit_char_whitelist: '',
           preserve_interword_spaces: '0',
         });
         const secondary = await worker.recognize(originalCanvas);
-        const secondaryText = cleanMenuName(typeof secondary.data.text === 'string' ? secondary.data.text : '');
+        const secondaryText = normalizeMenuOcrText(typeof secondary.data.text === 'string' ? secondary.data.text : '');
         const secondaryConfidence = Number.isFinite(secondary.data.confidence) ? Number(secondary.data.confidence) : 0;
 
         const usePrimary = primaryConfidence >= secondaryConfidence;
