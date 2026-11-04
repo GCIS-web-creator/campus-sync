@@ -409,14 +409,14 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
           aria-label="CampusSync AI 全画面チャット"
           className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:rounded-3xl"
         >
-          <header className="flex shrink-0 items-center justify-between gap-3 bg-[#111B35] px-4 py-3.5 text-white sm:px-6">
+          <header className="flex shrink-0 items-center justify-between gap-3 bg-[#173B40] px-4 py-3.5 text-white sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-violet-200">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#A7D3CD]">
                 <Sparkles size={22} />
               </div>
               <div className="min-w-0">
                 <h2 className="truncate text-base font-black tracking-tight sm:text-lg">CampusSync AI</h2>
-                <p className="text-[9px] font-bold tracking-[0.16em] text-violet-200 sm:text-[10px]">SCHOOL LIFE INTELLIGENCE</p>
+                <p className="text-[9px] font-bold tracking-[0.16em] text-[#A7D3CD] sm:text-[10px]">SCHOOL LIFE INTELLIGENCE</p>
               </div>
             </div>
             <button
@@ -439,13 +439,13 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
               </div>
               <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
                 {conversations.map(conversation => (
-                  <div key={conversation.id} className={'group rounded-xl border p-2 ' + (activeConversationId === conversation.id ? 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/40' : 'border-transparent hover:border-slate-200 hover:bg-white dark:hover:border-slate-700 dark:hover:bg-slate-900')}>
+                  <div key={conversation.id} className={'group rounded-xl border p-2 ' + (activeConversationId === conversation.id ? 'border-[#C8DEDB] bg-[#EAF2F1] dark:border-[#376C69] dark:bg-[#173B40]/40' : 'border-transparent hover:border-slate-200 hover:bg-white dark:hover:border-slate-700 dark:hover:bg-slate-900')}>
                     <button type="button" disabled={busy} onClick={() => openConversation(conversation)} className="w-full min-w-0 text-left disabled:opacity-50">
-                      <span className={'block truncate text-xs font-bold ' + (activeConversationId === conversation.id ? 'text-violet-800 dark:text-violet-200' : 'text-slate-700 dark:text-slate-200')}>{conversation.title}</span>
+                      <span className={'block truncate text-xs font-bold ' + (activeConversationId === conversation.id ? 'text-[#315B59] dark:text-[#A7D3CD]' : 'text-slate-700 dark:text-slate-200')}>{conversation.title}</span>
                       <span className="mt-1 block text-[9px] text-slate-400">{conversation.messages.length ? new Date(conversation.updatedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '新規会話'}</span>
                     </button>
                     <div className="mt-1 flex justify-end gap-1 opacity-70 transition group-hover:opacity-100">
-                      <button type="button" onClick={() => renameConversation(conversation)} aria-label="会話名を変更" title="名前を変更" className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-violet-700 dark:hover:bg-slate-800"><Pencil size={12} /></button>
+                      <button type="button" onClick={() => renameConversation(conversation)} aria-label="会話名を変更" title="名前を変更" className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-[#376C69] dark:hover:bg-slate-800"><Pencil size={12} /></button>
                       <button type="button" onClick={() => deleteConversation(conversation)} aria-label="会話を削除" title="削除" className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-rose-600 dark:hover:bg-slate-800"><Trash2 size={12} /></button>
                     </div>
                   </div>
@@ -482,13 +482,19 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                     <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                       <div className={
                         m.role === 'user'
-                          ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#2B4FD8] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'
+                          ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#5C9291] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'
                           : 'w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-800 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:px-5'
                       }>
                         {m.role === 'ai' && (
-                          <div className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wide text-violet-700 dark:text-violet-300">
-                            <Sparkles size={13} />
-                            CAMPUSSYNC AI
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EAF2F1] text-[#376C69] dark:bg-[#173B40] dark:text-[#A7D3CD]">
+                              <Sparkles size={15} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[10px] font-black tracking-wide text-[#376C69] dark:text-[#A7D3CD]">CAMPUSSYNC AI</span>
+                              <span className="block text-[9px] font-medium tracking-wider text-slate-400">SCHOOL LIFE ASSISTANT</span>
+                            </span>
+                            <span className="rounded-full bg-[#EAF2F1] px-2.5 py-1 text-[9px] font-bold text-[#376C69] dark:bg-[#173B40] dark:text-[#A7D3CD]">AI回答</span>
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words">{m.text}</div>
@@ -511,7 +517,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                         {m.quickReplies?.length && m.queueMenuId && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             {m.quickReplies.map(choice => (
-                              <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#2B4FD8]/40 bg-white px-4 py-2 text-xs font-bold text-[#2B4FD8] hover:bg-[#2B4FD8]/10 disabled:opacity-50">
+                              <button key={choice.status} type="button" disabled={busy} onClick={() => void voteQueue(m.id, m.queueMenuId!, choice)} className="rounded-full border border-[#5C9291]/40 bg-white px-4 py-2 text-xs font-bold text-[#376C69] hover:bg-[#5C9291]/10 disabled:opacity-50">
                                 {choice.label}
                               </button>
                             ))}
@@ -522,7 +528,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                   ))}
                   {busy && (
                     <div className="flex items-center gap-2 px-2 text-xs font-medium text-slate-400">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" />
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#EAF2F1]0" />
                       CampusSync AIが確認しています…
                     </div>
                   )}
@@ -531,9 +537,9 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                       <p className="mb-2 text-xs font-black text-slate-500 dark:text-slate-400">よく使う質問</p>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {SUGGESTIONS.map(s => (
-                          <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="flex items-center justify-between rounded-xl border border-violet-200 bg-white px-3.5 py-3 text-left text-xs font-bold text-slate-700 transition hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+                          <button key={s} type="button" disabled={busy} onClick={() => void send(s)} className="flex items-center justify-between rounded-xl border border-[#C8DEDB] bg-white px-3.5 py-3 text-left text-xs font-bold text-slate-700 transition hover:border-[#5C9291] hover:bg-[#EAF2F1] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
                             {s}
-                            <span className="text-violet-500">→</span>
+                            <span className="text-[#5C9291]">→</span>
                           </button>
                         ))}
                       </div>
@@ -546,9 +552,9 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
           </div>
 
           <form onSubmit={e => { e.preventDefault(); void send(input); }} className="shrink-0 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:px-6 sm:py-4">
-            <div className="mx-auto flex w-full max-w-5xl items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-xs focus-within:border-violet-400 dark:border-slate-700 dark:bg-slate-800">
+            <div className="mx-auto flex w-full max-w-5xl items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-xs focus-within:border-[#5C9291] dark:border-slate-700 dark:bg-slate-800">
               <input value={input} onChange={e => setInput(e.target.value)} maxLength={100} placeholder="学校のことを質問してください…" className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-slate-400 dark:text-white" />
-              <button type="submit" disabled={busy || !input.trim()} aria-label="送信" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#6D28D9] text-white transition hover:bg-violet-800 disabled:opacity-40">
+              <button type="submit" disabled={busy || !input.trim()} aria-label="送信" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173B40] text-white transition hover:bg-[#315D60] disabled:opacity-40">
                 <Send size={18} />
               </button>
             </div>
@@ -563,7 +569,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
           }}
           aria-label="CampusSync AI専用画面を開く"
           title="CampusSync AIを開く"
-          className="fixed bottom-20 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-[#6D28D9] text-white shadow-lg transition hover:scale-105 md:bottom-6"
+          className="fixed bottom-20 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-[#173B40] text-white shadow-lg transition hover:scale-105 md:bottom-6"
         >
           <Sparkles size={22} />
         </button>
