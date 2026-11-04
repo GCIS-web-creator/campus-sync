@@ -53,7 +53,7 @@ function retryKeyForWeek(weekStart: string): string {
 
 
 function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timetable: ClassTimetableData) {
-  const accent=group==='7組'?'#0891B2':'#4F46E5';
+  const accent=group==='7組'?'#5C9291':'#0891B2';
   const rows:Record<string,unknown>[]=timetable[group].Mon.map(slot=>({
     type:'box',layout:'horizontal',alignItems:'center',spacing:'sm',paddingAll:'9px',cornerRadius:'9px',backgroundColor:'#F8FAFC',
     contents:[
