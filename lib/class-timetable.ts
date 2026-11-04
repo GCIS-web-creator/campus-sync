@@ -168,7 +168,7 @@ export function getTokyoTomorrowTimetableInfo(now: Date = new Date()): TokyoTomo
 
 function buildGroupBubble(group: ClassTimetableGroup, dayKey: ClassTimetableDayKey, dateLabel: string, timetable: ClassTimetableData = CLASS_TIMETABLE_DATA) {
   const rows = timetable[group][dayKey];
-  const accent = group === '7組' ? '#0891B2' : '#4F46E5';
+  const accent = group === '7組' ? '#5C9291' : '#0891B2';
   const contents: Record<string, unknown>[] = rows.map(slot => ({
     type: 'box',
     layout: 'horizontal',
