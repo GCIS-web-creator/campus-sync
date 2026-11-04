@@ -444,7 +444,8 @@ export async function POST(request: Request) {
     admin.from('class_timetable_slots')
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
-    fetchSchoolWeatherForecast(4).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
+    // 今日を除外しても明日から3日分を確保できるよう、5日分の予報を取得する。
+    fetchSchoolWeatherForecast(5).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
