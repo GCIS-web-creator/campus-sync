@@ -51,17 +51,16 @@ export async function POST(request: Request) {
     if (!id) return NextResponse.json({ success: false, message: '対象コードを確認できません。' }, { status: 400, headers: noStore });
     const { data: existing, error: findError } = await admin
       .from('teacher_access_codes')
-      .select('id')
+      .select('id,session_generation')
       .eq('id', id)
       .maybeSingle();
     if (findError || !existing) return NextResponse.json({ success: false, message: '対象コードが見つかりません。' }, { status: 404, headers: noStore });
 
-    const { error } = await admin.from('teacher_access_codes').update({ code_hash: codeHash }).eq('id', id);
+    const { error } = await admin.from('teacher_access_codes').update({ code_hash: codeHash, session_generation: (Number(existing.session_generation) || 1) + 1 }).eq('id', id);
     if (error) {
       console.error('先生用アクセスコード再発行に失敗:', error.message);
       return NextResponse.json({ success: false, message: 'コードを再発行できませんでした。' }, { status: 500, headers: noStore });
     }
-    await admin.from('teacher_access_sessions').delete().eq('access_code_id', id);
     return NextResponse.json({ success: true, code: rawCode, message: '新しいコードを発行しました。以前のコードとログイン中のセッションは無効になりました。' }, { headers: noStore });
   }
 
@@ -115,12 +114,21 @@ export async function PATCH(request: Request) {
   }
   if (!Object.keys(update).length) return NextResponse.json({ success: false, message: '変更内容がありません。' }, { status: 400, headers: noStore });
 
-  if (update.starts_on || update.ends_on) {
-    const { data: current } = await admin.from('teacher_access_codes').select('starts_on,ends_on').eq('id', id).maybeSingle();
+  const revokesExistingSessions = update.is_active === false || Boolean(update.starts_on || update.ends_on);
+  let currentCode: { starts_on: string; ends_on: string; session_generation: number } | null = null;
+  if (revokesExistingSessions || update.starts_on || update.ends_on) {
+    const { data: current } = await admin.from('teacher_access_codes')
+      .select('starts_on,ends_on,session_generation')
+      .eq('id', id)
+      .maybeSingle();
     if (!current) return NextResponse.json({ success: false, message: '対象コードが見つかりません。' }, { status: 404, headers: noStore });
+    currentCode = current;
     const start = String(update.starts_on || current.starts_on);
     const end = String(update.ends_on || current.ends_on);
     if (start > end) return NextResponse.json({ success: false, message: '終了日は開始日以降にしてください。' }, { status: 400, headers: noStore });
+  }
+  if (revokesExistingSessions && currentCode) {
+    update.session_generation = (Number(currentCode.session_generation) || 1) + 1;
   }
 
   const { data, error } = await admin.from('teacher_access_codes')
