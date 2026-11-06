@@ -782,7 +782,7 @@ function GuestPreviewApp({ onExit }: { onExit: () => void }) {
               <section className={cardClass}>
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-black text-slate-900">今日の時間割</h3>{sampleTag}</div>
                 <div className="space-y-2">{GUEST_PREVIEW_TIMETABLE.slice(0, 3).map(row => <div key={row.period} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="w-12 shrink-0 text-center"><p className="text-xs font-black text-cyan-800">{row.period}</p><p className="mt-1 text-[9px] text-slate-500">{row.time.split('–')[0]}</p></div><div className="min-w-0 flex-1 border-l border-slate-200 pl-3"><p className="text-sm font-black text-slate-800">{row.subject}</p><p className="mt-1 text-[10px] text-slate-500">{row.teacher} ・ {row.room}</p></div></div>)}</div>
-                <button type="button" onClick={() => setActiveTab('timetable')} className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-50">時間割を確認 <ChevronRight size={15} /></button>
+                <button type="button" data-teacher-nav="true" onClick={() => setActiveTab('timetable')} className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-50">時間割を確認 <ChevronRight size={15} /></button>
               </section>
               <section className={cardClass}>
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-black text-slate-900">提出物リマインダー</h3>{sampleTag}</div>
@@ -2071,9 +2071,9 @@ useEffect(() => {
   return () => window.clearInterval(intervalId);
 }, [activeTab]);
 
-// Adminと共有する図書室蔵書を読み込む
+// Adminと共有する図書室蔵書を読み込む（先生モードでは閲覧のみ）
 useEffect(() => {
-  if (!authUser) { setLibraryBooksLoading(false); return; }
+  if (!authUser && !isTeacherMode) { setLibraryBooksLoading(false); return; }
   let cancelled = false;
 
   const fetchLibraryBooks = async () => {
@@ -2108,11 +2108,11 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [authUser]);
+}, [authUser, isTeacherMode]);
 
 // Adminサイトで設定したキャリアセンター自習室の座席状況を読み込む
 useEffect(() => {
-  if (!authUser) return;
+  if (!authUser && !isTeacherMode) return;
   let cancelled = false;
   const loadStudyRoomStatus = async () => {
     const { data, error } = await supabase
@@ -2139,11 +2139,11 @@ useEffect(() => {
 
   void loadStudyRoomStatus();
   return () => { cancelled = true; };
-}, [authUser]);
+}, [authUser, isTeacherMode]);
 
 // 学食からのお知らせをSupabaseから取得し、ポップアップと学食タブのバナーに反映する。
 useEffect(() => {
-  if (!authUser) {
+  if (!authUser && !isTeacherMode) {
     setCafeteriaAnnouncement(null);
     setShowCafeteriaAnnouncementPopup(false);
     return;
@@ -2182,11 +2182,11 @@ useEffect(() => {
 
   void loadCafeteriaAnnouncement();
   return () => { cancelled = true; };
-}, [authUser?.id]);
+}, [authUser?.id, isTeacherMode]);
 
-// Supabaseから落とし物・教室状況データを取得
+// Supabaseから学校共通の落とし物・教室・学食・交通・献立データを取得
 useEffect(() => {
-  if (!authUser) return;
+  if (!authUser && !isTeacherMode) return;
   const fetchSharedData = async () => {
     let fetchStep = '投票IDの準備';
     try {
@@ -2637,7 +2637,7 @@ useEffect(() => {
   };
 
   fetchSharedData();
-}, [authUser?.id, studentId]);
+}, [authUser?.id, studentId, isTeacherMode]);
 
 // 認証完了後に本人の課題を読み込む。
 // 共有データ取得用effectとは分け、ログイン前に実行されて終わる問題を防ぐ。
@@ -5923,7 +5923,7 @@ Supabaseの設定を確認してください。
       data-teacher-mode={isTeacherMode ? 'true' : undefined}
       onClickCapture={isTeacherMode ? event => {
         const target = event.target as HTMLElement;
-        if (target.closest('[data-teacher-nav="true"]')) return;
+        if (target.closest('[data-teacher-nav="true"], nav, [role="tab"]')) return;
         event.preventDefault();
         event.stopPropagation();
       } : undefined}
@@ -5934,7 +5934,7 @@ Supabaseの設定を確認してください。
       {isTeacherMode && (
         <div className="fixed right-3 top-3 z-[120] flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-amber-300/40 bg-slate-950/95 px-3 py-2 text-[10px] font-bold text-amber-100 shadow-xl backdrop-blur">
           <ShieldAlert size={14} className="shrink-0 text-amber-300" />
-          <span className="truncate">{teacherDisplayName}・先生閲覧モード（編集不可）</span>
+          <span className="truncate">{teacherDisplayName}・先生閲覧モード（編集不可／期限 {teacherAccessEndsOn}）</span>
           <button type="button" data-teacher-nav="true" onClick={() => void exitTeacherMode()} className="shrink-0 rounded-full bg-amber-300 px-3 py-1.5 text-[10px] font-black text-slate-950">ログアウト</button>
         </div>
       )}
