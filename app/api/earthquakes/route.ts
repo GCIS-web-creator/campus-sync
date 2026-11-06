@@ -415,7 +415,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   const isDistant = descendantsNamed(root, 'Foreign').length > 0 || /海外|中国|ロシア|アメリカ|台湾|トンガ|パプア|フィリピン|インドネシア|南米|太平洋|地中海|メキシコ|チリ|カムチャツカ|マリアナ|バヌアツ/.test(placeText);
   const eventKey = buildEventKey(root, eventTime, hypocenterName, magnitude, entry.id);
   const hasObservedMajorIntensity = observedAreas.some(area =>
-    (area.intensityRank ?? intensityRank(area.intensity || '')) >= 7
+    ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7
   );
   const notificationKind = isEewCancelled && eewKodairaTarget
     ? 'eew_cancelled'
@@ -467,7 +467,7 @@ function stableRetryKey(value: string): string {
 
 function notificationPayload(item: ParsedEarthquake, kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake'): EarthquakeNotificationPayload {
   const severeAreas = item.observedAreas
-    .filter(area => (area.intensityRank ?? intensityRank(area.intensity || '')) >= 7)
+    .filter(area => ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7)
     .map(area => ({
       name: area.name,
       prefecture: area.prefecture,
