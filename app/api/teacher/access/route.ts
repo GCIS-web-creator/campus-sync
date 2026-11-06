@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   if (!normalized) return NextResponse.json({ success: false, message: 'コードが正しくありません。' }, { status: 401, headers: noStore });
 
   const { data: code, error } = await admin.from('teacher_access_codes')
-    .select('id,display_name,starts_on,ends_on,is_active')
+    .select('id,display_name,starts_on,ends_on,is_active,use_count')
     .eq('code_hash', hashTeacherSecret(normalized))
     .maybeSingle();
   const today = getTokyoDateKey();
@@ -64,8 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: 'ログイン処理に失敗しました。' }, { status: 500, headers: noStore });
   }
   await admin.from('teacher_access_codes').update({ last_used_at: new Date().toISOString() }).eq('id', code.id);
-  const { count } = await admin.from('teacher_access_sessions').select('id', { count: 'exact', head: true }).eq('access_code_id', code.id);
-  await admin.from('teacher_access_codes').update({ use_count: (count || 0) }).eq('id', code.id);
+  await admin.from('teacher_access_codes').update({ use_count: (Number(code.use_count) || 0) + 1 }).eq('id', code.id);
 
   return NextResponse.json(
     { success: true, teacher: { name: code.display_name, endsOn: code.ends_on, expiresAt } },
