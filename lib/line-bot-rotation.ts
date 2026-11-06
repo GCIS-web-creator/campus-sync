@@ -1,12 +1,32 @@
 import { createClient } from '@supabase/supabase-js';
 
-export type LineBotSlot = 1 | 2 | 3;
+export type LineBotSlot = 1 | 2 | 3 | 4 | 5;
 
 export type LineBotCredential = {
   slot: LineBotSlot | 0;
   channelSecret: string;
   accessToken: string;
 };
+
+/** Returns the balanced BOT slot assigned to a JST calendar date. */
+export function getLineBotSlotForDate(dateValue: Date | string): LineBotSlot | null {
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+  const year = Number(parts.find(part => part.type === 'year')?.value);
+  const month = Number(parts.find(part => part.type === 'month')?.value);
+  const day = Number(parts.find(part => part.type === 'day')?.value);
+  if (!year || month < 1 || month > 12 || day < 1) return null;
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Math.min(5, Math.ceil(day * 5 / daysInMonth)) as LineBotSlot;
+}
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -48,7 +68,7 @@ export async function getActiveLineBot(): Promise<LineBotCredential | null> {
     }
     if (!error && data) {
       const slot = Number(data.active_bot_slot);
-      if (slot === 1 || slot === 2 || slot === 3) {
+      if (slot >= 1 && slot <= 5) {
         const configured = getLineBotCredentialsForSlot(slot);
         if (configured) return configured;
         // Keep BOT 1 compatible with the currently deployed single-account setup.
@@ -74,7 +94,7 @@ export async function getActiveLineBot(): Promise<LineBotCredential | null> {
 /** All configured channels are accepted by the shared webhook URL. */
 export function getLineWebhookCredentials(): LineBotCredential[] {
   const credentials: LineBotCredential[] = [];
-  for (const slot of [1, 2, 3] as const) {
+  for (const slot of [1, 2, 3, 4, 5] as const) {
     const credential = getLineBotCredentialsForSlot(slot);
     if (credential) credentials.push(credential);
   }
@@ -89,7 +109,7 @@ export function getLineWebhookCredentials(): LineBotCredential[] {
 
 /** Returns configuration presence only. Never returns any secret/token value. */
 export function getLineBotEnvironmentStatus() {
-  return ([1, 2, 3] as const).map(slot => ({
+  return ([1, 2, 3, 4, 5] as const).map(slot => ({
     slot,
     channelSecretConfigured: Boolean(process.env[`LINE_CHANNEL_SECRET_${slot}`] || (slot === 1 && process.env.LINE_CHANNEL_SECRET)),
     accessTokenConfigured: Boolean(process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`] || (slot === 1 && process.env.LINE_CHANNEL_ACCESS_TOKEN)),

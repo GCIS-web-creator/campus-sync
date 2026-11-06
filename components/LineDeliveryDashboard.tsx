@@ -196,7 +196,7 @@ export default function LineDeliveryDashboard() {
           <div><h3 className="font-black text-white">BOTローテーション状況</h3><p className="mt-1 text-xs text-slate-500">アクセストークン・Channel Secretの値は表示しません。</p></div>
           {data?.rotation && <span className="rounded-full bg-cyan-500/15 px-3 py-1.5 text-xs font-black text-cyan-200">現在 BOT {data.rotation.active_bot_slot}</span>}
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
           {(data?.botEnvironment || []).map(bot => <div key={bot.slot} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
             <p className="font-bold text-white">BOT {bot.slot}</p>
             <p className={'mt-2 text-xs ' + (bot.channelSecretConfigured ? 'text-emerald-300' : 'text-rose-300')}>Channel Secret {bot.channelSecretConfigured ? '登録済み' : '未登録'}</p>
@@ -213,7 +213,7 @@ export default function LineDeliveryDashboard() {
             <label className="relative sm:col-span-2 xl:col-span-1"><Search size={14} className="absolute left-3 top-3 text-slate-500"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="内容・送信先・IDを検索" className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-3 text-xs text-white outline-none focus:border-cyan-500"/></label>
             <select value={channelFilter} onChange={event => setChannelFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">すべての送信先</option><option value="broadcast">公式アカウント</option><option value="push">グループ・ルーム</option><option value="reply">個別返信</option></select>
             <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">成功・失敗すべて</option><option value="success">API受付成功</option><option value="failure">失敗のみ</option></select>
-            <select value={botFilter} onChange={event => setBotFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">全BOT</option><option value="0">旧BOT / 単独BOT</option><option value="1">BOT 1</option><option value="2">BOT 2</option><option value="3">BOT 3</option><option value="unknown">BOT不明</option></select>
+            <select value={botFilter} onChange={event => setBotFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">全BOT</option><option value="0">旧BOT / 単独BOT</option><option value="1">BOT 1</option><option value="2">BOT 2</option><option value="3">BOT 3</option><option value="4">BOT 4</option><option value="5">BOT 5</option><option value="unknown">BOT不明</option></select>
             <select value={kindFilter} onChange={event => setKindFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">全カテゴリ</option>{kinds.map(kind => <option key={kind} value={kind}>{KIND_LABELS[kind] || kind}</option>)}</select>
           </div>
         </div>

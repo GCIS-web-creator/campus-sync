@@ -4,19 +4,13 @@
 alter table public.line_group_chats
   add column if not exists bot_slot smallint;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.line_group_chats'::regclass
-      and conname = 'line_group_chats_bot_slot_check'
-  ) then
-    alter table public.line_group_chats
-      add constraint line_group_chats_bot_slot_check
-      check (bot_slot is null or bot_slot between 1 and 3) not valid;
-  end if;
-end
-$$;
+alter table public.line_group_chats
+  drop constraint if exists line_group_chats_bot_slot_check;
+alter table public.line_group_chats
+  add constraint line_group_chats_bot_slot_check
+  check (bot_slot is null or bot_slot between 1 and 5) not valid;
+alter table public.line_group_chats
+  validate constraint line_group_chats_bot_slot_check;
 
 alter table public.line_broadcast_history
   add column if not exists delivery_batch_id uuid;
@@ -38,8 +32,17 @@ create table if not exists public.line_group_delivery_logs (
   created_at timestamptz not null default now(),
   unique (delivery_batch_id, chat_id),
   constraint line_group_delivery_logs_bot_slot_check
-    check (bot_slot is null or bot_slot between 1 and 3)
+    check (bot_slot is null or bot_slot between 1 and 5)
 );
+
+alter table public.line_group_delivery_logs
+  drop constraint if exists line_group_delivery_logs_bot_slot_check;
+alter table public.line_group_delivery_logs
+  add constraint line_group_delivery_logs_bot_slot_check
+  check (bot_slot is null or bot_slot between 1 and 5) not valid;
+alter table public.line_group_delivery_logs
+  validate constraint line_group_delivery_logs_bot_slot_check;
+
 
 create index if not exists line_group_delivery_logs_batch_idx
   on public.line_group_delivery_logs (delivery_batch_id, sent_at desc);

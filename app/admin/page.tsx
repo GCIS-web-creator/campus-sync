@@ -430,7 +430,7 @@ export default function CampusSyncAdmin() {
   const [classTimetableSending, setClassTimetableSending] = useState(false);
   const [classTimetableMessage, setClassTimetableMessage] = useState('');
 
-  // LINE公式アカウントBOT 1〜3の自動ローテーション状況（認証値は取得・表示しない）。
+  // LINE公式アカウントBOT 1〜5の自動ローテーション状況（認証値は取得・表示しない）。
   const [lineBotRotation, setLineBotRotation] = useState<{
     rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; rotation_hold_until?: string | null; updated_at: string };
     pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string } | null;
@@ -2090,7 +2090,7 @@ export default function CampusSyncAdmin() {
                   <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><MessageSquare size={22} /></div>
                   <div>
                     <h3 className="text-base font-black text-white">LINE公式アカウント BOT ローテーション</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">毎月1日・11日・21日にSupabaseが使用BOTを自動更新します。認証情報はVercel内だけで管理し、この画面には表示しません。</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">月の日数に合わせてBOT 1〜5の担当期間を均等に分け、おおむね5〜7日ごとにSupabaseが使用BOTを自動更新します。認証情報はVercel内だけで管理し、この画面には表示しません。</p>
                   </div>
                 </div>
                 <button
@@ -2123,7 +2123,7 @@ export default function CampusSyncAdmin() {
                     </div>
                     <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
                       <p className="text-[11px] font-bold text-slate-300">Vercel認証情報の登録状況</p>
-                      <div className="mt-2 grid grid-cols-3 gap-2">
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
                         {lineBotRotation.environment.map(item => (
                           <div key={item.slot} className="rounded-lg bg-slate-950 p-2 text-center">
                             <p className="text-xs font-black text-white">BOT {item.slot}</p>
@@ -2142,7 +2142,7 @@ export default function CampusSyncAdmin() {
                     </div>
                   )}
                   <p className="text-[11px] leading-5 text-slate-400">
-                    友だち向けBroadcastは現在選択中BOTの友だちにだけ届きます。BOT 1〜3は別々の友だちリストとして管理されるため、3つすべてから配信を受け取るには、各アカウントの友だち追加が必要です。
+                    友だち向けBroadcastは現在選択中BOTの友だちにだけ届きます。BOT 1〜5は別々の友だちリストとして管理されるため、5つすべてから配信を受け取るには、各アカウントの友だち追加が必要です。
                   </p>
                   {lineBotRotation.pendingEvent ? (
                     <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">

@@ -1,6 +1,6 @@
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
-import { getActiveLineBot } from '@/lib/line-bot-rotation';
+import { getActiveLineBot, getLineBotSlotForDate } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -67,8 +67,9 @@ export async function POST(request:Request) {
   }
 
   const currentSlot=Number(rotation.active_bot_slot);
-  if(![1,2,3].includes(currentSlot))return jsonError('現在のBOT番号が不正です。',500);
-  const nextSlot=currentSlot===3?1:currentSlot+1;
+  if(![1,2,3,4,5].includes(currentSlot))return jsonError('現在のBOT番号が不正です。',500);
+  const nextSlot=getLineBotSlotForDate(switchAt);
+  if(!nextSlot)return jsonError('次回BOT番号を計算できません。',500);
   const activeBot=await getActiveLineBot();
   if(!activeBot?.accessToken)return jsonError('現在使用中のBOTのアクセストークンがありません。',503);
 

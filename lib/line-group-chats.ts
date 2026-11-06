@@ -34,7 +34,7 @@ function getAdminClient() {
 export async function rememberLineChatEvent(
   source: LineChatSource | undefined,
   eventType: string,
-  botSlot: 0 | 1 | 2 | 3,
+  botSlot: 0 | 1 | 2 | 3 | 4 | 5,
 ): Promise<void> {
   if (!source || (source.type !== 'group' && source.type !== 'room')) return;
   const chatId = source.type === 'group' ? source.groupId : source.roomId;
@@ -47,7 +47,7 @@ export async function rememberLineChatEvent(
   }
 
   const now = new Date().toISOString();
-  const storedBotSlot = botSlot >= 1 && botSlot <= 3 ? botSlot : null;
+  const storedBotSlot = botSlot >= 1 && botSlot <= 5 ? botSlot : null;
   if (eventType === 'leave') {
     // Keep the ID for troubleshooting even if the bot leaves before a prior join
     // event could be saved. Inactive chats are never used as delivery targets.
@@ -75,7 +75,7 @@ export async function rememberLineChatEvent(
 }
 
 function resolveLineBotSlot(accessToken: string): number | null {
-  for (const slot of [1, 2, 3] as const) {
+  for (const slot of [1, 2, 3, 4, 5] as const) {
     const configuredToken = process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`] || '';
     if (configuredToken && configuredToken === accessToken) return slot;
   }

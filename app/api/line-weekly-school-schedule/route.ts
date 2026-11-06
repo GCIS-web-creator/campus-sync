@@ -233,7 +233,7 @@ export async function POST(request: Request) {
     // 現在のBOTで参加を確認できたグループだけ、週間学校予定表の受信を有効化する。
     for (const group of verifiedGroups) {
       const { error: updateError } = await supabase.from('line_group_chats').update({
-        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 3 ? activeLineBot.slot : null,
+        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 5 ? activeLineBot.slot : null,
         receive_school_schedule: true,
       }).eq('chat_id', group.chatId).eq('active', true);
       if (updateError) {
@@ -282,7 +282,7 @@ export async function POST(request: Request) {
         kind: 'school_schedule',
         chat_id: delivery.chatId,
         chat_type: 'group',
-        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 3 ? activeLineBot.slot : null,
+        bot_slot: activeLineBot.slot >= 1 && activeLineBot.slot <= 5 ? activeLineBot.slot : null,
         status: delivery.success ? 'success' : 'failure',
         http_status: delivery.status,
         error_message: delivery.errorMessage,

@@ -118,7 +118,7 @@ async function replyToLine(
 async function handleLineEvents(
   events: LineTextMessageEvent[],
   channelAccessToken: string,
-  botSlot: 0 | 1 | 2 | 3,
+  botSlot: 0 | 1 | 2 | 3 | 4 | 5,
 ): Promise<void> {
   await Promise.all(events.map(async event => {
     if (event.source?.type === 'group' || event.source?.type === 'room') {
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 
   if (channelCredentials.length === 0) {
     return NextResponse.json(
-      { message: 'LINE BOT 1〜3のWebhook認証情報をサーバー環境変数に設定してください。' },
+      { message: 'LINE BOT 1〜5のWebhook認証情報をサーバー環境変数に設定してください。' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
