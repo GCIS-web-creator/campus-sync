@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     }));
 
   const events: Array<Record<string, any>> = [...auditEvents.map(event => ({ ...event, source: 'detailed' })), ...legacyBroadcasts, ...legacyGroups]
-    .sort((a, b) => new Date(String(b.sent_at || 0)).getTime() - new Date(String(a.sent_at || 0)).getTime())
+    .sort((a: Record<string, any>, b: Record<string, any>) => new Date(String(b.sent_at || 0)).getTime() - new Date(String(a.sent_at || 0)).getTime())
     .slice(0, 1500);
 
   return NextResponse.json({
