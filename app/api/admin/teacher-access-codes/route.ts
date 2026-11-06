@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { randomBytes } from 'node:crypto';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import {
   createTeacherAccessCode,
   getTeacherAccessAdmin,
   hashTeacherSecret,
   isValidDateKey,
+  normalizeTeacherAccessCode,
 } from '@/lib/teacher-access';
 
 export const runtime = 'nodejs';
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   if (!body) return NextResponse.json({ success: false, message: '入力内容を確認してください。' }, { status: 400, headers: noStore });
 
   const rawCode = createTeacherAccessCode();
-  const codeHash = hashTeacherSecret(rawCode);
+  const codeHash = hashTeacherSecret(normalizeTeacherAccessCode(rawCode));
   if (body.action === 'rotate') {
     const id = typeof body.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ success: false, message: '対象コードを確認できません。' }, { status: 400, headers: noStore });
