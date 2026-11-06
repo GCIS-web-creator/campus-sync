@@ -108,7 +108,7 @@ function categoryDefaultEnabled(category: string): boolean {
 }
 
 async function finish(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   id: number,
   outcome: 'sent' | 'skipped' | 'failed',
   error?: string,

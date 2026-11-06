@@ -25,6 +25,18 @@ alter table public.notifications
 create index if not exists notifications_target_created_idx
   on public.notifications (target_user_id, created_at desc);
 create index if not exists notifications_created_at_desc_idx on public.notifications (created_at desc);
+-- Public notices remain readable, but targeted notices are visible only to their owner.
+alter table public.notifications enable row level security;
+drop policy if exists public_read_notifications on public.notifications;
+drop policy if exists public_insert_notifications on public.notifications;
+drop policy if exists school_notifications_read_target on public.notifications;
+create policy school_notifications_read_target
+  on public.notifications for select to anon, authenticated
+  using (target_user_id is null or target_user_id = (select auth.uid()));
+grant select on public.notifications to anon, authenticated, service_role;
+revoke insert, update, delete on public.notifications from public, anon, authenticated;
+grant insert, update, delete on public.notifications to service_role;
+
 create table if not exists public.notification_reads (
   user_id uuid not null references auth.users(id) on delete cascade,
   notification_id text not null,
