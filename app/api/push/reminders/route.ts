@@ -64,7 +64,7 @@ function moveTargetPastQuietHours(
 ): Date {
   if (!enabled) return target;
   const toMinutes = (value: string): number | null => {
-    const match = /^(\\d{2}):(\\d{2})/.exec(String(value || ''));
+    const match = /^(\d{2}):(\d{2})/.exec(String(value || ''));
     if (!match) return null;
     const hour = Number(match[1]);
     const minute = Number(match[2]);
@@ -118,7 +118,9 @@ function isReminderDue(
   target = moveTargetPastQuietHours(target, timezone, quietHoursEnabled, quietHoursStart, quietHoursEnd);
   const current = localParts(now, timezone);
   if (!allowedDays.includes(current.weekday)) return false;
-  return now.getTime() >= target.getTime() && now.getTime() < target.getTime() + 5 * 60 * 1000;
+  return now.getTime() >= target.getTime()
+    && now.getTime() < target.getTime() + 15 * 60 * 1000
+    && now.getTime() < new Date(dueAt).getTime();
 }
 
 export async function POST(request: Request) {

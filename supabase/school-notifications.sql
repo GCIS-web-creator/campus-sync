@@ -6,7 +6,24 @@ alter table public.notifications
   add column if not exists image_url text,
   add column if not exists line_sent boolean not null default false,
   add column if not exists line_sent_at timestamptz,
-  add column if not exists line_error text;
+  add column if not exists line_error text,
+  add column if not exists category text not null default 'general',
+  add column if not exists priority text not null default 'normal',
+  add column if not exists is_pinned boolean not null default false,
+  add column if not exists target_user_id uuid references auth.users(id) on delete cascade,
+  add column if not exists expires_at timestamptz;
+
+alter table public.notifications
+  drop constraint if exists notifications_category_check,
+  drop constraint if exists notifications_priority_check;
+alter table public.notifications
+  add constraint notifications_category_check
+    check (category in ('general', 'school_closure', 'class_change', 'early_dismissal', 'disaster', 'emergency')),
+  add constraint notifications_priority_check
+    check (priority in ('normal', 'important', 'emergency'));
+
+create index if not exists notifications_target_created_idx
+  on public.notifications (target_user_id, created_at desc);
 create index if not exists notifications_created_at_desc_idx on public.notifications (created_at desc);
 create table if not exists public.notification_reads (
   user_id uuid not null references auth.users(id) on delete cascade,

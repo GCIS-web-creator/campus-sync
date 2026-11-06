@@ -1304,7 +1304,12 @@ export default function CampusSyncApp() {
           if (!cancelled) setPushStatus('このブラウザーはWeb Push通知に対応していません。');
           return;
         }
-        const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        if (Notification.permission === 'denied') {
+          if (!cancelled) setPushStatus('このサイトの通知がブラウザーでブロックされています。ブラウザーのサイト設定から通知を許可してください。');
+          if (!cancelled) setPushReady(false);
+          return;
+        }
+        const registration = await navigator.serviceWorker.getRegistration('/');
         const subscription = await registration?.pushManager.getSubscription();
         if (!subscription || Notification.permission !== 'granted') {
           if (!cancelled) setPushReady(false);
@@ -1580,7 +1585,9 @@ export default function CampusSyncApp() {
     | 'school_announcements'
     | 'transport_alerts'
     | 'cafeteria_updates'
-    | 'activity_updates';
+    | 'activity_updates'
+    | 'weather_alerts'
+    | 'disaster_alerts';
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']);
   const [allowedNotificationDays, setAllowedNotificationDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
@@ -1591,6 +1598,8 @@ export default function CampusSyncApp() {
     transport_alerts: true,
     cafeteria_updates: false,
     activity_updates: true,
+    weather_alerts: true,
+    disaster_alerts: true,
   });
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('21:00');
@@ -2507,10 +2516,14 @@ useEffect(() => {
     }
 
     fetchStep = '学校通知取得（notifications）';
-    const { data: notificationData, error: notificationError } = await supabase
+    let notificationQuery = supabase
       .from('notifications')
       .select('*')
       .order('created_at', { ascending: false });
+    notificationQuery = authUser?.id
+      ? notificationQuery.or('target_user_id.is.null,target_user_id.eq.' + authUser.id)
+      : notificationQuery.is('target_user_id', null);
+    const { data: notificationData, error: notificationError } = await notificationQuery;
 
     if (notificationError) {
       console.error('学校通知の取得に失敗:', notificationError);
@@ -3499,6 +3512,8 @@ Supabaseの設定を確認してください。
         transport_alerts: true,
         cafeteria_updates: false,
         activity_updates: true,
+        weather_alerts: true,
+        disaster_alerts: true,
       });
       setQuietHoursEnabled(false);
       setQuietHoursStart('21:00');
@@ -3518,6 +3533,8 @@ Supabaseの設定を確認してください。
       transport_alerts: true,
       cafeteria_updates: false,
       activity_updates: true,
+      weather_alerts: true,
+      disaster_alerts: true,
     });
     setQuietHoursEnabled(false);
     setQuietHoursStart('21:00');
@@ -3550,6 +3567,8 @@ Supabaseの設定を確認してください。
           transport_alerts: loaded.transport_alerts !== false,
           cafeteria_updates: loaded.cafeteria_updates === true,
           activity_updates: loaded.activity_updates !== false,
+          weather_alerts: loaded.weather_alerts !== false,
+          disaster_alerts: loaded.disaster_alerts !== false,
         });
         setQuietHoursEnabled(data.quiet_hours_enabled === true);
         setQuietHoursStart(String(data.quiet_hours_start || '21:00').slice(0, 5));
@@ -3559,6 +3578,18 @@ Supabaseの設定を確認してください。
     })();
     return () => { cancelled = true; };
   }, [authUser?.id, studentId]);
+
+  const getPushDeviceName = (): string => {
+    if (typeof navigator === 'undefined') return 'この端末';
+    const ua = navigator.userAgent;
+    if (/iPhone/i.test(ua)) return 'iPhone';
+    if (/iPad/i.test(ua)) return 'iPad';
+    if (/Android/i.test(ua)) return 'Android端末';
+    if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac';
+    if (/Windows/i.test(ua)) return 'Windows PC';
+    if (/CrOS/i.test(ua)) return 'Chromebook';
+    return 'ブラウザー端末';
+  };
 
   const enablePushNotifications = async () => {
     if (!authUser || !/^\d{6}$/.test(studentId)) {
@@ -3582,8 +3613,9 @@ Supabaseの設定を確認してください。
         : await Notification.requestPermission();
       if (permission !== 'granted') throw new Error('ブラウザーの通知を許可してください。ブラウザー設定でブロックされている場合はサイト設定も確認してください。');
 
-      const registration = await navigator.serviceWorker.register('/sw.js');
+      const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       await navigator.serviceWorker.ready;
+      await registration.update().catch(() => undefined);
       let subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
@@ -3597,15 +3629,43 @@ Supabaseの設定を確認してください。
         user_id: authUser.id,
         student_id: studentId,
         subscription: subscriptionJson,
+        device_name: getPushDeviceName(),
+        user_agent: navigator.userAgent.slice(0, 500),
+        last_seen_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'endpoint' });
       if (subscriptionError) throw subscriptionError;
       await savePushReminderPreferences(remindersEnabled, reminderTimes, allowedNotificationDays, notificationSettings, quietHoursEnabled, quietHoursStart, quietHoursEnd);
       setPushReady(true);
-      setPushStatus('通知を有効にしました。この端末で「テスト通知を送る」を押して確認してください。');
+      setPushStatus('この端末を通知先に登録しました。テスト通知で受信を確認できます。');
     } catch (error) {
       const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
       setPushStatus(`通知設定に失敗しました: ${message}`);
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const disablePushNotifications = async () => {
+    if (!authUser || typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    setPushBusy(true);
+    setPushStatus('この端末の通知登録を解除しています…');
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/');
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        const endpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        const { error } = await supabase.from('push_subscriptions')
+          .delete()
+          .eq('user_id', authUser.id)
+          .eq('endpoint', endpoint);
+        if (error) throw error;
+      }
+      setPushReady(false);
+      setPushStatus('この端末のプッシュ通知を解除しました。');
+    } catch (error) {
+      setPushStatus('通知登録を解除できませんでした: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setPushBusy(false);
     }
@@ -5605,14 +5665,16 @@ Supabaseの設定を確認してください。
                   <div className="pt-3 border-t border-gray-100 space-y-3">
                     <div>
                       <span className="text-[10px] font-black text-gray-400 block mb-1">通知カテゴリごとの設定</span>
-                      <p className="text-[10px] text-gray-500 mb-2">設定はSupabaseに保存されます。現時点で実際の送信に反映されるのは課題リマインダーです。他カテゴリは送信元との連携を順次追加します。</p>
+                      <p className="text-[10px] text-gray-500 mb-2">ここでONにした種類だけ、このアカウントの登録済みPC・スマホへ届きます。通常のお知らせはおやすみ時間に保留し、緊急の防災情報は優先して通知します。</p>
                       {[
-                        { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '期限の前日・当日などの通知' },
-                        { key: 'chat_messages' as NotificationCategory, label: 'クラス・学年・学校チャット', description: '新しいメッセージの通知（送信側との連携は段階的に対応）' },
-                        { key: 'school_announcements' as NotificationCategory, label: '学校・先生からのお知らせ', description: '重要連絡や課題更新' },
-                        { key: 'transport_alerts' as NotificationCategory, label: 'バス・電車の運行情報', description: '遅延や運行関連の通知' },
-                        { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '売り切れ・メニューの更新（初期設定OFF）' },
-                        { key: 'activity_updates' as NotificationCategory, label: '部活動・校内活動', description: '部活動ノートなどの更新' },
+                        { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '期限の2日前・前日・当日・3時間前' },
+                        { key: 'chat_messages' as NotificationCategory, label: 'クラス・学年・学校チャット', description: '自分以外の新着メッセージ・添付ファイル' },
+                        { key: 'school_announcements' as NotificationCategory, label: '学校・先生からのお知らせ', description: '学校通知の公開時に通知' },
+                        { key: 'transport_alerts' as NotificationCategory, label: '交通・バス運行情報', description: '遅れ・運休など状態が変化したとき' },
+                        { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '売切・学食からのお知らせ（初期設定OFF）' },
+                        { key: 'activity_updates' as NotificationCategory, label: '部活動・校内活動', description: '部活動・委員会ノートの新着投稿' },
+                        { key: 'weather_alerts' as NotificationCategory, label: '気象警報', description: '小平市に気象庁の警報・特別警報が発表されたとき' },
+                        { key: 'disaster_alerts' as NotificationCategory, label: '地震・防災速報', description: '緊急地震速報・強い揺れなどの地震情報' }
                       ].map(item => (
                         <label key={item.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2 mb-1.5 cursor-pointer">
                           <span className="min-w-0">
@@ -5663,7 +5725,7 @@ Supabaseの設定を確認してください。
                   <div className="pt-3 border-t border-gray-100 space-y-2.5">
                     <div>
                       <h4 className="text-[11px] font-black text-gray-700">スマホ・PCへのプッシュ通知</h4>
-                      <p className="text-[10px] text-gray-500 leading-relaxed mt-1">ブラウザーを閉じていても通知を受け取れるよう、この端末の通知を許可します。HTTPSとブラウザーの通知許可が必要です。</p>
+                      <p className="text-[10px] text-gray-500 leading-relaxed mt-1">PC・Androidは対応ブラウザーで通知を許可してください。iPhone・iPadはSafariの共有メニューから「ホーム画面に追加」し、そのアイコンからCampusSyncを開いて通知を有効化してください（iOS/iPadOS 16.4以降）。登録は端末・ブラウザーごとに必要です。</p>
                     </div>
                     {pushStatus && <p role="status" className="text-[10px] leading-relaxed font-bold text-blue-700 bg-blue-50 rounded-xl p-2.5">{pushStatus}</p>}
                     <div className="grid grid-cols-2 gap-2">
@@ -5671,7 +5733,10 @@ Supabaseの設定を確認してください。
                         {pushBusy ? '設定中…' : pushReady ? 'この端末の通知を再設定' : 'この端末の通知を有効化'}
                       </button>
                       <button type="button" onClick={() => void sendTestPushNotification()} disabled={!pushReady || pushBusy} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-[10px] font-black text-gray-700 disabled:opacity-40">
-                        テスト通知を送る
+                        テスト通知
+                      </button>
+                      <button type="button" onClick={() => void disablePushNotifications()} disabled={!pushReady || pushBusy} className="col-span-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold text-gray-500 disabled:opacity-40">
+                        この端末の通知を解除
                       </button>
                     </div>
                     {!authUser && <p className="text-[10px] text-amber-700">通知を設定するには学校メールでログインしてください。</p>}

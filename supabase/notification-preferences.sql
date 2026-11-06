@@ -9,7 +9,7 @@ create table if not exists public.push_reminder_preferences (
   allowed_days text[] not null default array['Mon', 'Tue', 'Wed', 'Thu', 'Fri']::text[],
   timezone text not null default 'Asia/Tokyo',
   notification_settings jsonb not null default
-    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true}'::jsonb,
+    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb,
   quiet_hours_enabled boolean not null default false,
   quiet_hours_start time not null default time '21:00',
   quiet_hours_end time not null default time '07:00',
@@ -23,7 +23,7 @@ alter table public.push_reminder_preferences
   add column if not exists allowed_days text[] not null default array['Mon', 'Tue', 'Wed', 'Thu', 'Fri']::text[],
   add column if not exists timezone text not null default 'Asia/Tokyo',
   add column if not exists notification_settings jsonb not null default
-    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true}'::jsonb,
+    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb,
   add column if not exists quiet_hours_enabled boolean not null default false,
   add column if not exists quiet_hours_start time not null default time '21:00',
   add column if not exists quiet_hours_end time not null default time '07:00',
