@@ -21,8 +21,21 @@ type OcrWorker = {
   recognize: (image: HTMLCanvasElement) => Promise<{ data: { words?: OcrWord[]; text?: string; confidence?: number } }>;
   terminate: () => Promise<void>;
 };
+type PdfViewport = {
+  width: number;
+  height: number;
+  scale: number;
+  convertToViewportPoint: (x: number, y: number) => [number, number];
+};
+type PdfTextContentItem = {
+  str?: string;
+  transform?: number[];
+  width?: number;
+  height?: number;
+};
 type PdfPage = {
-  getViewport: (options: { scale: number }) => { width: number; height: number };
+  getViewport: (options: { scale: number }) => PdfViewport;
+  getTextContent: () => Promise<{ items: unknown[] }>;
   render: (options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
 };
 type PdfDocument = { numPages: number; getPage: (pageNumber: number) => Promise<PdfPage> };
@@ -73,13 +86,18 @@ function loadScript(id: string, source: string, ready: () => boolean): Promise<v
   });
 }
 
+async function loadPdfLibrary() {
+  await loadScript('campussync-pdfjs', PDFJS_URL, () => Boolean(window.pdfjsLib));
+  if (!window.pdfjsLib) throw new Error('PDF読み取り機能を利用できません。');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+}
+
 async function loadOcrLibraries() {
   await Promise.all([
-    loadScript('campussync-pdfjs', PDFJS_URL, () => Boolean(window.pdfjsLib)),
+    loadPdfLibrary(),
     loadScript('campussync-tesseract', TESSERACT_URL, () => Boolean(window.Tesseract)),
   ]);
-  if (!window.pdfjsLib || !window.Tesseract) throw new Error('PDF・OCRライブラリを利用できません。');
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+  if (!window.Tesseract) throw new Error('日本語OCRライブラリを利用できません。');
 }
 
 function imageToCanvas(source: HTMLImageElement | ImageBitmap): HTMLCanvasElement {
@@ -638,6 +656,260 @@ async function extractRows(
   };
 }
 
+
+type PdfTextBox = {
+  text: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+  height: number;
+};
+type PdfTextLine = {
+  text: string;
+  left: number;
+  right: number;
+  centerY: number;
+  boxes: PdfTextBox[];
+};
+
+function pdfTextBoxes(items: unknown[], viewport: PdfViewport): PdfTextBox[] {
+  const result: PdfTextBox[] = [];
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as PdfTextContentItem;
+    if (typeof item.str !== 'string' || !item.str.trim() || !Array.isArray(item.transform) || item.transform.length < 6) continue;
+    const x = Number(item.transform[4]);
+    const y = Number(item.transform[5]);
+    const width = Number(item.width || 0);
+    const transformHeight = Math.hypot(Number(item.transform[2] || 0), Number(item.transform[3] || 0));
+    const height = Math.max(Number(item.height || 0), transformHeight, 1);
+    if (![x, y, width, height].every(Number.isFinite)) continue;
+
+    const point = viewport.convertToViewportPoint(x, y);
+    const scale = viewport.scale || 1;
+    const xEnd = point[0] + width * scale;
+    const top = point[1] - height * scale;
+    const bottom = point[1];
+    result.push({
+      text: item.str,
+      left: Math.min(point[0], xEnd),
+      right: Math.max(point[0], xEnd),
+      top,
+      bottom,
+      centerX: (point[0] + xEnd) / 2,
+      centerY: (top + bottom) / 2,
+      height: height * scale,
+    });
+  }
+  return result;
+}
+
+function groupPdfTextLines(boxes: PdfTextBox[]): PdfTextLine[] {
+  const sorted = [...boxes].sort((a, b) => a.centerY - b.centerY || a.left - b.left);
+  const heights = sorted.map(box => box.height).sort((a, b) => a - b);
+  const medianHeight = heights[Math.floor(heights.length / 2)] || 8;
+  const tolerance = Math.max(2.4, Math.min(3.2, medianHeight * 0.36));
+  const lines: PdfTextLine[] = [];
+
+  for (const box of sorted) {
+    let line = lines.find(candidate => Math.abs(candidate.centerY - box.centerY) <= tolerance);
+    if (!line) {
+      line = { text: '', left: box.left, right: box.right, centerY: box.centerY, boxes: [] };
+      lines.push(line);
+    }
+    line.boxes.push(box);
+    line.left = Math.min(line.left, box.left);
+    line.right = Math.max(line.right, box.right);
+    line.centerY = line.boxes.reduce((sum, item) => sum + item.centerY, 0) / line.boxes.length;
+  }
+
+  return lines
+    .map(line => {
+      const ordered = [...line.boxes].sort((a, b) => a.left - b.left);
+      return { ...line, text: ordered.map(box => box.text).join('') };
+    })
+    .sort((a, b) => a.centerY - b.centerY);
+}
+
+function findPdfTextMatchCenter(line: PdfTextLine, pattern: RegExp): number | null {
+  const ordered = [...line.boxes].sort((a, b) => a.left - b.left);
+  const text = ordered.map(box => box.text).join('');
+  const match = pattern.exec(text);
+  if (!match) return null;
+
+  // 見出しは5列とも同じ高さにあるため、行全体の中央ではなく、
+  // 見出し文字に該当するPDFテキスト片だけの中央位置を使う。
+  const start = match.index;
+  const end = start + match[0].length;
+  let offset = 0;
+  const selected: PdfTextBox[] = [];
+  for (const box of ordered) {
+    const boxStart = offset;
+    const boxEnd = offset + box.text.length;
+    if (boxEnd > start && boxStart < end) selected.push(box);
+    offset = boxEnd;
+  }
+  if (!selected.length) return null;
+  return (Math.min(...selected.map(box => box.left)) + Math.max(...selected.map(box => box.right))) / 2;
+}
+
+function findPdfMenuColumnBounds(lines: PdfTextLine[], pageHeight: number): number[] | null {
+  // Excelで作成された学食表の列見出しから、各メニュー列の中心を取得する。
+  // 固定ピクセル比率ではなくPDF内の実際の文字座標を使うため、余白や倍率に左右されない。
+  const headerAliases = [
+    /レギュラー|創価ランチ/,
+    /バランス|ヘルシーランチ/,
+    /ボウル|スナックランチ/,
+    /カレー/,
+    /ヌードル|麺類/,
+  ];
+  const headerLines = lines.filter(line => line.centerY < 0.30 * pageHeight);
+  const centers = headerAliases.map(alias => {
+    const line = headerLines.find(candidate => alias.test(candidate.text));
+    return line ? findPdfTextMatchCenter(line, alias) : null;
+  });
+  if (centers.some(center => center === null)) return null;
+
+  const numeric = centers as number[];
+  const gaps = numeric.slice(1).map((center, index) => center - numeric[index]);
+  if (gaps.some(gap => !Number.isFinite(gap) || gap < 35 || gap > 180)) return null;
+  const averageGap = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+  if (gaps.some(gap => Math.abs(gap - averageGap) > averageGap * 0.16)) return null;
+
+  const bounds = [
+    numeric[0] - gaps[0] / 2,
+    (numeric[0] + numeric[1]) / 2,
+    (numeric[1] + numeric[2]) / 2,
+    (numeric[2] + numeric[3]) / 2,
+    (numeric[3] + numeric[4]) / 2,
+    numeric[4] + gaps[3] / 2,
+  ];
+  return bounds.every((value, index) => Number.isFinite(value) && (index === 0 || value > bounds[index - 1]))
+    ? bounds
+    : null;
+}
+
+function cleanPdfMenuText(value: string): string {
+  return value.normalize('NFKC')
+    .replace(/おすすめ|大人気|新登場|期間限定|今月のおすすめ/g, '')
+    .replace(/[|｜•·]+/g, '')
+    .replace(/[\s\u3000]+/g, '')
+    .trim()
+    .slice(0, 100);
+}
+
+async function extractPdfTextRows(
+  file: File,
+  selectedMonth: string,
+  onProgress: (message: string) => void,
+): Promise<{ rows: CafeteriaMenuImportRow[]; detectedMonths: number[]; hasTableText: boolean }> {
+  if (!window.pdfjsLib) throw new Error('PDF読み取り機能を初期化できません。');
+  const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  if (pdf.numPages > 5) throw new Error('PDFは5ページ以内のファイルを選択してください。');
+
+  const targetYear = Number(selectedMonth.slice(0, 4));
+  const targetMonth = Number(selectedMonth.slice(5, 7));
+  const extracted: CafeteriaMenuImportRow[] = [];
+  const detectedMonths: number[] = [];
+  let hasTableText = false;
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    onProgress('PDF内の文字・座標を解析中... ' + pageNumber + '/' + pdf.numPages + 'ページ');
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const boxes = pdfTextBoxes(content.items, viewport);
+    if (!boxes.length) continue;
+
+    const lines = groupPdfTextLines(boxes);
+    const columns = findPdfMenuColumnBounds(lines, viewport.height);
+    if (!columns) continue;
+    hasTableText = true;
+
+    // 見出しは表の上部にあるため、本文の「カレー」等を列見出しと誤認しない。
+    const headerLines = lines.filter(line => line.centerY < viewport.height * 0.15);
+    const headerBottom = Math.max(...headerLines
+      .filter(line => /レギュラー|創価ランチ|バランス|ヘルシーランチ|ボウル|スナックランチ|カレー|ヌードル|麺類/.test(line.text))
+      .map(line => line.centerY));
+    const anchors = lines
+      .filter(line => line.centerY > headerBottom + 5)
+      .map(line => ({ line, date: parseMenuDate(line.text) }))
+      .filter((item): item is { line: PdfTextLine; date: { month: number; day: number } } => Boolean(item.date))
+      .sort((a, b) => a.line.centerY - b.line.centerY);
+
+    const uniqueAnchors: typeof anchors = [];
+    for (const anchor of anchors) {
+      const previous = uniqueAnchors[uniqueAnchors.length - 1];
+      if (previous && Math.abs(previous.line.centerY - anchor.line.centerY) < 7) continue;
+      uniqueAnchors.push(anchor);
+    }
+    if (!uniqueAnchors.length) continue;
+
+    const gaps = uniqueAnchors.slice(1)
+      .map((anchor, index) => anchor.line.centerY - uniqueAnchors[index].line.centerY)
+      .filter(gap => gap >= 10 && gap <= viewport.height * 0.15)
+      .sort((a, b) => a - b);
+    const typicalGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : viewport.height * 0.032;
+
+    for (let rowIndex = 0; rowIndex < uniqueAnchors.length; rowIndex += 1) {
+      const anchor = uniqueAnchors[rowIndex];
+      const previous = uniqueAnchors[rowIndex - 1];
+      const next = uniqueAnchors[rowIndex + 1];
+      const top = previous
+        ? (previous.line.centerY + anchor.line.centerY) / 2
+        : anchor.line.centerY - typicalGap / 2;
+      const bottom = next
+        ? (anchor.line.centerY + next.line.centerY) / 2
+        : anchor.line.centerY + typicalGap / 2;
+
+      detectedMonths.push(anchor.date.month);
+      if (anchor.date.month !== targetMonth || anchor.date.day < 1 || anchor.date.day > 31) continue;
+
+      const rowBoxes = boxes.filter(box =>
+        box.centerY >= top - 1
+        && box.centerY <= bottom + 1
+        && box.centerX >= columns[0]
+        && box.centerX <= columns[5]
+      );
+      const combinedRowText = rowBoxes.map(box => box.text).join('');
+      const isClosed = /営業はありません|営業しておりません|本日休業|休業/.test(combinedRowText);
+      const isSpecialMenu = /特別メニュー/.test(combinedRowText);
+
+      const values = columns.slice(0, 5).map((left, columnIndex) => {
+        if (isClosed || isSpecialMenu) return '';
+        const right = columns[columnIndex + 1];
+        const cellText = rowBoxes
+          .filter(box => box.centerX >= left && box.centerX < right)
+          .sort((a, b) => a.centerY - b.centerY || a.left - b.left)
+          .map(box => box.text)
+          .join('');
+        return cleanPdfMenuText(cellText);
+      });
+
+      extracted.push({
+        service_date: String(targetYear) + '-' + String(anchor.date.month).padStart(2, '0') + '-' + String(anchor.date.day).padStart(2, '0'),
+        soka_lunch: isSpecialMenu ? '特別メニュー' : values[0],
+        healthy_lunch: values[1],
+        snack_lunch: values[2],
+        curry: values[3],
+        noodles: values[4],
+        is_closed: isClosed,
+      });
+    }
+  }
+
+  const unique = new Map<string, CafeteriaMenuImportRow>();
+  for (const row of extracted) unique.set(row.service_date, row);
+  return {
+    rows: [...unique.values()].sort((a, b) => a.service_date.localeCompare(b.service_date)),
+    detectedMonths,
+    hasTableText,
+  };
+}
+
 const MENU_FIELDS = [
   { key: 'soka_lunch', label: '創価ランチ' },
   { key: 'healthy_lunch', label: 'ヘルシーランチ' },
@@ -664,56 +936,92 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
     if (!file) { setError('PDFまたは写真を選択してください。'); return; }
     if (!/^\d{4}-\d{2}$/.test(selectedMonth)) { setError('先に対象年月を選択してください。'); return; }
     if (file.size > 15 * 1024 * 1024) { setError('ファイルは15MB以内にしてください。'); return; }
-    if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) { setError('PDF・画像ファイルを選択してください。'); return; }
+    const isPdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdfFile && !file.type.startsWith('image/')) { setError('PDF・画像ファイルを選択してください。'); return; }
 
     setLoading(true); setRows([]); setError(''); setWarning(''); setApplied(false);
     let worker: OcrWorker | null = null;
     try {
-      setProgress('読み取り機能を準備しています...');
-      await loadOcrLibraries();
-      const canvases = file.type === 'application/pdf' ? await createPdfCanvases(file) : [await createImageCanvas(file)];
-      if (!canvases.length) throw new Error('画像ページがありません。');
-
-      setProgress('日本語OCRを準備しています（初回は辞書の取得が必要です）...');
-      worker = await window.Tesseract!.createWorker('jpn', 1, {
-        workerPath: TESSERACT_WORKER_URL,
-        corePath: TESSERACT_CORE_URL,
-        langPath: JAPANESE_DATA_URL,
-        logger: message => {
-          if (message.status === 'recognizing text') setProgress('日本語を読み取り中... ' + Math.round((message.progress || 0) * 100) + '%');
-        },
-      });
-      const extracted: CafeteriaMenuImportRow[] = [];
-      const detectedMonths: number[] = [];
+      let extracted: CafeteriaMenuImportRow[] = [];
+      let detectedMonths: number[] = [];
       let lowConfidence = 0;
-      for (let index = 0; index < canvases.length; index += 1) {
-        setProgress('日付と表の位置を検出中... ' + (index + 1) + '/' + canvases.length + 'ページ');
-        await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
-        const result = await worker.recognize(canvases[index]);
-        const page = await extractRows(
-          canvases[index],
-          result.data.words || [],
-          selectedMonth,
-          worker,
-          (completed, total) => setProgress('献立名を2方式で照合中... ' + completed + '/' + total + '日分'),
-        );
-        extracted.push(...page.rows); detectedMonths.push(...page.detectedMonths); lowConfidence += page.lowConfidence;
+      let directPdfTextUsed = false;
+
+      if (isPdfFile) {
+        // Excel等から出力された通常のPDFは、文字と座標を直接読む。
+        // 文字レイヤーがないスキャンPDFだけ、従来の日本語OCRへフォールバックする。
+        setProgress('PDF内の文字・列位置を直接解析しています...');
+        await loadPdfLibrary();
+        const direct = await extractPdfTextRows(file, selectedMonth, message => setProgress(message));
+        extracted.push(...direct.rows);
+        detectedMonths.push(...direct.detectedMonths);
+        directPdfTextUsed = direct.rows.length > 0;
+
+        if (!directPdfTextUsed && direct.detectedMonths.length > 0) {
+          const months = [...new Set(direct.detectedMonths)].map(month => month + '月').join('・');
+          throw new Error('PDF内の日付は' + months + 'でした。対象年月を合わせてから再度読み取ってください。');
+        }
+
+        if (!directPdfTextUsed) {
+          setProgress('文字データがないPDFです。日本語OCRに切り替えています...');
+          await loadOcrLibraries();
+        }
+      } else {
+        await loadOcrLibraries();
       }
+
+      if (!directPdfTextUsed) {
+        const canvases = isPdfFile
+          ? await createPdfCanvases(file)
+          : [await createImageCanvas(file)];
+        if (!canvases.length) throw new Error('画像ページがありません。');
+
+        setProgress('日本語OCRを準備しています（初回は辞書の取得が必要です）...');
+        worker = await window.Tesseract!.createWorker('jpn', 1, {
+          workerPath: TESSERACT_WORKER_URL,
+          corePath: TESSERACT_CORE_URL,
+          langPath: JAPANESE_DATA_URL,
+          logger: message => {
+            if (message.status === 'recognizing text') setProgress('日本語を読み取り中... ' + Math.round((message.progress || 0) * 100) + '%');
+          },
+        });
+
+        for (let index = 0; index < canvases.length; index += 1) {
+          setProgress('日付と表の位置を検出中... ' + (index + 1) + '/' + canvases.length + 'ページ');
+          await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
+          const result = await worker.recognize(canvases[index]);
+          const page = await extractRows(
+            canvases[index],
+            result.data.words || [],
+            selectedMonth,
+            worker,
+            (completed, total) => setProgress('献立名を2方式で照合中... ' + completed + '/' + total + '日分'),
+          );
+          extracted.push(...page.rows);
+          detectedMonths.push(...page.detectedMonths);
+          lowConfidence += page.lowConfidence;
+        }
+      }
+
       const unique = new Map<string, CafeteriaMenuImportRow>();
       for (const row of extracted) unique.set(row.service_date, row);
       const finalRows = [...unique.values()].sort((a, b) => a.service_date.localeCompare(b.service_date));
       if (!finalRows.length) {
         const months = [...new Set(detectedMonths)].map(month => month + '月').join('・');
-        if (months && !months.includes(Number(selectedMonth.slice(5, 7)) + '月')) {
+        if (months) {
           throw new Error('PDF・写真から' + months + 'の日付を検出しました。対象年月を合わせてから再度読み取ってください。');
         }
-        throw new Error('日付欄を読み取れませんでした。日付の列がはっきり写っているか確認してください。罫線が斜めでも、日付の文字が読めれば自動で行を検出できます。');
+        throw new Error('日付欄を読み取れませんでした。PDFに文字情報がない場合は、表全体が入ったPDFまたは画像を選び直してください。');
       }
       setRows(finalRows);
       setWarning(lowConfidence > 0
-        ? '日付または2方式の読み取りが一致しない箇所が' + lowConfidence + '件あります。空欄や文字を確認・修正してください。'
-        : '読み取り結果を確認してください。表に載っていない日付は変更されません。');
-      setProgress(finalRows.length + '日分を読み取りました。');
+        ? 'OCRの読み取り結果が一致しない箇所が' + lowConfidence + '件あります。空欄や文字を確認・修正してください。'
+        : directPdfTextUsed
+          ? 'PDF内の文字データと列の座標から直接抽出しました。OCRは使用していません。空欄は元のPDFでもメニュー記載がないセルです。'
+          : '読み取り結果を確認してください。表に載っていない日付は変更されません。');
+      setProgress(directPdfTextUsed
+        ? finalRows.length + '日分をPDFの文字データから直接読み取りました。'
+        : finalRows.length + '日分を読み取りました。');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '読み取りに失敗しました。');
       setProgress('');
@@ -729,7 +1037,7 @@ export default function CafeteriaMenuImport({ selectedMonth, onApply }: Props) {
         <div className="rounded-xl bg-cyan-500/10 p-2.5 text-cyan-300"><ScanText size={21} /></div>
         <div className="min-w-0 flex-1">
           <h3 className="font-black text-white">PDF・写真から献立を自動入力</h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">日付欄から全行の位置を先に検出し、5区分の献立は画像処理を変えた2方式のOCR結果を照合します。一致しない箇所は空欄にして誤入力を防ぎます。確認・修正してから月間表へ反映できます。</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">文字情報を含むPDFは、OCRを使わずPDF内の文字と座標から5列を直接抽出します。スキャンPDFや写真だけ日本語OCRを使用します。空欄を勝手に補完せず、元の表の配置を保って確認・修正してから反映できます。</p>
         </div>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
