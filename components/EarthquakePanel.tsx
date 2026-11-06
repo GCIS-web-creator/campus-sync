@@ -11,6 +11,7 @@ type EarthquakeEvent = EarthquakeMapEvent & {
 };
 type EarthquakeResponse = {
   events: EarthquakeEvent[];
+  majorEvents: EarthquakeEvent[];
   sync: { highLastSuccessAt: string | null; longLastSuccessAt: string | null; lastAttemptAt: string | null; lastError: string | null; stale: boolean };
 };
 type AreaGroup = { name: string; areas: EarthquakeObservedArea[]; maxRank: number };
@@ -74,7 +75,7 @@ export default function EarthquakePanel() {
         if (!response.ok || !Array.isArray(result?.events) || !result?.sync) throw new Error(result?.message || '地震情報を取得できませんでした。');
         if (!cancelled) {
           setData(result as EarthquakeResponse);
-          setSelectedKey(current => current || result.events[0]?.event_key || '');
+          setSelectedKey(current => current || result.events[0]?.event_key || result.majorEvents?.[0]?.event_key || '');
           setError('');
         }
       } catch (caught) {
@@ -92,7 +93,20 @@ export default function EarthquakePanel() {
   }, []);
 
   const events = data?.events || [];
-  const selectedBase = useMemo(() => events.find(event => event.event_key === selectedKey) || events[0] || null, [events, selectedKey]);
+  const majorEvents = data?.majorEvents || events.filter(event =>
+    (event.max_intensity_rank || rankFromIntensity(event.max_intensity)) >= 7
+    && event.product_code !== 'VXSE43'
+    && !event.is_distant
+  );
+  const selectableEvents = useMemo(() => {
+    const byKey = new Map<string, EarthquakeEvent>();
+    for (const event of [...events, ...majorEvents]) byKey.set(event.event_key, event);
+    return Array.from(byKey.values());
+  }, [events, majorEvents]);
+  const selectedBase = useMemo(
+    () => selectableEvents.find(event => event.event_key === selectedKey) || events[0] || majorEvents[0] || null,
+    [selectableEvents, events, majorEvents, selectedKey],
+  );
   const selected = selectedBase ? detailsByKey[selectedBase.event_key] || selectedBase : null;
 
   useEffect(() => {
@@ -145,16 +159,68 @@ export default function EarthquakePanel() {
           <div className="space-y-2 p-4">{[0, 1, 2].map(item => <div key={item} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />)}</div>
         ) : error && !data ? (
           <p role="status" className="p-5 text-sm text-rose-600 dark:text-rose-300">{error}</p>
-        ) : events.length === 0 ? (
+        ) : events.length === 0 && majorEvents.length === 0 ? (
           <p className="p-5 text-sm font-bold text-slate-600 dark:text-slate-300">表示できる地震情報はまだありません。初回同期が完了すると、ここに最新情報が表示されます。</p>
         ) : (
+          <>
+          {majorEvents.length > 0 && (
+            <section className="border-b border-rose-200 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-3 dark:border-rose-950/70 dark:from-rose-950/30 dark:via-slate-900 dark:to-orange-950/20 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-lg font-black text-white shadow-sm">!</span>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-black text-rose-950 dark:text-rose-100">全国の大地震情報</h4>
+                    <p className="mt-0.5 text-[10px] font-semibold text-rose-800/80 dark:text-rose-200/80">国内で震度6弱〜7を観測した地震</p>
+                  </div>
+                </div>
+                <span className="rounded-full border border-rose-300 bg-white/80 px-2.5 py-1 text-[9px] font-black text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">小平市以外も対象</span>
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-rose-900/80 dark:text-rose-100/80">
+                小平市で揺れを観測していない場合も、全国の観測情報を掲載します。直近5日間の情報を対象にしています。
+              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {majorEvents.map(event => {
+                  const rank = event.max_intensity_rank || rankFromIntensity(event.max_intensity);
+                  const severeAreas = (event.observed_areas || []).filter(area =>
+                    (area.intensityRank || rankFromIntensity(area.intensity)) >= 7
+                  );
+                  const areaNames = severeAreas.map(area => area.prefecture ? area.prefecture + area.name : area.name);
+                  const active = selectedKey === event.event_key;
+                  return (
+                    <button key={event.event_key} type="button" onClick={() => setSelectedKey(event.event_key)}
+                      className={'w-full rounded-2xl border p-3 text-left transition ' + (active
+                        ? 'border-rose-400 bg-white shadow-sm dark:border-rose-700 dark:bg-slate-900'
+                        : 'border-rose-200/80 bg-white/80 hover:border-rose-300 hover:bg-white dark:border-rose-900/70 dark:bg-slate-950/50 dark:hover:bg-slate-900')}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-bold tabular-nums text-slate-500 dark:text-slate-400">{dateText(event.event_time || event.issued_at)}</p>
+                          <p className="mt-1 truncate text-xs font-black text-slate-950 dark:text-white">{event.hypocenter_name || event.title || '震源情報'}</p>
+                          <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300">{event.magnitude === null ? 'M —' : 'M' + event.magnitude.toFixed(1)}</p>
+                        </div>
+                        <span className="shrink-0 rounded-xl bg-rose-600 px-2.5 py-1.5 text-[10px] font-black text-white">最大震度 {intensityLabel(rank, event.max_intensity)}</span>
+                      </div>
+                      {areaNames.length > 0 ? (
+                        <p className="mt-2 text-[10px] leading-relaxed text-rose-900 dark:text-rose-200">
+                          <span className="font-black">震度6弱以上：</span>{areaNames.slice(0, 5).join('、')}{areaNames.length > 5 ? ' ほか' + (areaNames.length - 5) + '市区町村' : ''}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">震度6弱以上の観測地域の詳細は、気象庁の続報を確認中です。</p>
+                      )}
+                      <p className="mt-2 text-[9px] font-black text-rose-700 dark:text-rose-300">詳細・震度分布を見る →</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           <div className="grid gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(250px,0.78fr)_minmax(0,1.22fr)]">
             <div className="min-w-0 space-y-2">
               <div className="flex items-center justify-between gap-2 px-1">
                 <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200">最近の地震</h4>
                 <span className="text-[9px] tabular-nums text-slate-400">最大60件 ／ {events.length}件</span>
               </div>
-              <div className="max-h-[660px] space-y-1.5 overflow-y-auto pr-1">
+              {events.length > 0 ? (
+                <div className="max-h-[660px] space-y-1.5 overflow-y-auto pr-1">
                 {events.map(event => {
                   const active = selected?.event_key === event.event_key;
                   const rank = event.max_intensity_rank || rankFromIntensity(event.max_intensity);
@@ -180,7 +246,12 @@ export default function EarthquakePanel() {
                     </button>
                   );
                 })}
-              </div>
+                </div>
+              ) : (
+                <p className="rounded-xl border border-slate-200 p-4 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  現在、一覧に表示できる地震はありません。全国の大地震情報から対象の地震を選択できます。
+                </p>
+              )}
             </div>
 
             <div className="min-w-0 space-y-3">
@@ -268,9 +339,10 @@ export default function EarthquakePanel() {
               ) : <p className="rounded-xl border border-slate-200 p-5 text-sm text-slate-500 dark:border-slate-700">地震を選択すると詳細を表示します。</p>}
             </div>
           </div>
+          </>
         )}
       </section>
-      <p className="px-1 text-[9px] leading-relaxed text-slate-400">出典：気象庁 防災情報XML（地震火山情報）。観測値・掲載時刻は発表や訂正のタイミングによって変わります。緊急時は必ず気象庁などの公式情報も確認してください。</p>
+      <p className="px-1 text-[9px] leading-relaxed text-slate-400">出典：気象庁 防災情報XML（地震火山情報）。全国の大地震情報は国内で震度6弱以上を観測した地震を直近5日間掲載します。観測値・掲載時刻は発表や訂正のタイミングによって変わります。緊急時は必ず気象庁などの公式情報も確認してください。</p>
     </div>
   );
 }

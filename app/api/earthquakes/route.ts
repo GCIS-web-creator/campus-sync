@@ -831,22 +831,34 @@ export async function GET(request: Request) {
         headers: { 'Cache-Control': 'no-store, max-age=0' },
       });
     }
-    const [eventsResult, syncResult] = await Promise.all([
+    const eventColumns = 'event_key,latest_source_url,product_code,title,headline,issued_at,event_time,hypocenter_name,latitude,longitude,depth_km,magnitude,max_intensity,max_intensity_rank,kodaira_intensity,kodaira_intensity_rank,observed_areas,eew_targets,eew_kodaira_target,eew_forecast_intensity,is_eew,is_eew_cancelled,is_distant,updated_at';
+    const majorWindowStart = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const [eventsResult, majorEventsResult, syncResult] = await Promise.all([
       admin.from('jma_earthquakes')
-        .select('event_key,latest_source_url,product_code,title,headline,issued_at,event_time,hypocenter_name,latitude,longitude,depth_km,magnitude,max_intensity,max_intensity_rank,kodaira_intensity,kodaira_intensity_rank,observed_areas,eew_targets,eew_kodaira_target,eew_forecast_intensity,is_eew,is_eew_cancelled,is_distant,updated_at')
+        .select(eventColumns)
         .order('event_time', { ascending: false, nullsFirst: false })
         .limit(60),
+      admin.from('jma_earthquakes')
+        .select(eventColumns)
+        .gte('max_intensity_rank', 7)
+        .eq('is_distant', false)
+        .neq('product_code', 'VXSE43')
+        .gte('event_time', majorWindowStart)
+        .order('event_time', { ascending: false, nullsFirst: false })
+        .limit(20),
       admin.from('jma_earthquake_sync_state')
         .select('high_last_success_at,long_last_success_at,last_attempt_at,last_error')
         .eq('id', 1)
         .maybeSingle(),
     ]);
     if (eventsResult.error) throw eventsResult.error;
+    if (majorEventsResult.error) throw majorEventsResult.error;
     if (syncResult.error) throw syncResult.error;
     const highAt = syncResult.data?.high_last_success_at || null;
     const stale = !highAt || Date.now() - Date.parse(highAt) > 5 * 60 * 1000;
     return NextResponse.json({
       events: eventsResult.data || [],
+      majorEvents: majorEventsResult.data || [],
       sync: {
         highLastSuccessAt: highAt,
         longLastSuccessAt: syncResult.data?.long_last_success_at || null,
