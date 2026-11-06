@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -255,6 +256,7 @@ export async function POST(request: Request) {
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });
+        await recordLineDeliveryResponse(response, { channel: 'push', destinationType: 'group', destinationId: group.chatId, kind: 'school_schedule', accessToken, deliveryBatchId, messages: [flex] });
         const responseBody = response.ok ? '' : (await response.text().catch(() => '')).slice(0, 500);
         return {
           chatId: group.chatId,
@@ -313,6 +315,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'school_schedule', accessToken, retryKey, messages: [flex] });
     if (!response.ok && response.status !== 409) {
       const errorBody = await response.text().catch(() => '');
       console.error('学校予定表のLINE配信に失敗:', response.status, errorBody.slice(0, 500));

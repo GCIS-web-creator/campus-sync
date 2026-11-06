@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
@@ -145,6 +146,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({ messages: applyCampusSyncFlexFooters(messages) }),
         cache: 'no-store',
       });
+      await recordLineDeliveryResponse(lineResponse, { channel: 'broadcast', kind: 'assignment_updates', accessToken, retryKey, deliveryBatchId: retryKey, messages });
 
       if (lineResponse.ok) {
         lineNotification = {

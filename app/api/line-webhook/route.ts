@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -103,6 +104,7 @@ async function replyToLine(
       cache: 'no-store',
       signal: AbortSignal.timeout(15000),
     });
+    await recordLineDeliveryResponse(response, { channel: 'reply', destinationType: 'user', kind: 'campus_ai', accessToken: channelAccessToken, messages: [message] });
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');

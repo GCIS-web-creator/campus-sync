@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
@@ -376,6 +377,7 @@ export async function PATCH(request: Request) {
             body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
             cache: 'no-store',
           });
+          await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'lost_found', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
           const responseText = await response.text();
           let responseBody: any = null;
           try {

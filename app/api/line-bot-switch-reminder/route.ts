@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -111,6 +112,7 @@ export async function POST(request:Request) {
     cache:'no-store',
     signal:AbortSignal.timeout(20000),
   });
+  await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'bot_rotation', accessToken: activeBot.accessToken, retryKey, deliveryBatchId: retryKey, messages: [message] });
   if(!response.ok&&response.status!==409){
     const details=await response.text().catch(()=> '');
     console.error('BOT切替予告の友だち向け配信失敗:',response.status,details.slice(0,400));

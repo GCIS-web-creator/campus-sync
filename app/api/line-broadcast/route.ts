@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { randomUUID } from 'node:crypto';
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({ messages: applyCampusSyncFlexFooters(messages) }),
       cache: 'no-store',
     });
+    await recordLineDeliveryResponse(lineResponse, { channel: 'broadcast', kind: 'quick_notice', accessToken, retryKey, deliveryBatchId, messages });
 
     if (!lineResponse.ok) {
       console.error('LINE broadcast API error status:', lineResponse.status);

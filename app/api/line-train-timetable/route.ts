@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
@@ -181,6 +182,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
       cache: 'no-store',
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'train_timetable', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
     if (response.ok || response.status === 409) {
       const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'train_timetable');
       const groupSummary = summarizeLineGroupDelivery(groupDelivery);

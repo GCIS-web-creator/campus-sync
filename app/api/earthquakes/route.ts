@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -594,6 +595,7 @@ async function dispatchNotifications(admin: SupabaseClient) {
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });
+        await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'earthquake_alert', accessToken: bot.accessToken, retryKey: stableRetryKey(item.event_key + ':' + item.notification_kind + ':official'), messages: [flex] });
         patch.official_http_status = response.status;
         if (response.ok || response.status === 409) patch.official_sent_at = now;
         else failures.push('公式アカウント HTTP ' + response.status + '：' + (await response.text().catch(() => '')).slice(0, 180));

@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -561,6 +562,7 @@ export async function POST(request: Request) {
     cache: 'no-store',
     signal: AbortSignal.timeout(25000),
   });
+  await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'daily_digest', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
 
   if (!response.ok && response.status !== 409) {
     const errorBody = await response.text().catch(() => '');

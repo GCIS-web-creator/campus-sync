@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { randomUUID } from 'node:crypto';
 import { buildClubNoteFlexMessage } from '@/lib/line-flex';
@@ -137,6 +138,7 @@ export async function broadcastClubNoteToLine(
       body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flexMessage]) }),
       cache: 'no-store',
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'club_note', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flexMessage] });
 
     // LINE returns 409 when the same retry key was already accepted.
     if (response.ok || response.status === 409) {

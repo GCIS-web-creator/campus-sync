@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
@@ -94,6 +95,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'class_timetable', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
 
     // LINE may return 409 when a scheduled request with this retry key was accepted already.
     if (!response.ok && response.status !== 409) {

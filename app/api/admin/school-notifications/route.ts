@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
@@ -109,6 +110,7 @@ async function sendLineNotification(
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'school_notification', accessToken, messages });
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => '')).slice(0, 300);

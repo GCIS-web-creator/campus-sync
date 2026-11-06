@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -119,18 +120,20 @@ export async function POST(request: Request) {
   const broadcastResults: Array<{ batch: number; sent: boolean; status?: number }> = [];
   for (let offset = 0, batch = 0; offset < flexMessages.length; offset += 5, batch += 1) {
     const messages = flexMessages.slice(offset, offset + 5);
+    const batchRetryKey = manualRequest ? randomUUID() : retryKey(today, batch);
     try {
       const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + accessToken,
           'Content-Type': 'application/json',
-          'X-Line-Retry-Key': manualRequest ? randomUUID() : retryKey(today, batch),
+          'X-Line-Retry-Key': batchRetryKey,
         },
         body: JSON.stringify({ messages: applyCampusSyncFlexFooters(messages) }),
         cache: 'no-store',
         signal: AbortSignal.timeout(20000),
       });
+      await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'school_event_countdown', accessToken, retryKey: batchRetryKey, deliveryBatchId: batchRetryKey, messages });
       const ok = response.ok || response.status === 409;
       if (!ok) {
         const errorBody = await response.text().catch(() => '');

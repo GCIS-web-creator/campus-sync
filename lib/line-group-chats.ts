@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -151,6 +152,11 @@ export async function pushLineMessagesToRegisteredChats(
         body: JSON.stringify({ to: chat.chat_id, messages: outboundMessages }),
         cache: 'no-store',
         signal: AbortSignal.timeout(15000),
+      });
+      await recordLineDeliveryResponse(response, {
+        channel: 'push', destinationType: chat.chat_type, destinationId: chat.chat_id,
+        kind, botSlot, deliveryBatchId: deliveryBatchId || retryKeyBase || null,
+        retryKey: headers['X-Line-Retry-Key'] || null, accessToken, messages: outboundMessages,
       });
       if (response.ok || response.status === 409) {
         return { chat_id: chat.chat_id, chat_type: chat.chat_type, success: true as const, status: response.status };

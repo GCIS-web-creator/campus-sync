@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
+    await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'weather_forecast_test', accessToken, retryKey, deliveryBatchId: retryKey, messages: [message] });
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => '')).slice(0, 300);

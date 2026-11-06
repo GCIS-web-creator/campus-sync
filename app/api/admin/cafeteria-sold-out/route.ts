@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
+    await recordLineDeliveryResponse(broadcast, { channel: 'broadcast', kind: 'cafeteria_sold_out', accessToken: activeBot.accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
     if (!broadcast.ok && broadcast.status !== 409) {
       const details = await broadcast.text().catch(() => '');
       console.error('学食売切の友だち向け配信失敗:', broadcast.status, details.slice(0, 400));

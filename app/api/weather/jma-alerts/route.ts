@@ -1,3 +1,4 @@
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -473,6 +474,7 @@ async function dispatchPendingKodairaWarnings(admin: SupabaseClient): Promise<Re
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });
+        await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'weather_alert', accessToken: bot.accessToken, retryKey: stableLineRetryUuid(item.source_id + ':official'), messages: [flex] });
         patch.official_http_status = response.status;
         if (response.ok || response.status === 409) {
           patch.official_sent_at = now;
