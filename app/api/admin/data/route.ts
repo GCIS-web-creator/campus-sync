@@ -67,30 +67,6 @@ function getLibraryCoverPath(value: unknown): string | null {
   }
 }
 
-async function handleUploadCover(request: Request, admin: NonNullable<ReturnType<typeof getAdminClient>>) {
-  const form = await request.formData();
-  const file = form.get('file');
-  if (!(file instanceof File)) return jsonError('表紙画像ファイルがありません。', 400);
-  if (!ALLOWED_IMAGE_TYPES.has(file.type) || file.size < 1 || file.size > MAX_IMAGE_BYTES) {
-    return jsonError('画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。', 400);
-  }
-
-  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-  const path = `${Date.now()}-${randomUUID()}.${extension}`;
-  const { error } = await admin.storage.from('library-covers').upload(path, Buffer.from(await file.arrayBuffer()), {
-    cacheControl: '3600',
-    contentType: file.type,
-    upsert: false,
-  });
-  if (error) {
-    console.error('Admin library cover upload failed:', error.message);
-    return jsonError('表紙画像をアップロードできませんでした。', 500);
-  }
-
-  const coverUrl = admin.storage.from('library-covers').getPublicUrl(path).data.publicUrl;
-  return NextResponse.json({ success: true, coverUrl }, { headers: noStore });
-}
-
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError('不正な管理操作です。', 403);
   if (!verifyAdminSessionRequest(request)) return jsonError('管理者ログインが必要です。', 401);
@@ -101,7 +77,6 @@ export async function POST(request: Request) {
   if (request.headers.get('content-type')?.toLowerCase().includes('multipart/form-data')) {
     const form = await request.formData().catch(() => null);
     if (!form || form.get('action') !== 'upload-library-cover') return jsonError('不正な画像アップロード要求です。', 400);
-    // handleUploadCover reads the request body, so pass the parsed form's file through a fresh FormData.
     const file = form.get('file');
     if (!(file instanceof File)) return jsonError('表紙画像ファイルがありません。', 400);
     if (!ALLOWED_IMAGE_TYPES.has(file.type) || file.size < 1 || file.size > MAX_IMAGE_BYTES) {
@@ -211,7 +186,12 @@ export async function POST(request: Request) {
         const title = typeof payload.book.title === 'string' ? payload.book.title.trim() : '';
         const author = typeof payload.book.author === 'string' ? payload.book.author.trim() : '';
         const code = typeof payload.book.code === 'string' ? payload.book.code.trim() : '';
-        const coverUrl = payload.book.cover_url === null ? null : getLibraryCoverPath(payload.book.cover_url) ? payload.book.cover_url : null;
+        const rawCoverUrl = payload.book.cover_url;
+        const coverUrl = rawCoverUrl === null
+          ? null
+          : typeof rawCoverUrl === 'string' && getLibraryCoverPath(rawCoverUrl)
+            ? rawCoverUrl
+            : null;
         if (!title || title.length > 200 || !author || author.length > 200 || !/^LIB-[A-Za-z0-9-]{8,80}$/.test(code)) {
           return jsonError('蔵書のタイトル・著者・管理番号を確認してください。', 400);
         }
@@ -232,7 +212,9 @@ export async function POST(request: Request) {
 
       case 'update-library-book-cover': {
         const bookId = payload.bookId;
-        const coverUrl = getLibraryCoverPath(payload.coverUrl) ? payload.coverUrl : null;
+        const coverUrl = typeof payload.coverUrl === 'string' && getLibraryCoverPath(payload.coverUrl)
+          ? payload.coverUrl
+          : null;
         if ((typeof bookId !== 'string' && typeof bookId !== 'number') || !coverUrl) return jsonError('蔵書IDまたは表紙画像URLが正しくありません。', 400);
         const { data, error } = await admin.from('library_books')
           .update({ cover_url: coverUrl })
