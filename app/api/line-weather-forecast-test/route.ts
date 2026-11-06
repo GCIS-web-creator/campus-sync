@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { fetchSchoolWeatherForecast } from '@/lib/weather';
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
         'X-Line-Retry-Key': retryKey,
       },
-      body: JSON.stringify({ messages: [message] }),
+      body: JSON.stringify({ messages: applyCampusSyncFlexFooters([message]) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });

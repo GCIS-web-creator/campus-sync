@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
@@ -136,6 +137,7 @@ export async function pushLineMessagesToRegisteredChats(
   }
 
   const chats = (data || []) as RegisteredChat[];
+  const outboundMessages = applyCampusSyncFlexFooters(messages);
   const outcomes = await Promise.all(chats.map(async chat => {
     try {
       const headers: Record<string, string> = {
@@ -146,7 +148,7 @@ export async function pushLineMessagesToRegisteredChats(
       const response = await fetch('https://api.line.me/v2/bot/message/push', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ to: chat.chat_id, messages }),
+        body: JSON.stringify({ to: chat.chat_id, messages: outboundMessages }),
         cache: 'no-store',
         signal: AbortSignal.timeout(15000),
       });

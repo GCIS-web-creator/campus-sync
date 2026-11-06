@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { gunzipSync } from 'node:zlib';
@@ -468,7 +469,7 @@ async function dispatchPendingKodairaWarnings(admin: SupabaseClient): Promise<Re
             'Content-Type': 'application/json',
             'X-Line-Retry-Key': stableLineRetryUuid(item.source_id + ':official'),
           },
-          body: JSON.stringify({ messages: [flex] }),
+          body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });

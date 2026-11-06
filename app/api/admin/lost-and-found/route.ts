@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
@@ -372,7 +373,7 @@ export async function PATCH(request: Request) {
               'Content-Type': 'application/json',
               'X-Line-Retry-Key': retryKey,
             },
-            body: JSON.stringify({ messages: [flex] }),
+            body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
             cache: 'no-store',
           });
           const responseText = await response.text();

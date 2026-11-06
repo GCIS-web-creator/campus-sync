@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -106,7 +107,7 @@ export async function POST(request:Request) {
   const response=await fetch('https://api.line.me/v2/bot/message/broadcast',{
     method:'POST',
     headers:{Authorization:'Bearer '+activeBot.accessToken,'Content-Type':'application/json','X-Line-Retry-Key':retryKey},
-    body:JSON.stringify({messages:[message]}),
+    body:JSON.stringify({messages:applyCampusSyncFlexFooters([message])}),
     cache:'no-store',
     signal:AbortSignal.timeout(20000),
   });

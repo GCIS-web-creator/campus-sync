@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { randomUUID } from 'node:crypto';
 import { buildClubNoteFlexMessage } from '@/lib/line-flex';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
@@ -133,7 +134,7 @@ export async function broadcastClubNoteToLine(
         'Content-Type': 'application/json',
         'X-Line-Retry-Key': retryKey,
       },
-      body: JSON.stringify({ messages: [flexMessage] }),
+      body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flexMessage]) }),
       cache: 'no-store',
     });
 

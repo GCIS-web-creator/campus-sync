@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
@@ -97,7 +98,7 @@ async function replyToLine(
       },
       body: JSON.stringify({
         replyToken,
-        messages: [message],
+        messages: applyCampusSyncFlexFooters([message]),
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(15000),

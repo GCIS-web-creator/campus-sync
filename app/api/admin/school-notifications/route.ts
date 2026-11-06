@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
@@ -104,7 +105,7 @@ async function sendLineNotification(
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages: applyCampusSyncFlexFooters(messages) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });

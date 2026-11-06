@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -250,7 +251,7 @@ export async function POST(request: Request) {
             'Content-Type': 'application/json',
             'X-Line-Retry-Key': randomUUID(),
           },
-          body: JSON.stringify({ to: group.chatId, messages: [flex] }),
+          body: JSON.stringify({ to: group.chatId, messages: applyCampusSyncFlexFooters([flex]) }),
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });
@@ -308,7 +309,7 @@ export async function POST(request: Request) {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json', 'X-Line-Retry-Key': retryKey },
-      body: JSON.stringify({ messages: [flex] }),
+      body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });

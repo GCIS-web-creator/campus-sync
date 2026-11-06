@@ -1,3 +1,4 @@
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
         'X-Line-Retry-Key': retryKey,
       },
-      body: JSON.stringify({ messages: [flex] }),
+      body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });
