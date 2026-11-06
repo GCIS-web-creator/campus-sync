@@ -25,7 +25,9 @@ export function getLineBotSlotForDate(dateValue: Date | string): LineBotSlot | n
   if (!year || month < 1 || month > 12 || day < 1) return null;
 
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return Math.min(5, Math.ceil(day * 5 / daysInMonth)) as LineBotSlot;
+  const monthlyPeriod = Math.min(5, Math.ceil(day * 5 / daysInMonth));
+  // Monthly periods follow the continuous cycle BOT 3 -> 4 -> 5 -> 1 -> 2 -> 3.
+  return (((monthlyPeriod + 1) % 5) + 1) as LineBotSlot;
 }
 
 function getAdminClient() {

@@ -2090,7 +2090,7 @@ export default function CampusSyncAdmin() {
                   <div className="rounded-xl bg-cyan-500/15 p-3 text-cyan-300"><MessageSquare size={22} /></div>
                   <div>
                     <h3 className="text-base font-black text-white">LINE公式アカウント BOT ローテーション</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">月の日数に合わせてBOT 1〜5の担当期間を均等に分け、おおむね5〜7日ごとにSupabaseが使用BOTを自動更新します。認証情報はVercel内だけで管理し、この画面には表示しません。</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">BOT4 → BOT5 → BOT1 → BOT2 → BOT3 → BOT4の順に、月の日数に合わせて担当期間を均等に分け、おおむね5〜7日ごとにSupabaseが使用BOTを自動更新します。認証情報はVercel内だけで管理し、この画面には表示しません。</p>
                   </div>
                 </div>
                 <button

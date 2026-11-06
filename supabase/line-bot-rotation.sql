@@ -1,6 +1,7 @@
 -- CampusSync: 5 LINE公式アカウントを月の日数に合わせて均等ローテーション
--- 30日月: BOT1=1〜6日 / BOT2=7〜12日 / BOT3=13〜18日 / BOT4=19〜24日 / BOT5=25〜30日
--- 31日月: BOT1〜4は各6日、BOT5は7日。28・29日月も5アカウントにできるだけ均等配分。
+-- ローテーション順: BOT4 -> BOT5 -> BOT1 -> BOT2 -> BOT3 -> BOT4 ...（2026-11-09開始）
+-- 30日月: BOT3=1〜6日 / BOT4=7〜12日 / BOT5=13〜18日 / BOT1=19〜24日 / BOT2=25〜30日
+-- 31日月: 同じ順で各6日、最後のBOT2が7日。28・29日月も5アカウントにできるだけ均等配分。
 -- Supabase pg_cron (UTC): 23:55 UTC = 08:55 JST. The active BOT updates before the 09:00 JST changeover.
 -- Tokens and Channel Secrets are stored only in Vercel environment variables.
 -- Admin UI receives slot/status only; no credential values are ever stored in Supabase.
@@ -67,6 +68,7 @@ declare
   v_month_start date;
   v_days_in_month integer;
   v_day integer;
+  v_period integer;
   v_slot smallint;
   v_next_date date;
   v_next_switch timestamptz;
@@ -85,19 +87,20 @@ begin
   v_day := extract(day from v_today)::integer;
 
   if v_hold_until is not null and v_today <= v_hold_until then
-    -- Preserve a configured one-time hold without changing the active account.
+    -- Keep the configured account until the one-time hold date has passed.
     v_slot := v_previous_slot;
     v_next_date := v_hold_until + 1;
   else
-    -- Assign each calendar day to one of five near-equal monthly blocks.
-    v_slot := least(5, ceil(v_day * 5.0 / v_days_in_month)::integer)::smallint;
+    -- Five nearly equal monthly periods, assigned BOT 3 -> 4 -> 5 -> 1 -> 2.
+    v_period := least(5, ceil(v_day * 5.0 / v_days_in_month)::integer);
 
-    if v_slot < 5 then
-      -- First day of the next slot: floor(slot * days_in_month / 5) + 1.
-      v_next_date := v_month_start + floor(v_slot * v_days_in_month / 5.0)::integer;
+    if v_period < 5 then
+      v_next_date := v_month_start + floor(v_period * v_days_in_month / 5.0)::integer;
     else
       v_next_date := (v_month_start + interval '1 month')::date;
     end if;
+
+    v_slot := (((v_period + 1) % 5) + 1)::smallint;
   end if;
 
   v_next_switch := (v_next_date + time '09:00') at time zone 'Asia/Tokyo';
