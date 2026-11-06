@@ -2213,11 +2213,11 @@ useEffect(() => {
       .select('*');
 
     if (roomError) {
+      // 教室データだけ取得できなくても、後続の学食・交通・ノート等の取得は続行する。
       console.error('教室状況データの取得に失敗:', roomError);
-      return;
     }
 
-    if (roomData) {
+    if (!roomError && roomData) {
       setRooms(prevRooms =>
         prevRooms.map(room => {
           const sharedRoom = roomData.find(item => String(item.room_id) === String(room.id));
