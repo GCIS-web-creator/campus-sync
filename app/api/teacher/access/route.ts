@@ -12,18 +12,18 @@ async function readSession(request: Request) {
   const admin = getTeacherAccessAdmin();
   if (!admin) return null;
   const { data: session } = await admin.from('teacher_access_sessions')
-    .select('id,access_code_id,expires_at')
+    .select('id,access_code_id,expires_at,session_generation')
     .eq('session_token_hash', hashTeacherSecret(token))
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
   if (!session) return null;
 
   const { data: code } = await admin.from('teacher_access_codes')
-    .select('id,display_name,starts_on,ends_on,is_active')
+    .select('id,display_name,starts_on,ends_on,is_active,session_generation')
     .eq('id', session.access_code_id)
     .maybeSingle();
   const today = getTokyoDateKey();
-  if (!code || !code.is_active || today < code.starts_on || today > code.ends_on) return null;
+  if (!code || !code.is_active || Number(session.session_generation) !== Number(code.session_generation) || today < code.starts_on || today > code.ends_on) return null;
 
   await admin.from('teacher_access_sessions').update({ last_used_at: new Date().toISOString() }).eq('id', session.id);
   return { name: code.display_name, endsOn: code.ends_on, expiresAt: session.expires_at };
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   if (!normalized) return NextResponse.json({ success: false, message: 'コードが正しくありません。' }, { status: 401, headers: noStore });
 
   const { data: code, error } = await admin.from('teacher_access_codes')
-    .select('id,display_name,starts_on,ends_on,is_active,use_count')
+    .select('id,display_name,starts_on,ends_on,is_active,use_count,session_generation')
     .eq('code_hash', hashTeacherSecret(normalized))
     .maybeSingle();
   const today = getTokyoDateKey();
@@ -57,14 +57,14 @@ export async function POST(request: Request) {
   const { error: sessionError } = await admin.from('teacher_access_sessions').insert({
     access_code_id: code.id,
     session_token_hash: hashTeacherSecret(sessionToken),
+    session_generation: code.session_generation,
     expires_at: expiresAt,
   });
   if (sessionError) {
     console.error('先生用セッションの発行に失敗:', sessionError.message);
     return NextResponse.json({ success: false, message: 'ログイン処理に失敗しました。' }, { status: 500, headers: noStore });
   }
-  await admin.from('teacher_access_codes').update({ last_used_at: new Date().toISOString() }).eq('id', code.id);
-  await admin.from('teacher_access_codes').update({ use_count: (Number(code.use_count) || 0) + 1 }).eq('id', code.id);
+  await admin.from('teacher_access_codes').update({ last_used_at: new Date().toISOString(), use_count: (Number(code.use_count) || 0) + 1 }).eq('id', code.id);
 
   return NextResponse.json(
     { success: true, teacher: { name: code.display_name, endsOn: code.ends_on, expiresAt } },
