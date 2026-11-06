@@ -69,7 +69,7 @@ export async function getActiveLineBot(): Promise<LineBotCredential | null> {
     if (!error && data) {
       const slot = Number(data.active_bot_slot);
       if (slot >= 1 && slot <= 5) {
-        const configured = getLineBotCredentialsForSlot(slot);
+        const configured = getLineBotCredentialsForSlot(slot as LineBotSlot);
         if (configured) return configured;
         // Keep BOT 1 compatible with the currently deployed single-account setup.
         if (slot === 1 && process.env.LINE_CHANNEL_SECRET && process.env.LINE_CHANNEL_ACCESS_TOKEN) {
