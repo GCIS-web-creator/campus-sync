@@ -6023,7 +6023,8 @@ Supabaseの設定を確認してください。
       data-teacher-mode={isTeacherMode ? 'true' : undefined}
       onClickCapture={isTeacherMode ? event => {
         const target = event.target as HTMLElement;
-        if (target.closest('[data-teacher-nav="true"], nav, [role="tab"]')) return;
+        // 先生閲覧モードでも、学食のお知らせを閉じる操作は許可する。
+        if (target.closest('[data-teacher-nav="true"], [data-cafeteria-popup-confirm="true"], nav, [role="tab"]')) return;
         event.preventDefault();
         event.stopPropagation();
       } : undefined}
