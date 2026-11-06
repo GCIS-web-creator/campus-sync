@@ -2332,16 +2332,18 @@ useEffect(() => {
     }
 
     fetchStep = '部活ノート取得（club_notes）';
-    const { data: clubData, error: clubError } = await supabase
-      .from('club_notes')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (clubError) {
-      console.error('部活・委員会ノートの取得に失敗:', clubError);
-    } else if (clubData) {
+    type ClubNoteRow = {
+      id: string;
+      club_name: string | null;
+      title: string | null;
+      content: string | null;
+      created_at: string;
+      author?: string | null;
+      author_name?: string | null;
+    };
+    const applyClubNotes = (rows: ClubNoteRow[]) => {
       setClubNotes(
-        clubData.map(note => ({
+        rows.map(note => ({
           id: note.id,
           clubName: note.club_name,
           title: note.title,
@@ -2360,6 +2362,35 @@ useEffect(() => {
           author: formatClubAuthorLabel(note.author_name || note.author),
         }))
       );
+    };
+
+    if (isTeacherMode) {
+      // 先生モードは生徒用Supabaseセッションを持たないため、
+      // HttpOnly先生セッションを検証するサーバーAPIから安全な表示列だけ取得する。
+      const response = await fetch('/api/teacher/club-notes', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const result = await response.json().catch(() => null) as { notes?: ClubNoteRow[]; message?: string } | null;
+      if (!response.ok) {
+        console.error('先生用部活・委員会ノートの取得に失敗:', {
+          status: response.status,
+          message: result?.message || '取得に失敗しました。',
+        });
+      } else if (Array.isArray(result?.notes)) {
+        applyClubNotes(result.notes);
+      }
+    } else {
+      const { data: clubData, error: clubError } = await supabase
+        .from('club_notes')
+        .select('id, club_name, title, content, author, created_at, author_name')
+        .order('created_at', { ascending: false });
+
+      if (clubError) {
+        console.error('部活・委員会ノートの取得に失敗:', clubError);
+      } else if (clubData) {
+        applyClubNotes(clubData);
+      }
     }
 
     fetchStep = '本日の献立取得（cafeteria_daily_menus）';
@@ -2449,22 +2480,28 @@ useEffect(() => {
       setSoldOutItems(nextSoldOut);
     }
 
-    fetchStep = '本日の自分の売切報告取得（cafeteria_sold_out_reports）';
-    const reportDate = getTokyoDateKey();
-    const { data: reportData, error: reportError } = await supabase
-      .from('cafeteria_sold_out_reports')
-      .select('menu_id, reporter_id')
-      .eq('service_date', reportDate);
+    // 本人の報告済み状態は生徒ログイン時だけ必要。
+    // 先生モードはSupabaseのanonロールなので、個人報告テーブルにはアクセスしない。
+    if (authUser?.id && !isTeacherMode) {
+      fetchStep = '本日の自分の売切報告取得（cafeteria_sold_out_reports）';
+      const reportDate = getTokyoDateKey();
+      const { data: reportData, error: reportError } = await supabase
+        .from('cafeteria_sold_out_reports')
+        .select('menu_id, reporter_id')
+        .eq('service_date', reportDate);
 
-    if (reportError) {
-      console.error('売切報告の取得に失敗:', reportError);
-      setUserSoldOutReports({});
-    } else {
-      const reportedByMe: Record<string, boolean> = {};
-      for (const report of reportData || []) {
-        if (report.reporter_id === authUser?.id) reportedByMe[String(report.menu_id)] = true;
+      if (reportError) {
+        console.error('売切報告の取得に失敗:', reportError);
+        setUserSoldOutReports({});
+      } else {
+        const reportedByMe: Record<string, boolean> = {};
+        for (const report of reportData || []) {
+          if (report.reporter_id === authUser.id) reportedByMe[String(report.menu_id)] = true;
+        }
+        setUserSoldOutReports(reportedByMe);
       }
-      setUserSoldOutReports(reportedByMe);
+    } else {
+      setUserSoldOutReports({});
     }
 
     fetchStep = '学校通知取得（notifications）';
