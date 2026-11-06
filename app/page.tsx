@@ -1625,6 +1625,7 @@ export default function CampusSyncApp() {
   const [cafeteriaSubTab, setCafeteriaSubTab] = useState<'overall' | 'menu' | 'reviews'>('overall');
   const [cafeteriaAnnouncement, setCafeteriaAnnouncement] = useState<{ message: string; show_popup: boolean; show_banner: boolean; updated_at?: string | null } | null>(null);
   const [showCafeteriaAnnouncementPopup, setShowCafeteriaAnnouncementPopup] = useState(false);
+  const [dismissedCafeteriaAnnouncementKey, setDismissedCafeteriaAnnouncementKey] = useState<string | null>(null);
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost' | 'map'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
@@ -2177,12 +2178,13 @@ useEffect(() => {
       updated_at: data.updated_at || null,
     };
     setCafeteriaAnnouncement(announcement);
-    setShowCafeteriaAnnouncementPopup(announcement.show_popup);
+    const announcementKey = String(announcement.updated_at || announcement.message);
+    setShowCafeteriaAnnouncementPopup(announcement.show_popup && dismissedCafeteriaAnnouncementKey !== announcementKey);
   };
 
   void loadCafeteriaAnnouncement();
   return () => { cancelled = true; };
-}, [authUser?.id, isTeacherMode]);
+}, [authUser?.id, isTeacherMode, dismissedCafeteriaAnnouncementKey]);
 
 // Supabaseから学校共通の落とし物・教室・学食・交通・献立データを取得
 useEffect(() => {
@@ -6560,7 +6562,11 @@ Supabaseの設定を確認してください。
               </div>
             </div>
             <p className="mt-4 whitespace-pre-wrap break-words rounded-2xl bg-amber-50 p-4 text-sm font-bold leading-relaxed text-amber-950">{cafeteriaAnnouncement.message}</p>
-            <button type="button" onClick={() => setShowCafeteriaAnnouncementPopup(false)} className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-amber-700">
+            <button type="button" onClick={() => {
+                const announcementKey = String(cafeteriaAnnouncement?.updated_at || cafeteriaAnnouncement?.message || '');
+                setDismissedCafeteriaAnnouncementKey(announcementKey);
+                setShowCafeteriaAnnouncementPopup(false);
+              }} className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-amber-700">
               確認しました
             </button>
           </section>
