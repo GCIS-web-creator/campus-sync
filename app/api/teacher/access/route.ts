@@ -52,6 +52,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: 'コードが無効か、利用期間外です。管理担当者に確認してください。' }, { status: 401, headers: noStore });
   }
 
+  // 期限切れセッションを整理して、テーブルが使われない認証行で膨らまないようにする。
+  await admin.from('teacher_access_sessions').delete().lt('expires_at', new Date().toISOString());
   const sessionToken = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + TEACHER_SESSION_TTL_SECONDS * 1000).toISOString();
   const { error: sessionError } = await admin.from('teacher_access_sessions').insert({

@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       console.error('先生用アクセスコード再発行に失敗:', error.message);
       return NextResponse.json({ success: false, message: 'コードを再発行できませんでした。' }, { status: 500, headers: noStore });
     }
+    await admin.from('teacher_access_sessions').delete().eq('access_code_id', id);
     return NextResponse.json({ success: true, code: rawCode, message: '新しいコードを発行しました。以前のコードとログイン中のセッションは無効になりました。' }, { headers: noStore });
   }
 

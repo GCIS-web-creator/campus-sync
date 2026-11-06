@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, Copy, KeyRound, Plus, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react';
+import { CalendarDays, Copy, KeyRound, Plus, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-react';
 
 type TeacherAccessCode = {
   id: string;
@@ -123,8 +123,8 @@ export default function TeacherAccessCodesAdmin() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.message || '再発行できませんでした。');
       setIssuedCode(result.code || '');
-      setMessage(result.message || '新しいコードを発行しました。');
       await loadCodes();
+      setMessage(result.message || '新しいコードを発行しました。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '再発行できませんでした。');
     } finally {
