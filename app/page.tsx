@@ -950,6 +950,12 @@ export default function CampusSyncApp() {
   const [authMessage, setAuthMessage] = useState('');
   const [guestCode, setGuestCode] = useState('');
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [teacherAccessCode, setTeacherAccessCode] = useState('');
+  const [teacherLoginBusy, setTeacherLoginBusy] = useState(false);
+  const [teacherAuthMessage, setTeacherAuthMessage] = useState('');
+  const [isTeacherMode, setIsTeacherMode] = useState(false);
+  const [teacherDisplayName, setTeacherDisplayName] = useState('');
+  const [teacherAccessEndsOn, setTeacherAccessEndsOn] = useState('');
   const [profileSetupStatus, setProfileSetupStatus] = useState<'checking' | 'required' | 'complete' | 'error'>('checking');
   const authUserIdRef = useRef<string | null>(null);
   const [profileSetupGrade, setProfileSetupGrade] = useState('1');
@@ -1110,7 +1116,25 @@ export default function CampusSyncApp() {
       } else {
         acceptSessionUser(user);
       }
-      setAuthChecking(false);
+
+      // 先生コードのHttpOnlyセッションを検証する。生徒用Supabaseアカウントは作成しない。
+      try {
+        const teacherResponse = await fetch('/api/teacher/access', { cache: 'no-store', credentials: 'same-origin' });
+        const teacherResult = await teacherResponse.json().catch(() => ({}));
+        if (alive && teacherResponse.ok && teacherResult?.authenticated && teacherResult?.teacher) {
+          if (user) await supabase.auth.signOut({ scope: 'local' });
+          acceptSessionUser(null);
+          setIsTeacherMode(true);
+          setTeacherDisplayName(String(teacherResult.teacher.name || '先生'));
+          setTeacherAccessEndsOn(String(teacherResult.teacher.endsOn || ''));
+          setStudentId('');
+          setStudentName(String(teacherResult.teacher.name || '先生'));
+          setProfileSetupStatus('complete');
+        }
+      } catch (teacherError) {
+        console.warn('先生用セッションの確認に失敗:', teacherError);
+      }
+      if (alive) setAuthChecking(false);
     })();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1121,6 +1145,29 @@ export default function CampusSyncApp() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isTeacherMode) return;
+    let active = true;
+    const verifyTeacherSession = async () => {
+      try {
+        const response = await fetch('/api/teacher/access', { cache: 'no-store', credentials: 'same-origin' });
+        const result = await response.json().catch(() => ({}));
+        if (active && (!response.ok || !result?.authenticated)) {
+          setIsTeacherMode(false);
+          setTeacherDisplayName('');
+          setTeacherAccessEndsOn('');
+          window.location.replace('/');
+        } else if (active && result?.teacher?.endsOn) {
+          setTeacherAccessEndsOn(String(result.teacher.endsOn));
+        }
+      } catch {
+        // 一時的な通信障害では表示を切り替えず、次の確認で再試行する。
+      }
+    };
+    const timer = window.setInterval(() => void verifyTeacherSession(), 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [isTeacherMode]);
 
   useEffect(() => {
     if (!authUser || typeof window === 'undefined') {
@@ -1301,6 +1348,54 @@ export default function CampusSyncApp() {
     setGuestCode('');
     setAuthMessage('');
     setAuthStep('email');
+  };
+
+  const enterTeacherMode = async () => {
+    const code = teacherAccessCode.trim();
+    if (!code) {
+      setTeacherAuthMessage('先生用アクセスコードを入力してください。');
+      return;
+    }
+    setTeacherLoginBusy(true);
+    setTeacherAuthMessage('');
+    try {
+      const response = await fetch('/api/teacher/access', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.teacher) {
+        throw new Error(result?.message || 'アクセスコードを確認できませんでした。');
+      }
+      // 同じブラウザーに生徒ログインが残っている場合は解除し、先生モードだけで開く。
+      await supabase.auth.signOut({ scope: 'local' });
+      setAuthUser(null);
+      setStudentId('');
+      setStudentName(String(result.teacher.name || '先生'));
+      setTeacherDisplayName(String(result.teacher.name || '先生'));
+      setTeacherAccessEndsOn(String(result.teacher.endsOn || ''));
+      setProfileSetupStatus('complete');
+      setIsTeacherMode(true);
+      setTeacherAccessCode('');
+      setAuthMessage('');
+      setActiveTab('home');
+    } catch (error) {
+      setTeacherAuthMessage(error instanceof Error ? error.message : 'ログインできませんでした。');
+    } finally {
+      setTeacherLoginBusy(false);
+    }
+  };
+
+  const exitTeacherMode = async () => {
+    try { await fetch('/api/teacher/access', { method: 'DELETE', credentials: 'same-origin', cache: 'no-store' }); }
+    finally {
+      setIsTeacherMode(false);
+      setTeacherDisplayName('');
+      setTeacherAccessEndsOn('');
+      window.location.replace('/');
+    }
   };
 
   const signInWithSchoolPassword = async () => {
@@ -5665,7 +5760,7 @@ Supabaseの設定を確認してください。
     );
   }
 
-  if (!authUser) {
+  if (!authUser && !isTeacherMode) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-5">
@@ -5699,6 +5794,13 @@ Supabaseの設定を確認してください。
             )}
             {authMessage && <p role="status" className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs leading-relaxed text-cyan-100">{authMessage}</p>}
           </div>
+          <section className="w-full space-y-3 rounded-2xl border border-amber-300/20 bg-amber-300/5 p-5 shadow-xl">
+            <div className="flex items-center gap-2"><Lock size={17} className="text-amber-200" /><h2 className="text-sm font-black text-amber-100">先生用コードでログイン</h2></div>
+            <p className="text-[11px] leading-5 text-slate-300">Adminパネルで発行された先生専用アクセスコードを入力してください。学校メール・学籍番号は不要です。</p>
+            <input type="text" autoComplete="off" spellCheck={false} value={teacherAccessCode} onChange={event => { setTeacherAccessCode(event.target.value.toUpperCase()); setTeacherAuthMessage(''); }} onKeyDown={event => { if (event.key === 'Enter') void enterTeacherMode(); }} placeholder="TCH-XXXX-XXXX-XXXX-XXXX" className="w-full rounded-xl border border-amber-200/20 bg-slate-950/80 px-4 py-3 text-center font-mono text-sm font-bold tracking-wider text-white outline-none focus:ring-2 focus:ring-amber-300" />
+            <button type="button" onClick={() => void enterTeacherMode()} disabled={teacherLoginBusy || !teacherAccessCode.trim()} className="w-full rounded-xl bg-amber-300 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:opacity-50">{teacherLoginBusy ? '確認中…' : '先生としてログイン'}</button>
+            {teacherAuthMessage && <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-300/10 p-3 text-xs text-rose-100">{teacherAuthMessage}</p>}
+          </section>
           <p className="text-center text-[11px] text-slate-400">ログイン用QRは、一回限り・短時間のみ有効です。QRを表示した端末で承認が必要です。</p>
         </div>
         {showCardScanner && (
@@ -5816,7 +5918,26 @@ Supabaseの設定を確認してください。
   };
 
   return (
-    <div data-campus-mode={isDarkMode ? 'dark' : 'light'} className={`campus-student-shell flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}>
+    <div
+      data-campus-mode={isDarkMode ? 'dark' : 'light'}
+      data-teacher-mode={isTeacherMode ? 'true' : undefined}
+      onClickCapture={isTeacherMode ? event => {
+        const target = event.target as HTMLElement;
+        if (target.closest('[data-teacher-nav="true"]')) return;
+        event.preventDefault();
+        event.stopPropagation();
+      } : undefined}
+      onSubmitCapture={isTeacherMode ? event => { event.preventDefault(); event.stopPropagation(); } : undefined}
+      onChangeCapture={isTeacherMode ? event => { event.preventDefault(); event.stopPropagation(); } : undefined}
+      className={`campus-student-shell flex h-screen bg-gray-50 font-sans overflow-hidden ${isDarkMode ? 'dark bg-slate-900' : ''} ${theme === 'neon' ? 'campus-theme-neon' : theme === 'cyber' ? 'campus-theme-cyber' : ''}`}
+    >
+      {isTeacherMode && (
+        <div className="fixed right-3 top-3 z-[120] flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-amber-300/40 bg-slate-950/95 px-3 py-2 text-[10px] font-bold text-amber-100 shadow-xl backdrop-blur">
+          <ShieldAlert size={14} className="shrink-0 text-amber-300" />
+          <span className="truncate">{teacherDisplayName}・先生閲覧モード（編集不可）</span>
+          <button type="button" data-teacher-nav="true" onClick={() => void exitTeacherMode()} className="shrink-0 rounded-full bg-amber-300 px-3 py-1.5 text-[10px] font-black text-slate-950">ログアウト</button>
+        </div>
+      )}
       
       {/* デスクトップ用 左側固定サイドバーレイアウト */}
       <aside className="campus-theme-sidebar sticky top-0 hidden h-dvh w-64 shrink-0 overflow-hidden border-r border-gray-100 bg-white shadow-xs z-30 md:flex md:flex-col">
@@ -6450,7 +6571,7 @@ function NavItem({ icon, label, isActive, onClick, themeCls, badge }: { icon: Re
 
 function SidebarItem({ icon, label, isActive, onClick, badge, themeCls }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, badge?: number, themeCls: any }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
+    <button data-teacher-nav="true" onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${isActive ? `${themeCls.lightBg} ${themeCls.text} font-black shadow-xs` : 'text-gray-500 hover:bg-gray-50 font-bold'}`}>
       <span className="campus-nav-icon-motion flex h-8 w-8 shrink-0 items-center justify-center" aria-hidden="true">
         {icon}
       </span>
