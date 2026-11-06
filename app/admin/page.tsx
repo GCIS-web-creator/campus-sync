@@ -321,15 +321,36 @@ type AdminSchoolNotification = {
   created_at: string;
 };
 
-const uploadLibraryCoverImage = async (file: File): Promise<string> => {
-  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
-  const { error } = await supabase.storage
-    .from('library-covers')
-    .upload(path, file, { cacheControl: '3600', contentType: file.type, upsert: false });
+const postAdminData = async <T,>(action: string, payload: Record<string, unknown> = {}): Promise<T> => {
+  const response = await fetch('/api/admin/data', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
+    cache: 'no-store',
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.message || `管理データの保存に失敗しました（HTTP ${response.status}）。`);
+  }
+  return result as T;
+};
 
-  if (error) throw new Error(error.message);
-  return supabase.storage.from('library-covers').getPublicUrl(path).data.publicUrl;
+const uploadLibraryCoverImage = async (file: File): Promise<string> => {
+  const form = new FormData();
+  form.set('action', 'upload-library-cover');
+  form.set('file', file);
+  const response = await fetch('/api/admin/data', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+    cache: 'no-store',
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success || typeof result.coverUrl !== 'string') {
+    throw new Error(result?.message || `表紙画像をアップロードできませんでした（HTTP ${response.status}）。`);
+  }
+  return result.coverUrl;
 };
 
 // 4. 図書室の管理（貸出遅れ・蔵書登録）
@@ -931,19 +952,15 @@ export default function CampusSyncAdmin() {
       updated_at: new Date().toISOString(),
     }));
 
-    const { error } = await supabase
-      .from('cafeteria_daily_menus')
-      .upsert(rowsToSave, { onConflict: 'service_date' });
-
-    setMenuSaving(false);
-
-    if (error) {
+    try {
+      await postAdminData('save-monthly-menus', { rows: rowsToSave });
+      setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
+    } catch (error) {
       console.error('月間献立の保存に失敗:', error);
-      setMenuMessage(`保存に失敗しました: ${error.message}`);
-      return;
+      setMenuMessage(`保存に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+    } finally {
+      setMenuSaving(false);
     }
-
-    setMenuMessage(`${selectedMenuMonth.replace('-', '年')}月の献立を${dailyMenuRows.length}日分保存しました。`);
   };
 
   // おすすめ告知を保存し、ポップアップと学食タブのバナーを同時に有効化する
@@ -971,21 +988,7 @@ export default function CampusSyncAdmin() {
     setCafeteriaAnnouncementSaving(true);
     setCafeteriaAnnouncementMessage('');
     try {
-      const { error } = await supabase
-        .from('cafeteria_announcements')
-        .upsert({
-          id: 1,
-          message,
-          show_popup: true,
-          show_banner: true,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-
-      if (error) {
-        console.error('学食おすすめのお知らせ保存に失敗:', error);
-        setCafeteriaAnnouncementMessage(`保存に失敗しました: ${error.message}（SQL・RLS設定を確認してください）`);
-        return;
-      }
+      await postAdminData('publish-cafeteria-announcement', { message });
       setCafeteriaAnnouncementText(message);
       setCafeteriaAnnouncementPublished(true);
 
@@ -1028,20 +1031,7 @@ export default function CampusSyncAdmin() {
     setCafeteriaAnnouncementSaving(true);
     setCafeteriaAnnouncementMessage('');
     try {
-      const { error } = await supabase
-        .from('cafeteria_announcements')
-        .upsert({
-          id: 1,
-          message: cafeteriaAnnouncementText.trim(),
-          show_popup: false,
-          show_banner: false,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-      if (error) {
-        console.error('学食おすすめのお知らせ停止に失敗:', error);
-        setCafeteriaAnnouncementMessage(`掲載停止に失敗しました: ${error.message}`);
-        return;
-      }
+      await postAdminData('unpublish-cafeteria-announcement', { message: cafeteriaAnnouncementText.trim() });
       setCafeteriaAnnouncementPublished(false);
       setCafeteriaAnnouncementMessage('生徒サイトでのポップアップとバナー掲載を停止しました。');
     } catch (error) {
@@ -1249,17 +1239,15 @@ export default function CampusSyncAdmin() {
 
     setAcReportSavingId(id);
     setAcReportsMessage('');
-    const { error } = await supabase
-      .from('room_status')
-      .update({ status: '快適', updated_at: new Date().toISOString() })
-      .eq('room_id', report.roomId);
-
-    setAcReportSavingId(null);
-    if (error) {
+    try {
+      await postAdminData('resolve-room-status', { roomId: report.roomId });
+    } catch (error) {
       console.error('エアコン報告の解決状態を保存できません:', error);
-      setAcReportsMessage('解決状態を保存できませんでした。Supabaseのroom_statusのUPDATE権限を確認してください。');
+      setAcReportsMessage(error instanceof Error ? error.message : '解決状態を保存できませんでした。');
+      setAcReportSavingId(null);
       return;
     }
+    setAcReportSavingId(null);
 
     setAcReports(prev => prev.filter(item => item.id !== id));
     setAcReportsMessage(`${report.room}を「快適」に更新しました。生徒用サイトにも反映されます。`);
@@ -1387,10 +1375,14 @@ export default function CampusSyncAdmin() {
     if(!item||cafeteriaControlSavingId)return;
     const nextSoldOut=!item.isSoldOut;
     setCafeteriaControlSavingId(id);setCafeteriaControlMessage('');
-    const {error}=await supabase.from('cafeteria_sold_out').upsert({
-      menu_id:id,is_sold_out:nextSoldOut,line_notified_at:null,updated_at:new Date().toISOString(),
-    },{onConflict:'menu_id'});
-    if(error){console.error('学食の売切状態保存に失敗:',error);setCafeteriaControlMessage('売切状態を保存できませんでした。supabase/cafeteria-bulk-line-notifications.sql の実行を確認してください。');setCafeteriaControlSavingId(null);return;}
+    try {
+      await postAdminData('toggle-cafeteria-sold-out', { menuId: id, isSoldOut: nextSoldOut });
+    } catch (error) {
+      console.error('学食の売切状態保存に失敗:', error);
+      setCafeteriaControlMessage(error instanceof Error ? error.message : '売切状態を保存できませんでした。');
+      setCafeteriaControlSavingId(null);
+      return;
+    }
     setMenuItems(prev=>prev.map(menu=>menu.id===id?{...menu,isSoldOut:nextSoldOut,lineNotifiedAt:null}:menu));
     setCafeteriaControlMessage(nextSoldOut?item.name+'を売切にしました。LINE通知はまだ送信していません。':item.name+'を販売中に戻しました。');
     setCafeteriaControlSavingId(null);
@@ -1485,21 +1477,7 @@ export default function CampusSyncAdmin() {
         cover_url: coverUrl,
       };
 
-      const { data, error } = await supabase
-        .from('library_books')
-        .insert(newBook)
-        .select('id, title, author, code, status, cover_url, created_at')
-        .single();
-
-      if (error) {
-        console.error('蔵書の登録に失敗:', error);
-        setBooksMessage(
-          error.code === '23505'
-            ? '同じタイトル・著者の本が既に登録されています。'
-            : `登録に失敗しました: ${error.message}`
-        );
-        return;
-      }
+      const { book: data } = await postAdminData<{ book: LibraryBook }>('create-library-book', { book: newBook });
 
       setBooks(prev => [data, ...prev]);
       setNewBookTitle('');
@@ -1525,14 +1503,10 @@ export default function CampusSyncAdmin() {
     setUpdatingCoverBookId(book.id);
     try {
       const coverUrl = await uploadLibraryCoverImage(file);
-      const { data, error } = await supabase
-        .from('library_books')
-        .update({ cover_url: coverUrl })
-        .eq('id', book.id)
-        .select('id, title, author, code, status, cover_url, created_at')
-        .single();
-
-      if (error) throw new Error(error.message);
+      const { book: data } = await postAdminData<{ book: LibraryBook }>('update-library-book-cover', {
+        bookId: book.id,
+        coverUrl,
+      });
       setBooks(prev => prev.map(item => item.id === book.id ? data : item));
       setBooksMessage(`「${book.title}」の表紙画像を更新しました。`);
     } catch (unexpectedError) {
@@ -1552,45 +1526,13 @@ export default function CampusSyncAdmin() {
     setDeletingBookId(book.id);
     setBooksMessage('');
     try {
-      const { data, error } = await supabase
-        .from('library_books')
-        .delete()
-        .eq('id', book.id)
-        .select('id')
-        .maybeSingle();
+      const result = await postAdminData<{ imageDeleted: boolean }>('delete-library-book', { bookId: book.id });
 
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error('削除できませんでした。SupabaseのDELETEポリシーを確認してください。');
-
-      // DBの削除が成功したら、Adminの一覧からも即時に取り除く
+      // DBの削除が成功したら、Adminの一覧からも即時に取り除く。
       setBooks(prev => prev.filter(item => item.id !== book.id));
-
-      // public URLからStorage内のファイルパスを取り出す
-      let storagePath: string | null = null;
-      if (book.cover_url) {
-        try {
-          const parsedUrl = new URL(book.cover_url);
-          const marker = '/storage/v1/object/public/library-covers/';
-          const markerIndex = parsedUrl.pathname.indexOf(marker);
-          if (markerIndex >= 0) {
-            storagePath = decodeURIComponent(parsedUrl.pathname.slice(markerIndex + marker.length));
-          }
-        } catch {
-          // 古い形式などでURLを解析できない場合は、蔵書削除を優先する
-        }
-      }
-
-      if (storagePath) {
-        const { error: imageError } = await supabase.storage.from('library-covers').remove([storagePath]);
-        if (imageError) {
-          console.error('蔵書の表紙画像削除に失敗:', imageError);
-          setBooksMessage(`「${book.title}」は削除しましたが、表紙画像を削除できませんでした。StorageのDELETEポリシーを確認してください。`);
-        } else {
-          setBooksMessage(`「${book.title}」を蔵書から削除しました。`);
-        }
-      } else {
-        setBooksMessage(`「${book.title}」を蔵書から削除しました。`);
-      }
+      setBooksMessage(result.imageDeleted
+        ? `「${book.title}」を蔵書から削除しました。`
+        : `「${book.title}」は削除しましたが、表紙画像の削除に失敗しました。`);
     } catch (unexpectedError) {
       console.error('蔵書の削除に失敗:', unexpectedError);
       setBooksMessage(`蔵書の削除に失敗しました: ${unexpectedError instanceof Error ? unexpectedError.message : '不明なエラー'}`);
@@ -1613,19 +1555,10 @@ export default function CampusSyncAdmin() {
     setStudyRoomSaving(true);
     setStudyRoomMessage('');
     try {
-      const { data, error } = await supabase
-        .from('study_room_status')
-        .upsert({
-          room_key: 'career_center',
-          room_name: 'キャリアセンター自習室',
-          occupied_seats: occupied,
-          total_seats: total,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'room_key' })
-        .select('room_key, room_name, occupied_seats, total_seats, updated_at')
-        .single();
-
-      if (error) throw error;
+      const { studyRoom: data } = await postAdminData<{ studyRoom: { occupied_seats: number; total_seats: number } }>('save-study-room-status', {
+        occupiedSeats: occupied,
+        totalSeats: total,
+      });
       setStudyRoomOccupiedSeats(Number(data.occupied_seats));
       setStudyRoomTotalSeats(Number(data.total_seats));
       setStudyRoomMessage('保存しました。生徒用サイトにも反映されます。');
