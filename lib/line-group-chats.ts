@@ -154,7 +154,7 @@ export async function pushLineMessagesToRegisteredChats(
         signal: AbortSignal.timeout(15000),
       });
       await recordLineDeliveryResponse(response, {
-        channel: 'push', destinationType: chat.chat_type, destinationId: chat.chat_id,
+        channel: 'push', destinationType: chat.chat_type === 'room' ? 'room' : 'group', destinationId: chat.chat_id,
         kind, botSlot, deliveryBatchId: deliveryBatchId || retryKeyBase || null,
         retryKey: headers['X-Line-Retry-Key'] || null, accessToken, messages: outboundMessages,
       });
