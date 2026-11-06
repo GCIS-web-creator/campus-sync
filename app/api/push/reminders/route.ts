@@ -155,6 +155,29 @@ export async function POST(request: Request) {
       .lte('due_at', new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000).toISOString());
     if (todoError) throw new Error(`todosを取得できません: ${todoError.message}. setup_web_push_reminders.sqlを先に実行してください。`);
 
+    // Include shared Admin / teacher assignments in the same deadline reminder flow.
+    // Completion is tracked per student; already-submitted assignments are excluded.
+    const { data: assignments, error: assignmentError } = await admin
+      .from('assignments')
+      .select('id, title, due_at')
+      .eq('is_active', true)
+      .not('due_at', 'is', null)
+      .gte('due_at', new Date(now.getTime() - 5 * 60 * 1000).toISOString())
+      .lte('due_at', new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000).toISOString());
+    if (assignmentError) throw new Error('先生・Admin課題を取得できません: ' + assignmentError.message);
+
+    const assignmentIds = (assignments || []).map(item => item.id);
+    let completedAssignments = new Set<string>();
+    if (assignmentIds.length) {
+      const { data: completedRows, error: completedError } = await admin
+        .from('assignment_completions')
+        .select('student_id, assignment_id')
+        .eq('completed', true)
+        .in('assignment_id', assignmentIds);
+      if (completedError) throw new Error('課題の提出済み状態を取得できません: ' + completedError.message);
+      completedAssignments = new Set((completedRows || []).map(item => String(item.student_id) + ':' + String(item.assignment_id)));
+    }
+
     const { data: preferences, error: preferenceError } = await admin
       .from('push_reminder_preferences')
       .select('user_id, student_id, reminders_enabled, reminder_times, allowed_days, timezone, notification_settings, quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
@@ -186,7 +209,17 @@ export async function POST(request: Request) {
     for (const pref of (preferences || []) as PreferenceRow[]) {
       const userSubscriptions = subscriptionsByUser.get(pref.user_id) || [];
       if (!userSubscriptions.length) continue;
-      const userTodos = todosByStudent.get(pref.student_id) || [];
+      const userTodos = [...(todosByStudent.get(pref.student_id) || [])];
+      for (const assignment of assignments || []) {
+        if (completedAssignments.has(pref.student_id + ':' + String(assignment.id))) continue;
+        userTodos.push({
+          id: 'assignment:' + String(assignment.id),
+          student_id: pref.student_id,
+          title: assignment.title,
+          due_at: assignment.due_at,
+          completed: false,
+        });
+      }
       const timezone = pref.timezone || 'Asia/Tokyo';
       const allowedDays = Array.isArray(pref.allowed_days) ? pref.allowed_days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       const selectedRules = Array.isArray(pref.reminder_times) ? pref.reminder_times : [];
