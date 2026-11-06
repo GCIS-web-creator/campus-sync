@@ -89,12 +89,8 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
       const data = await request('view=explorer-schema');
       const nextTables = (data.tables || []) as TableMeta[];
       setTables(nextTables);
-      const nextName = preferred && nextTables.some((table) => table.name === preferred)
-        ? preferred
-        : selectedName && nextTables.some((table) => table.name === selectedName)
-          ? selectedName
-          : nextTables[0]?.name || '';
-      if (nextName) setSelectedName(nextName);
+      const nextName = preferred && nextTables.some((table) => table.name === preferred) ? preferred : nextTables[0]?.name || '';
+      setSelectedName((current) => preferred && nextTables.some((table) => table.name === preferred) ? preferred : current && nextTables.some((table) => table.name === current) ? current : nextName);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -265,7 +261,7 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
       <header className="rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-950/50 via-slate-950 to-slate-900 p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-cyan-200"><HardDrive size={18}/><span className="text-[10px] font-black uppercase tracking-[0.25em]">HighAdmin / Supabase Storage</span></div>
+            <div className="flex items-center gap-2 text-cyan-200"><HardDrive size={18}/><span className="text-[10px] font-black uppercase tracking-[0.25em]">HighAdmin / Supabase Database</span></div>
             <h2 className="mt-2 text-2xl font-black sm:text-3xl">Supabase データエクスプローラー</h2>
             <p className="mt-2 max-w-3xl text-xs leading-6 text-slate-400">Windowsのファイルエクスプローラーのように、CampusSyncの保存データをフォルダー別に整理して確認できます。各項目の意味を日本語で表示し、許可されたテーブルは追加・編集・削除できます。</p>
           </div>
