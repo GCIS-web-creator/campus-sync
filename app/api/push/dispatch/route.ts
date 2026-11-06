@@ -113,7 +113,7 @@ async function finish(
   outcome: 'sent' | 'skipped' | 'failed',
   error?: string,
 ) {
-  const { error: finishError } = await admin.rpc('push_finish_notification', {
+  const { error: finishError } = await (admin as any).rpc('push_finish_notification', {
     p_id: id,
     p_outcome: outcome,
     p_error: error || null,
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
 
   try {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
-    const { data: claimedRows, error: claimError } = await admin.rpc('push_claim_notifications', { p_limit: 80 });
+    const { data: claimedRows, error: claimError } = await (admin as any).rpc('push_claim_notifications', { p_limit: 80 });
     if (claimError) throw new Error('通知キューを取得できません: ' + claimError.message);
     const claimed = (claimedRows || []) as OutboxRow[];
     if (!claimed.length) {
@@ -198,7 +198,7 @@ export async function POST(request: Request) {
         if (row.priority !== 'urgent' && preference) {
           const releaseAt = quietHoursReleaseAt(new Date(), preference);
           if (releaseAt) {
-            const { error: releaseError } = await admin.rpc('push_release_notification', {
+            const { error: releaseError } = await (admin as any).rpc('push_release_notification', {
               p_id: row.id,
               p_available_at: releaseAt.toISOString(),
             });
