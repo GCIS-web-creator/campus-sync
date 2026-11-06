@@ -455,7 +455,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null) as { table?: unknown; values?: unknown } | null;
     if (!body || typeof body.table !== 'string') return fail('保存リクエストが正しくありません。', 400);
     const valid = await validateExplorerMutation(auth.admin, body.table, body.values, undefined);
-    if ('error' in valid) return fail(valid.error, valid.status);
+    if ('error' in valid) return fail(valid.error || '入力値が正しくありません。', valid.status || 400);
     const { data, error } = await auth.admin.from(body.table).insert(valid.values).select('*').single();
     if (error) return fail('レコードを追加できませんでした: ' + error.message, 400);
     const tableSchema = valid.table;
@@ -476,7 +476,7 @@ export async function PATCH(request: Request) {
     const body = await request.json().catch(() => null) as { table?: unknown; values?: unknown; key?: unknown } | null;
     if (!body || typeof body.table !== 'string') return fail('更新リクエストが正しくありません。', 400);
     const valid = await validateExplorerMutation(auth.admin, body.table, body.values, body.key);
-    if ('error' in valid) return fail(valid.error, valid.status);
+    if ('error' in valid) return fail(valid.error || '入力値が正しくありません。', valid.status || 400);
     const changes = Object.fromEntries(Object.entries(valid.values).filter(([name]) => !valid.table.primary_key.includes(name)));
     if (!Object.keys(changes).length) return fail('主キー以外に変更する項目を入力してください。', 400);
     let query = auth.admin.from(body.table).update(changes);
