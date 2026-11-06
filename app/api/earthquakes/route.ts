@@ -562,13 +562,20 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
 }
 
 async function dispatchNotifications(admin: SupabaseClient) {
-  const { data: pending, error } = await admin.from('jma_earthquake_notifications')
+  const { data: pendingRows, error } = await admin.from('jma_earthquake_notifications')
     .select('id,event_key,notification_kind,payload,official_sent_at,groups_sent_at')
     .or('official_sent_at.is.null,groups_sent_at.is.null')
     .order('created_at', { ascending: true })
-    .limit(8);
+    .limit(40);
   if (error) throw error;
-  if (!pending?.length) return { pending: 0, attempted: 0, completed: 0 };
+  const pending = (pendingRows || [])
+    .sort((a, b) => {
+      const aUrgent = String(a.notification_kind).startsWith('eew_') ? 0 : 1;
+      const bUrgent = String(b.notification_kind).startsWith('eew_') ? 0 : 1;
+      return aUrgent - bUrgent || 0;
+    })
+    .slice(0, 8);
+  if (!pending.length) return { pending: 0, attempted: 0, completed: 0 };
 
   const bot = await getActiveLineBot();
   if (!bot?.accessToken) return { pending: pending.length, attempted: 0, completed: 0, skipped: '有効なLINE公式アカウントが設定されていません。' };
@@ -665,8 +672,14 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
         ? age <= 30 * 60 * 1000
         : age > 30 * 60 * 1000 && age <= 5 * 24 * 60 * 60 * 1000;
     })
-    .sort((a, b) => Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || ''))
-    .slice(-MAX_FEED_ITEMS);
+    .sort((a, b) => {
+      // Process EEW warning/cancellation bulletins before ordinary earthquake products.
+      const aUrgent = /VXSE43/i.test(a.href + ' ' + a.id);
+      const bUrgent = /VXSE43/i.test(b.href + ' ' + b.id);
+      if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
+      return Date.parse(a.publishedAt || '') - Date.parse(b.publishedAt || '');
+    })
+    .slice(0, MAX_FEED_ITEMS);
 
   const { data: knownRows, error: knownError } = entries.length
     ? await admin.from('jma_earthquake_reports').select('source_id').in('source_id', entries.map(entry => entry.id))
@@ -682,24 +695,42 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
   let saved = 0;
   let failures = 0;
 
-  for (let index = 0; index < batchEntries.length; index += 4) {
-    const chunk = batchEntries.slice(index, index + 4);
-    const results = await Promise.all(chunk.map(async entry => {
-      try {
-        const xml = await fetchText(entry.href, 10000, MAX_XML_BYTES);
-        return { entry, parsed: parseMessage(entry, xml) };
-      } catch (caught) {
-        console.error('JMA earthquake XML fetch failed:', entry.id, caught instanceof Error ? caught.message : 'unknown');
-        failures += 1;
-        return null;
+  const processEntries = async (items: FeedEntry[]) => {
+    for (let index = 0; index < items.length; index += 4) {
+      const chunk = items.slice(index, index + 4);
+      const results = await Promise.all(chunk.map(async entry => {
+        try {
+          const xml = await fetchText(entry.href, 10000, MAX_XML_BYTES);
+          return { entry, parsed: parseMessage(entry, xml) };
+        } catch (caught) {
+          console.error('JMA earthquake XML fetch failed:', entry.id, caught instanceof Error ? caught.message : 'unknown');
+          failures += 1;
+          return null;
+        }
+      }));
+      for (const result of results) {
+        if (!result?.parsed) continue;
+        downloaded += 1;
+        if (await saveMessage(admin, mode, result.parsed)) saved += 1;
       }
-    }));
-    for (const result of results) {
-      if (!result?.parsed) continue;
-      downloaded += 1;
-      if (await saveMessage(admin, mode, result.parsed)) saved += 1;
     }
-  }
+  };
+
+  // Fetch, persist, and dispatch EEW warning/cancellation bulletins before
+  // ordinary earthquake products so backlog cannot delay the urgent alert.
+  const urgentEntries = mode === 'high'
+    ? batchEntries.filter(entry => /VXSE43/i.test(entry.href + ' ' + entry.id))
+    : [];
+  const regularEntries = mode === 'high'
+    ? batchEntries.filter(entry => !/VXSE43/i.test(entry.href + ' ' + entry.id))
+    : batchEntries;
+
+  await processEntries(urgentEntries);
+  const urgentNotifications = mode === 'high' && urgentEntries.length
+    ? await dispatchNotifications(admin)
+    : { pending: 0, attempted: 0, completed: 0 };
+  await processEntries(regularEntries);
+
   if (failures > 0) throw new Error('気象庁の地震情報を一部取得できませんでした。次回同期で再試行します。');
 
   const remainingEntries = Math.max(0, pendingEntries.length - batchEntries.length);
@@ -712,9 +743,16 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
 
   // The high-frequency feed is the only source allowed to create and dispatch
   // realtime LINE alerts. The long feed is strictly for historical display.
-  const notifications = mode === 'high'
+  const finalNotifications = mode === 'high'
     ? await dispatchNotifications(admin)
     : { pending: 0, attempted: 0, completed: 0, skipped: 'historical_feed_no_dispatch' };
+  const notifications = mode === 'high'
+    ? {
+        pending: urgentNotifications.pending + finalNotifications.pending,
+        attempted: urgentNotifications.attempted + finalNotifications.attempted,
+        completed: urgentNotifications.completed + finalNotifications.completed,
+      }
+    : finalNotifications;
   return {
     mode,
     entries: entries.length,
