@@ -58,6 +58,7 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
   const [expandedGroups, setExpandedGroups] = useState<string[]>(GROUP_ORDER);
   const [showSchema, setShowSchema] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<RowData | null>(null);
+  const [viewingRow, setViewingRow] = useState<RowData | null>(null);
 
   const authHeaders = useMemo(() => ({
     Authorization: 'Bearer ' + token,
@@ -99,7 +100,7 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
     } finally {
       setLoading(false);
     }
-  }, [request, selectedName]);
+  }, [request]);
 
   const selected = tables.find((table) => table.name === selectedName) || null;
 
@@ -258,7 +259,6 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
   };
 
   const visibleColumns = selected?.columns.slice(0, 7) || [];
-  const groupCount = groups.reduce((sum, group) => sum + group.items.length, 0);
 
   return (
     <div className="space-y-4 text-slate-100">
@@ -302,7 +302,7 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
                     {open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}<Folder size={15} className="text-amber-300"/><span className="min-w-0 flex-1 truncate">{group}</span><span className="text-[10px] text-slate-600">{items.length}</span>
                   </button>
                   {open && <div className="ml-4 space-y-0.5 border-l border-white/10 pl-2">{items.map((table) => (
-                    <button key={table.name} onClick={() => { setSelectedName(table.name); setSearch(''); setPage(1); setMessage(''); setError(''); }} className={'flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition ' + (selectedName === table.name ? 'bg-cyan-300/10 text-cyan-100 ring-1 ring-inset ring-cyan-300/20' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200')}>
+                    <button key={table.name} onClick={() => { setSelectedName(table.name); setSearch(''); setPage(1); setMessage(''); setError(''); setViewingRow(null); }} className={'flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition ' + (selectedName === table.name ? 'bg-cyan-300/10 text-cyan-100 ring-1 ring-inset ring-cyan-300/20' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200')}>
                       <Table2 size={14} className="mt-0.5 shrink-0 text-cyan-300"/><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-bold">{table.label}</span><span className="mt-0.5 block truncate font-mono text-[9px] text-slate-600">{table.name}</span></span>
                       {!table.can_write && <LockKeyhole size={11} className="mt-1 shrink-0 text-slate-600"/>}
                     </button>
@@ -335,7 +335,7 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
                   <thead className="bg-white/[0.035] text-slate-400"><tr>{visibleColumns.map((column) => <th key={column.name} className="max-w-[210px] px-3 py-3 font-bold"><span className="block truncate">{column.label}</span><span className="mt-0.5 block font-mono text-[9px] font-normal text-slate-600">{column.name}</span></th>)}<th className="w-[120px] px-3 py-3 text-right">操作</th></tr></thead>
                   <tbody>{rows.map((row, index) => <tr key={JSON.stringify(selected.primary_key.map((key) => row[key])) || index} className="border-t border-white/5 hover:bg-white/[0.025]">
                     {visibleColumns.map((column) => <td key={column.name} className="max-w-[210px] px-3 py-3 align-top"><span className="block max-h-16 overflow-hidden break-all text-[11px] leading-5 text-slate-300">{displayValue(row[column.name])}</span></td>)}
-                    <td className="px-3 py-3 text-right"><div className="inline-flex gap-1">{selected.can_write && <><button title="編集" onClick={() => openEdit(row)} className="rounded-lg border border-white/10 p-2 text-cyan-200 hover:bg-cyan-300/10"><Pencil size={13}/></button><button title="削除" onClick={() => setConfirmDelete(row)} className="rounded-lg border border-white/10 p-2 text-rose-300 hover:bg-rose-300/10"><Trash2 size={13}/></button></>}<button title="詳細" onClick={() => openEdit(row)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:bg-white/5"><Eye size={13}/></button></div></td>
+                    <td className="px-3 py-3 text-right"><div className="inline-flex gap-1">{selected.can_write && <><button title="編集" onClick={() => openEdit(row)} className="rounded-lg border border-white/10 p-2 text-cyan-200 hover:bg-cyan-300/10"><Pencil size={13}/></button><button title="削除" onClick={() => setConfirmDelete(row)} className="rounded-lg border border-white/10 p-2 text-rose-300 hover:bg-rose-300/10"><Trash2 size={13}/></button></>}<button title="詳細" onClick={() => setViewingRow(row)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:bg-white/5"><Eye size={13}/></button></div></td>
                   </tr>)}
                   {rows.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-12 text-center"><Database size={25} className="mx-auto mb-2 text-slate-700"/><p className="text-xs font-bold text-slate-400">{loading ? '読み込み中…' : 'このテーブルにはデータがありません。'}</p><p className="mt-1 text-[10px] text-slate-600">編集可能なテーブルなら「新しいデータ」から登録できます。</p></td></tr>}
                   </tbody>
@@ -346,6 +346,20 @@ export default function HiAdminDataExplorer({ token, password2, password3 }: Pro
           </section>
         </div>
       )}
+
+
+      {viewingRow && selected && <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="explorer-detail-title">
+        <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-slate-950 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 p-4"><div><h3 id="explorer-detail-title" className="font-black">レコードの詳細</h3><p className="mt-1 text-[10px] text-slate-500">{selected.label} · public.{selected.name}</p></div><button onClick={() => setViewingRow(null)} className="rounded-lg border border-white/10 p-2"><X size={16}/></button></div>
+          <div className="max-h-[72vh] space-y-2 overflow-y-auto p-4 sm:p-5">
+            {selected.columns.map((column) => <div key={column.name} className="grid gap-1 rounded-xl border border-white/5 bg-white/[0.025] p-3 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-4">
+              <div><p className="text-[11px] font-bold text-slate-300">{column.label}</p><p className="mt-1 break-all font-mono text-[9px] text-slate-600">{column.name}</p></div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-5 text-slate-300">{column.sensitive ? '［保護された情報］' : displayValue(viewingRow[column.name])}</pre>
+            </div>)}
+          </div>
+          <div className="flex justify-between border-t border-white/10 p-4"><span className="text-[10px] text-slate-500">保護対象の認証情報は表示していません。</span>{selected.can_write && <button onClick={() => { setViewingRow(null); openEdit(viewingRow); }} className="inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-4 py-2.5 text-xs font-black text-slate-950"><Pencil size={13}/>編集</button>}</div>
+        </div>
+      </div>}
 
       {mode && selected && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="explorer-edit-title">
         <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-slate-950 shadow-2xl">
