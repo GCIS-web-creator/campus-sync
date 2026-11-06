@@ -159,15 +159,17 @@ const EXPLORER_TABLE_INFO: Record<string, { label: string; group: string; descri
 };
 
 const EXPLORER_READ_ONLY = new Set([
-  'chat_audit_logs', 'club_post_code_attempts', 'club_post_codes',
-  'hiadmin_audit_logs', 'hiadmin_gate_attempts',
-  'jma_earthquake_reports', 'jma_earthquake_sync_state', 'jma_weather_alert_events', 'jma_weather_sync_state',
-  'line_bot_rotation_events', 'line_delivery_events', 'line_group_delivery_logs', 'line_train_timetable_sends',
+  'cafeteria_sold_out_reports', 'chat_audit_logs', 'club_post_code_attempts', 'club_post_codes',
+  'contribution_history', 'hiadmin_audit_logs', 'hiadmin_gate_attempts',
+  'jma_earthquake_notifications', 'jma_earthquake_reports', 'jma_earthquake_sync_state', 'jma_earthquakes',
+  'jma_weather_alert_events', 'jma_weather_alerts', 'jma_weather_sync_state',
+  'line_bot_rotation', 'line_bot_rotation_events', 'line_broadcast_history', 'line_delivery_events',
+  'line_group_delivery_logs', 'line_train_timetable_sends', 'nkn', 'push_reminder_deliveries',
   'push_subscriptions', 'student_login_handoffs', 'teacher_access_codes', 'teacher_access_sessions',
 ]);
 const EXPLORER_REDACTED_COLUMNS = new Set([
-  'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash',
-  'subscription', 'endpoint',
+  'card_token', 'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash',
+  'subscription', 'endpoint', 'lock_token', 'high_lock_token', 'long_lock_token', 'sync_lock_token',
 ]);
 const EXPLORER_LABELS: Record<string, string> = {
   id: 'レコードID', student_id: '学籍番号', student_name: '生徒氏名', user_class: 'クラス',
