@@ -1,5 +1,6 @@
 export type EarthquakeNotificationPayload = {
-  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled';
+  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake';
+  severeAreas?: Array<{ name: string; prefecture: string | null; intensity: string | null }>;
   eventTime: string;
   issuedAt: string;
   hypocenterName: string;
@@ -110,8 +111,9 @@ function getSafetyMessage(maxIntensity: string): string {
 export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) {
   const isEew = payload.kind === 'eew_kodaira';
   const isCancelled = payload.kind === 'eew_cancelled';
+  const isMajor = payload.kind === 'major_earthquake';
   const normalizedMaxIntensity = normalizeIntensity(payload.maxIntensity);
-  const observationTheme = payload.kind === 'kodaira_intensity2'
+  const observationTheme = payload.kind === 'kodaira_intensity2' || isMajor
     ? INTENSITY_THEMES[normalizedMaxIntensity]
     : undefined;
 
@@ -128,13 +130,17 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
     ? '緊急地震速報の取消情報'
     : isEew
       ? '緊急地震速報（警報）'
-      : '小平市で震度2以上を観測';
+      : isMajor
+        ? '全国で大地震を観測'
+        : '小平市で震度2以上を観測';
 
   const kicker = isCancelled
     ? 'CAMPUSSYNC / EEW CANCELLED'
     : isEew
       ? 'CAMPUSSYNC / EEW WARNING'
-      : 'CAMPUSSYNC / EARTHQUAKE ALERT';
+      : isMajor
+        ? 'CAMPUSSYNC / MAJOR EARTHQUAKE'
+        : 'CAMPUSSYNC / EARTHQUAKE ALERT';
 
   const eventTime = new Date(payload.eventTime).toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -156,25 +162,31 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
     ? '速報の発表状況'
     : isEew
       ? '小平市周辺で予想される震度'
-      : '全国で観測された最大震度';
+      : isMajor
+        ? '国内で観測された最大震度'
+        : '全国で観測された最大震度';
 
   const heroCaption = isCancelled
     ? '緊急地震速報は取り消されました'
     : isEew
       ? '強い揺れに備えてください'
-      : '気象庁発表';
+      : isMajor
+        ? '観測結果・気象庁発表'
+        : '気象庁発表';
 
   const topNotice = isCancelled
     ? '取消情報'
     : isEew
       ? 'ただちに身を守る行動を'
-      : normalizedMaxIntensity === '7'
-        ? '最大級の揺れを観測'
-        : normalizedMaxIntensity === '6弱' || normalizedMaxIntensity === '6強'
-          ? '非常に強い揺れを観測'
-          : normalizedMaxIntensity === '5弱' || normalizedMaxIntensity === '5強'
-            ? '強い揺れを観測'
-            : '地震情報';
+      : isMajor
+        ? normalizedMaxIntensity === '7' ? '最大級の揺れを観測' : '震度6弱以上の強い揺れを観測'
+        : normalizedMaxIntensity === '7'
+          ? '最大級の揺れを観測'
+          : normalizedMaxIntensity === '6弱' || normalizedMaxIntensity === '6強'
+            ? '非常に強い揺れを観測'
+            : normalizedMaxIntensity === '5弱' || normalizedMaxIntensity === '5強'
+              ? '強い揺れを観測'
+              : '地震情報';
 
   const heroContents: Array<Record<string, unknown>> = [
     { type: 'text', text: heroLabel, size: 'sm', weight: 'bold', color: theme.headerText, wrap: true },
@@ -200,18 +212,35 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
           { type: 'text', text: '発表状況', size: 'xs', weight: 'bold', color: '#475569' },
           { type: 'text', text: '小平市を対象に発表された緊急地震速報の取消情報です。', size: 'sm', weight: 'bold', color: '#334155', wrap: true, margin: 'sm' },
         ]
-      : [
-          { type: 'text', text: '小平市の観測震度', size: 'xs', weight: 'bold', color: theme.text },
-          {
-            type: 'text',
-            text: '震度' + (payload.kodairaIntensity || '2以上'),
-            size: 'xl',
-            weight: 'bold',
-            color: theme.text,
-            margin: 'sm',
-          },
-          { type: 'text', text: '※上の大きな表示は地震全体の最大震度です', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
-        ];
+      : isMajor
+        ? [
+            { type: 'text', text: '震度6弱以上を観測した地域', size: 'xs', weight: 'bold', color: theme.text },
+            {
+              type: 'text',
+              text: payload.severeAreas?.length
+                ? payload.severeAreas.slice(0, 8).map(area => (area.prefecture || '') + area.name + (area.intensity ? '（震度' + area.intensity + '）' : '')).join('、')
+                  + (payload.severeAreas.length > 8 ? ' ほか' + (payload.severeAreas.length - 8) + '市区町村' : '')
+                : '観測地域の詳細は気象庁の続報を確認してください。',
+              size: 'sm',
+              weight: 'bold',
+              color: theme.text,
+              wrap: true,
+              margin: 'sm',
+            },
+            { type: 'text', text: '小平市の揺れの有無にかかわらず、国内の大地震としてお知らせしています。', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
+          ]
+        : [
+            { type: 'text', text: '小平市の観測震度', size: 'xs', weight: 'bold', color: theme.text },
+            {
+              type: 'text',
+              text: '震度' + (payload.kodairaIntensity || '2以上'),
+              size: 'xl',
+              weight: 'bold',
+              color: theme.text,
+              margin: 'sm',
+            },
+            { type: 'text', text: '※上の大きな表示は地震全体の最大震度です', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
+          ];
 
   const detailContents: Array<Record<string, unknown>> = [
     { type: 'text', text: '地震の詳細', size: 'md', weight: 'bold', color: '#0F172A' },
@@ -225,7 +254,9 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
     ? '⚠ 今すぐ身を守ってください'
     : isCancelled
       ? '速報の取消について'
-      : '⚠ 揺れの後も安全を確認';
+      : isMajor
+        ? '⚠ 強い揺れが観測された地域の方へ'
+        : '⚠ 揺れの後も安全を確認';
 
   const safetyMessage = isEew
     ? '頭を守り、丈夫な机の下など安全な場所で身を守ってください。周囲の人にも注意を呼びかけてください。'

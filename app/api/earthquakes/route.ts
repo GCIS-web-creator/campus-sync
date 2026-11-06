@@ -54,7 +54,7 @@ type ParsedEarthquake = {
   isEew: boolean;
   isEewCancelled: boolean;
   isDistant: boolean;
-  notificationKind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | null;
+  notificationKind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake' | null;
 };
 
 function getAdmin(): SupabaseClient {
@@ -414,13 +414,19 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   const placeText = (hypocenterName || '') + ' ' + headline + ' ' + title;
   const isDistant = descendantsNamed(root, 'Foreign').length > 0 || /海外|中国|ロシア|アメリカ|台湾|トンガ|パプア|フィリピン|インドネシア|南米|太平洋|地中海|メキシコ|チリ|カムチャツカ|マリアナ|バヌアツ/.test(placeText);
   const eventKey = buildEventKey(root, eventTime, hypocenterName, magnitude, entry.id);
+  const hasObservedMajorIntensity = observedAreas.some(area =>
+    (area.intensityRank ?? intensityRank(area.intensity || '')) >= 7
+  );
   const notificationKind = isEewCancelled && eewKodairaTarget
     ? 'eew_cancelled'
     : isEew && eewKodairaTarget
       ? 'eew_kodaira'
-      : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
-        ? 'kodaira_intensity2'
-        : null;
+      : productCode === 'VXSE53' && !isDistant && maxIntensityRank !== null
+        && maxIntensityRank >= 7 && hasObservedMajorIntensity
+        ? 'major_earthquake'
+        : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
+          ? 'kodaira_intensity2'
+          : null;
 
   return {
     sourceId: entry.id,
@@ -459,7 +465,14 @@ function stableRetryKey(value: string): string {
   return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
 }
 
-function notificationPayload(item: ParsedEarthquake, kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled'): EarthquakeNotificationPayload {
+function notificationPayload(item: ParsedEarthquake, kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake'): EarthquakeNotificationPayload {
+  const severeAreas = item.observedAreas
+    .filter(area => (area.intensityRank ?? intensityRank(area.intensity || '')) >= 7)
+    .map(area => ({
+      name: area.name,
+      prefecture: area.prefecture,
+      intensity: area.intensity,
+    }));
   return {
     kind,
     eventTime: item.eventTime || item.issuedAt,
@@ -473,6 +486,7 @@ function notificationPayload(item: ParsedEarthquake, kind: 'eew_kodaira' | 'koda
     kodairaIntensity: item.kodairaIntensity,
     eewTargets: item.eewTargets,
     eewForecastIntensity: item.eewForecastIntensity,
+    severeAreas,
     sourceUrl: item.sourceUrl,
   };
 }
@@ -535,6 +549,9 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
       longitude: item.longitude ?? (current?.longitude === null || current?.longitude === undefined ? null : Number(current.longitude)),
       maxIntensity: item.maxIntensity || current?.max_intensity || null,
       kodairaIntensity: item.kodairaIntensity || current?.kodaira_intensity || null,
+      observedAreas: item.observedAreas.length
+        ? item.observedAreas
+        : (Array.isArray(current?.observed_areas) ? current.observed_areas as ParsedEarthquake['observedAreas'] : []),
       eewTargets: item.eewTargets.length ? item.eewTargets : (Array.isArray(current?.eew_targets) ? current.eew_targets : []),
       eewForecastIntensity: item.eewForecastIntensity || current?.eew_forecast_intensity || null,
     };
@@ -570,9 +587,8 @@ async function dispatchNotifications(admin: SupabaseClient) {
   if (error) throw error;
   const pending = (pendingRows || [])
     .sort((a, b) => {
-      const aUrgent = String(a.notification_kind).startsWith('eew_') ? 0 : 1;
-      const bUrgent = String(b.notification_kind).startsWith('eew_') ? 0 : 1;
-      return aUrgent - bUrgent || 0;
+      const priority = (kind: string) => kind.startsWith('eew_') ? 0 : kind === 'major_earthquake' ? 1 : 2;
+      return priority(String(a.notification_kind)) - priority(String(b.notification_kind));
     })
     .slice(0, 8);
   if (!pending.length) return { pending: 0, attempted: 0, completed: 0 };
@@ -716,19 +732,28 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
     }
   };
 
-  // Fetch, persist, and dispatch EEW warning/cancellation bulletins before
-  // ordinary earthquake products so backlog cannot delay the urgent alert.
-  const urgentEntries = mode === 'high'
+  // Process EEW first, then observed-intensity bulletins. This lets a
+  // nationwide M6-7 observation create and dispatch its LINE alert before
+  // unrelated routine earthquake products are handled.
+  const eewEntries = mode === 'high'
     ? batchEntries.filter(entry => /VXSE43/i.test(entry.href + ' ' + entry.id))
     : [];
-  const regularEntries = mode === 'high'
-    ? batchEntries.filter(entry => !/VXSE43/i.test(entry.href + ' ' + entry.id))
-    : batchEntries;
+  const observationEntries = mode === 'high'
+    ? batchEntries.filter(entry => /VXSE53/i.test(entry.href + ' ' + entry.id))
+    : [];
+  const priorityIds = new Set([...eewEntries, ...observationEntries].map(entry => entry.id));
+  const regularEntries = batchEntries.filter(entry => !priorityIds.has(entry.id));
 
-  await processEntries(urgentEntries);
-  const urgentNotifications = mode === 'high' && urgentEntries.length
+  await processEntries(eewEntries);
+  const eewNotifications = mode === 'high' && eewEntries.length
     ? await dispatchNotifications(admin)
     : { pending: 0, attempted: 0, completed: 0 };
+
+  await processEntries(observationEntries);
+  const observationNotifications = mode === 'high' && observationEntries.length
+    ? await dispatchNotifications(admin)
+    : { pending: 0, attempted: 0, completed: 0 };
+
   await processEntries(regularEntries);
 
   if (failures > 0) throw new Error('気象庁の地震情報を一部取得できませんでした。次回同期で再試行します。');
@@ -748,9 +773,9 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
     : { pending: 0, attempted: 0, completed: 0, skipped: 'historical_feed_no_dispatch' };
   const notifications = mode === 'high'
     ? {
-        pending: urgentNotifications.pending + finalNotifications.pending,
-        attempted: urgentNotifications.attempted + finalNotifications.attempted,
-        completed: urgentNotifications.completed + finalNotifications.completed,
+        pending: eewNotifications.pending + observationNotifications.pending + finalNotifications.pending,
+        attempted: eewNotifications.attempted + observationNotifications.attempted + finalNotifications.attempted,
+        completed: eewNotifications.completed + observationNotifications.completed + finalNotifications.completed,
       }
     : finalNotifications;
   return {

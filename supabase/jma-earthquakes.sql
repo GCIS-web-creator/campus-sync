@@ -55,7 +55,7 @@ create table if not exists public.jma_earthquake_notifications (
   id bigint generated always as identity primary key,
   event_key text not null,
   notification_kind text not null
-    check (notification_kind in ('eew_kodaira', 'kodaira_intensity2', 'eew_cancelled')),
+    check (notification_kind in ('eew_kodaira', 'kodaira_intensity2', 'eew_cancelled', 'major_earthquake')),
   payload jsonb not null,
   official_sent_at timestamptz,
   groups_sent_at timestamptz,
@@ -67,6 +67,13 @@ create table if not exists public.jma_earthquake_notifications (
   updated_at timestamptz not null default now(),
   unique (event_key, notification_kind)
 );
+-- Keep an existing installation in sync with the currently supported LINE alert kinds.
+alter table public.jma_earthquake_notifications
+  drop constraint if exists jma_earthquake_notifications_notification_kind_check;
+alter table public.jma_earthquake_notifications
+  add constraint jma_earthquake_notifications_notification_kind_check
+  check (notification_kind in ('eew_kodaira', 'kodaira_intensity2', 'eew_cancelled', 'major_earthquake'));
+
 create index if not exists jma_earthquake_notifications_pending_idx
   on public.jma_earthquake_notifications (created_at)
   where official_sent_at is null or groups_sent_at is null;
@@ -116,4 +123,4 @@ comment on table public.jma_earthquakes is
 comment on table public.jma_earthquake_reports is
   '気象庁地震XMLの電文ID記録。重複取込防止用の内部テーブル。';
 comment on table public.jma_earthquake_notifications is
-  '小平市向け緊急地震速報・震度2以上・EEW取消のLINE配信outbox。';
+  '小平市向け緊急地震速報・震度2以上・EEW取消、および全国の震度6弱以上のLINE配信outbox。';
