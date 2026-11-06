@@ -1626,6 +1626,8 @@ export default function CampusSyncApp() {
   const [cafeteriaAnnouncement, setCafeteriaAnnouncement] = useState<{ message: string; show_popup: boolean; show_banner: boolean; updated_at?: string | null } | null>(null);
   const [showCafeteriaAnnouncementPopup, setShowCafeteriaAnnouncementPopup] = useState(false);
   const [dismissedCafeteriaAnnouncementKey, setDismissedCafeteriaAnnouncementKey] = useState<string | null>(null);
+  // 学食ポップアップの取得処理を時系列で追跡するための連番。
+  const cafeteriaAnnouncementDebugSequenceRef = useRef(0);
   const [facilitiesSubTab, setFacilitiesSubTab] = useState<'status' | 'lost' | 'map'>('status');
   const [busSubTab] = useState<'countdown' | 'report'>('countdown');
 
@@ -2143,8 +2145,21 @@ useEffect(() => {
 }, [authUser, isTeacherMode]);
 
 // 学食からのお知らせをSupabaseから取得し、ポップアップと学食タブのバナーに反映する。
+// 調査用ログ: 取得開始→応答→state更新→ボタン操作→再表示の順序を確認する。
 useEffect(() => {
+  const debugRunId = ++cafeteriaAnnouncementDebugSequenceRef.current;
+  console.info('[CampusSync][CafeteriaPopup] effect:start', {
+    debugRunId,
+    hasAuthUser: Boolean(authUser),
+    isTeacherMode,
+    hasDismissedKey: Boolean(dismissedCafeteriaAnnouncementKey),
+  });
+
   if (!authUser && !isTeacherMode) {
+    console.info('[CampusSync][CafeteriaPopup] fetch:skipped', {
+      debugRunId,
+      reason: 'not-authenticated',
+    });
     setCafeteriaAnnouncement(null);
     setShowCafeteriaAnnouncementPopup(false);
     return;
@@ -2152,20 +2167,40 @@ useEffect(() => {
 
   let cancelled = false;
   const loadCafeteriaAnnouncement = async () => {
+    console.info('[CampusSync][CafeteriaPopup] fetch:start', { debugRunId });
     const { data, error } = await supabase
       .from('cafeteria_announcements')
       .select('id, message, show_popup, show_banner, updated_at')
       .eq('id', 1)
       .maybeSingle();
 
-    if (cancelled) return;
+    console.info('[CampusSync][CafeteriaPopup] fetch:response', {
+      debugRunId,
+      cancelled,
+      hasData: Boolean(data),
+      hasError: Boolean(error),
+      errorMessage: error?.message || null,
+      showPopupFromDb: data?.show_popup ?? null,
+      updatedAt: data?.updated_at ?? null,
+      messageLength: typeof data?.message === 'string' ? data.message.length : 0,
+    });
+
+    if (cancelled) {
+      console.info('[CampusSync][CafeteriaPopup] fetch:ignored-after-cleanup', { debugRunId });
+      return;
+    }
     if (error) {
-      console.error('学食からのお知らせ取得に失敗:', error);
+      console.error('[CampusSync][CafeteriaPopup] fetch:error', {
+        debugRunId,
+        message: error.message,
+        code: error.code,
+      });
       return;
     }
 
     const message = String(data?.message || '').trim();
     if (!data || !message) {
+      console.info('[CampusSync][CafeteriaPopup] state:clear-empty-announcement', { debugRunId });
       setCafeteriaAnnouncement(null);
       setShowCafeteriaAnnouncementPopup(false);
       return;
@@ -2177,14 +2212,40 @@ useEffect(() => {
       show_banner: data.show_banner === true,
       updated_at: data.updated_at || null,
     };
-    setCafeteriaAnnouncement(announcement);
     const announcementKey = String(announcement.updated_at || announcement.message);
-    setShowCafeteriaAnnouncementPopup(announcement.show_popup && dismissedCafeteriaAnnouncementKey !== announcementKey);
+    const shouldShowPopup = announcement.show_popup && dismissedCafeteriaAnnouncementKey !== announcementKey;
+
+    console.info('[CampusSync][CafeteriaPopup] state:apply-fetch-result', {
+      debugRunId,
+      shouldShowPopup,
+      dbShowPopup: announcement.show_popup,
+      keyMatchesDismissed: dismissedCafeteriaAnnouncementKey === announcementKey,
+      updatedAt: announcement.updated_at,
+    });
+    setCafeteriaAnnouncement(announcement);
+    setShowCafeteriaAnnouncementPopup(shouldShowPopup);
   };
 
   void loadCafeteriaAnnouncement();
-  return () => { cancelled = true; };
+  return () => {
+    cancelled = true;
+    console.info('[CampusSync][CafeteriaPopup] effect:cleanup', { debugRunId });
+  };
 }, [authUser?.id, isTeacherMode, dismissedCafeteriaAnnouncementKey]);
+
+// state更新後に、実際にReactが持つ表示状態を記録する。
+useEffect(() => {
+  const announcementKey = cafeteriaAnnouncement
+    ? String(cafeteriaAnnouncement.updated_at || cafeteriaAnnouncement.message)
+    : null;
+  console.info('[CampusSync][CafeteriaPopup] state:committed', {
+    visible: showCafeteriaAnnouncementPopup,
+    dbShowPopup: cafeteriaAnnouncement?.show_popup ?? null,
+    hasAnnouncement: Boolean(cafeteriaAnnouncement),
+    keyMatchesDismissed: announcementKey !== null && dismissedCafeteriaAnnouncementKey === announcementKey,
+    updatedAt: cafeteriaAnnouncement?.updated_at ?? null,
+  });
+}, [showCafeteriaAnnouncementPopup, cafeteriaAnnouncement, dismissedCafeteriaAnnouncementKey]);
 
 // Supabaseから学校共通の落とし物・教室・学食・交通・献立データを取得
 useEffect(() => {
@@ -6562,11 +6623,32 @@ Supabaseの設定を確認してください。
               </div>
             </div>
             <p className="mt-4 whitespace-pre-wrap break-words rounded-2xl bg-amber-50 p-4 text-sm font-bold leading-relaxed text-amber-950">{cafeteriaAnnouncement.message}</p>
-            <button type="button" onClick={() => {
+            <button
+              type="button"
+              data-cafeteria-popup-confirm="true"
+              onPointerDown={(event) => {
+                console.info('[CampusSync][CafeteriaPopup] button:pointerdown', {
+                  isTrusted: event.isTrusted,
+                  button: event.button,
+                });
+              }}
+              onClick={(event) => {
                 const announcementKey = String(cafeteriaAnnouncement?.updated_at || cafeteriaAnnouncement?.message || '');
+                console.info('[CampusSync][CafeteriaPopup] button:click', {
+                  isTrusted: event.isTrusted,
+                  visibleBeforeClick: showCafeteriaAnnouncementPopup,
+                  dbShowPopup: cafeteriaAnnouncement?.show_popup ?? null,
+                  key: announcementKey,
+                  dismissedKeyBeforeClick: dismissedCafeteriaAnnouncementKey,
+                });
                 setDismissedCafeteriaAnnouncementKey(announcementKey);
                 setShowCafeteriaAnnouncementPopup(false);
-              }} className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-amber-700">
+                console.info('[CampusSync][CafeteriaPopup] button:setters-called', {
+                  nextVisible: false,
+                  nextDismissedKey: announcementKey,
+                });
+              }}
+              className="mt-4 w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-amber-700">
               確認しました
             </button>
           </section>
