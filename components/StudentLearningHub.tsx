@@ -219,11 +219,6 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
   }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind]);
 
   useEffect(() => {
-    if (term === '3') setExamType('学年末考査');
-    else if (examType === '学年末考査') setExamType('中間考査');
-  }, [term, examType]);
-
-  useEffect(() => {
     if (timerState !== 'running') return;
     lastTick.current = Date.now();
     const timer = window.setInterval(() => {
