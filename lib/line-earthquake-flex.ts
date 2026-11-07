@@ -1,5 +1,5 @@
 export type EarthquakeNotificationPayload = {
-  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake';
+  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake' | 'eew_national_push' | 'observed_intensity2_push';
   severeAreas?: Array<{ name: string; prefecture: string | null; intensity: string | null }>;
   eventTime: string;
   issuedAt: string;

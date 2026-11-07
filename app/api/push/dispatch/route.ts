@@ -103,8 +103,8 @@ function quietHoursReleaseAt(now: Date, preference: PreferenceRow): Date | null 
   return localDateTimeToInstant(endDate, endHour, endMinute, timezone);
 }
 
-function categoryDefaultEnabled(category: string): boolean {
-  return category !== 'cafeteria_updates';
+function categoryDefaultEnabled(_category: string): boolean {
+  return true;
 }
 
 async function finish(

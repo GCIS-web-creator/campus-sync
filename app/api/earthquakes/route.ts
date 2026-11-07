@@ -55,6 +55,7 @@ type ParsedEarthquake = {
   isEewCancelled: boolean;
   isDistant: boolean;
   notificationKind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake' | null;
+  pushNotificationKind: 'eew_national_push' | 'observed_intensity2_push' | null;
 };
 
 function getAdmin(): SupabaseClient {
@@ -417,6 +418,14 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   const hasObservedMajorIntensity = observedAreas.some(area =>
     ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7
   );
+  const hasObservedIntensity2 = productCode === 'VXSE53' && (
+    (maxIntensityRank ?? 0) >= 2
+    || observedAreas.some(area =>
+      ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 2
+      || area.stations.some(station => ((station.intensityRank ?? intensityRank(station.intensity || '')) ?? 0) >= 2)
+    )
+  );
+  // Keep the existing LINE rules unchanged. Nationwide-only cases use separate Push-only kinds.
   const notificationKind = isEewCancelled && eewKodairaTarget
     ? 'eew_cancelled'
     : isEew && eewKodairaTarget
@@ -427,6 +436,11 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
         : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
           ? 'kodaira_intensity2'
           : null;
+  const pushNotificationKind = !notificationKind && isEew
+    ? 'eew_national_push'
+    : !notificationKind && hasObservedIntensity2
+      ? 'observed_intensity2_push'
+      : null;
 
   return {
     sourceId: entry.id,
@@ -454,6 +468,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
     isEewCancelled,
     isDistant,
     notificationKind,
+    pushNotificationKind,
   };
 }
 
@@ -465,7 +480,7 @@ function stableRetryKey(value: string): string {
   return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
 }
 
-function notificationPayload(item: ParsedEarthquake, kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake'): EarthquakeNotificationPayload {
+function notificationPayload(item: ParsedEarthquake, kind: EarthquakeNotificationPayload['kind']): EarthquakeNotificationPayload {
   const severeAreas = item.observedAreas
     .filter(area => ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7)
     .map(area => ({
@@ -537,8 +552,9 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
   const resolvedNotificationKind = item.isEewCancelled && current?.eew_kodaira_target
     ? 'eew_cancelled'
     : item.notificationKind;
-  if (resolvedNotificationKind && mode === 'high') {
-    const kind = resolvedNotificationKind;
+  const notificationKindToStore = resolvedNotificationKind || item.pushNotificationKind;
+  if (notificationKindToStore && mode === 'high') {
+    const kind = notificationKindToStore;
     const notificationItem: ParsedEarthquake = {
       ...item,
       eventTime: item.eventTime || current?.event_time || null,
@@ -556,10 +572,13 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
       eewForecastIntensity: item.eewForecastIntensity || current?.eew_forecast_intensity || null,
     };
     const payload = notificationPayload(notificationItem, kind);
+    const pushOnly = kind === 'eew_national_push' || kind === 'observed_intensity2_push';
+    const sentAt = new Date().toISOString();
     const { error: notificationError } = await admin.from('jma_earthquake_notifications').upsert({
       event_key: item.eventKey,
       notification_kind: kind,
       payload,
+      ...(pushOnly ? { official_sent_at: sentAt, groups_sent_at: sentAt } : {}),
     }, { onConflict: 'event_key,notification_kind', ignoreDuplicates: true });
     if (notificationError) throw notificationError;
   }
@@ -581,6 +600,7 @@ async function saveMessage(admin: SupabaseClient, mode: 'high' | 'long', item: P
 async function dispatchNotifications(admin: SupabaseClient) {
   const { data: pendingRows, error } = await admin.from('jma_earthquake_notifications')
     .select('id,event_key,notification_kind,payload,official_sent_at,groups_sent_at')
+    .in('notification_kind', ['eew_kodaira', 'kodaira_intensity2', 'eew_cancelled', 'major_earthquake'])
     .or('official_sent_at.is.null,groups_sent_at.is.null')
     .order('created_at', { ascending: true })
     .limit(40);

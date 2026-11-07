@@ -1596,7 +1596,7 @@ export default function CampusSyncApp() {
     chat_messages: true,
     school_announcements: true,
     transport_alerts: true,
-    cafeteria_updates: false,
+    cafeteria_updates: true,
     activity_updates: true,
     weather_alerts: true,
     disaster_alerts: true,
@@ -3510,7 +3510,7 @@ Supabaseの設定を確認してください。
         chat_messages: true,
         school_announcements: true,
         transport_alerts: true,
-        cafeteria_updates: false,
+        cafeteria_updates: true,
         activity_updates: true,
         weather_alerts: true,
         disaster_alerts: true,
@@ -3531,7 +3531,7 @@ Supabaseの設定を確認してください。
       chat_messages: true,
       school_announcements: true,
       transport_alerts: true,
-      cafeteria_updates: false,
+      cafeteria_updates: true,
       activity_updates: true,
       weather_alerts: true,
       disaster_alerts: true,
@@ -3565,7 +3565,7 @@ Supabaseの設定を確認してください。
           chat_messages: loaded.chat_messages !== false,
           school_announcements: loaded.school_announcements !== false,
           transport_alerts: loaded.transport_alerts !== false,
-          cafeteria_updates: loaded.cafeteria_updates === true,
+          cafeteria_updates: loaded.cafeteria_updates !== false,
           activity_updates: loaded.activity_updates !== false,
           weather_alerts: loaded.weather_alerts !== false,
           disaster_alerts: loaded.disaster_alerts !== false,
@@ -5667,14 +5667,14 @@ Supabaseの設定を確認してください。
                       <span className="text-[10px] font-black text-gray-400 block mb-1">通知カテゴリごとの設定</span>
                       <p className="text-[10px] text-gray-500 mb-2">ここでONにした種類だけ、このアカウントの登録済みPC・スマホへ届きます。通常のお知らせはおやすみ時間に保留し、緊急の防災情報は優先して通知します。</p>
                       {[
-                        { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '期限の2日前・前日・当日・3時間前' },
+                        { key: 'todo_reminders' as NotificationCategory, label: '課題・提出期限リマインダー', description: '新しい課題の公開時・期限の2日前／前日／当日／3時間前' },
                         { key: 'chat_messages' as NotificationCategory, label: 'クラス・学年・学校チャット', description: '自分以外の新着メッセージ・添付ファイル' },
                         { key: 'school_announcements' as NotificationCategory, label: '学校・先生からのお知らせ', description: '学校通知の公開時に通知' },
-                        { key: 'transport_alerts' as NotificationCategory, label: '交通・バス運行情報', description: '遅れ・運休など状態が変化したとき' },
-                        { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '売切・学食からのお知らせ（初期設定OFF）' },
+                        { key: 'transport_alerts' as NotificationCategory, label: '交通・バス運行情報', description: '平日15:49に16:04発の国分寺行き・遅延や運休など' },
+                        { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '毎朝7時の今日の献立・売切・学食からのお知らせ' },
                         { key: 'activity_updates' as NotificationCategory, label: '部活動・校内活動', description: '部活動・委員会ノートの新着投稿' },
-                        { key: 'weather_alerts' as NotificationCategory, label: '気象警報', description: '小平市に気象庁の警報・特別警報が発表されたとき' },
-                        { key: 'disaster_alerts' as NotificationCategory, label: '地震・防災速報', description: '緊急地震速報・強い揺れなどの地震情報' }
+                        { key: 'weather_alerts' as NotificationCategory, label: '気象警報', description: '毎朝7時の今日の天気・小平市の気象警報' },
+                        { key: 'disaster_alerts' as NotificationCategory, label: '地震・防災速報', description: '全国の震度2以上・緊急地震速報（EEW）' }
                       ].map(item => (
                         <label key={item.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2 mb-1.5 cursor-pointer">
                           <span className="min-w-0">

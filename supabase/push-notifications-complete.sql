@@ -30,11 +30,11 @@ alter table public.push_subscriptions
 
 alter table public.push_reminder_preferences
   alter column notification_settings set default
-    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb;
+    '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":true,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb;
 
 update public.push_reminder_preferences
 set notification_settings =
-  '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb
+  '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":true,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb
   || coalesce(notification_settings, '{}'::jsonb);
 
 create schema if not exists campus_private;
@@ -47,7 +47,7 @@ create table if not exists campus_private.push_notification_outbox (
   user_id uuid not null references auth.users(id) on delete cascade,
   student_id text not null,
   category text not null check (category in (
-    'chat_messages', 'school_announcements', 'transport_alerts',
+    'todo_reminders', 'chat_messages', 'school_announcements', 'transport_alerts',
     'cafeteria_updates', 'activity_updates', 'weather_alerts', 'disaster_alerts'
   )),
   title text not null,
@@ -93,15 +93,12 @@ declare
 begin
   if p_user_id is null or p_event_key is null or p_category is null then return; end if;
 
-  select case
-    when p_category = 'cafeteria_updates' then coalesce((notification_settings ->> p_category)::boolean, false)
-    else coalesce((notification_settings ->> p_category)::boolean, true)
-  end
+  select coalesce((notification_settings ->> p_category)::boolean, true)
   into category_enabled
   from public.push_reminder_preferences
   where user_id = p_user_id;
 
-  if not found then category_enabled := p_category <> 'cafeteria_updates'; end if;
+  if not found then category_enabled := true; end if;
   if category_enabled is not true then return; end if;
   if not exists (select 1 from public.push_subscriptions s where s.user_id = p_user_id) then return; end if;
 
@@ -328,25 +325,70 @@ create trigger campus_push_club_note_insert
 after insert on public.club_notes
 for each row execute function campus_private.queue_club_note_push();
 
+create or replace function campus_private.queue_assignment_created_push()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, campus_private
+as $function$
+declare recipient record; due_label text; body_text text;
+begin
+  if new.is_active is not true then return new; end if;
+  due_label := case
+    when new.due_at is null then '期限未設定'
+    else to_char(new.due_at at time zone 'Asia/Tokyo', 'YYYY/MM/DD HH24:MI')
+  end;
+  body_text := '課題名：' || coalesce(new.title, '課題')
+    || E'\n提出期限：' || due_label
+    || case when coalesce(btrim(new.details), '') <> '' then E'\n' || left(btrim(new.details), 240) else '' end;
+  for recipient in
+    select distinct s.user_id, s.student_id
+    from public.push_subscriptions s
+  loop
+    perform campus_private.enqueue_push_for_user(
+      'assignment-created:' || new.id::text,
+      recipient.user_id,
+      recipient.student_id,
+      'todo_reminders',
+      '新しい課題が公開されました',
+      body_text,
+      '/#home',
+      'high'
+    );
+  end loop;
+  return new;
+end;
+$function$;
+drop trigger if exists campus_push_assignment_created on public.assignments;
+create trigger campus_push_assignment_created
+after insert on public.assignments
+for each row execute function campus_private.queue_assignment_created_push();
+
 create or replace function campus_private.queue_earthquake_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare push_title text; push_body text;
+declare push_title text; push_body text; push_priority text;
 begin
   push_title := case
-    when new.notification_kind = 'major_earthquake' then '全国で大きな地震を観測'
+    when new.notification_kind like 'eew_cancelled%' then '緊急地震速報（解除）'
     when new.notification_kind like 'eew_%' then '緊急地震速報'
+    when new.notification_kind = 'major_earthquake' then '全国で大きな地震を観測'
+    when new.notification_kind = 'observed_intensity2_push' then '全国で震度2以上を観測'
     else '小平市周辺の地震情報'
   end;
   push_body := coalesce(nullif(new.payload->>'hypocenterName', ''), new.payload->>'headline', '気象庁から新しい地震情報が発表されました。');
   if new.payload->>'maxIntensity' is not null then push_body := push_body || ' 最大震度：' || new.payload->>'maxIntensity'; end if;
   if new.payload->>'kodairaIntensity' is not null then push_body := push_body || ' 小平市：' || new.payload->>'kodairaIntensity'; end if;
+  push_priority := case
+    when new.notification_kind like 'eew_%' or new.notification_kind = 'major_earthquake' then 'urgent'
+    else 'high'
+  end;
   perform campus_private.enqueue_push_for_user(
     'earthquake:' || new.event_key || ':' || new.notification_kind,
-    s.user_id, s.student_id, 'disaster_alerts', push_title, push_body, '/#weather', 'urgent'
+    s.user_id, s.student_id, 'disaster_alerts', push_title, push_body, '/#weather', push_priority
   ) from public.push_subscriptions s;
   return new;
 end;
