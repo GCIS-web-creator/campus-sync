@@ -8,7 +8,8 @@ const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', 
 type Subject = typeof SUBJECTS[number];
 type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string };
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
-type Range = { id: string; subject_id: string; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
+type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
+type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
 type TimerSnapshot = {
   version: 1;
@@ -59,23 +60,17 @@ const duration = (seconds: number) => {
 const dateLabel = (value: string) => new Date(value + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
 
 export default function StudentLearningHub({ userId, isDarkMode = false }: { userId: string; isDarkMode?: boolean }) {
-  const [tab, setTab] = useState<'overview' | 'tests' | 'focus' | 'history'>('overview');
+  const [tab, setTab] = useState<'overview' | 'tests' | 'assignments' | 'focus' | 'history'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [examId, setExamId] = useState('');
-  const [year, setYear] = useState(String(new Date().getFullYear()));
-  const [term, setTerm] = useState('1');
-  const [examType, setExamType] = useState('中間考査');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [subjectName, setSubjectName] = useState<Subject>('国語演習');
-  const [subjectDate, setSubjectDate] = useState('');
   const [rangeInput, setRangeInput] = useState('');
   const [rangeTarget, setRangeTarget] = useState('');
 
@@ -114,18 +109,19 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     setLoading(true); setError('');
     try {
       const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d] = await Promise.all([
-        supabase.from('student_test_exams').select('*').eq('user_id', userId).order('start_date', { ascending: false }),
-        supabase.from('student_test_subjects').select('*').eq('user_id', userId).order('exam_date').order('sort_order'),
+      const [a, b, c, d, e] = await Promise.all([
+        supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
+        supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
         supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
+        supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
       ]);
-      const issue = a.error || b.error || c.error || d.error;
+      const issue = a.error || b.error || c.error || d.error || e.error;
       if (issue) throw issue;
       const newExams = (a.data || []) as Exam[];
       setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions((d.data || []) as Session[]);
+      setAssignments((e.data || []) as Assignment[]);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
-      setSubjectDate(current => current || newExams[0]?.start_date || '');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習データを読み込めませんでした。');
     } finally { setLoading(false); }
@@ -252,53 +248,26 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     }
   }, [timerState, remaining, phase, breakMinutes, focusMinutes]);
 
-  const activeExam = exams.find(item => item.id === examId) || null;
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
-  const focusRanges = ranges.filter(item => item.subject_id === focusSubjectId);
-  const datesDuration = startDate && endDate
-    ? Math.round((new Date(endDate + 'T00:00:00').getTime() - new Date(startDate + 'T00:00:00').getTime()) / 86400000) + 1 : 0;
-
-  const createExam = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setError(''); setMessage('');
-    if (datesDuration !== 3 && datesDuration !== 4) { setError('考査期間は3日間または4日間で設定してください。'); return; }
-    setSaving(true);
-    try {
-      const { data, error: insertError } = await supabase.from('student_test_exams').insert({
-        user_id: userId, school_year: Number(year), term: Number(term),
-        exam_type: term === '3' ? '学年末考査' : examType, start_date: startDate, end_date: endDate,
-      }).select('id').single();
-      if (insertError) throw insertError;
-      setExamId(data.id); setSubjectDate(startDate); setMessage('考査を登録しました。実施教科を追加してください。'); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '考査を登録できませんでした。'); }
-    finally { setSaving(false); }
+  const focusRanges = ranges.filter(item => item.school_test_subject_id === focusSubjectId);
+  const daysUntilDue = (value: string | null) => {
+    if (!value) return null;
+    const dueKey = dayKey(new Date(value));
+    const todayKey = dayKey(new Date());
+    return Math.round((new Date(dueKey + 'T00:00:00').getTime() - new Date(todayKey + 'T00:00:00').getTime()) / 86400000);
   };
-
-  const addSubject = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!activeExam) { setError('先に考査を登録してください。'); return; }
-    if (subjectDate < activeExam.start_date || subjectDate > activeExam.end_date) { setError('教科の日付は考査期間内にしてください。'); return; }
-    const sameDay = activeSubjects.filter(item => item.exam_date === subjectDate);
-    if (sameDay.length >= 3) { setError('1日に登録できる教科は最大3教科です。'); return; }
-    if (activeSubjects.some(item => item.subject === subjectName)) { setError('この考査には同じ教科が登録済みです。'); return; }
-    setSaving(true); setError('');
-    try {
-      const { error: insertError } = await supabase.from('student_test_subjects').insert({
-        user_id: userId, exam_id: activeExam.id, subject: subjectName, exam_date: subjectDate, sort_order: sameDay.length + 1,
-      });
-      if (insertError) throw insertError;
-      setMessage(subjectName + 'を追加しました。'); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '教科を追加できませんでした。'); }
-    finally { setSaving(false); }
-  };
+  const targetLabel = (assignment: Assignment) => assignment.subject_option?.trim()
+    ? '理系クラス・' + assignment.subject_option + '向け'
+    : assignment.target_class === 'science' ? '理系クラス向け' : '全クラス';
 
   const addRange = async (subjectId: string) => {
     if (!rangeInput.trim()) return;
     setSaving(true); setError('');
     try {
       const { error: insertError } = await supabase.from('student_test_ranges').insert({
-        user_id: userId, subject_id: subjectId, title: rangeInput.trim(),
-        sort_order: ranges.filter(item => item.subject_id === subjectId).length,
+        user_id: userId, school_test_subject_id: subjectId, title: rangeInput.trim(),
+        sort_order: ranges.filter(item => item.school_test_subject_id === subjectId).length,
       });
       if (insertError) throw insertError;
       setRangeInput(''); setMessage('テスト範囲を追加しました。'); await load();
@@ -310,13 +279,6 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     const { error: updateError } = await supabase.from('student_test_ranges').update({ status }).eq('id', id).eq('user_id', userId);
     if (updateError) setError(updateError.message);
     else setRanges(current => current.map(item => item.id === id ? { ...item, status } : item));
-  };
-
-  const removeExam = async () => {
-    if (!activeExam || !window.confirm('この考査と教科・範囲を削除しますか？')) return;
-    const { error: deleteError } = await supabase.from('student_test_exams').delete().eq('id', activeExam.id).eq('user_id', userId);
-    if (deleteError) setError(deleteError.message);
-    else { setExamId(''); setMessage('考査を削除しました。'); await load(); }
   };
 
   const setPreset = (focus: number, rest: number) => {
@@ -340,7 +302,7 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     setSaving(true); setError('');
     try {
       const { error: insertError } = await supabase.from('student_study_sessions').insert({
-        user_id: userId, test_subject_id: activeFocusSubject?.subject === focusSubject ? activeFocusSubject.id : null,
+        user_id: userId, test_subject_id: null,
         subject_name: focusSubject, task_title: task.trim(),
         test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
@@ -371,7 +333,7 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
   }, [sessions]);
   const progress = (id: string) => {
-    const list = ranges.filter(item => item.subject_id === id);
+    const list = ranges.filter(item => item.school_test_subject_id === id);
     const done = list.filter(item => item.status === 'completed' || item.status === 'reviewed').length;
     return { count: list.length, percent: list.length ? Math.round(done / list.length * 100) : 0 };
   };
@@ -381,8 +343,8 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC LEARNING</p><h1 className={'mt-1 text-2xl font-black ' + (dark ? 'text-white' : 'text-slate-900')}>学習・テスト対策</h1><p className={'mt-1 text-xs ' + muted}>考査の予定、集中時間、勉強の記録をまとめて管理。</p></div><div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-cyan-950"><p className="text-[9px] font-bold">今週の勉強時間</p><p className="text-sm font-black">{duration(weekSeconds)}</p></div></header>
-    <nav className={'grid grid-cols-4 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
-      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'focus',label:'集中モード',icon:Timer},{id:'history',label:'学習記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex items-center justify-center gap-1 rounded-xl px-1 py-3 text-[10px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
+    <nav className={'grid grid-cols-5 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
@@ -390,31 +352,55 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     {tab === 'overview' && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">今週の集中時間</h2><button type="button" onClick={() => setTab('history')} className="text-xs font-bold text-cyan-600">詳細</button></div><div className="grid grid-cols-7 items-end gap-2">{weekData.map(day => <div key={day.key} className="flex flex-col items-center gap-2"><span className={'text-[9px] '+muted}>{day.seconds ? Math.round(day.seconds/60)+'分' : '—'}</span><div className={'flex h-24 w-full items-end overflow-hidden rounded-lg '+(dark?'bg-slate-900':'bg-slate-100')}><div className="w-full rounded-lg bg-gradient-to-t from-cyan-700 to-sky-400" style={{height:Math.max(day.seconds?5:0,day.seconds/maxDay*100)+'%'}}/></div><span className={'text-[10px] font-bold '+muted}>{day.label}</span></div>)}</div></section>
-      <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">次の考査</h2><button type="button" onClick={() => setTab('tests')} className="text-xs font-bold text-cyan-600">管理</button></div>{exams.length ? exams.slice().sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,1).map(exam => <div key={exam.id} className="rounded-xl bg-gradient-to-r from-cyan-800 to-blue-700 p-4 text-white"><p className="text-xs text-cyan-100">{exam.school_year}年度・{exam.term}学期</p><p className="mt-1 text-xl font-black">{exam.exam_type}</p><p className="mt-2 text-xs">{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p><p className="mt-2 text-[11px] text-white/80">{subjects.filter(item=>item.exam_id===exam.id).length}教科登録</p></div>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査が未登録です。テスト対策から登録できます。</p>}</section>
+      <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">次の考査</h2><button type="button" onClick={() => setTab('tests')} className="text-xs font-bold text-cyan-600">日程を見る</button></div>{exams.length ? exams.slice().sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,1).map(exam => <div key={exam.id} className="rounded-xl bg-gradient-to-r from-cyan-800 to-blue-700 p-4 text-white"><p className="text-xs text-cyan-100">{exam.school_year}年度・{exam.term}学期</p><p className="mt-1 text-xl font-black">{exam.exam_type}</p><p className="mt-2 text-xs">{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p><p className="mt-2 text-[11px] text-white/80">{subjects.filter(item=>item.exam_id===exam.id).length}教科登録</p></div>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はAdmin・先生が登録するとここに表示されます。</p>}</section>
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">教科別の集中時間</h2><button type="button" onClick={() => setTab('focus')} className="text-xs font-bold text-cyan-600">勉強を始める</button></div>{subjectTotals.length ? <div className="space-y-3">{subjectTotals.slice(0,5).map(([name,seconds])=><div key={name}><div className="mb-1 flex justify-between text-xs"><b>{name}</b><span className={muted}>{duration(seconds)}</span></div><div className={'h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:Math.max(2,seconds/Math.max(...subjectTotals.map(item=>item[1]))*100)+'%'}}/></div></div>)}</div> : <p className={'text-sm '+muted}>勉強記録を保存すると集計が表示されます。</p>}</section>
     </div>}
 
     {tab === 'tests' && <div className="space-y-4">
-      <section className={panel}><div className="mb-3 flex items-center gap-2"><Plus size={18} className="text-cyan-600"/><h2 className="font-black">考査を登録</h2></div><form onSubmit={createExam} className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs font-bold">年度<input className={input} type="number" min="2020" max="2100" value={year} onChange={e=>setYear(e.target.value)} required/></label>
-        <label className="space-y-1 text-xs font-bold">学期<select className={input} value={term} onChange={e=>setTerm(e.target.value)}><option value="1">1学期</option><option value="2">2学期</option><option value="3">3学期</option></select></label>
-        <label className="space-y-1 text-xs font-bold">考査<select className={input} value={term==='3'?'学年末考査':examType} onChange={e=>setExamType(e.target.value)} disabled={term==='3'}><option>中間考査</option><option>期末考査</option></select></label>
-        <div className="grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">開始日<input className={input} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} required/></label><label className="space-y-1 text-xs font-bold">終了日<input className={input} type="date" min={startDate||undefined} value={endDate} onChange={e=>setEndDate(e.target.value)} required/></label></div>
-        <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2"><p className={'text-[11px] '+muted}>3日間または4日間。実施しない教科は追加しないでください。</p><button className={primary} disabled={saving}>考査を保存</button></div>
-      </form></section>
-      {exams.length>0 && <section className={panel}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="font-black">登録済みの考査</h2><select className={input+' max-w-[260px]'} value={examId} onChange={e=>setExamId(e.target.value)}>{exams.map(item=><option key={item.id} value={item.id}>{item.school_year}年度・{item.term}学期 {item.exam_type}</option>)}</select></div>
-        {activeExam && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-cyan-50 p-3 text-cyan-950"><div><b className="text-sm">{activeExam.exam_type}</b><p className="mt-1 text-xs">{dateLabel(activeExam.start_date)}〜{dateLabel(activeExam.end_date)}</p></div><button type="button" onClick={()=>void removeExam()} className="rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-[10px] font-bold text-rose-700">考査を削除</button></div>}
-        <form onSubmit={addSubject} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={subjectName} onChange={e=>setSubjectName(e.target.value as Subject)}>{SUBJECTS.map(item=><option key={item}>{item}</option>)}</select></label><label className="space-y-1 text-xs font-bold">試験日<input className={input} type="date" min={activeExam?.start_date} max={activeExam?.end_date} value={subjectDate} onChange={e=>setSubjectDate(e.target.value)} required/></label><button className={primary} disabled={saving||!activeExam}><Plus size={15}/>教科を追加</button></form>
-        <p className={'mt-2 text-[10px] '+muted}>1日最大3教科。同一考査で同じ教科は1回まで。</p>
-        <div className="mt-4 space-y-3">{Array.from(new Set(activeSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date} className="rounded-xl border border-slate-200/70 p-3"><p className="mb-2 text-xs font-black">{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{activeSubjects.filter(item=>item.exam_date===date).sort((a,b)=>a.sort_order-b.sort_order).map(item=><span key={item.id} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{item.sort_order} ・ {item.subject}</span>)}</div></div>)}{!activeSubjects.length&&<p className={'rounded-xl border border-dashed p-4 text-xs '+muted}>まだ教科が登録されていません。</p>}</div>
-      </section>}
-      {activeSubjects.map(subject=>{const list=ranges.filter(item=>item.subject_id===subject.id);const pct=progress(subject.id).percent;return <section key={subject.id} className={panel}>
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className="rounded-full bg-cyan-50 px-3 py-1 text-xs text-cyan-800">{pct}% 完了</b></div>
-        <div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:pct+'%'}}/></div>
-        <div className="mt-3 space-y-2">{list.map(item=><div key={item.id} className={'flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><span className="min-w-0 flex-1 text-sm font-bold">{item.title}</span><select aria-label={item.title+'の進捗'} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700" value={item.status} onChange={e=>void setRangeStatus(item.id,e.target.value as Range['status'])}>{Object.entries(STATUS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>)}{!list.length&&<p className={'text-xs '+muted}>範囲が未登録です。</p>}</div>
-        <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：教科書 P20〜35、問題集 第2章" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>範囲を追加</button></form>
-      </section>;})}
-      {exams.length===0&&<p className={'text-sm '+muted}>考査を登録すると、試験日ごとの教科とテスト範囲を管理できます。</p>}
+      <section className={panel}>
+        <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-black">学校公式の考査日程</h2><span className="rounded-full bg-cyan-50 px-3 py-1 text-[10px] font-black text-cyan-800">閲覧専用</span></div>
+        <p className={'mb-3 text-xs leading-5 '+muted}>考査の予定・実施教科はAdmin・先生が登録します。生徒は日程を確認し、自分用のテスト範囲と進捗を管理できます。</p>
+        {exams.length ? exams.map(exam => {
+          const examSubjects = subjects.filter(item => item.exam_id === exam.id).slice().sort((a,b)=>a.exam_date.localeCompare(b.exam_date)||a.sort_order-b.sort_order);
+          return <article key={exam.id} className={'mb-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
+            <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=><span key={item.id} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">{item.sort_order} ・ {item.subject}</span>)}</div></div>)}
+            {!examSubjects.length&&<p className={'text-xs '+muted}>実施教科は未登録です。</p>}</div>
+          </article>;
+        }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はまだ登録されていません。Admin・先生の登録後にここへ表示されます。</p>}
+      </section>
+      {exams.length > 0 && <label className={'block space-y-1 text-xs font-bold ' + muted}>テスト範囲を管理する考査
+        <select className={input} value={examId} onChange={e=>setExamId(e.target.value)}>
+          {exams.map(exam=><option key={exam.id} value={exam.id}>{exam.school_year}年度・{exam.term}学期 {exam.exam_type}</option>)}
+        </select>
+      </label>}
+      {activeSubjects.map(subject=>{
+        const list=ranges.filter(item=>item.school_test_subject_id===subject.id);
+        const pct=progress(subject.id).percent;
+        return <section key={subject.id} className={panel}>
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className="rounded-full bg-cyan-50 px-3 py-1 text-xs text-cyan-800">{pct}% 完了</b></div>
+          <div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:pct+'%'}}/></div>
+          <div className="mt-3 space-y-2">{list.map(item=><div key={item.id} className={'flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><span className="min-w-0 flex-1 text-sm font-bold">{item.title}</span><select aria-label={item.title+'の進捗'} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700" value={item.status} onChange={e=>void setRangeStatus(item.id,e.target.value as Range['status'])}>{Object.entries(STATUS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>)}{!list.length&&<p className={'text-xs '+muted}>テスト範囲はまだ登録されていません。</p>}</div>
+          <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：教科書 P20〜35、問題集 第2章" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>範囲を追加</button></form>
+        </section>;
+      })}
+    </div>}
+
+    {tab === 'assignments' && <div className="space-y-3">
+      <section className={panel}><h2 className="font-black">課題一覧</h2><p className={'mt-1 text-xs '+muted}>教科・課題内容・提出期限を確認できます。理系クラスの選択科目は対象を明記しています。</p></section>
+      {assignments.length ? assignments.map(assignment=>{
+        const left=daysUntilDue(assignment.due_at);
+        const target=targetLabel(assignment);
+        return <article key={assignment.id} className={panel}>
+          <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-[10px] font-black text-cyan-900">{assignment.subject||'その他'}</span><span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold '+(assignment.target_class==='science'?'bg-violet-100 text-violet-800':'bg-slate-100 text-slate-700')}>{target}</span></div>
+          <h3 className="mt-2 text-base font-black">{assignment.title}</h3>
+          <p className={'mt-2 whitespace-pre-wrap text-sm leading-6 '+muted}>{assignment.details||'課題の詳細はありません。'}</p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
+            <p className={'text-xs font-bold '+muted}>{assignment.due_at ? new Date(assignment.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
+            {left===null ? <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">期限なし</span> : left<0 ? <span className="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-black text-rose-800">{Math.abs(left)}日超過</span> : left===0 ? <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-900">今日が期限</span> : <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-black text-blue-900">あと{left}日</span>}
+          </div>
+        </article>;
+      }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>現在公開中の課題はありません。</p>}
     </div>}
 
     {tab === 'focus' && <div className="space-y-4">

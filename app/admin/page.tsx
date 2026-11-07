@@ -11,6 +11,8 @@ import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
 import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
 import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
 import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
+import ExamScheduleAdmin from '@/components/ExamScheduleAdmin';
+import AssignmentSuggestionsAdmin from '@/components/AssignmentSuggestionsAdmin';
 import LineDeliveryDashboard from '@/components/LineDeliveryDashboard';
 import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
 import React, { useEffect, useState } from 'react';
@@ -209,6 +211,9 @@ type CampusAssignment = {
   created_at?: string;
   classroom_course_id?: string | null;
   classroom_coursework_id?: string | null;
+  subject?: string;
+  subject_option?: string;
+  target_class?: 'all' | 'science';
 };
 
 const toAdminDateTimeInput = (value: string | null | undefined): string => {
@@ -389,6 +394,9 @@ export default function CampusSyncAdmin() {
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [assignmentDetails, setAssignmentDetails] = useState('');
   const [assignmentType, setAssignmentType] = useState('paper');
+  const [assignmentSubject, setAssignmentSubject] = useState('国語演習');
+  const [assignmentTargetClass, setAssignmentTargetClass] = useState<'all' | 'science'>('all');
+  const [assignmentSubjectOption, setAssignmentSubjectOption] = useState('');
   const [assignmentDueAt, setAssignmentDueAt] = useState('');
 
   // 月間献立表（デフォルトは翌月）
@@ -1601,6 +1609,9 @@ export default function CampusSyncAdmin() {
     setAssignmentTitle('');
     setAssignmentDetails('');
     setAssignmentType('paper');
+    setAssignmentSubject('国語演習');
+    setAssignmentTargetClass('all');
+    setAssignmentSubjectOption('');
     setAssignmentDueAt('');
   };
 
@@ -1609,6 +1620,9 @@ export default function CampusSyncAdmin() {
     setAssignmentTitle(row.title || '');
     setAssignmentDetails(row.details || '');
     setAssignmentType(row.type || 'paper');
+    setAssignmentSubject(row.subject || 'その他');
+    setAssignmentTargetClass(row.target_class || 'all');
+    setAssignmentSubjectOption(row.subject_option || '');
     setAssignmentDueAt(toAdminDateTimeInput(row.due_at));
     setAssignmentMessage('編集中です。変更後に「保存」を押してください。');
   };
@@ -1642,6 +1656,9 @@ export default function CampusSyncAdmin() {
         title: assignmentTitle.trim(),
         details: assignmentDetails.trim(),
         type: assignmentType,
+        subject: assignmentSubject,
+        target_class: assignmentTargetClass,
+        subject_option: assignmentSubjectOption,
         source: 'Admin／先生',
         due_at: dueAtISO,
         due: dueAtISO ? '期限あり' : '期限未設定',
@@ -1762,6 +1779,9 @@ export default function CampusSyncAdmin() {
             </button>
             <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
+            </button>
+            <button aria-label="考査日程管理" title="考査日程管理" onClick={() => setActiveTab('exams')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'exams' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">考査日程管理</span>
             </button>
             <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
@@ -2492,6 +2512,26 @@ export default function CampusSyncAdmin() {
                 <textarea value={assignmentDetails} onChange={e => setAssignmentDetails(e.target.value)} maxLength={5000} rows={4} placeholder="提出内容、提出方法、回収時の注意など" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="block text-xs font-bold text-slate-400">教科
+                  <select value={assignmentSubject} onChange={e => { setAssignmentSubject(e.target.value); setAssignmentSubjectOption(''); }} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                    {['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-bold text-slate-400">対象
+                  <select value={assignmentTargetClass} onChange={e => { setAssignmentTargetClass(e.target.value as 'all' | 'science'); setAssignmentSubjectOption(''); }} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                    <option value="all">全クラス</option><option value="science">理系クラス</option>
+                  </select>
+                </label>
+                {assignmentTargetClass === 'science' && ['物理','生物','数３','英コミュ'].includes(assignmentSubject) && (
+                  <label className="block text-xs font-bold text-slate-400 md:col-span-2">選択科目・コース
+                    <select value={assignmentSubjectOption} onChange={e => setAssignmentSubjectOption(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                      <option value="">選択してください</option>
+                      {(assignmentSubject === '物理' ? ['物理選択者'] : assignmentSubject === '生物' ? ['生物選択者'] : assignmentSubject === '数３' ? ['アドバンスト','スタンダード'] : ['Intensive','Standard']).map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="block text-xs font-bold text-slate-400">課題の種類
                   <select value={assignmentType} onChange={e => setAssignmentType(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
                     <option value="paper">紙プリント・ノート</option>
@@ -2523,6 +2563,7 @@ export default function CampusSyncAdmin() {
                     <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2"><p className="font-black text-white">{row.title}</p><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300">{row.source || 'Admin／先生'}</span></div>
+                        <p className="mt-1 flex flex-wrap gap-2 text-[10px] font-bold text-cyan-300"><span>{row.subject || 'その他'}</span><span>{row.target_class === 'science' ? '理系クラス' : '全クラス'}</span>{row.subject_option && <span>{row.subject_option}向け</span>}</p>
                         <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap">{row.details || '詳細なし'}</p>
                         <p className="mt-2 text-xs font-bold text-blue-300">{row.due_at ? new Date(row.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
                       </div>
@@ -2535,8 +2576,24 @@ export default function CampusSyncAdmin() {
                 </div>
               )}
             </div>
+            <div className="rounded-2xl border border-cyan-900/70 bg-cyan-950/30 p-4 space-y-3">
+              <h3 className="text-sm font-black text-cyan-200">課題の追加方法</h3>
+              <ol className="list-decimal space-y-1 pl-5 text-xs leading-5 text-cyan-100/90">
+                <li>教科を選択し、課題名と提出内容・指示事項を入力します。</li>
+                <li>対象を全クラスまたは理系クラスに設定します。</li>
+                <li>理系クラスの物理・生物・数３・英コミュは、必要な選択科目・コースも指定します。</li>
+                <li>提出期限を設定して「学生全員に課題を公開」を押します。期限がない場合は空欄で構いません。</li>
+              </ol>
+              <div className="border-t border-cyan-900/70 pt-3">
+                <p className="text-xs font-black text-cyan-200">LINE公式アカウントから追加する場合</p>
+                <p className="mt-1 text-xs leading-5 text-cyan-100/90">1対1トークで「CSAI 課題追加」と送信し、返ってくるテンプレートに沿って返信してください。提案はSupabaseに承認待ちとして保存され、ここでAdminが承認すると正式課題になります。</p>
+              </div>
+            </div>
+            <AssignmentSuggestionsAdmin />
           </div>
         )}
+
+        {activeTab === 'exams' && <ExamScheduleAdmin />}
 
         {/* ================= 月間献立表（次月分を入力して一括保存） ================= */}
         {activeTab === 'menu-calendar' && (

@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { buildNoticeFlexMessage } from '@/lib/line-flex';
+import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
@@ -19,9 +20,13 @@ type AssignmentPayload = {
   due?: string | null;
   due_at?: string | null;
   is_active?: boolean;
+  subject?: string;
+  target_class?: 'all' | 'science';
+  subject_option?: string;
 };
 
 function isAuthorized(request: Request): boolean {
+  if (verifyAdminSessionRequest(request)) return true;
   const expected = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
   const received = request.headers.get('x-admin-password') || '';
   if (!expected || !received) return false;
@@ -41,11 +46,11 @@ function getAdminSupabase() {
 }
 
 function unauthorizedOrMisconfigured(request: Request) {
-  if (!process.env.CAMPUS_SYNC_ADMIN_PASSWORD || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return NextResponse.json({ message: 'サーバー環境変数 CAMPUS_SYNC_ADMIN_PASSWORD / SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL を設定してください。' }, { status: 503 });
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL)) {
+    return NextResponse.json({ message: 'Supabaseのサーバー設定が不足しています。' }, { status: 503 });
   }
   if (!isAuthorized(request)) {
-    return NextResponse.json({ message: '管理用パスワードが正しくありません。' }, { status: 401 });
+    return NextResponse.json({ message: 'Adminログインが必要です。' }, { status: 401 });
   }
   return null;
 }
@@ -56,6 +61,14 @@ function validatePayload(payload: AssignmentPayload): string | null {
   if ((payload.details || '').length > 5000) return '詳細は5000文字以内にしてください。';
   if (payload.due_at && Number.isNaN(new Date(payload.due_at).getTime())) return '提出期限の日付と時刻が不正です。';
   if (payload.type && !['paper', 'classroom', 'other'].includes(payload.type)) return '課題の種類が不正です。';
+  const subject = payload.subject || 'その他';
+  if (!['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].includes(subject)) return '教科が不正です。';
+  if (payload.target_class && !['all','science'].includes(payload.target_class)) return '課題の対象クラスが不正です。';
+  const option = payload.subject_option || '';
+  const validOptions: Record<string, string[]> = { '物理': ['物理選択者'], '生物': ['生物選択者'], '数３': ['アドバンスト','スタンダード'], '英コミュ': ['Intensive','Standard'] };
+  if (option && (!validOptions[subject] || !validOptions[subject].includes(option))) return '選択科目・コースの指定が不正です。';
+  if (option && payload.target_class !== 'science') return '選択科目別の課題は理系クラスを対象にしてください。';
+  if (payload.target_class === 'science' && validOptions[subject] && !option) return '対象の選択科目・コースを指定してください。';
   return null;
 }
 
@@ -67,7 +80,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from('assignments')
-    .select('id, title, details, source, type, due, due_at, is_active, created_at, classroom_course_id, classroom_coursework_id')
+    .select('id, title, details, source, type, due, due_at, is_active, subject, target_class, subject_option, created_at, classroom_course_id, classroom_coursework_id')
     .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ message: `課題の取得に失敗しました: ${error.message}` }, { status: 500 });
   return NextResponse.json({ assignments: data || [] });
@@ -89,6 +102,9 @@ export async function POST(request: Request) {
     details: (payload.details || '').trim(),
     source: payload.source || 'Admin／先生',
     type: payload.type || 'paper',
+    subject: payload.subject || 'その他',
+    target_class: payload.target_class || 'all',
+    subject_option: payload.subject_option || '',
     due: payload.due_at ? '期限あり' : '期限未設定',
     due_at: payload.due_at || null,
     is_active: true,
@@ -124,6 +140,8 @@ export async function POST(request: Request) {
         }).format(new Date(data.due_at))
       : '期限未設定';
     const noticeBody = [
+      '教科：' + (data.subject || 'その他'),
+      '対象：' + (data.target_class === 'science' ? '理系クラス' : '全クラス') + (data.subject_option ? '（' + data.subject_option + '向け）' : ''),
       '課題名：' + data.title,
       '種類：' + typeLabel,
       '提出期限：' + dueLabel,
@@ -191,6 +209,9 @@ export async function PATCH(request: Request) {
     details: (payload.details || '').trim(),
     source: payload.source || 'Admin／先生',
     type: payload.type || 'paper',
+    subject: payload.subject || 'その他',
+    target_class: payload.target_class || 'all',
+    subject_option: payload.subject_option || '',
     due: payload.due_at ? '期限あり' : '期限未設定',
     due_at: payload.due_at || null,
     is_active: payload.is_active ?? true,

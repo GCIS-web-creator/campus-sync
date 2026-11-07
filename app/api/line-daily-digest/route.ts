@@ -16,6 +16,7 @@ export const maxDuration = 60;
 
 type TrainRow = { direction: string; departure_time: string; service?: string | null };
 type EventRow = { title: string; summary?: string | null; event_date: string };
+type AssignmentDigestRow = { id: string; title: string; details: string | null; subject: string | null; subject_option: string | null; target_class: string | null; due_at: string | null };
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -378,6 +379,60 @@ function buildSchoolEventsBubble(input: {
   });
 }
 
+
+function buildAssignmentListBubble(input: { today: string; assignments: AssignmentDigestRow[]; error: boolean }) {
+  const bodyContents: Record<string, unknown>[] = [];
+  if (input.error) {
+    bodyContents.push({ type: 'text', text: '課題一覧を取得できませんでした。CampusSyncで最新情報を確認してください。', size: 'sm', color: '#B91C1C', wrap: true });
+  } else if (!input.assignments.length) {
+    bodyContents.push({ type: 'text', text: '現在公開中の課題はありません。', size: 'sm', color: '#64748B', wrap: true });
+  } else {
+    for (const assignment of input.assignments.slice(0, 8)) {
+      const option = assignment.subject_option ? '・' + assignment.subject_option + '向け' : '';
+      const target = assignment.target_class === 'science' ? '理系クラス' + option : '全クラス';
+      let dueLabel = '期限未設定';
+      if (assignment.due_at) {
+        const dueDate = new Date(assignment.due_at);
+        const dueDateKey = dateKeyFromParts(tokyoParts(dueDate));
+        const days = daysUntil(input.today, dueDateKey);
+        const calendar = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(dueDate);
+        const remaining = days < 0 ? Math.abs(days) + '日超過' : days === 0 ? '今日が期限' : 'あと' + days + '日';
+        dueLabel = calendar + ' ・ ' + remaining;
+      }
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#F8FAFC',
+        cornerRadius: '12px',
+        paddingAll: '12px',
+        spacing: 'xs',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            alignItems: 'center',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: assignment.subject || 'その他', size: 'xxs', weight: 'bold', color: '#0E7490', flex: 0 },
+              { type: 'text', text: target, size: 'xxs', color: '#64748B', wrap: true, flex: 1 },
+            ],
+          },
+          { type: 'text', text: assignment.title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
+          ...(assignment.details ? [{ type: 'text', text: assignment.details.replace(/\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
+          { type: 'text', text: dueLabel, size: 'xs', weight: 'bold', color: assignment.due_at && dueLabel.includes('超過') ? '#B91C1C' : '#1D4ED8', wrap: true },
+        ],
+      });
+      bodyContents.push({ type: 'separator', color: '#E2E8F0' });
+    }
+  }
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS',
+    title: '課題一覧',
+    subtitle: 'SUBJECT  •  DEADLINE  •  REMAINING DAYS',
+    bodyContents,
+  });
+}
+
 function buildDailyDigest(input: {
   dateLabel: string;
   today: string;
@@ -391,10 +446,13 @@ function buildDailyDigest(input: {
   eventError: boolean;
   includeClassTimetable: boolean;
   weather: WeatherDayForecast[];
+  assignments: AssignmentDigestRow[];
+  assignmentError: boolean;
 }) {
   const transitBubble = buildTransitBubble(input);
   const weatherBubble = buildWeatherForecastBubble(input.weather);
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
+  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -409,6 +467,7 @@ function buildDailyDigest(input: {
           buildClassTimetableBubble({group:'8組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
         ]:[]),
         buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
+        assignmentBubble,
       ],
     },
   };
@@ -416,10 +475,13 @@ function buildDailyDigest(input: {
 
 function buildSaturdayDigest(input: {
   dateLabel: string;
+  today: string;
   kokubunji: TimetableDeparture[];
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
   weather: WeatherDayForecast[];
+  assignments: AssignmentDigestRow[];
+  assignmentError: boolean;
 }) {
   const transitBubble = buildTransitBubble({
     dateLabel: input.dateLabel,
@@ -430,10 +492,11 @@ function buildSaturdayDigest(input: {
     startLabel: '12:30',
     endLabel: '14:00',
   });
+  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   return {
     type: 'flex',
-    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の土曜時刻表・明日から3日間の天気。横にスワイプして確認できます。').slice(0, 400),
-    contents: { type: 'carousel', contents: [transitBubble, buildWeatherForecastBubble(input.weather)] },
+    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題一覧。横にスワイプして確認できます。').slice(0, 400),
+    contents: { type: 'carousel', contents: [transitBubble, buildWeatherForecastBubble(input.weather), assignmentBubble] },
   };
 }
 
@@ -489,7 +552,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [trainResult, eventResult, classTimetableResult, weatherResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service,service_day')
       .eq('service_day', isSaturday ? 'saturday' : 'weekday')
@@ -506,11 +569,17 @@ export async function POST(request: Request) {
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
     // 今日を除外しても明日から3日分を確保できるよう、5日分の予報を取得する。
     fetchSchoolWeatherForecast(5).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
+    admin.from('assignments')
+      .select('id,title,details,subject,subject_option,target_class,due_at,is_active')
+      .eq('is_active', true)
+      .order('due_at', { ascending: true, nullsFirst: false })
+      .limit(8),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
   if (eventResult.error) console.error('日次まとめ：行事取得エラー', eventResult.error.message);
   if (classTimetableResult.error) console.error('日次まとめ：時間割取得エラー（初期データへフォールバック）', classTimetableResult.error.message);
+  if (assignmentResult.error) console.error('日次まとめ：課題一覧取得エラー', assignmentResult.error.message);
 
   const timetableRows = (classTimetableResult.data || []) as ClassTimetableRow[];
   const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows) : CLASS_TIMETABLE_DATA;
@@ -534,7 +603,16 @@ export async function POST(request: Request) {
   const weatherDays = weatherResult as WeatherDayForecast[] | null;
   const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
   const flex = isSaturday
-    ? buildSaturdayDigest({ dateLabel: todayLabel, kokubunji, higashimurayama, trainError: Boolean(trainResult.error), weather: forecastDays })
+    ? buildSaturdayDigest({
+        dateLabel: todayLabel,
+        today,
+        kokubunji,
+        higashimurayama,
+        trainError: Boolean(trainResult.error),
+        weather: forecastDays,
+        assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
+        assignmentError: Boolean(assignmentResult.error),
+      })
     : buildDailyDigest({
         dateLabel: todayLabel,
         today,
@@ -548,6 +626,8 @@ export async function POST(request: Request) {
         eventError: Boolean(eventResult.error),
         includeClassTimetable,
         weather: forecastDays,
+        assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
+        assignmentError: Boolean(assignmentResult.error),
       });
 
   const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');

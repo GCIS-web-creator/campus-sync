@@ -159,7 +159,7 @@ export async function POST(request: Request) {
     // Completion is tracked per student; already-submitted assignments are excluded.
     const { data: assignments, error: assignmentError } = await admin
       .from('assignments')
-      .select('id, title, due_at')
+      .select('id, title, subject, due_at')
       .eq('is_active', true)
       .not('due_at', 'is', null)
       .gte('due_at', new Date(now.getTime() - 5 * 60 * 1000).toISOString())
@@ -215,7 +215,7 @@ export async function POST(request: Request) {
         userTodos.push({
           id: 'assignment:' + String(assignment.id),
           student_id: pref.student_id,
-          title: assignment.title,
+          title: (assignment.subject ? assignment.subject + '｜' : '') + assignment.title,
           due_at: assignment.due_at,
           completed: false,
         });
