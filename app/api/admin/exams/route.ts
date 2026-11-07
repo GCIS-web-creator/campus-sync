@@ -82,21 +82,9 @@ export async function PATCH(request:Request){
     rows.push({subject,exam_date:date,sort_order:count});
   }
 
-  const previous=await admin.from('school_test_subjects').select('*').eq('exam_id',payload.id);
-  if(previous.error)return fail('現在の実施教科を確認できませんでした。',500);
-  const deleted=await admin.from('school_test_subjects').delete().eq('exam_id',payload.id);
-  if(deleted.error)return fail('現在の実施教科を更新できませんでした。',500);
-  let saved:any[]=[];
-  if(rows.length){
-    const inserted=await admin.from('school_test_subjects').insert(rows.map(row=>({...row,exam_id:payload.id}))).select('*');
-    if(inserted.error){
-      await admin.from('school_test_subjects').delete().eq('exam_id',payload.id);
-      if(previous.data?.length)await admin.from('school_test_subjects').insert(previous.data);
-      return fail('実施教科を更新できませんでした。元の日程を復元しました。',500);
-    }
-    saved=inserted.data||[];
-  }
-  return NextResponse.json({success:true,subjects:saved},{headers:{'Cache-Control':'no-store, private'}});
+  const {data:saved,error:saveError}=await admin.rpc('replace_school_test_subjects',{p_exam_id:payload.id,p_rows:rows});
+  if(saveError)return fail('実施教科を更新できませんでした。変更は保存されていません。',500);
+  return NextResponse.json({success:true,subjects:saved||[]},{headers:{'Cache-Control':'no-store, private'}});
 }
 export async function DELETE(request:Request){
   if(!sameOrigin(request))return fail('不正な管理操作です。',403);
