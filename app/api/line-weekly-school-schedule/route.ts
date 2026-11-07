@@ -155,7 +155,7 @@ function buildWeeklyAssignmentsBubble(today: string, assignments: WeeklyAssignme
             { type: 'text', text: target, size: 'xxs', color: '#64748B', wrap: true, flex: 1 },
           ] },
           { type: 'text', text: item.title, size: 'sm', color: '#0F172A', weight: 'bold', wrap: true },
-          ...(item.details ? [{ type: 'text', text: item.details.replace(/\\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
+          ...(item.details ? [{ type: 'text', text: item.details.replace(/\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
           { type: 'text', text: due, size: 'xs', color: overdue ? '#B91C1C' : '#1D4ED8', weight: 'bold', wrap: true },
         ],
       });
