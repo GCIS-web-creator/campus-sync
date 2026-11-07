@@ -118,8 +118,9 @@ function buildBoardBubble(input: {
 
 function buildTransitBubble(input: {
   dateLabel: string;
-  kokubunji: TimetableDeparture[];
-  higashimurayama: TimetableDeparture[];
+  directionTitle: string;
+  accent: string;
+  departures: TimetableDeparture[];
   trainError: boolean;
   scheduleDayLabel?: string;
   startLabel?: string;
@@ -136,33 +137,31 @@ function buildTransitBubble(input: {
   if (input.trainError) {
     bodyContents.push({ type: 'text', text: '時刻表データを取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
   } else {
-    bodyContents.push(
-      buildTimetableDirectionBox('国分寺方面', '#2563EB', input.kokubunji),
-      { type: 'separator', color: '#E2E8F0' },
-      buildTimetableDirectionBox('東村山方面', '#0D9488', input.higashimurayama),
-    );
+    bodyContents.push(buildTimetableDirectionBox(input.directionTitle, input.accent, input.departures));
   }
 
   return {
     type: 'bubble',
-    size: 'mega',
+    // 横幅を広げて時刻・行先を見やすくし、方面ごとのカードに分離して縦の長さを抑える。
+    size: 'giga',
     header: {
       type: 'box',
       layout: 'vertical',
       backgroundColor: '#0F172A',
-      paddingAll: '22px',
+      paddingAll: '20px',
       spacing: 'sm',
       contents: [
         { type: 'text', text: 'CAMPUSSYNC  /  TRANSIT', size: 'xs', color: '#67E8F9', weight: 'bold' },
         { type: 'text', text: '鷹の台駅 発車案内', size: 'xxl', color: '#FFFFFF', weight: 'bold', wrap: true },
-        { type: 'text', text: scheduleLabel + '  •  ' + compactDateLabel + ' ' + startLabel + ' – ' + endLabel, size: 'sm', color: '#CBD5E1', wrap: true },
+        { type: 'text', text: input.directionTitle + '  •  ' + scheduleLabel + '  •  ' + compactDateLabel, size: 'sm', color: '#CBD5E1', wrap: true },
+        { type: 'text', text: startLabel + ' – ' + endLabel, size: 'xs', color: '#94A3B8', wrap: true },
       ],
     },
     body: {
       type: 'box',
       layout: 'vertical',
       paddingAll: '18px',
-      spacing: 'xl',
+      spacing: 'md',
       contents: bodyContents,
     },
     footer: {
@@ -176,6 +175,28 @@ function buildTransitBubble(input: {
       ],
     },
   };
+}
+
+function buildTransitBubbles(input: {
+  dateLabel: string;
+  kokubunji: TimetableDeparture[];
+  higashimurayama: TimetableDeparture[];
+  trainError: boolean;
+  scheduleDayLabel?: string;
+  startLabel?: string;
+  endLabel?: string;
+}) {
+  const shared = {
+    dateLabel: input.dateLabel,
+    trainError: input.trainError,
+    scheduleDayLabel: input.scheduleDayLabel,
+    startLabel: input.startLabel,
+    endLabel: input.endLabel,
+  };
+  return [
+    buildTransitBubble({ ...shared, directionTitle: '国分寺方面', accent: '#2563EB', departures: input.kokubunji }),
+    buildTransitBubble({ ...shared, directionTitle: '東村山方面', accent: '#0D9488', departures: input.higashimurayama }),
+  ];
 }
 
 function buildClassTimetableBubble(input: {
@@ -449,7 +470,7 @@ function buildDailyDigest(input: {
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
-  const transitBubble = buildTransitBubble(input);
+  const transitBubbles = buildTransitBubbles(input);
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
@@ -460,7 +481,7 @@ function buildDailyDigest(input: {
     contents: {
       type:'carousel',
       contents:[
-        transitBubble,
+        ...transitBubbles,
         weatherBubble,
         ...(input.includeClassTimetable?[
           buildClassTimetableBubble({group:'7組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
@@ -483,7 +504,7 @@ function buildSaturdayDigest(input: {
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
-  const transitBubble = buildTransitBubble({
+  const transitBubbles = buildTransitBubbles({
     dateLabel: input.dateLabel,
     kokubunji: input.kokubunji,
     higashimurayama: input.higashimurayama,
@@ -496,7 +517,7 @@ function buildSaturdayDigest(input: {
   return {
     type: 'flex',
     altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題一覧。横にスワイプして確認できます。').slice(0, 400),
-    contents: { type: 'carousel', contents: [transitBubble, buildWeatherForecastBubble(input.weather), assignmentBubble] },
+    contents: { type: 'carousel', contents: [...transitBubbles, buildWeatherForecastBubble(input.weather), assignmentBubble] },
   };
 }
 
@@ -683,12 +704,14 @@ export async function POST(request: Request) {
       classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
       events:events.length,
       weather:forecastDays.length>0,
-      carouselCards: isSaturday ? 2 : (includeClassTimetable ? 5 : 3),
+      assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
+      assignmentError: Boolean(assignmentResult.error),
+      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5),
       historySaved,
     },
     groupDelivery,
     message: isSaturday
-      ? todayLabel + 'の12:30配信は、土曜ダイヤ12:30〜14:00と明日から3日間の天気を1つのLINEメッセージにまとめて配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-      : todayLabel + 'の16:00配信は、電車・明日から3日間の天気' + (includeClassTimetable ? '・7組・8組' : '') + '・学校行事をまとめて配信しました。' + summarizeLineGroupDelivery(groupDelivery),
+      ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+      : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

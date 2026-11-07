@@ -1,12 +1,7 @@
-import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
-import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
-import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { buildNoticeFlexMessage } from '@/lib/line-flex';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
-import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -113,83 +108,14 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.from('assignments').insert(record).select('*').single();
   if (error) return NextResponse.json({ message: `課題の保存に失敗しました: ${error.message}` }, { status: 500 });
 
-  // Newly published assignments are announced to LINE friends as Flex Message.
-  // The database write remains successful if LINE is temporarily unavailable.
-  let lineNotification: { status: 'sent' | 'failed'; message: string } = {
-    status: 'failed',
-    message: '課題は保存しましたが、LINE通知を送信できませんでした。',
-  };
-  const activeLineBot = await getActiveLineBot();
-  const accessToken = activeLineBot?.accessToken || null;
-  if (!accessToken) {
-    lineNotification = {
-      status: 'failed',
-      message: '課題は公開されましたが、現在使用中のLINE BOTの認証情報が未設定のためLINE通知は送信されていません。',
-    };
-  } else {
-    const typeLabel = data.type === 'paper'
-      ? '紙プリント・ノート'
-      : data.type === 'classroom'
-        ? 'Google Classroom'
-        : '連絡・アンケート';
-    const dueLabel = data.due_at
-      ? new Intl.DateTimeFormat('ja-JP', {
-          timeZone: 'Asia/Tokyo',
-          year: 'numeric', month: 'numeric', day: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        }).format(new Date(data.due_at))
-      : '期限未設定';
-    const noticeBody = [
-      '教科：' + (data.subject || 'その他'),
-      '対象：' + (data.target_class === 'science' ? '理系クラス' : '全クラス') + (data.subject_option ? '（' + data.subject_option + '向け）' : ''),
-      '課題名：' + data.title,
-      '種類：' + typeLabel,
-      '提出期限：' + dueLabel,
-      data.details?.trim() ? '指示事項：\n' + data.details.trim() : '',
-    ].filter(Boolean).join('\n\n').slice(0, 1800);
-
-    let groupSummary = 'グループ配信結果を確認できませんでした。';
-    try {
-      const retryKey = randomUUID();
-      const messages = [buildNoticeFlexMessage('新しい課題が公開されました', noticeBody)];
-      const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, messages, retryKey, 'assignment_updates');
-      groupSummary = summarizeLineGroupDelivery(groupDelivery);
-      const lineResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + accessToken,
-          'Content-Type': 'application/json',
-          'X-Line-Retry-Key': retryKey,
-        },
-        body: JSON.stringify({ messages: applyCampusSyncFlexFooters(messages) }),
-        cache: 'no-store',
-      });
-      await recordLineDeliveryResponse(lineResponse, { channel: 'broadcast', kind: 'assignment_updates', accessToken, retryKey, deliveryBatchId: retryKey, messages });
-
-      if (lineResponse.ok) {
-        lineNotification = {
-          status: 'sent',
-          message: 'LINE公式アカウントへFlex Messageで課題のお知らせを送信しました。 ' + groupSummary,
-        };
-      } else {
-        console.error('課題公開のLINE通知に失敗:', lineResponse.status);
-        lineNotification = {
-          status: 'failed',
-          message: lineResponse.status === 429
-            ? '課題は公開されましたが、LINEの送信上限に達した可能性があります。グループ配信結果：' + groupSummary
-            : `課題は公開されましたが、LINE友だち向け通知に失敗しました（HTTP ${lineResponse.status}）。グループ配信結果：${groupSummary}`,
-        };
-      }
-    } catch (lineError) {
-      console.error('課題公開のLINE通知接続エラー:', lineError instanceof Error ? lineError.message : 'unknown error');
-      lineNotification = {
-        status: 'failed',
-        message: '課題は公開されましたが、LINE友だち向け通知の接続に失敗しました。グループ配信結果：' + groupSummary + ' Vercelのログを確認してください。',
-      };
-    }
-  }
-
-  return NextResponse.json({ assignment: data, lineNotification }, { status: 201 });
+  //課題は個別のLINE Flex Messageでは通知せず、定期配信の日次まとめに掲載する。
+  return NextResponse.json({
+    assignment: data,
+    lineNotification: {
+      status: 'disabled',
+      message: '課題登録時の個別LINE通知は行いません。次回の定期まとめに掲載されます。',
+    },
+  }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
