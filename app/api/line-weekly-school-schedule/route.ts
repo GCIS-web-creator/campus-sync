@@ -492,8 +492,19 @@ export async function POST(request: Request) {
     const groupMessage = summarizeLineGroupDelivery(groupDelivery);
     const weekEnd = addDays(weekStart, 6);
     return NextResponse.json({
-      success: true, weekStart, groupDelivery,
-      message: weekStart + '〜' + weekEnd + ' の学校予定表、月曜日の7組・8組時間割、翌日から3日間の天気をLINEへ送信しました。' + groupMessage,
+      success: true,
+      weekStart,
+      groupDelivery,
+      content: {
+        weeklySchedule: hasSavedSchedule,
+        weeklyEventFallback: !hasSavedSchedule,
+        mondayClassTimetable: true,
+        assignments: assignments.length,
+        countdowns: countdownEvents.length,
+        weather: weeklyWeather.length,
+      },
+      message: weekStart + '〜' + weekEnd + ' の1週間の予定、月曜日の7組・8組時間割、課題一覧、天気、カウントダウンをLINEへ送信しました。' +
+        (!hasSavedSchedule ? ' 詳細な週間予定表は未登録のため、行事情報を使った一覧にしています。' : '') + groupMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学校予定表のLINE配信通信エラー:', error instanceof Error ? error.message : 'unknown error');
