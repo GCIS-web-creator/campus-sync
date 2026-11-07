@@ -83,6 +83,148 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
   };
 }
 
+type WeeklyEventRow = { id: string; title: string; summary?: string | null; event_date: string };
+type WeeklyAssignmentRow = { id: string; title: string; details?: string | null; subject?: string | null; subject_option?: string | null; target_class?: string | null; due_at?: string | null };
+
+function getTokyoTodayKey(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return String(values.year) + '-' + String(values.month) + '-' + String(values.day);
+}
+
+function daysUntil(today: string, target: string): number {
+  const a = today.split('-').map(Number);
+  const b = target.split('-').map(Number);
+  return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+}
+
+function buildWeeklyInfoBubble(input: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  contents: Record<string, unknown>[];
+}) {
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box', layout: 'vertical', backgroundColor: '#0F172A', paddingAll: '18px', spacing: 'sm',
+      contents: [
+        { type: 'text', text: input.eyebrow, size: 'xs', color: '#67E8F9', weight: 'bold' },
+        { type: 'text', text: input.title, size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+        { type: 'text', text: input.subtitle, size: 'xs', color: '#CBD5E1', wrap: true },
+      ],
+    },
+    body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: input.contents },
+    footer: {
+      type: 'box', layout: 'vertical', paddingAll: '11px', backgroundColor: '#F8FAFC',
+      contents: [{ type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center' }],
+    },
+  };
+}
+
+function buildWeeklyAssignmentsBubble(today: string, assignments: WeeklyAssignmentRow[], failed: boolean) {
+  const contents: Record<string, unknown>[] = [];
+  if (failed) {
+    contents.push({ type: 'text', text: '課題一覧を取得できませんでした。CampusSyncで最新情報を確認してください。', size: 'sm', color: '#B91C1C', wrap: true });
+  } else if (!assignments.length) {
+    contents.push({ type: 'text', text: '現在公開中の課題はありません。', size: 'sm', color: '#64748B', wrap: true });
+  } else {
+    for (const item of assignments.slice(0, 8)) {
+      const option = item.subject_option ? '・' + item.subject_option + '向け' : '';
+      const target = item.target_class === 'science' ? '理系クラス' + option : '全クラス';
+      let due = '期限未設定';
+      let overdue = false;
+      if (item.due_at) {
+        const date = new Date(item.due_at);
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        const dueKey = String(values.year) + '-' + String(values.month) + '-' + String(values.day);
+        const days = daysUntil(today, dueKey);
+        const dateLabel = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+        overdue = days < 0;
+        due = dateLabel + ' ・ ' + (days < 0 ? Math.abs(days) + '日超過' : days === 0 ? '今日が期限' : 'あと' + days + '日');
+      }
+      contents.push({
+        type: 'box', layout: 'vertical', backgroundColor: '#F8FAFC', cornerRadius: '10px', paddingAll: '11px', spacing: 'xs',
+        contents: [
+          { type: 'box', layout: 'horizontal', spacing: 'sm', alignItems: 'center', contents: [
+            { type: 'text', text: item.subject || 'その他', size: 'xxs', color: '#0E7490', weight: 'bold', flex: 0 },
+            { type: 'text', text: target, size: 'xxs', color: '#64748B', wrap: true, flex: 1 },
+          ] },
+          { type: 'text', text: item.title, size: 'sm', color: '#0F172A', weight: 'bold', wrap: true },
+          ...(item.details ? [{ type: 'text', text: item.details.replace(/\\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
+          { type: 'text', text: due, size: 'xs', color: overdue ? '#B91C1C' : '#1D4ED8', weight: 'bold', wrap: true },
+        ],
+      });
+    }
+    if (assignments.length > 8) contents.push({ type: 'text', text: 'ほか' + (assignments.length - 8) + '件の課題があります。CampusSyncで確認してください。', size: 'xxs', color: '#64748B', wrap: true });
+  }
+  return buildWeeklyInfoBubble({
+    eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS',
+    title: '課題一覧',
+    subtitle: 'SUBJECT  •  DEADLINE  •  REMAINING DAYS',
+    contents,
+  });
+}
+
+function buildCountdownBubble(today: string, events: WeeklyEventRow[], failed: boolean) {
+  const contents: Record<string, unknown>[] = [];
+  if (failed) {
+    contents.push({ type: 'text', text: 'カウントダウン情報を取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
+  } else if (!events.length) {
+    contents.push({ type: 'text', text: '現在登録されている今後のカウントダウンはありません。', size: 'sm', color: '#64748B', wrap: true });
+  } else {
+    for (const event of events.slice(0, 6)) {
+      const remaining = daysUntil(today, event.event_date);
+      const label = remaining === 0 ? '本日' : remaining === 1 ? 'あと1日' : 'あと' + remaining + '日';
+      const dateLabel = event.event_date.slice(5).replace('-', '/');
+      contents.push({
+        type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'md', paddingAll: '10px',
+        backgroundColor: '#F8FAFC', cornerRadius: '10px',
+        contents: [
+          { type: 'box', layout: 'vertical', width: '66px', paddingAll: '8px', backgroundColor: '#163A40', cornerRadius: '9px', justifyContent: 'center', alignItems: 'center', spacing: 'xs',
+            contents: [
+              { type: 'text', text: dateLabel, size: 'md', color: '#FFFFFF', weight: 'bold', align: 'center' },
+              { type: 'text', text: label, size: 'xxs', color: '#A7D3CD', weight: 'bold', align: 'center', wrap: true },
+            ],
+          },
+          { type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', contents: [
+            { type: 'text', text: event.title, size: 'sm', color: '#0F172A', weight: 'bold', wrap: true },
+            ...(event.summary ? [{ type: 'text', text: event.summary.slice(0, 120), size: 'xs', color: '#64748B', wrap: true }] : []),
+          ] },
+        ],
+      });
+    }
+  }
+  return buildWeeklyInfoBubble({
+    eyebrow: 'CAMPUSSYNC  /  COUNTDOWN',
+    title: '学校イベント・カウントダウン',
+    subtitle: 'COMING UP  •  開催日までの日数',
+    contents,
+  });
+}
+
+function buildFallbackWeekDays(weekStart: string, events: WeeklyEventRow[]) {
+  const dayLabels = ['月', '火', '水', '木', '金', '土', '日'];
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    const items = events.filter(event => event.event_date === date).map(event => ({
+      id: event.id,
+      title: event.title,
+      details: event.summary || '',
+    }));
+    if (index === 0) items.unshift({
+      id: 'weekly-schedule-not-registered',
+      title: '詳細な週間予定表は未登録です',
+      details: 'このカードには、登録済みの学校行事・カウントダウン情報を掲載しています。',
+    });
+    return { date, dayLabel: dayLabels[index], isHoliday: false, items };
+  });
+}
+
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; weekStart?: unknown };
   const manualRequest = payload.mode === 'manual';
@@ -115,51 +257,75 @@ export async function POST(request: Request) {
   const weekStart = manualRequest || repairAndSendGroups ? String(payload.weekStart || '') : getNextSchoolWeekStart();
   if (!isDateKey(weekStart) || !isMonday(weekStart)) return jsonError('送信週は月曜日の日付で指定してください。', 400);
 
-  const { data: schedule, error } = await supabase.from('school_weekly_schedules')
-    .select('week_start,title,days').eq('week_start', weekStart).maybeSingle();
-  if (error) {
-    console.error('学校予定表をLINE送信前に取得できません:', error.message);
-    return jsonError('学校予定表を取得できません。supabase/school-weekly-schedule.sql を実行してください。', 500);
+  const today = getTokyoTodayKey();
+  const weekEnd = addDays(weekStart, 6);
+  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, forecast] = await Promise.all([
+    supabase.from('school_weekly_schedules')
+      .select('week_start,title,days').eq('week_start', weekStart).maybeSingle(),
+    supabase.from('school_event_countdowns')
+      .select('id,title,summary,event_date').eq('is_active', true)
+      .gte('event_date', weekStart).lte('event_date', weekEnd)
+      .order('event_date', { ascending: true }).limit(30),
+    supabase.from('school_event_countdowns')
+      .select('id,title,summary,event_date').eq('is_active', true)
+      .gte('event_date', today).order('event_date', { ascending: true }).limit(6),
+    supabase.from('assignments')
+      .select('id,title,details,subject,subject_option,target_class,due_at')
+      .eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }).limit(8),
+    supabase.from('class_timetable_slots')
+      .select('group_name,day_key,period,subject,teacher')
+      .order('group_name', { ascending: true }).order('period', { ascending: true }),
+    fetchSchoolWeatherForecast(4).catch(error => {
+      console.error('週間学校予定表：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
+      return [];
+    }),
+  ]);
+  if (scheduleResult.error) console.error('週間予定表の取得に失敗（行事情報で代替）:', scheduleResult.error.message);
+  if (weeklyEventsResult.error) console.error('週間予定表：学校行事の取得に失敗:', weeklyEventsResult.error.message);
+  if (countdownResult.error) console.error('週間予定表：カウントダウン取得に失敗:', countdownResult.error.message);
+  if (assignmentResult.error) console.error('週間予定表：課題取得に失敗:', assignmentResult.error.message);
+  if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
+
+  const schedule = scheduleResult.data;
+  if (!schedule && (manualRequest || repairAndSendGroups)) {
+    return jsonError('選択した週の予定表がまだ保存されていません。先に予定表を保存してください。', 404);
   }
-  if (!schedule) {
-    if (manualRequest) return jsonError('選択した週の予定表がまだ保存されていません。先に予定表を保存してください。', 404);
-    return NextResponse.json({ success: true, skipped: true, message: '送信対象週の学校予定表が未登録のため、LINE配信をスキップしました。' }, { headers: { 'Cache-Control': 'no-store' } });
+  const weeklyEvents = (weeklyEventsResult.data || []) as WeeklyEventRow[];
+  const savedDays = Array.isArray(schedule?.days) ? schedule.days as Array<any> : [];
+  const hasSavedSchedule = Boolean(schedule && savedDays.length > 0);
+  // 次週の週間予定表が未登録でも、登録済みの学校行事を日付別にまとめて配信を継続する。
+  const days = hasSavedSchedule ? savedDays : buildFallbackWeekDays(weekStart, weeklyEvents);
+  if (manualRequest && !days.some(day => day?.isHoliday || String(day?.holidayName || '').trim() || (Array.isArray(day?.items) && day.items.some((item: any) => String(item?.title || item?.details || item?.time || item?.location || '').trim())))) {
+    return jsonError('予定または祝日設定がないため、配信できません。', 400);
   }
 
-  const days = Array.isArray(schedule.days) ? schedule.days as Array<any> : [];
-  const hasContent = days.some(day => day?.isHoliday || String(day?.holidayName || '').trim() || (Array.isArray(day?.items) && day.items.some((item: any) => String(item?.title || item?.details || item?.time || item?.location || '').trim())));
-  if (!hasContent) {
-    if (manualRequest) return jsonError('予定または祝日設定がないため、配信できません。', 400);
-    return NextResponse.json({ success: true, skipped: true, message: '予定・祝日が未入力のため、LINE配信をスキップしました。' }, { headers: { 'Cache-Control': 'no-store' } });
-  }
-
-  const { data: timetableRows, error: timetableError } = await supabase.from('class_timetable_slots')
-    .select('group_name,day_key,period,subject,teacher')
-    .order('group_name', { ascending: true }).order('period', { ascending: true });
-  if (timetableError) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableError.message);
-  const timetable: ClassTimetableData = timetableRows?.length ? mapClassTimetableRows(timetableRows as ClassTimetableRow[]) : CLASS_TIMETABLE_DATA;
-  const forecast = await fetchSchoolWeatherForecast(4).catch(error => {
-    console.error('週間学校予定表：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
-    return [];
-  });
+  const timetableRows = timetableResult.data || [];
+  const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows as ClassTimetableRow[]) : CLASS_TIMETABLE_DATA;
   const weatherTargetDates = [weekStart, addDays(weekStart, 1), addDays(weekStart, 2)];
-  const weeklyWeather = forecast
+  const weeklyWeather = (forecast || [])
     .filter(day => weatherTargetDates.includes(day.date))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3);
+  const countdownEvents = (countdownResult.data || []) as WeeklyEventRow[];
+  const assignments = (assignmentResult.data || []) as WeeklyAssignmentRow[];
   const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
-  const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: String(schedule.title || '学校予定表'), weekStart, days });
+  const scheduleTitle = hasSavedSchedule ? String(schedule?.title || '学校予定表') : '今後1週間の予定（登録済み情報）';
+  const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: scheduleTitle, weekStart, days });
   const weeklyScheduleBubble = baseFlex.contents as Record<string, unknown>;
+  const assignmentBubble = buildWeeklyAssignmentsBubble(today, assignments, Boolean(assignmentResult.error));
+  const countdownBubble = buildCountdownBubble(today, countdownEvents, Boolean(countdownResult.error));
   const flex = {
     ...baseFlex,
-    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・天気予報').slice(0, 400),
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題一覧・天気予報・カウントダウン').slice(0, 400),
     contents: {
       type: 'carousel',
       contents: [
-        weeklyScheduleBubble,
         buildMondayClassBubble('7組', mondayLabel, timetable),
         buildMondayClassBubble('8組', mondayLabel, timetable),
+        assignmentBubble,
         buildWeatherForecastBubble(weeklyWeather),
+        countdownBubble,
+        weeklyScheduleBubble,
       ],
     },
   };
