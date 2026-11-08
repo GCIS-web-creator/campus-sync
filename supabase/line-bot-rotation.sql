@@ -461,3 +461,27 @@ select id, previous_bot_slot, new_bot_slot, effective_date, created_at
 from public.line_bot_rotation_events
 where acknowledged_at is null
 order by created_at desc;
+
+
+-- BOT handoff: persist the Official Account-only test result separately from group membership.
+alter table public.line_bot_rotation
+  add column if not exists handoff_test_bot_slot smallint,
+  add column if not exists handoff_test_next_switch_at timestamptz,
+  add column if not exists handoff_test_status text not null default 'not_started',
+  add column if not exists handoff_test_sent_at timestamptz,
+  add column if not exists handoff_test_error text,
+  add column if not exists handoff_test_retry_key uuid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.line_bot_rotation'::regclass
+      and conname = 'line_bot_rotation_handoff_test_status_check'
+  ) then
+    alter table public.line_bot_rotation
+      add constraint line_bot_rotation_handoff_test_status_check
+      check (handoff_test_status in ('not_started', 'sending', 'sent', 'failed'));
+  end if;
+end;
+$$;

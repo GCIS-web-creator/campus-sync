@@ -22,6 +22,11 @@ type RotationRow = {
   rotation_hold_until: string | null;
   updated_at: string;
   handoff_group_chat_id: string | null;
+  handoff_test_bot_slot: number | null;
+  handoff_test_next_switch_at: string | null;
+  handoff_test_status: 'not_started' | 'sending' | 'sent' | 'failed';
+  handoff_test_sent_at: string | null;
+  handoff_test_error: string | null;
 };
 
 type RotationEvent = {
@@ -301,7 +306,7 @@ export async function GET(request: Request) {
 
   const [rotationResult, eventResult, historyResult, activeChatsResult, noticeRetryResult] = await Promise.all([
     admin.from('line_bot_rotation')
-      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at,handoff_group_chat_id')
+      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at,handoff_group_chat_id,handoff_test_bot_slot,handoff_test_next_switch_at,handoff_test_status,handoff_test_sent_at,handoff_test_error')
       .eq('id', 1)
       .maybeSingle(),
     admin.from('line_bot_rotation_events')
@@ -337,7 +342,15 @@ export async function GET(request: Request) {
   }
 
   const rotation = rotationResult.data as RotationRow;
-  const { handoff_group_chat_id: expectedGroupChatId, ...publicRotation } = rotation;
+  const {
+    handoff_group_chat_id: expectedGroupChatId,
+    handoff_test_bot_slot: handoffTestBotSlot,
+    handoff_test_next_switch_at: handoffTestNextSwitchAt,
+    handoff_test_status: handoffTestStatus,
+    handoff_test_sent_at: handoffTestSentAt,
+    handoff_test_error: handoffTestError,
+    ...publicRotation
+  } = rotation;
   const activeSlot = Number(rotation.active_bot_slot);
   const nextBotSlot = getLineBotSlotForDate(rotation.next_switch_at);
   const environment = getLineBotEnvironmentStatus();
@@ -362,6 +375,14 @@ export async function GET(request: Request) {
     && Date.now() >= windowOpensAt
     && Boolean(nextBotSlot)
     && nextBotSlot !== activeSlot;
+  const handoffTestMatchesCurrentSwitch = Number(handoffTestBotSlot) === Number(nextBotSlot)
+    && Boolean(handoffTestNextSwitchAt)
+    && Date.parse(handoffTestNextSwitchAt as string) === Date.parse(rotation.next_switch_at);
+  const officialAccountTestSent = handoffTestMatchesCurrentSwitch
+    && handoffTestStatus === 'sent'
+    && Boolean(handoffTestSentAt);
+  const officialAccountTestStatus = handoffTestMatchesCurrentSwitch ? handoffTestStatus : 'not_started';
+  const officialAccountTestError = handoffTestMatchesCurrentSwitch ? handoffTestError : null;
 
   return NextResponse.json({
     success: true,
@@ -382,10 +403,137 @@ export async function GET(request: Request) {
       otherBotActiveCount,
       targetBotConfigured: Boolean(environment.some(item => item.slot === nextBotSlot && item.channelSecretConfigured && item.accessTokenConfigured)),
       registeredGroupConfigured: Boolean(expectedGroupChatId),
+      officialAccountTestSent,
+      officialAccountTestStatus,
+      officialAccountTestSentAt: handoffTestMatchesCurrentSwitch ? handoffTestSentAt : null,
+      officialAccountTestError,
     },
     noticeRetryEvent: noticeRetryResult.data || null,
     notice: 'Channel Secretとアクセストークンの値はセキュリティのため返却しません。',
   }, { headers: { 'Cache-Control': 'no-store', 'Vary': 'X-Admin-Password' } });
+}
+
+async function handleOfficialAccountTest(
+  admin: NonNullable<ReturnType<typeof getAdmin>>,
+): Promise<NextResponse> {
+  const { data: rotation, error: rotationError } = await admin.from('line_bot_rotation')
+    .select('active_bot_slot,next_switch_at,handoff_group_chat_id')
+    .eq('id', 1)
+    .maybeSingle();
+  if (rotationError || !rotation) return jsonError('現在のBOT切替予定を取得できません。', 503);
+
+  const currentBotSlot = Number(rotation.active_bot_slot);
+  const newBotSlot = getLineBotSlotForDate(rotation.next_switch_at);
+  if (!newBotSlot || newBotSlot === currentBotSlot) return jsonError('次回の切替先BOTを計算できません。', 409);
+  if (Date.now() < Date.parse(rotation.next_switch_at) - ONE_DAY_MS) return jsonError('通知テストは切替予定の24時間前から実行できます。', 409);
+
+  const groupId = typeof rotation.handoff_group_chat_id === 'string' ? rotation.handoff_group_chat_id : '';
+  if (!groupId) return jsonError('切替対象のグループが登録されていません。', 409);
+
+  const credentials = getLineBotCredentialsForSlot(newBotSlot);
+  if (!credentials) return jsonError('BOT ' + newBotSlot + ' のChannel Secretまたはアクセストークンが未登録です。', 503);
+
+  const { data: prepareResult, error: prepareError } = await admin.rpc('campussync_prepare_line_bot_handoff_test', {
+    p_expected_current_bot_slot: currentBotSlot,
+    p_expected_new_bot_slot: newBotSlot,
+    p_expected_next_switch_at: rotation.next_switch_at,
+    p_expected_group_chat_id: groupId,
+  });
+  if (prepareError) {
+    console.error('BOT公式アカウント通知テストの準備に失敗:', prepareError.message);
+    return jsonError(prepareError.message.includes('グループ') ? prepareError.message : 'BOT ' + newBotSlot + ' のグループ確認または通知テスト準備に失敗しました。状態を更新して再度お試しください。', 409);
+  }
+
+  const prepared = Array.isArray(prepareResult) ? prepareResult[0] : prepareResult;
+  const retryKey = typeof prepared?.test_retry_key === 'string' ? prepared.test_retry_key : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(retryKey)) {
+    return jsonError('通知テスト用の再送キーを取得できませんでした。', 500);
+  }
+  if (prepared?.already_sent === true) {
+    return NextResponse.json({
+      success: true,
+      alreadySent: true,
+      message: 'BOT ' + newBotSlot + ' の公式アカウント通知テストは送信済みです。受信を確認して切替操作へ進んでください。',
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  const messages = [{
+    type: 'text',
+    text: [
+      '【CampusSync BOT ' + newBotSlot + ' 公式アカウント通知テスト】',
+      'BOT ' + newBotSlot + ' からの通知テストです。',
+      'このメッセージはBOT ' + newBotSlot + ' の公式アカウントの友だち向けに送信しています。',
+      '連携グループには送信していません。',
+      'この通知を受信できたことを確認してから、Admin画面で切替を完了してください。',
+    ].join('\n'),
+  }];
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + credentials.accessToken,
+        'Content-Type': 'application/json',
+        'X-Line-Retry-Key': retryKey,
+      },
+      body: JSON.stringify({ messages }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.name : 'network_error';
+    await admin.from('line_bot_rotation').update({
+      handoff_test_status: 'failed',
+      handoff_test_error: 'LINE API接続エラー（' + detail + '）。同じ再送キーで再試行できます。',
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1).eq('handoff_test_retry_key', retryKey);
+    return jsonError('BOT ' + newBotSlot + ' の公式アカウント通知テストに接続できませんでした。同じテストを再試行できます。', 502);
+  }
+
+  await recordLineDeliveryResponse(response, {
+    channel: 'broadcast',
+    destinationType: 'official_account',
+    kind: 'bot_rotation_test',
+    botSlot: newBotSlot,
+    accessToken: credentials.accessToken,
+    retryKey,
+    deliveryBatchId: retryKey,
+    messages,
+  });
+
+  if (!response.ok && response.status !== 409) {
+    await admin.from('line_bot_rotation').update({
+      handoff_test_status: 'failed',
+      handoff_test_error: 'LINE API returned HTTP ' + response.status + '.',
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1).eq('handoff_test_retry_key', retryKey);
+    return jsonError(response.status === 429
+      ? 'BOT ' + newBotSlot + ' の通知テストはLINEの送信制限により受け付けられませんでした。時間をおいて再試行してください。'
+      : 'BOT ' + newBotSlot + ' の公式アカウント通知テストに失敗しました（HTTP ' + response.status + '）。再試行できます。', 502);
+  }
+
+  const sentAt = new Date().toISOString();
+  const { error: saveError } = await admin.from('line_bot_rotation').update({
+    handoff_test_status: 'sent',
+    handoff_test_sent_at: sentAt,
+    handoff_test_error: null,
+    updated_at: sentAt,
+  }).eq('id', 1)
+    .eq('handoff_test_retry_key', retryKey)
+    .eq('handoff_test_bot_slot', newBotSlot)
+    .eq('handoff_test_next_switch_at', rotation.next_switch_at);
+
+  if (saveError) {
+    console.error('BOT公式アカウント通知テストの結果保存に失敗:', saveError.message);
+    return jsonError('LINEは通知を受け付けましたが、テスト結果の保存に失敗しました。再送操作で安全に確認できます。', 500);
+  }
+
+  return NextResponse.json({
+    success: true,
+    testSent: true,
+    message: 'BOT ' + newBotSlot + ' の公式アカウントへテスト通知を送信しました。BOT ' + newBotSlot + ' の公式アカウントから通知が届くことを確認してください。グループには送信していません。',
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 async function handleManualSwitch(
@@ -403,7 +551,7 @@ async function handleManualSwitch(
   }
 
   const { data: rotation, error: rotationError } = await admin.from('line_bot_rotation')
-    .select('active_bot_slot,next_switch_at,handoff_group_chat_id')
+    .select('active_bot_slot,next_switch_at,handoff_group_chat_id,handoff_test_bot_slot,handoff_test_next_switch_at,handoff_test_status,handoff_test_sent_at')
     .eq('id', 1)
     .maybeSingle();
   if (rotationError || !rotation) return jsonError('現在の切替予定を取得できません。', 503);
@@ -422,6 +570,14 @@ async function handleManualSwitch(
   }
   if (!getLineBotCredentialsForSlot(newBotSlot)) {
     return jsonError('BOT ' + newBotSlot + ' のChannel Secretとアクセストークンが揃っていません。Vercelの環境変数を確認してください。', 503);
+  }
+
+  const officialAccountTestSent = Number(rotation.handoff_test_bot_slot) === newBotSlot
+    && Date.parse(String(rotation.handoff_test_next_switch_at || '')) === Date.parse(rotation.next_switch_at)
+    && rotation.handoff_test_status === 'sent'
+    && Boolean(rotation.handoff_test_sent_at);
+  if (!officialAccountTestSent) {
+    return jsonError('BOT ' + newBotSlot + ' の公式アカウント通知テストが未完了です。先に「公式アカウントへテスト送信」を実行し、通知が届くことを確認してください。', 409);
   }
 
   const { data: activeChats, error: chatsError } = await admin.from('line_group_chats')
@@ -498,6 +654,10 @@ export async function POST(request: Request) {
     groupConfirmed?: unknown;
   } | null;
   if (!payload) return jsonError('リクエストを読み取れませんでした。', 400);
+
+  if (payload.action === 'test-official-account') {
+    return handleOfficialAccountTest(admin);
+  }
 
   if (payload.action === 'manual-switch') {
     return handleManualSwitch(admin, payload);
