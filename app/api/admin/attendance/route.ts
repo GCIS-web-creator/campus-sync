@@ -24,7 +24,12 @@ export async function GET(request: Request) {
     .order('report_date',{ascending:false}).order('created_at',{ascending:false}).limit(500);
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) requestQuery = requestQuery.eq('report_date',date);
   if (status && ['received','reviewing','processed','needs_contact','canceled'].includes(status)) requestQuery = requestQuery.eq('status',status);
-  if (query) {\n    const safeQuery = query.replace(/[,%()]/g, '');\n    if (/^[0-9]{6}$/.test(safeQuery)) requestQuery = requestQuery.eq('student_id', safeQuery);\n    else if (/^[1-3]-[1-8]$/.test(safeQuery)) requestQuery = requestQuery.eq('user_class', safeQuery);\n    else requestQuery = requestQuery.ilike('student_name', '%' + safeQuery + '%');\n  }
+  if (query) {
+    const safeQuery = query.replace(/[,%()]/g, '');
+    if (/^[0-9]{6}$/.test(safeQuery)) requestQuery = requestQuery.eq('student_id', safeQuery);
+    else if (/^[1-3]-[1-8]$/.test(safeQuery)) requestQuery = requestQuery.eq('user_class', safeQuery);
+    else requestQuery = requestQuery.ilike('student_name', '%' + safeQuery + '%');
+  }
   const {data,error}=await requestQuery;
   if(error){console.error('Attendance admin list failed:',error.message);return fail('出欠連絡一覧を取得できませんでした。',500);}
   return NextResponse.json({success:true,reports:data||[]},{headers:noStore});
