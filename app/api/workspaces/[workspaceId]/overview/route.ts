@@ -61,7 +61,7 @@ export async function GET(request: Request, route: { params: Promise<{ workspace
       },
       recentPosts: (postsResult.data || []).map((item) => ({ ...item, author_name: names.get(item.author_user_id) || 'メンバー' })),
       recentMessages: (messagesResult.data || []).map((item) => ({ ...item, sender_name: names.get(item.sender_user_id) || 'メンバー' })).reverse(),
-      recentFiles: (filesResult.data || []).map((item) => ({ ...item, uploaded_by_name: names.get(item.uploaded_by) || 'メンバー' })),
+      recentFiles: (filesResult.data || []).map((item) => ({ ...item, uploader_name: names.get(item.uploaded_by) || 'メンバー' })),
       upcomingEvents: eventsResult.data || [],
       openTasks: tasksResult.data || [],
     }, { headers: noStoreHeaders });

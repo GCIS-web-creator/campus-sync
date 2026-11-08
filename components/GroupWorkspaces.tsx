@@ -356,9 +356,18 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
 
   const upload=async(event:React.FormEvent)=>{
     event.preventDefault();if(!selected||!uploadFile)return;setSaving(true);
-    const data=new FormData();data.set('file',uploadFile);data.set('folder_path',folderPath);data.set('description',fileDescription);
     try{
-      await api('/api/workspaces/'+selected.id+'/files','POST',data);
+      const prepared=await api('/api/workspaces/'+selected.id+'/files','POST',{
+        action:'prepare_upload',file_name:uploadFile.name,file_size:uploadFile.size,mime_type:uploadFile.type,
+        folder_path:folderPath,description:fileDescription,
+      });
+      const {error:uploadError}=await supabase.storage.from('workspace-files')
+        .uploadToSignedUrl(prepared.path,prepared.token,uploadFile,{contentType:prepared.mime_type});
+      if(uploadError)throw uploadError;
+      await api('/api/workspaces/'+selected.id+'/files','POST',{
+        action:'complete_upload',storage_path:prepared.path,file_name:prepared.file_name,file_size:prepared.file_size,
+        folder_path:prepared.folder_path,description:prepared.description,
+      });
       setUploadFile(null);setFolderPath('');setFileDescription('');setShowUpload(false);
       await loadFiles(selected.id);await loadOverview(selected.id,true);setMessage('ファイルをアップロードしました。');
     }catch(error){setMessage(error instanceof Error?error.message:'アップロードできませんでした。');}
@@ -515,7 +524,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
               </section>
               <section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}>
                 <h2 className="mb-3 flex items-center gap-2 font-black"><FolderOpen size={17} className="text-cyan-500"/>新しいファイル</h2>
-                {overview?.recentFiles.length?<div className="space-y-3">{overview.recentFiles.map((file)=><div key={file.id} className="flex items-center gap-3"><FileText size={18} className="shrink-0 text-cyan-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{file.file_name}</p><p className={'text-[10px] '+muted}>{file.uploaded_by_name} ・ {formatSize(file.file_size)}</p></div></div>)}</div>:<p className={'py-4 text-xs '+muted}>ファイルはまだありません。</p>}<button type="button" onClick={()=>setPanel('files')} className="mt-3 text-xs font-bold text-cyan-500">ファイルを開く</button>
+                {overview?.recentFiles.length?<div className="space-y-3">{overview.recentFiles.map((file)=><div key={file.id} className="flex items-center gap-3"><FileText size={18} className="shrink-0 text-cyan-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{file.file_name}</p><p className={'text-[10px] '+muted}>{file.uploader_name} ・ {formatSize(file.file_size)}</p></div></div>)}</div>:<p className={'py-4 text-xs '+muted}>ファイルはまだありません。</p>}<button type="button" onClick={()=>setPanel('files')} className="mt-3 text-xs font-bold text-cyan-500">ファイルを開く</button>
               </section>
             </div>
             {overview?.openTasks.length?<section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}><h2 className="mb-3 flex items-center gap-2 font-black"><ClipboardList size={17} className="text-cyan-500"/>進行中のタスク</h2><div className="grid gap-2 sm:grid-cols-2">{overview.openTasks.map((task)=><div key={task.id} className={'rounded-xl border p-3 '+(dark?'border-slate-700':'border-slate-200')}><p className="text-sm font-bold">{task.title}</p><p className={'mt-1 text-[10px] '+muted}>{task.status==='todo'?'未着手':task.status==='in_progress'?'進行中':'確認待ち'}{task.due_at?' ・ 期限 '+formatDate(task.due_at):''}</p></div>)}</div></section>:null}
