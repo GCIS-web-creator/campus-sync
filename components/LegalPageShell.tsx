@@ -35,7 +35,7 @@ export default function LegalPageShell({
           </div>
 
           <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-xs leading-6 text-amber-950 sm:px-9">
-            このページは現在のCampusSyncの機能と設定をもとにした草案です。正式公開前に、運営者の正式名称・住所・問い合わせ先、学校との承認関係、外部サービスとの契約および海外での個人情報取扱いを確認してください。
+            現在の運営主体は個人である開発者です。学校・GCISによる正式採用や運営委託は未確定です。正式公開前に、成年の保護者等の協力を得て、運営者情報・問い合わせ窓口・生徒情報の管理体制・外部サービスの契約および海外での情報取扱いを確認してください。
           </div>
 
           <div className="p-5 sm:p-9">
