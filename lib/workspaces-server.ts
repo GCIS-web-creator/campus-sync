@@ -56,6 +56,13 @@ export async function getWorkspaceMemberRole(admin: WorkspaceAdminClient, worksp
     .maybeSingle();
   if (error) throw error;
   if (!data || data.status !== 'active') return null;
+  const { data: workspace, error: workspaceError } = await admin
+    .from('workspaces')
+    .select('status')
+    .eq('id', workspaceId)
+    .maybeSingle();
+  if (workspaceError) throw workspaceError;
+  if (!workspace || workspace.status !== 'active') return null;
   return String(data.member_role);
 }
 

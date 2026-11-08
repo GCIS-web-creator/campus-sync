@@ -150,6 +150,23 @@ export async function PATCH(request: Request, route: { params: Promise<{ workspa
       return NextResponse.json({ success: true, message: approved ? '参加申請を承認しました。' : '参加申請を却下しました。' }, { headers: noStoreHeaders });
     }
 
+    if (body.action === 'leave_workspace') {
+      if (actorRole === 'owner') return fail('オーナーは先に別のメンバーへ引き継いでください。', 409);
+      const { error } = await context.admin.from('workspace_members')
+        .update({ status: 'removed', removed_at: new Date().toISOString() })
+        .eq('workspace_id', workspaceId)
+        .eq('user_id', context.userId)
+        .eq('status', 'active');
+      if (error) throw error;
+      await recordWorkspaceAudit(context.admin, {
+        workspaceId,
+        actorUserId: context.userId,
+        action: 'member_left_workspace',
+        targetType: 'member',
+      });
+      return NextResponse.json({ success: true, message: 'グループから退出しました。' }, { headers: noStoreHeaders });
+    }
+
     if (body.action === 'change_role') {
       if (actorRole !== 'owner') return fail('メンバー権限の変更はオーナーのみ行えます。', 403);
       const targetUserId = String(body.user_id || '');

@@ -147,6 +147,25 @@ export default function GroupWorkspaces({ isDarkMode = false }: { isDarkMode?: b
     }
   };
 
+  const leaveWorkspace = async () => {
+    if (!selected || role === 'owner') return;
+    if (!window.confirm(selected.name + 'から退出しますか？')) return;
+    setSaving(true);
+    try {
+      await api('/api/workspaces/' + selected.id + '/members', 'PATCH', { action: 'leave_workspace' });
+      setSelected(null);
+      setMembers([]);
+      setRequests([]);
+      setRole('');
+      await load();
+      setMessage('グループから退出しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '退出できませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const createInvite = async () => {
     if (!selected) return;
     setSaving(true);
@@ -236,12 +255,15 @@ export default function GroupWorkspaces({ isDarkMode = false }: { isDarkMode?: b
         <section className={'rounded-2xl border p-4 sm:p-5 ' + panel}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{selected.name}</h2>{selected.is_official && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-500"><ShieldCheck size={13} />学校公認</span>}</div><p className={'mt-1 text-xs ' + muted}>{CATEGORY[selected.category] || 'その他'} ・ {ROLE[role] || 'メンバー'} ・ {members.length}人</p></div>
-            <button type="button" onClick={() => { setSelected(null); setMembers([]); setRequests([]); }} className="rounded-lg border px-3 py-2 text-xs font-bold">閉じる</button>
+            <div className="flex items-center gap-2">
+              {role && role !== 'owner' && <button type="button" onClick={() => void leaveWorkspace()} disabled={saving} className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-bold text-rose-500 disabled:opacity-50">退出する</button>}
+              <button type="button" onClick={() => { setSelected(null); setMembers([]); setRequests([]); }} className="rounded-lg border px-3 py-2 text-xs font-bold">閉じる</button>
+            </div>
           </div>
           {['owner','admin'].includes(role) && <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void createInvite()} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-black text-white"><UserPlus size={15} />招待コードを発行</button></div>}
           {issuedCode?.id === selected.id && <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><p className="text-xs font-bold text-emerald-500">招待コード（この場で一度だけ表示）</p><div className="mt-2 flex flex-wrap items-center gap-2"><code className="break-all rounded-lg bg-black/10 px-3 py-2 font-mono text-sm">{issuedCode.code}</code><button type="button" onClick={() => void navigator.clipboard.writeText(issuedCode.code)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold"><Copy size={14} />コピー</button></div><p className={'mt-2 text-[10px] ' + muted}>有効期限：{new Date(issuedCode.expiresAt).toLocaleString('ja-JP')} ・ 最大5回</p><p className={'mt-1 text-[10px] ' + muted}>グループID：{selected.id}</p></div>}
           {requests.length > 0 && <div className="mt-5"><h3 className="font-black">参加申請 <span className="text-cyan-500">{requests.length}</span></h3><div className="mt-2 space-y-2">{requests.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"><div><p className="text-sm font-bold">{item.display_name}（{item.user_class}組）</p>{item.message && <p className={'mt-1 text-xs ' + muted}>{item.message}</p>}</div><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => void memberAction({ action: 'approve_request', request_id: item.id }, '参加申請を承認しました。')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white"><Check size={14} className="mr-1 inline" />承認</button><button type="button" disabled={saving} onClick={() => void memberAction({ action: 'reject_request', request_id: item.id }, '参加申請を却下しました。')} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white"><X size={14} className="mr-1 inline" />却下</button></div></div>)}</div></div>}
-          <div className="mt-5"><h3 className="font-black">メンバー</h3><div className="mt-2 divide-y divide-slate-500/10">{members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div className="flex min-w-0 items-center gap-2"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-xs font-black text-cyan-500">{member.display_name.slice(0,1)}</span><div className="min-w-0"><p className="truncate text-sm font-bold">{member.display_name} {member.user_id === selected.id ? <Crown size={12} className="inline" /> : null}</p><p className={'text-[10px] ' + muted}>{member.user_class}組 ・ {ROLE[member.member_role] || member.member_role}</p></div></div><div className="flex items-center gap-2">{role === 'owner' && member.member_role !== 'owner' && <><select aria-label={member.display_name + 'の権限'} value={member.member_role} onChange={(event) => void memberAction({ action: 'change_role', user_id: member.user_id, member_role: event.target.value }, 'メンバー権限を変更しました。')} className={'rounded-lg border px-2 py-1.5 text-[10px] ' + field}><option value="member">メンバー</option><option value="editor">編集者</option><option value="admin">管理者</option></select><button type="button" disabled={saving} onClick={() => { if (window.confirm(member.display_name + 'さんにオーナーを引き継ぎますか？')) void memberAction({ action: 'transfer_owner', user_id: member.user_id }, 'オーナーを引き継ぎました。'); }} className="rounded-lg border px-2 py-1.5 text-[10px] font-bold">引き継ぐ</button></>}{['owner','admin'].includes(role) && member.member_role !== 'owner' && <button type="button" disabled={saving} onClick={() => { if (window.confirm(member.display_name + 'さんをグループから退出させますか？')) void memberAction({ action: 'remove_member', user_id: member.user_id }, 'メンバーを退出させました。'); }} className="rounded-lg border border-rose-500/30 px-2 py-1.5 text-[10px] font-bold text-rose-500">退出</button>}</div></div>)}</div></div>
+          <div className="mt-5"><h3 className="font-black">メンバー</h3><div className="mt-2 divide-y divide-slate-500/10">{members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div className="flex min-w-0 items-center gap-2"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-xs font-black text-cyan-500">{member.display_name.slice(0,1)}</span><div className="min-w-0"><p className="truncate text-sm font-bold">{member.display_name} {member.member_role === 'owner' ? <Crown size={12} className="inline" /> : null}</p><p className={'text-[10px] ' + muted}>{member.user_class}組 ・ {ROLE[member.member_role] || member.member_role}</p></div></div><div className="flex items-center gap-2">{role === 'owner' && member.member_role !== 'owner' && <><select aria-label={member.display_name + 'の権限'} value={member.member_role} onChange={(event) => void memberAction({ action: 'change_role', user_id: member.user_id, member_role: event.target.value }, 'メンバー権限を変更しました。')} className={'rounded-lg border px-2 py-1.5 text-[10px] ' + field}><option value="member">メンバー</option><option value="editor">編集者</option><option value="admin">管理者</option></select><button type="button" disabled={saving} onClick={() => { if (window.confirm(member.display_name + 'さんにオーナーを引き継ぎますか？')) void memberAction({ action: 'transfer_owner', user_id: member.user_id }, 'オーナーを引き継ぎました。'); }} className="rounded-lg border px-2 py-1.5 text-[10px] font-bold">引き継ぐ</button></>}{['owner','admin'].includes(role) && member.member_role !== 'owner' && <button type="button" disabled={saving} onClick={() => { if (window.confirm(member.display_name + 'さんをグループから退出させますか？')) void memberAction({ action: 'remove_member', user_id: member.user_id }, 'メンバーを退出させました。'); }} className="rounded-lg border border-rose-500/30 px-2 py-1.5 text-[10px] font-bold text-rose-500">退出</button>}</div></div>)}</div></div>
         </section>
       )}
 
