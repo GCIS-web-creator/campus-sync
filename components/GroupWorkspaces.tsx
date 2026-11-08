@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import WorkspacePlanning from './WorkspacePlanning';
 import {
   Users, Plus, Search, RefreshCw, Check, X, Copy, ShieldCheck, Crown, UserPlus,
   MessageCircle, Megaphone, FolderOpen, Home, Download, Upload, Send, Reply,
@@ -35,7 +36,7 @@ type Overview = {
   upcomingEvents:{id:string;title:string;starts_at:string;ends_at:string|null;location:string}[];
   openTasks:{id:string;title:string;status:string;priority:string;due_at:string|null}[];
 };
-type Panel = 'home'|'chat'|'posts'|'files'|'members';
+type Panel = 'home'|'calendar'|'tasks'|'minutes'|'chat'|'posts'|'files'|'members';
 const CATEGORY: Record<string,string> = {
   club:'部活動',committee:'委員会',event:'学校行事',project:'プロジェクト',
   study:'勉強会',research:'研究',volunteer:'自主活動',other:'その他',
@@ -176,7 +177,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
   const field=dark?'border-slate-600 bg-slate-900 text-white placeholder:text-slate-500':'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400';
   const buttonOutline=dark?'border-slate-600 hover:bg-slate-700':'border-slate-300 hover:bg-slate-50';
 
-  const api=async(path:string,method='GET',body?:unknown)=>{
+  const api=useCallback(async(path:string,method='GET',body?:unknown)=>{
     const {data,error}=await supabase.auth.getSession();
     if(error) throw error;
     const token=data.session?.access_token;
@@ -191,7 +192,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
     const result=await response.json().catch(()=>null);
     if(!response.ok||!result?.success) throw new Error(result?.message||'処理に失敗しました。');
     return result;
-  };
+  },[]);
 
   const load=async()=>{
     setLoading(true);
@@ -483,6 +484,9 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
   const fileList=files.filter((file)=>!fileSearch||(file.file_name+' '+file.description+' '+file.folder_path).toLowerCase().includes(fileSearch.toLowerCase()));
   const tabs:{id:Panel;label:string;icon:React.ReactNode}[]=[
     {id:'home',label:'ホーム',icon:<Home size={16}/>},
+    {id:'calendar',label:'カレンダー',icon:<CalendarDays size={16}/>},
+    {id:'tasks',label:'タスク',icon:<ClipboardList size={16}/>},
+    {id:'minutes',label:'議事録',icon:<FileText size={16}/>},
     {id:'chat',label:'チャット',icon:<MessageCircle size={16}/>},
     {id:'posts',label:'お知らせ',icon:<Megaphone size={16}/>},
     {id:'files',label:'ファイル',icon:<FolderOpen size={16}/>},
@@ -595,7 +599,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
               </section>
               <section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}>
                 <h2 className="mb-3 flex items-center gap-2 font-black"><CalendarDays size={17} className="text-cyan-500"/>今後の予定</h2>
-                {overview?.upcomingEvents.length?<div className="space-y-3">{overview.upcomingEvents.map((event)=><div key={event.id} className="flex gap-3"><div className="min-w-12 rounded-xl bg-cyan-500/10 px-2 py-2 text-center"><p className="text-[10px] font-bold text-cyan-500">{new Date(event.starts_at).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'})}</p><p className="text-xs font-black text-cyan-500">{new Date(event.starts_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</p></div><div><p className="text-sm font-bold">{event.title}</p>{event.location&&<p className={'mt-1 text-xs '+muted}>{event.location}</p>}</div></div>)}</div>:<p className={'py-4 text-xs '+muted}>予定はまだ登録されていません。カレンダー機能は次段階で追加します。</p>}
+                {overview?.upcomingEvents.length?<div className="space-y-3">{overview.upcomingEvents.map((event)=><div key={event.id} className="flex gap-3"><div className="min-w-12 rounded-xl bg-cyan-500/10 px-2 py-2 text-center"><p className="text-[10px] font-bold text-cyan-500">{new Date(event.starts_at).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'})}</p><p className="text-xs font-black text-cyan-500">{new Date(event.starts_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</p></div><div><p className="text-sm font-bold">{event.title}</p>{event.location&&<p className={'mt-1 text-xs '+muted}>{event.location}</p>}</div></div>)}</div>:<p className={'py-4 text-xs '+muted}>予定はまだ登録されていません。</p>}
               </section>
               <section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}>
                 <h2 className="mb-3 flex items-center gap-2 font-black"><FolderOpen size={17} className="text-cyan-500"/>新しいファイル</h2>
@@ -604,6 +608,8 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
             </div>
             {overview?.openTasks.length?<section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}><h2 className="mb-3 flex items-center gap-2 font-black"><ClipboardList size={17} className="text-cyan-500"/>進行中のタスク</h2><div className="grid gap-2 sm:grid-cols-2">{overview.openTasks.map((task)=><div key={task.id} className={'rounded-xl border p-3 '+(dark?'border-slate-700':'border-slate-200')}><p className="text-sm font-bold">{task.title}</p><p className={'mt-1 text-[10px] '+muted}>{task.status==='todo'?'未着手':task.status==='in_progress'?'進行中':'確認待ち'}{task.due_at?' ・ 期限 '+formatDate(task.due_at):''}</p></div>)}</div></section>:null}
           </div>}
+
+          {(panel==='calendar'||panel==='tasks'||panel==='minutes')&&selected&&<WorkspacePlanning workspaceId={selected.id} role={role} members={members} activePanel={panel as 'calendar'|'tasks'|'minutes'} isDarkMode={dark} api={api}/>}
 
           {panel==='chat'&&<div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="flex items-center gap-2 font-black"><MessageCircle size={18} className="text-cyan-500"/>グループチャット</h2><p className={'mt-1 text-[10px] '+muted}>5秒ごとに新しいメッセージを確認します。</p></div><button type="button" onClick={()=>selected&&void loadChat(selected.id)} className={'rounded-lg border px-3 py-2 text-xs font-bold '+buttonOutline}><RefreshCw size={14} className="mr-1 inline"/>更新</button></div>
