@@ -9,6 +9,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
+import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGlobalSearch';
 import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacilityMap';
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
@@ -21,7 +22,7 @@ import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-uti
 import { CLASS_TIMETABLE_DATA, type ClassTimetableData, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator,
+  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator, FolderOpen,
   ThermometerSun, Info, Users, Check, X,
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon,
   MapPin, User, Palette, BellRing, Sparkle,
@@ -4389,6 +4390,11 @@ Supabaseの設定を確認してください。
           ? <CampusNotes userId={String(authUser.id)} studentId={studentId} studentName={studentName} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm"><BookOpenCheck size={32} className="mx-auto text-cyan-700"/><h2 className="mt-3 text-lg font-black text-slate-800">メモはログイン後に利用できます</h2><p className="mt-2 text-sm leading-6 text-slate-500">学校アカウントでログインすると、自分のノートや共有されたメモを利用できます。</p></div>;
 
+      case 'materials':
+        return authUser?.id && !isGuestMode
+          ? <StudentMaterialsLibrary isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><FolderOpen size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">資料室はログイン後に利用できます</h2></div>;
+
       case 'study':
         return authUser?.id && !isGuestMode
           ? <StudentLearningHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
@@ -6055,6 +6061,7 @@ Supabaseの設定を確認してください。
             <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
             <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
             {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="学習・テスト対策" isActive={activeTab === 'study'} onClick={() => setActiveTab('study')} themeCls={themeCls} />}
+            {authUser?.id && !isGuestMode && <SidebarItem icon={<FolderOpen size={18} />} label="プリント・資料室" isActive={activeTab === 'materials'} onClick={() => setActiveTab('materials')} themeCls={themeCls} />}
             {authUser?.id && !isGuestMode && <SidebarItem icon={<QrCode size={18} />} label="デジタル生徒証" isActive={activeTab === 'student-card'} onClick={() => setActiveTab('student-card')} themeCls={themeCls} />}
             <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => setActiveTab('weather')} themeCls={themeCls} />
             <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
@@ -6079,7 +6086,7 @@ Supabaseの設定を確認してください。
       </aside>
 
       {/* メインビューポートエリア */}
-      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
+      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' || activeTab === 'materials' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">
@@ -6148,6 +6155,7 @@ Supabaseの設定を確認してください。
                 <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => { setShowGlobalSearch(true); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="学習・テスト対策" isActive={activeTab === 'study'} onClick={() => { setActiveTab('study'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
+                {authUser?.id && !isGuestMode && <SidebarItem icon={<FolderOpen size={18} />} label="プリント・資料室" isActive={activeTab === 'materials'} onClick={() => { setActiveTab('materials'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
                 {authUser?.id && !isGuestMode && <SidebarItem icon={<QrCode size={18} />} label="デジタル生徒証" isActive={activeTab === 'student-card'} onClick={() => { setActiveTab('student-card'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
                 <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => { setActiveTab('weather'); setMobileMenuOpen(false); }} themeCls={themeCls} />
                 <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
