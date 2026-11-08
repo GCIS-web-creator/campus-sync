@@ -2401,6 +2401,57 @@ export default function CampusSyncAdmin() {
                         <button type="button" onClick={() => setLineGroupRefreshKey(key => key + 1)} className="text-xs font-bold text-blue-300 hover:text-blue-200 flex items-center gap-1"><RefreshCw size={12} /> 更新</button>
                       </div>
                       <p className="text-xs leading-relaxed text-slate-400">通知カテゴリごとに受信先を管理できます。クイックお知らせと学食売切は現在、受信設定に関係なく有効な全グループへ送信します。</p>
+
+                      <div className="rounded-xl border border-cyan-900/60 bg-slate-950 p-3 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-black text-cyan-200">定期配信Cronスケジュール</p>
+                            <p className="text-[10px] text-slate-500">現在のSupabase pg_cron登録内容を確認した時刻です</p>
+                          </div>
+                          <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-300">3件 稼働中</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-slate-400">Cron式はUTC基準です。右側の時刻は日本時間（JST・UTC+9）に換算しています。</p>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-300">月〜金</span>
+                              <span className="text-lg font-black tabular-nums text-white">16:00</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-slate-400">電車時刻表・翌日の天気・学校行事カウントダウン。月〜木は翌日の7組・8組時間割も同じまとめに掲載。</p>
+                            <div className="border-t border-slate-800 pt-2">
+                              <p className="text-[10px] text-slate-500">campussync-daily-line-digest</p>
+                              <code className="text-[11px] text-cyan-300">0 7 * * 1-5</code>
+                              <span className="ml-2 text-[10px] text-slate-500">UTC</span>
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-300">土曜日</span>
+                              <span className="text-lg font-black tabular-nums text-white">12:30</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-slate-400">土曜版の日次LINEまとめを配信します。</p>
+                            <div className="border-t border-slate-800 pt-2">
+                              <p className="text-[10px] text-slate-500">campussync-saturday-line-digest</p>
+                              <code className="text-[11px] text-cyan-300">30 3 * * 6</code>
+                              <span className="ml-2 text-[10px] text-slate-500">UTC</span>
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-cyan-800/70 bg-cyan-950/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-cyan-100">日曜日</span>
+                              <span className="text-lg font-black tabular-nums text-white">09:00</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-slate-300">翌週の学校予定・月曜日の7組／8組時間割・課題・天気・カウントダウンをまとめて配信します。</p>
+                            <div className="border-t border-cyan-900/70 pt-2">
+                              <p className="text-[10px] text-slate-400">campussync-weekly-school-schedule</p>
+                              <code className="text-[11px] text-cyan-200">0 0 * * 0</code>
+                              <span className="ml-2 text-[10px] text-slate-400">UTC</span>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-[10px] leading-relaxed text-slate-500">※ これは現在確認できたCron設定の一覧です。Cronを変更・追加した場合は、この表示も合わせて更新してください。配信時刻は送信処理の開始予定時刻で、LINE側の到着時刻とは数秒程度ずれる場合があります。</p>
+                      </div>
+
                       {lineGroupLoading ? (
                         <p className="text-xs text-slate-500">グループ設定を読み込み中...</p>
                       ) : lineGroupRows.length === 0 ? (
