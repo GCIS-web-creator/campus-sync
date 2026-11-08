@@ -231,7 +231,7 @@ function buildLineAssignmentPrompt(step: string, draft: LineAssignmentDraft): { 
     case 'awaiting_details':
       return { text: '課題の内容・指示事項を送信してください。\n提出範囲、方法、注意事項などを書けます。説明が不要なら「省略する」を押してください。', quickReplies: [{ label: '省略する', text: '省略する' }] };
     case 'awaiting_deadline':
-      return { text: '提出期限を入力してください。\n例：2026/11/12 23:59 または 11/12 23:59\n期限を設定しない場合は下の「期限なし」を押してください。', quickReplies: [{ label: '期限なし', text: '期限なし' }] };
+      return { text: '提出期限を入力してください。\n例：YYYY/MM/DD HH:mm または M/D HH:mm\n期限を設定しない場合は下の「期限なし」を押してください。', quickReplies: [{ label: '期限なし', text: '期限なし' }] };
     case 'awaiting_confirmation': {
       const target = draft.targetClass === 'science' ? '理系クラス' + (draft.subjectOption ? '（' + draft.subjectOption + '）' : '') : '全クラス';
       const typeLabel = draft.assignmentType === 'classroom' ? 'Google Classroom' : draft.assignmentType === 'other' ? 'その他・連絡' : '紙プリント・ノート';
@@ -390,7 +390,7 @@ async function handleLineAssignmentContribution(
     if (['期限なし', 'なし', '設定しない'].includes(input)) { draft.dueAt = null; nextStep = 'awaiting_confirmation'; }
     else {
       const dueAt = parseLineAssignmentDueAt(input);
-      if (!dueAt) validationError = '日時を読み取れませんでした。「2026/11/12 23:59」または「11/12 23:59」の形式で送ってください。';
+      if (!dueAt) validationError = '日時を読み取れませんでした。「YYYY/MM/DD HH:mm」または「M/D HH:mm」の形式で送ってください。';
       else { draft.dueAt = dueAt; nextStep = 'awaiting_confirmation'; }
     }
   } else if (step === 'awaiting_confirmation') {
