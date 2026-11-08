@@ -96,21 +96,21 @@ export async function POST(request: Request) {
   }
 
   const tokenHash = createHash('sha256').update(token).digest('hex');
+  // Consume the token with one atomic DELETE ... RETURNING so two concurrent submissions
+  // cannot both create the same suggestion from a single-use form.
   const { data: session, error: sessionError } = await admin.from('line_assignment_sessions')
-    .select('line_user_id,expires_at')
+    .delete()
     .eq('form_token_hash', tokenHash)
+    .gt('expires_at', new Date().toISOString())
+    .select('line_user_id')
     .maybeSingle();
 
   if (sessionError) {
-    console.error('LINE assignment form session lookup failed:', sessionError.message);
+    console.error('LINE assignment form session consume failed:', sessionError.message);
     return jsonError('フォームを確認できませんでした。もう一度フォームを開いてください。', 503);
   }
-  if (!session) return jsonError('このフォームはすでに使用されたか、無効になっています。公式アカウントから開き直してください。', 410);
-  if (Date.parse(session.expires_at) <= Date.now()) {
-    await admin.from('line_assignment_sessions').delete()
-      .eq('line_user_id', session.line_user_id)
-      .eq('form_token_hash', tokenHash);
-    return jsonError('フォームの有効期限が切れました。公式アカウントから開き直してください。', 410);
+  if (!session) {
+    return jsonError('このフォームはすでに使用されたか、有効期限が切れています。公式アカウントで「CSAI 課題追加」と送信して、新しいフォームを開いてください。', 410);
   }
 
   const { error: insertError } = await admin.from('assignment_suggestions').insert({
@@ -127,12 +127,8 @@ export async function POST(request: Request) {
 
   if (insertError) {
     console.error('LINE assignment suggestion save failed:', insertError.message);
-    return jsonError('課題を保存できませんでした。入力内容を確認して再度お試しください。', 500);
+    return jsonError('課題を保存できませんでした。公式アカウントで「CSAI 課題追加」と送信し、新しいフォームを開いてください。', 500);
   }
-
-  await admin.from('line_assignment_sessions').delete()
-    .eq('line_user_id', session.line_user_id)
-    .eq('form_token_hash', tokenHash);
 
   return NextResponse.json({
     ok: true,
