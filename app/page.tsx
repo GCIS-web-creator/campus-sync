@@ -5924,6 +5924,10 @@ Supabaseの設定を確認してください。
             {teacherAuthMessage && <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-300/10 p-3 text-xs text-rose-100">{teacherAuthMessage}</p>}
           </section>
           <p className="text-center text-[11px] text-slate-400">ログイン用QRは、一回限り・短時間のみ有効です。QRを表示した端末で承認が必要です。</p>
+          <footer className="flex justify-center gap-5 pb-2 text-[11px] font-bold text-slate-400">
+            <a href="/privacy" className="transition hover:text-cyan-200">プライバシーポリシー</a>
+            <a href="/terms" className="transition hover:text-cyan-200">利用規約</a>
+          </footer>
         </div>
         {showCardScanner && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
