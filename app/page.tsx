@@ -6095,6 +6095,10 @@ Supabaseの設定を確認してください。
           </nav>
           <div className="mt-3 shrink-0 border-t pt-3 text-[10px] font-bold text-gray-400">
             <span>© 2026 CampusSync Pro</span>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              <a href="/privacy" className="transition hover:text-cyan-600">プライバシーポリシー</a>
+              <a href="/terms" className="transition hover:text-cyan-600">利用規約</a>
+            </div>
           </div>
         </div>
       </aside>
@@ -6190,7 +6194,11 @@ Supabaseの設定を確認してください。
                 <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }} themeCls={themeCls} />
               </nav>
               <footer className="shrink-0 border-t border-slate-100 px-4 py-3 text-[10px] font-bold text-slate-400">
-                © 2026 CampusSync Pro
+                <div>© 2026 CampusSync Pro</div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                  <a href="/privacy" className="transition hover:text-cyan-600">プライバシーポリシー</a>
+                  <a href="/terms" className="transition hover:text-cyan-600">利用規約</a>
+                </div>
               </footer>
             </section>
           </div>
