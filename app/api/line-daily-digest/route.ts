@@ -446,6 +446,34 @@ function buildAssignmentListBubble(input: { today: string; assignments: Assignme
       bodyContents.push({ type: 'separator', color: '#E2E8F0' });
     }
   }
+  bodyContents.push({
+    type: 'separator',
+    color: '#E2E8F0',
+    margin: 'lg',
+  });
+  bodyContents.push({
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: '#ECFDF5',
+    cornerRadius: '12px',
+    paddingAll: '13px',
+    spacing: 'sm',
+    contents: [
+      { type: 'text', text: '課題の追加もLINE公式アカウントから', size: 'sm', weight: 'bold', color: '#065F46', wrap: true },
+      { type: 'text', text: '公式アカウントの1対1トークで「CSAI 課題追加」と送信すると、専用フォームが開きます。教科・対象・提出期限などを選択して登録できます。提案は管理者の承認後に正式公開されます。', size: 'xs', color: '#334155', wrap: true },
+      {
+        type: 'button',
+        style: 'primary',
+        color: '#0F766E',
+        height: 'md',
+        action: {
+          type: 'uri',
+          label: '公式アカウントを開く',
+          uri: 'https://line.me/R/ti/p/%40420uwoqd',
+        },
+      },
+    ],
+  });
   return buildBoardBubble({
     eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS',
     title: '課題一覧',
