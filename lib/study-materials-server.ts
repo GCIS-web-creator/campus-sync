@@ -51,6 +51,7 @@ export type StudyStudentContext = {
   admin: NonNullable<ReturnType<typeof getStudyMaterialsAdminClient>>;
   studentId: string;
   userClass: string;
+  studentName: string;
 };
 
 export async function getStudyStudentContext(request: Request): Promise<StudyStudentContext | null> {
@@ -83,7 +84,7 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
 
   let profileResult = await admin
     .from('profiles')
-    .select('student_id,user_class,auth_user_id')
+    .select('student_id,student_name,user_class,auth_user_id')
     .eq('auth_user_id', user.id)
     .maybeSingle();
 
@@ -100,7 +101,7 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
   const userClass = String(profile.user_class || '');
   if (!/^[1-3]-[1-8]$/.test(userClass)) return null;
 
-  return { admin, studentId, userClass };
+  return { admin, studentId, userClass, studentName: String(profile.student_name || '') };
 }
 
 export function canStudentViewMaterial(
