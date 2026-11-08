@@ -609,7 +609,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
             {overview?.openTasks.length?<section className={'rounded-2xl border p-4 '+(dark?'border-slate-700':'border-slate-200')}><h2 className="mb-3 flex items-center gap-2 font-black"><ClipboardList size={17} className="text-cyan-500"/>進行中のタスク</h2><div className="grid gap-2 sm:grid-cols-2">{overview.openTasks.map((task)=><div key={task.id} className={'rounded-xl border p-3 '+(dark?'border-slate-700':'border-slate-200')}><p className="text-sm font-bold">{task.title}</p><p className={'mt-1 text-[10px] '+muted}>{task.status==='todo'?'未着手':task.status==='in_progress'?'進行中':'確認待ち'}{task.due_at?' ・ 期限 '+formatDate(task.due_at):''}</p></div>)}</div></section>:null}
           </div>}
 
-          {(panel==='calendar'||panel==='tasks'||panel==='minutes')&&selected&&<WorkspacePlanning workspaceId={selected.id} role={role} members={members} isDarkMode={dark} api={api}/>}
+          {(panel==='calendar'||panel==='tasks'||panel==='minutes')&&selected&&<WorkspacePlanning workspaceId={selected.id} role={role} members={members} activePanel={panel as 'calendar'|'tasks'|'minutes'} isDarkMode={dark} api={api}/>}
 
           {panel==='chat'&&<div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="flex items-center gap-2 font-black"><MessageCircle size={18} className="text-cyan-500"/>グループチャット</h2><p className={'mt-1 text-[10px] '+muted}>5秒ごとに新しいメッセージを確認します。</p></div><button type="button" onClick={()=>selected&&void loadChat(selected.id)} className={'rounded-lg border px-3 py-2 text-xs font-bold '+buttonOutline}><RefreshCw size={14} className="mr-1 inline"/>更新</button></div>
