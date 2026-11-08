@@ -91,7 +91,7 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
   if (!profileResult.data && !profileResult.error) {
     profileResult = await admin
       .from('profiles')
-      .select('student_id,user_class,auth_user_id')
+      .select('student_id,student_name,user_class,auth_user_id')
       .eq('student_id', studentId)
       .maybeSingle();
   }
