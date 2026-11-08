@@ -481,6 +481,10 @@ export default function CampusSyncAdmin() {
       otherBotActiveCount: number;
       targetBotConfigured: boolean;
       registeredGroupConfigured: boolean;
+      officialAccountTestSent: boolean;
+      officialAccountTestStatus: 'not_started' | 'sending' | 'sent' | 'failed';
+      officialAccountTestSentAt: string | null;
+      officialAccountTestError: string | null;
     };
     noticeRetryEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; notice_status: string; notice_error: string | null } | null;
   } | null>(null);
@@ -489,6 +493,7 @@ export default function CampusSyncAdmin() {
   const [lineBotRotationAckChecked, setLineBotRotationAckChecked] = useState(false);
   const [lineBotRotationAckSaving, setLineBotRotationAckSaving] = useState(false);
   const [lineBotRotationManualSaving, setLineBotRotationManualSaving] = useState(false);
+  const [lineBotRotationTestSending, setLineBotRotationTestSending] = useState(false);
   const [lineBotRotationNoticeRetrySaving, setLineBotRotationNoticeRetrySaving] = useState(false);
   const [lineBotRotationRefreshKey, setLineBotRotationRefreshKey] = useState(0);
 
@@ -1742,11 +1747,46 @@ export default function CampusSyncAdmin() {
     }
   };
 
+  const handleTestLineBotOfficialAccount = async () => {
+    const manualSwitch = lineBotRotation?.manualSwitch;
+    if (!manualSwitch?.available || !manualSwitch.targetBotConfigured) return;
+    if (!manualSwitch.registeredGroupConfigured || !manualSwitch.groupReady) {
+      setLineBotRotationMessage('BOT ' + manualSwitch.toBotSlot + ' のグループ参加記録が確認できません。先にグループ状態を更新してください。グループへのテスト送信は不要です。');
+      return;
+    }
+
+    setLineBotRotationTestSending(true);
+    setLineBotRotationMessage('');
+    try {
+      const response = await fetch('/api/admin/line-bot-rotation', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ action: 'test-official-account' }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) throw new Error(result?.message || '公式アカウントへのテスト通知に失敗しました。');
+      setLineBotRotationMessage(result.message || '公式アカウントへテスト通知を送信しました。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } catch (error) {
+      setLineBotRotationMessage(error instanceof Error ? error.message : '公式アカウントへのテスト通知に失敗しました。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } finally {
+      setLineBotRotationTestSending(false);
+    }
+  };
+
   const handleManualLineBotSwitch = async () => {
     const manualSwitch = lineBotRotation?.manualSwitch;
     if (!manualSwitch?.available) return;
+    if (!manualSwitch.officialAccountTestSent) {
+      setLineBotRotationMessage('先にBOT ' + manualSwitch.toBotSlot + ' の公式アカウントへテスト通知を送り、受信を確認してください。');
+      return;
+    }
     if (!lineBotRotationAckChecked) {
-      setLineBotRotationMessage('旧BOTの退出、新BOTのグループ参加、Webhook確認まで完了したことを確認してください。');
+      setLineBotRotationMessage('BOT ' + manualSwitch.fromBotSlot + ' の退出とBOT ' + manualSwitch.toBotSlot + ' のグループ参加・動作確認を済ませてからチェックしてください。');
       return;
     }
     if (!manualSwitch.groupReady || !manualSwitch.targetBotConfigured) {
@@ -2199,12 +2239,12 @@ export default function CampusSyncAdmin() {
                   {lineBotRotation.manualSwitch?.available && (
                     <div className="space-y-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10 p-4">
                       <div>
-                        <p className="text-sm font-black text-cyan-100">切替作業が完了したら、ここで配信BOTを変更</p>
+                        <p className="text-sm font-black text-cyan-100">公式アカウントのテスト後、ここで配信BOTを変更</p>
                         <p className="mt-1 text-xs leading-5 text-cyan-100/80">
                           次回予定は {new Date(lineBotRotation.manualSwitch.scheduledAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}。
                           BOT {lineBotRotation.manualSwitch.fromBotSlot} から BOT {lineBotRotation.manualSwitch.toBotSlot} への切替を予定しています。
                         </p>
-                        <p className="mt-1 text-[11px] leading-5 text-slate-300">このボタンは予定時刻の24時間前から、実際に切替を完了するまで表示されます。予定時刻になっても、グループの確認なしに配信BOTは自動変更しません。</p>
+                        <p className="mt-1 text-[11px] leading-5 text-slate-300">このボタンは予定時刻の24時間前から表示されます。BOT {lineBotRotation.manualSwitch.toBotSlot} の参加記録と公式アカウント通知テストを確認し、最後に管理者がチェックして切り替えるまで、配信先は旧BOTのままです。</p>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2">
@@ -2234,34 +2274,67 @@ export default function CampusSyncAdmin() {
                       ) : lineBotRotation.manualSwitch.groupReady ? (
                         <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-200">
                           <CheckCircle2 size={14} className="mr-1 inline" />
-                          Webhook記録を確認しました。新BOTが参加し、旧BOTは有効なグループ接続から外れています。
+                          BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と、BOT {lineBotRotation.manualSwitch.fromBotSlot} の退出記録を確認しました。
                         </p>
                       ) : (
                         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
-                          グループ接続の確認待ちです。① BOT {lineBotRotation.manualSwitch.fromBotSlot} を退出 ② BOT {lineBotRotation.manualSwitch.toBotSlot} を同じグループへ招待 ③ 新BOTからグループへテストメッセージを送信 ④「状態を更新」を押してください。
-                          接続記録が確認できるまでは、配信先は旧BOTのまま維持されます。
+                          グループ参加記録の確認待ちです。① BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出 ② BOT {lineBotRotation.manualSwitch.toBotSlot} を同じグループへ招待、まで行ったら「状態を更新」を押してください。グループへのテストメッセージ送信は不要です。
                         </p>
                       )}
 
-                      <label className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-slate-200">
+                      <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <div>
+                          <p className="text-sm font-black text-white">BOT {lineBotRotation.manualSwitch.toBotSlot} 公式アカウント通知テスト</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-300">
+                            テスト通知はBOT {lineBotRotation.manualSwitch.toBotSlot} の公式アカウントの友だち向けに配信されます。連携グループには送信しません。
+                          </p>
+                        </div>
+                        {lineBotRotation.manualSwitch.officialAccountTestSent ? (
+                          <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-200">
+                            <CheckCircle2 size={14} className="mr-1 inline" />
+                            テスト通知はLINEに受け付けられました
+                            {lineBotRotation.manualSwitch.officialAccountTestSentAt ? '（' + new Date(lineBotRotation.manualSwitch.officialAccountTestSentAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + '）' : ''}。BOT {lineBotRotation.manualSwitch.toBotSlot} の公式アカウントから通知が届いたことを確認してください。
+                          </p>
+                        ) : (
+                          <>
+                            {lineBotRotation.manualSwitch.officialAccountTestError && (
+                              <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-200">
+                                前回のテスト通知は完了しませんでした：{lineBotRotation.manualSwitch.officialAccountTestError}
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void handleTestLineBotOfficialAccount()}
+                              disabled={!lineBotRotation.manualSwitch.targetBotConfigured || !lineBotRotation.manualSwitch.registeredGroupConfigured || !lineBotRotation.manualSwitch.groupReady || lineBotRotationTestSending}
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-xs font-black text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <MessageSquare size={15} className={lineBotRotationTestSending ? 'animate-pulse' : ''} />
+                              {lineBotRotationTestSending ? 'BOTの公式アカウントへ送信しています...' : lineBotRotation.manualSwitch.officialAccountTestStatus === 'failed' || lineBotRotation.manualSwitch.officialAccountTestStatus === 'sending' ? '公式アカウントへテスト通知を再試行' : '公式アカウントへテスト送信'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <label className={'flex items-start gap-2 text-xs leading-5 ' + (lineBotRotation.manualSwitch.officialAccountTestSent ? 'cursor-pointer text-slate-200' : 'cursor-not-allowed text-slate-500')}>
                         <input
                           type="checkbox"
                           checked={lineBotRotationAckChecked}
+                          disabled={!lineBotRotation.manualSwitch.officialAccountTestSent}
                           onChange={event => setLineBotRotationAckChecked(event.target.checked)}
                           className="mt-0.5 h-4 w-4 accent-cyan-500"
                         />
-                        BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出し、BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と動作確認まで完了しました。
+                        BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出し、BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と公式アカウント通知の動作確認まで完了しました。
                       </label>
                       <button
                         type="button"
                         onClick={() => void handleManualLineBotSwitch()}
-                        disabled={!lineBotRotationAckChecked || !lineBotRotation.manualSwitch.groupReady || !lineBotRotation.manualSwitch.targetBotConfigured || lineBotRotationManualSaving}
+                        disabled={!lineBotRotationAckChecked || !lineBotRotation.manualSwitch.officialAccountTestSent || !lineBotRotation.manualSwitch.groupReady || !lineBotRotation.manualSwitch.targetBotConfigured || lineBotRotationManualSaving}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <CheckCircle2 size={15} />
-                        {lineBotRotationManualSaving ? '配信先を変更しています...' : 'グループ変更を確認して配信BOTを切り替える'}
+                        {lineBotRotationManualSaving ? '配信先を変更しています...' : '確認してBOTを切り替える'}
                       </button>
-                      <p className="text-[10px] leading-5 text-slate-400">実行後は配信先を新BOTへ変更し、新BOTの公式アカウントから友だち向けに切替完了通知を1通送信します。グループには通知を送りません。</p>
+                      <p className="text-[10px] leading-5 text-slate-400">切替ボタンを押すと配信先がBOT {lineBotRotation.manualSwitch.toBotSlot} へ変更され、その後、新BOTの公式アカウントから切替完了通知を友だち向けに送信します。グループには送信しません。</p>
                     </div>
                   )}
 
