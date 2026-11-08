@@ -170,6 +170,7 @@ const EXPLORER_READ_ONLY = new Set([
 const EXPLORER_REDACTED_COLUMNS = new Set([
   'card_token', 'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash',
   'subscription', 'endpoint', 'lock_token', 'high_lock_token', 'long_lock_token', 'sync_lock_token',
+  'handoff_group_chat_id',
 ]);
 const EXPLORER_LABELS: Record<string, string> = {
   id: 'レコードID', student_id: '学籍番号', student_name: '生徒氏名', user_class: 'クラス',
