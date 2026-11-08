@@ -71,7 +71,8 @@ export async function POST(request: Request) {
   const targetClass = input.targetClass === 'science' ? 'science' : input.targetClass === 'all' ? 'all' : '';
   const subjectOptionInput = typeof input.subjectOption === 'string' ? input.subjectOption : '';
   const type = input.type as AssignmentType;
-  const dueAt = input.noDeadline === true ? null : parseTokyoDateTime(input.dueAt);
+  const noDeadline = input.noDeadline === true;
+  const dueAt = noDeadline ? null : parseTokyoDateTime(input.dueAt);
 
   if (!ASSIGNMENT_SUBJECTS.includes(subject as typeof ASSIGNMENT_SUBJECTS[number])) {
     return jsonError('教科を選択してください。', 400);
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
   if (details.length > 5000) return jsonError('課題の内容は5000文字以内で入力してください。', 400);
   if (!targetClass) return jsonError('対象クラスを選択してください。', 400);
   if (!['paper', 'classroom', 'other'].includes(type)) return jsonError('課題の種類を選択してください。', 400);
-  if (dueAt === undefined) return jsonError('提出期限を正しく指定してください。', 400);
+  if (dueAt === undefined || (!noDeadline && dueAt === null)) return jsonError('提出期限を指定するか、「期限なし」を選択してください。', 400);
 
   let subjectOption = '';
   if (targetClass === 'science') {
