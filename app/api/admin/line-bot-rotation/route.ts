@@ -21,6 +21,7 @@ type RotationRow = {
   last_switched_at: string | null;
   rotation_hold_until: string | null;
   updated_at: string;
+  handoff_group_chat_id: string | null;
 };
 
 type RotationEvent = {
@@ -300,7 +301,7 @@ export async function GET(request: Request) {
 
   const [rotationResult, eventResult, historyResult, activeChatsResult, noticeRetryResult] = await Promise.all([
     admin.from('line_bot_rotation')
-      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at')
+      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at,handoff_group_chat_id')
       .eq('id', 1)
       .maybeSingle(),
     admin.from('line_bot_rotation_events')
@@ -314,7 +315,8 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .limit(20),
     admin.from('line_group_chats')
-      .select('bot_slot,active,last_seen_at,last_event_type')
+      .select('chat_id,chat_type,bot_slot,active,last_seen_at,last_event_type')
+      .eq('chat_type', 'group')
       .eq('active', true),
     admin.from('line_bot_rotation_events')
       .select('id,previous_bot_slot,new_bot_slot,effective_date,created_at,notice_status,notice_error')
@@ -335,17 +337,23 @@ export async function GET(request: Request) {
   }
 
   const rotation = rotationResult.data as RotationRow;
+  const { handoff_group_chat_id: expectedGroupChatId, ...publicRotation } = rotation;
   const activeSlot = Number(rotation.active_bot_slot);
   const nextBotSlot = getLineBotSlotForDate(rotation.next_switch_at);
   const environment = getLineBotEnvironmentStatus();
-  const activeChats = (activeChatsResult.data || []) as Array<{ bot_slot: number | null; active: boolean; last_seen_at: string | null; last_event_type: string | null }>;
+  const activeChats = (activeChatsResult.data || []) as Array<{ chat_id: string; chat_type: string; bot_slot: number | null; active: boolean; last_seen_at: string | null; last_event_type: string | null }>;
   const targetBotActiveCount = nextBotSlot
     ? activeChats.filter(chat => Number(chat.bot_slot) === nextBotSlot).length
     : 0;
   const previousBotActiveCount = activeChats.filter(chat => Number(chat.bot_slot) === activeSlot).length;
   const otherBotActiveCount = activeChats.length - targetBotActiveCount - previousBotActiveCount;
-  const groupReady = activeChats.length > 0
-    && targetBotActiveCount > 0
+  const registeredGroupMatches = expectedGroupChatId
+    ? activeChats.filter(chat => chat.chat_id === expectedGroupChatId && chat.chat_type === 'group')
+    : [];
+  const groupReady = Boolean(expectedGroupChatId)
+    && activeChats.length === 1
+    && registeredGroupMatches.length === 1
+    && Number(registeredGroupMatches[0].bot_slot) === nextBotSlot
     && previousBotActiveCount === 0
     && otherBotActiveCount === 0;
   const scheduledAt = Date.parse(rotation.next_switch_at);
@@ -357,7 +365,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     success: true,
-    rotation,
+    rotation: publicRotation,
     pendingEvent: eventResult.data || null,
     history: historyResult.data || [],
     environment,
@@ -373,6 +381,7 @@ export async function GET(request: Request) {
       previousBotActiveCount,
       otherBotActiveCount,
       targetBotConfigured: Boolean(environment.some(item => item.slot === nextBotSlot && item.channelSecretConfigured && item.accessTokenConfigured)),
+      registeredGroupConfigured: Boolean(expectedGroupChatId),
     },
     noticeRetryEvent: noticeRetryResult.data || null,
     notice: 'Channel Secretとアクセストークンの値はセキュリティのため返却しません。',
@@ -394,7 +403,7 @@ async function handleManualSwitch(
   }
 
   const { data: rotation, error: rotationError } = await admin.from('line_bot_rotation')
-    .select('active_bot_slot,next_switch_at')
+    .select('active_bot_slot,next_switch_at,handoff_group_chat_id')
     .eq('id', 1)
     .maybeSingle();
   if (rotationError || !rotation) return jsonError('現在の切替予定を取得できません。', 503);
@@ -416,22 +425,34 @@ async function handleManualSwitch(
   }
 
   const { data: activeChats, error: chatsError } = await admin.from('line_group_chats')
-    .select('bot_slot,active')
+    .select('chat_id,chat_type,bot_slot,active')
+    .eq('chat_type', 'group')
     .eq('active', true);
   if (chatsError) return jsonError('グループの接続状態を確認できません。', 503);
   const chats = activeChats || [];
+  const registeredGroupId = typeof rotation.handoff_group_chat_id === 'string' ? rotation.handoff_group_chat_id : '';
+  const registeredGroupRows = registeredGroupId
+    ? chats.filter(chat => chat.chat_id === registeredGroupId && chat.chat_type === 'group')
+    : [];
   const targetCount = chats.filter(chat => Number(chat.bot_slot) === newBotSlot).length;
   const oldCount = chats.filter(chat => Number(chat.bot_slot) === currentBotSlot).length;
   const otherCount = chats.length - targetCount - oldCount;
-  if (!chats.length || targetCount < 1 || oldCount > 0 || otherCount > 0) {
+  const sameRegisteredGroupReady = Boolean(registeredGroupId)
+    && chats.length === 1
+    && registeredGroupRows.length === 1
+    && Number(registeredGroupRows[0].bot_slot) === newBotSlot;
+  if (!sameRegisteredGroupReady || targetCount < 1 || oldCount > 0 || otherCount > 0) {
     return NextResponse.json({
       success: false,
-      message: 'グループ接続の確認が完了していません。旧BOTが退出し、BOT ' + newBotSlot + ' が参加した後、BOT ' + newBotSlot + ' からグループ内でメッセージを送って、Webhookを記録してから状態を更新してください。',
+      message: registeredGroupId
+        ? '登録済みの同じグループで新BOTのWebhook記録を確認できません。旧BOTを退出させ、新BOTを登録済みグループへ招待し、新BOTからメッセージを送信してから状態を更新してください。'
+        : '切替対象のグループが登録されていません。現在のBOTが参加しているグループを確認し、管理者にグループ設定を確認してもらってください。',
       groupStatus: {
         activeGroupCount: chats.length,
         targetBotActiveCount: targetCount,
         previousBotActiveCount: oldCount,
         otherBotActiveCount: otherCount,
+        registeredGroupMatched: registeredGroupRows.length === 1,
       },
     }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
   }
@@ -440,6 +461,7 @@ async function handleManualSwitch(
     p_expected_current_bot_slot: currentBotSlot,
     p_expected_new_bot_slot: newBotSlot,
     p_expected_next_switch_at: rotation.next_switch_at,
+    p_expected_group_chat_id: registeredGroupId,
     p_group_confirmed_at: new Date().toISOString(),
   });
   if (switchError) {
