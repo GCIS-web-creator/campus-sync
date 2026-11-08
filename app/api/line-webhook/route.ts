@@ -286,6 +286,13 @@ async function handleLineAssignmentContribution(
     }
   }
 
+  // Do not silently rotate a live form token when the user sends an unrelated chat message.
+  // The current Flex button remains usable until its 30-minute expiry or single-use submission.
+  if (!isStartCommand && session) {
+    await replyPlain(replyToken, '課題の入力は、先ほど届いたFlexの「課題登録フォームを開く」から行えます。フォームをもう一度受け取る場合は「CSAI 課題追加」と送ってください。', accessToken);
+    return true;
+  }
+
   // Each form URL is a random, single-use capability. Only its SHA-256 hash is stored.
   const token = randomBytes(32).toString('hex');
   const tokenHash = createHash('sha256').update(token).digest('hex');
