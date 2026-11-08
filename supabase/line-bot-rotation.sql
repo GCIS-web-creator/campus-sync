@@ -203,9 +203,14 @@ begin
 end;
 $$;
 
--- The former RPC did not verify the exact group. Disable that signature.
-revoke all on function public.campussync_manual_line_bot_switch(smallint, smallint, timestamptz, timestamptz)
-  from public, anon, authenticated, service_role;
+-- The former RPC did not verify the exact group. Disable it when upgrading an older installation.
+do $
+begin
+  if to_regprocedure('public.campussync_manual_line_bot_switch(smallint,smallint,timestamp with time zone,timestamp with time zone)') is not null then
+    execute 'revoke all on function public.campussync_manual_line_bot_switch(smallint,smallint,timestamptz,timestamptz) from public, anon, authenticated, service_role';
+  end if;
+end;
+$;
 
 create or replace function public.campussync_manual_line_bot_switch(
   p_expected_current_bot_slot smallint,
