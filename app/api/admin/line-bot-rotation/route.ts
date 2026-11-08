@@ -5,7 +5,7 @@ import {
   getLineBotEnvironmentStatus,
   getLineBotSlotForDate,
 } from '@/lib/line-bot-rotation';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
@@ -175,7 +175,7 @@ function buildSwitchCompleteFlex(event: RotationEvent): Record<string, unknown> 
 }
 
 async function sendManualSwitchNotice(
-  admin: ReturnType<typeof getAdmin> & {},
+  admin: SupabaseClient,
   eventId: number,
 ): Promise<{ sent: boolean; message: string }> {
   const { data: event, error: eventError } = await admin.from('line_bot_rotation_events')
