@@ -2245,7 +2245,7 @@ export default function CampusSyncAdmin() {
                           onChange={event => setLineBotRotationAckChecked(event.target.checked)}
                           className="mt-0.5 h-4 w-4 accent-cyan-500"
                         />
-                        BOT {lineBotRotation.fromBotSlot} が退出し、BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と動作確認まで完了しました。
+                        BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出し、BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と動作確認まで完了しました。
                       </label>
                       <button
                         type="button"
