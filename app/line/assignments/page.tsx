@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 const SUBJECTS = [
   '国語演習', '古典探求', '物理', '生物', '数３', '数C',
