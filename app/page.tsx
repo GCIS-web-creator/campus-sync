@@ -25,7 +25,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator, FolderOpen,
   ThermometerSun, Info, Users, Check, X,
-  Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon,
+  Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
   Volume2, Coffee, Moon, Sun, HelpCircle
