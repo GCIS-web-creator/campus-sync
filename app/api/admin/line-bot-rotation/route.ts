@@ -360,15 +360,20 @@ export async function GET(request: Request) {
     : 0;
   const previousBotActiveCount = activeChats.filter(chat => Number(chat.bot_slot) === activeSlot).length;
   const otherBotActiveCount = activeChats.length - targetBotActiveCount - previousBotActiveCount;
-  const registeredGroupMatches = expectedGroupChatId
-    ? activeChats.filter(chat => chat.chat_id === expectedGroupChatId && chat.chat_type === 'group')
+  const targetBotGroupRows = nextBotSlot
+    ? activeChats.filter(chat => chat.chat_type === 'group' && Number(chat.bot_slot) === nextBotSlot)
     : [];
+  // Group IDs reported by different official-account channels may not match the
+  // saved ID from the previous BOT. Treat the sole active target-BOT group as the
+  // pending handoff target; the explicit Admin confirmation gates the final switch.
   const groupReady = Boolean(expectedGroupChatId)
     && activeChats.length === 1
-    && registeredGroupMatches.length === 1
-    && Number(registeredGroupMatches[0].bot_slot) === nextBotSlot
+    && targetBotGroupRows.length === 1
     && previousBotActiveCount === 0
     && otherBotActiveCount === 0;
+  const handoffGroupIdMatches = Boolean(expectedGroupChatId)
+    && targetBotGroupRows.length === 1
+    && targetBotGroupRows[0].chat_id === expectedGroupChatId;
   const scheduledAt = Date.parse(rotation.next_switch_at);
   const windowOpensAt = scheduledAt - ONE_DAY_MS;
   const manualSwitchAvailable = Number.isFinite(scheduledAt)
@@ -403,6 +408,7 @@ export async function GET(request: Request) {
       otherBotActiveCount,
       targetBotConfigured: Boolean(environment.some(item => item.slot === nextBotSlot && item.channelSecretConfigured && item.accessTokenConfigured)),
       registeredGroupConfigured: Boolean(expectedGroupChatId),
+      handoffGroupIdMatches,
       officialAccountTestSent,
       officialAccountTestStatus,
       officialAccountTestSentAt: handoffTestMatchesCurrentSwitch ? handoffTestSentAt : null,
@@ -427,11 +433,27 @@ async function handleOfficialAccountTest(
   if (!newBotSlot || newBotSlot === currentBotSlot) return jsonError('次回の切替先BOTを計算できません。', 409);
   if (Date.now() < Date.parse(rotation.next_switch_at) - ONE_DAY_MS) return jsonError('通知テストは切替予定の24時間前から実行できます。', 409);
 
-  const groupId = typeof rotation.handoff_group_chat_id === 'string' ? rotation.handoff_group_chat_id : '';
-  if (!groupId) return jsonError('切替対象のグループが登録されていません。', 409);
+  const registeredGroupId = typeof rotation.handoff_group_chat_id === 'string' ? rotation.handoff_group_chat_id : '';
+  if (!registeredGroupId) return jsonError('切替対象のグループが登録されていません。', 409);
 
   const credentials = getLineBotCredentialsForSlot(newBotSlot);
   if (!credentials) return jsonError('BOT ' + newBotSlot + ' のChannel Secretまたはアクセストークンが未登録です。', 503);
+
+  const { data: activeChats, error: chatsError } = await admin.from('line_group_chats')
+    .select('chat_id,chat_type,bot_slot,active')
+    .eq('chat_type', 'group')
+    .eq('active', true);
+  if (chatsError) return jsonError('グループの接続状態を確認できません。', 503);
+  const chats = activeChats || [];
+  const targetGroups = chats.filter(chat => Number(chat.bot_slot) === newBotSlot);
+  const oldCount = chats.filter(chat => Number(chat.bot_slot) === currentBotSlot).length;
+  const otherCount = chats.length - targetGroups.length - oldCount;
+  if (chats.length !== 1 || targetGroups.length !== 1 || oldCount !== 0 || otherCount !== 0) {
+    return jsonError('BOT ' + newBotSlot + ' の参加記録が1件だけで、旧BOTの退出と他BOTの不在を確認できません。グループ状態を更新してください。', 409);
+  }
+  // Use the new BOT channel's webhook group ID for the pending handoff.
+  const groupId = String(targetGroups[0].chat_id || '');
+  if (!groupId) return jsonError('新BOTのグループ識別情報を取得できません。', 409);
 
   const { data: prepareResult, error: prepareError } = await admin.rpc('campussync_prepare_line_bot_handoff_test', {
     p_expected_current_bot_slot: currentBotSlot,
@@ -587,37 +609,39 @@ async function handleManualSwitch(
   if (chatsError) return jsonError('グループの接続状態を確認できません。', 503);
   const chats = activeChats || [];
   const registeredGroupId = typeof rotation.handoff_group_chat_id === 'string' ? rotation.handoff_group_chat_id : '';
-  const registeredGroupRows = registeredGroupId
-    ? chats.filter(chat => chat.chat_id === registeredGroupId && chat.chat_type === 'group')
-    : [];
-  const targetCount = chats.filter(chat => Number(chat.bot_slot) === newBotSlot).length;
+  const targetGroups = chats.filter(chat => Number(chat.bot_slot) === newBotSlot);
+  const targetCount = targetGroups.length;
   const oldCount = chats.filter(chat => Number(chat.bot_slot) === currentBotSlot).length;
   const otherCount = chats.length - targetCount - oldCount;
-  const sameRegisteredGroupReady = Boolean(registeredGroupId)
+  const groupReady = Boolean(registeredGroupId)
     && chats.length === 1
-    && registeredGroupRows.length === 1
-    && Number(registeredGroupRows[0].bot_slot) === newBotSlot;
-  if (!sameRegisteredGroupReady || targetCount < 1 || oldCount > 0 || otherCount > 0) {
+    && targetGroups.length === 1
+    && oldCount === 0
+    && otherCount === 0;
+  if (!groupReady) {
     return NextResponse.json({
       success: false,
       message: registeredGroupId
-        ? '登録済みの同じグループで新BOTのWebhook記録を確認できません。旧BOTを退出させ、新BOTを登録済みグループへ招待し、新BOTからメッセージを送信してから状態を更新してください。'
+        ? '新BOTの参加記録が1件だけで、旧BOTの退出と他BOTの不在を確認できません。グループ状態を更新してください。'
         : '切替対象のグループが登録されていません。現在のBOTが参加しているグループを確認し、管理者にグループ設定を確認してもらってください。',
       groupStatus: {
         activeGroupCount: chats.length,
         targetBotActiveCount: targetCount,
         previousBotActiveCount: oldCount,
         otherBotActiveCount: otherCount,
-        registeredGroupMatched: registeredGroupRows.length === 1,
+        registeredGroupMatched: targetGroups.length === 1 && targetGroups[0].chat_id === registeredGroupId,
       },
     }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
   }
+
+  const currentTargetGroupId = String(targetGroups[0].chat_id || '');
+  if (!currentTargetGroupId) return jsonError('新BOTのグループ識別情報を取得できません。', 409);
 
   const { data: switchResult, error: switchError } = await admin.rpc('campussync_manual_line_bot_switch', {
     p_expected_current_bot_slot: currentBotSlot,
     p_expected_new_bot_slot: newBotSlot,
     p_expected_next_switch_at: rotation.next_switch_at,
-    p_expected_group_chat_id: registeredGroupId,
+    p_expected_group_chat_id: currentTargetGroupId,
     p_group_confirmed_at: new Date().toISOString(),
   });
   if (switchError) {

@@ -481,6 +481,7 @@ export default function CampusSyncAdmin() {
       otherBotActiveCount: number;
       targetBotConfigured: boolean;
       registeredGroupConfigured: boolean;
+      handoffGroupIdMatches: boolean;
       officialAccountTestSent: boolean;
       officialAccountTestStatus: 'not_started' | 'sending' | 'sent' | 'failed';
       officialAccountTestSentAt: string | null;
@@ -2274,11 +2275,12 @@ export default function CampusSyncAdmin() {
                       ) : lineBotRotation.manualSwitch.groupReady ? (
                         <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-200">
                           <CheckCircle2 size={14} className="mr-1 inline" />
-                          BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と、BOT {lineBotRotation.manualSwitch.fromBotSlot} の退出記録を確認しました。
+                          BOT {lineBotRotation.manualSwitch.toBotSlot} の参加記録と、BOT {lineBotRotation.manualSwitch.fromBotSlot} の退出記録を確認しました。
+                          {!lineBotRotation.manualSwitch.handoffGroupIdMatches && ' BOTごとの接続識別子が異なるため、最終切替時に新BOT側の参加記録へ接続先を更新します。'}
                         </p>
                       ) : (
                         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
-                          グループ参加記録の確認待ちです。① BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出 ② BOT {lineBotRotation.manualSwitch.toBotSlot} を同じグループへ招待、まで行ったら「状態を更新」を押してください。グループへのテストメッセージ送信は不要です。
+                          新BOTの参加記録が1件だけで、旧BOTの退出と他BOTの不在を確認できる必要があります。招待後に「状態を更新」を押してください。
                         </p>
                       )}
 
