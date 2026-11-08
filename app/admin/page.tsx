@@ -465,14 +465,30 @@ export default function CampusSyncAdmin() {
   // LINE公式アカウントBOT 1〜5の自動ローテーション状況（認証値は取得・表示しない）。
   const [lineBotRotation, setLineBotRotation] = useState<{
     rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null; rotation_hold_until?: string | null; updated_at: string };
-    pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string } | null;
-    history: Array<{ id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; acknowledged_at: string | null }>;
+    pendingEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; switch_mode?: string; notice_status?: string } | null;
+    history: Array<{ id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; acknowledged_at: string | null; switch_mode?: string; notice_status?: string; notice_sent_at?: string | null; notice_error?: string | null }>;
     environment: Array<{ slot: number; channelSecretConfigured: boolean; accessTokenConfigured: boolean }>;
+    manualSwitch: {
+      available: boolean;
+      fromBotSlot: number;
+      toBotSlot: number | null;
+      scheduledAt: string;
+      windowOpensAt: string;
+      groupReady: boolean;
+      activeGroupCount: number;
+      targetBotActiveCount: number;
+      previousBotActiveCount: number;
+      otherBotActiveCount: number;
+      targetBotConfigured: boolean;
+    };
+    noticeRetryEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; notice_status: string; notice_error: string | null } | null;
   } | null>(null);
   const [lineBotRotationLoading, setLineBotRotationLoading] = useState(false);
   const [lineBotRotationMessage, setLineBotRotationMessage] = useState('');
   const [lineBotRotationAckChecked, setLineBotRotationAckChecked] = useState(false);
   const [lineBotRotationAckSaving, setLineBotRotationAckSaving] = useState(false);
+  const [lineBotRotationManualSaving, setLineBotRotationManualSaving] = useState(false);
+  const [lineBotRotationNoticeRetrySaving, setLineBotRotationNoticeRetrySaving] = useState(false);
   const [lineBotRotationRefreshKey, setLineBotRotationRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -1725,6 +1741,77 @@ export default function CampusSyncAdmin() {
     }
   };
 
+  const handleManualLineBotSwitch = async () => {
+    const manualSwitch = lineBotRotation?.manualSwitch;
+    if (!manualSwitch?.available) return;
+    if (!lineBotRotationAckChecked) {
+      setLineBotRotationMessage('旧BOTの退出、新BOTのグループ参加、Webhook確認まで完了したことを確認してください。');
+      return;
+    }
+    if (!manualSwitch.groupReady || !manualSwitch.targetBotConfigured) {
+      setLineBotRotationMessage('新BOTのグループ接続記録と認証情報が確認できていません。状態を更新してください。');
+      return;
+    }
+
+    setLineBotRotationManualSaving(true);
+    setLineBotRotationMessage('');
+    try {
+      const response = await fetch('/api/admin/line-bot-rotation', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({
+          action: 'manual-switch',
+          currentBotSlot: manualSwitch.fromBotSlot,
+          nextSwitchAt: manualSwitch.scheduledAt,
+          groupConfirmed: true,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || '配信BOTを切り替えられませんでした。');
+      }
+      setLineBotRotationAckChecked(false);
+      setLineBotRotationMessage(result.message || '配信BOTを切り替えました。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } catch (error) {
+      setLineBotRotationMessage(error instanceof Error ? error.message : '配信BOTを切り替えられませんでした。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } finally {
+      setLineBotRotationManualSaving(false);
+    }
+  };
+
+  const handleRetryLineBotSwitchNotice = async () => {
+    const event = lineBotRotation?.noticeRetryEvent;
+    if (!event) return;
+    setLineBotRotationNoticeRetrySaving(true);
+    setLineBotRotationMessage('');
+    try {
+      const response = await fetch('/api/admin/line-bot-rotation', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-password': adminApiPassword,
+        },
+        body: JSON.stringify({ action: 'retry-notice', eventId: event.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || '公式アカウントへの完了通知を再送できませんでした。');
+      }
+      setLineBotRotationMessage(result.message || '完了通知を送信しました。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } catch (error) {
+      setLineBotRotationMessage(error instanceof Error ? error.message : '公式アカウントへの完了通知を再送できませんでした。');
+      setLineBotRotationRefreshKey(key => key + 1);
+    } finally {
+      setLineBotRotationNoticeRetrySaving(false);
+    }
+  };
+
   const deleteAssignment = async (row: CampusAssignment) => {
     if (!adminApiPassword.trim()) {
       setAssignmentMessage('管理用パスワードを入力してください。');
@@ -2108,6 +2195,92 @@ export default function CampusSyncAdmin() {
                   <p className="text-[11px] leading-5 text-slate-400">
                     友だち向けBroadcastは現在選択中BOTの友だちにだけ届きます。BOT 1〜5は別々の友だちリストとして管理されるため、5つすべてから配信を受け取るには、各アカウントの友だち追加が必要です。
                   </p>
+                  {lineBotRotation.manualSwitch?.available && (
+                    <div className="space-y-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10 p-4">
+                      <div>
+                        <p className="text-sm font-black text-cyan-100">切替作業が完了したら、ここで配信BOTを変更</p>
+                        <p className="mt-1 text-xs leading-5 text-cyan-100/80">
+                          次回予定は {new Date(lineBotRotation.manualSwitch.scheduledAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}。
+                          BOT {lineBotRotation.manualSwitch.fromBotSlot} から BOT {lineBotRotation.manualSwitch.toBotSlot} への切替を予定しています。
+                        </p>
+                        <p className="mt-1 text-[11px] leading-5 text-slate-300">このボタンは予定時刻の24時間前から、実際に切替を完了するまで表示されます。予定時刻になっても、グループの確認なしに配信BOTは自動変更しません。</p>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-slate-950/70 p-2 text-center">
+                          <p className="text-[10px] text-slate-400">新BOT接続</p>
+                          <p className="mt-1 text-lg font-black text-emerald-300">{lineBotRotation.manualSwitch.targetBotActiveCount}</p>
+                        </div>
+                        <div className="rounded-lg bg-slate-950/70 p-2 text-center">
+                          <p className="text-[10px] text-slate-400">旧BOT接続</p>
+                          <p className="mt-1 text-lg font-black text-amber-300">{lineBotRotation.manualSwitch.previousBotActiveCount}</p>
+                        </div>
+                        <div className="rounded-lg bg-slate-950/70 p-2 text-center">
+                          <p className="text-[10px] text-slate-400">登録中グループ</p>
+                          <p className="mt-1 text-lg font-black text-white">{lineBotRotation.manualSwitch.activeGroupCount}</p>
+                        </div>
+                      </div>
+
+                      {!lineBotRotation.manualSwitch.targetBotConfigured && (
+                        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-200">
+                          BOT {lineBotRotation.manualSwitch.toBotSlot} のChannel SecretとアクセストークンがVercelに登録されていません。切替前に両方を設定してください。
+                        </p>
+                      )}
+                      {lineBotRotation.manualSwitch.groupReady ? (
+                        <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-200">
+                          <CheckCircle2 size={14} className="mr-1 inline" />
+                          Webhook記録を確認しました。新BOTが参加し、旧BOTは有効なグループ接続から外れています。
+                        </p>
+                      ) : (
+                        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
+                          グループ接続の確認待ちです。① BOT {lineBotRotation.manualSwitch.fromBotSlot} を退出 ② BOT {lineBotRotation.manualSwitch.toBotSlot} を同じグループへ招待 ③ 新BOTからグループへテストメッセージを送信 ④「状態を更新」を押してください。
+                          接続記録が確認できるまでは、配信先は旧BOTのまま維持されます。
+                        </p>
+                      )}
+
+                      <label className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={lineBotRotationAckChecked}
+                          onChange={event => setLineBotRotationAckChecked(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-cyan-500"
+                        />
+                        BOT {lineBotRotation.manualSwitch.fromBotSlot} が退出し、BOT {lineBotRotation.manualSwitch.toBotSlot} のグループ参加と動作確認まで完了しました。
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void handleManualLineBotSwitch()}
+                        disabled={!lineBotRotationAckChecked || !lineBotRotation.manualSwitch.groupReady || !lineBotRotation.manualSwitch.targetBotConfigured || lineBotRotationManualSaving}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={15} />
+                        {lineBotRotationManualSaving ? '配信先を変更しています...' : 'グループ変更を確認して配信BOTを切り替える'}
+                      </button>
+                      <p className="text-[10px] leading-5 text-slate-400">実行後は配信先を新BOTへ変更し、新BOTの公式アカウントから友だち向けに切替完了通知を1通送信します。グループには通知を送りません。</p>
+                    </div>
+                  )}
+
+                  {lineBotRotation.noticeRetryEvent && (
+                    <div className="space-y-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-4">
+                      <p className="text-sm font-black text-rose-100">配信BOTは切替済みですが、完了通知が未送信です</p>
+                      <p className="text-xs leading-5 text-rose-100/80">
+                        BOT {lineBotRotation.noticeRetryEvent.previous_bot_slot} から BOT {lineBotRotation.noticeRetryEvent.new_bot_slot} への切替通知を、公式アカウントの友だち向けに再送できます。グループには送信しません。
+                      </p>
+                      {lineBotRotation.noticeRetryEvent.notice_error && (
+                        <p className="text-[11px] text-rose-200">理由：{lineBotRotation.noticeRetryEvent.notice_error}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryLineBotSwitchNotice()}
+                        disabled={lineBotRotationNoticeRetrySaving}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-700 px-4 py-2.5 text-xs font-black text-white hover:bg-rose-600 disabled:opacity-50"
+                      >
+                        <RefreshCw size={14} className={lineBotRotationNoticeRetrySaving ? 'animate-spin' : ''} />
+                        {lineBotRotationNoticeRetrySaving ? '通知を再送しています...' : '公式アカウントへ完了通知を再送'}
+                      </button>
+                    </div>
+                  )}
+
                   {lineBotRotation.pendingEvent ? (
                     <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
                       <div className="flex items-center gap-2 text-amber-200">
@@ -2161,7 +2334,10 @@ export default function CampusSyncAdmin() {
                     {lineBotRotation.history.slice(0,10).map(event=>(
                       <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2">
                         <div><p className="text-xs font-bold text-slate-200">{event.previous_bot_slot?'BOT '+event.previous_bot_slot:'初期設定'} → BOT {event.new_bot_slot}</p><p className="mt-1 text-[10px] text-slate-500">{new Date(event.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</p></div>
-                        <span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(event.acknowledged_at?'bg-emerald-500/10 text-emerald-300':'bg-amber-500/10 text-amber-200')}>{event.acknowledged_at?'グループ切替確認済み':'確認待ち'}</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(event.acknowledged_at?'bg-emerald-500/10 text-emerald-300':'bg-amber-500/10 text-amber-200')}>{event.acknowledged_at?'グループ切替確認済み':'確認待ち'}</span>
+                          {event.switch_mode === 'manual' && <span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(event.notice_status === 'sent'?'bg-emerald-500/10 text-emerald-300':'bg-slate-700 text-slate-300')}>{event.notice_status === 'sent'?'公式通知済み':'公式通知 '+(event.notice_status || '未処理')}</span>}
+                        </div>
                       </div>
                     ))}
                   </div>

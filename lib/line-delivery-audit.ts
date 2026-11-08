@@ -45,9 +45,9 @@ function walkMessage(value: unknown, textParts: string[], bubbleCounter: { value
 }
 
 function resolveBotSlot(accessToken?: string | null, supplied?: number | null): number | null {
-  if (supplied === 0 || supplied === 1 || supplied === 2 || supplied === 3) return supplied;
+  if (supplied !== null && supplied !== undefined && Number.isInteger(supplied) && supplied >= 0 && supplied <= 5) return supplied;
   if (!accessToken) return null;
-  for (const slot of [1, 2, 3] as const) {
+  for (const slot of [1, 2, 3, 4, 5] as const) {
     if (process.env[`LINE_CHANNEL_ACCESS_TOKEN_${slot}`] === accessToken) return slot;
   }
   if (process.env.LINE_CHANNEL_ACCESS_TOKEN === accessToken) return 0;
