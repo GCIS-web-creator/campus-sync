@@ -59,6 +59,82 @@ function panelClass(dark:boolean) {
   return dark?'border-slate-700 bg-slate-800 text-white':'border-slate-200 bg-white text-slate-900';
 }
 
+async function uploadWorkspaceFileResumable(
+  file: File,
+  storagePath: string,
+  signature: string,
+  contentType: string,
+  onProgress: (percent: number) => void,
+) {
+  const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!projectUrl || !publishableKey) throw new Error('Supabaseの公開設定が不足しています。');
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error('学校アカウントでログインしてください。');
+
+  const base = new URL(projectUrl);
+  if (base.hostname.endsWith('.supabase.co')) {
+    base.hostname = base.hostname.replace(/\.supabase\.co$/, '.storage.supabase.co');
+  }
+  const endpoint = new URL('/storage/v1/upload/resumable', base).toString();
+  const encodeMetadata = (value: string) => btoa(unescape(encodeURIComponent(value)));
+  const metadata = [
+    ['bucketName', 'workspace-files'],
+    ['objectName', storagePath],
+    ['contentType', contentType],
+    ['cacheControl', '60'],
+  ].map(([key, value]) => key + ' ' + encodeMetadata(value)).join(',');
+
+  const createResponse = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Tus-Resumable': '1.0.0',
+      'Upload-Length': String(file.size),
+      'Upload-Metadata': metadata,
+      'x-signature': signature,
+      apikey: publishableKey,
+      Authorization: 'Bearer ' + accessToken,
+    },
+  });
+  if (!createResponse.ok) {
+    const detail = await createResponse.text().catch(() => '');
+    throw new Error(detail || 'アップロードを開始できませんでした。');
+  }
+  const location = createResponse.headers.get('Location');
+  if (!location) throw new Error('アップロード先URLを取得できませんでした。');
+  const uploadUrl = new URL(location, endpoint).toString();
+
+  const chunkSize = 6 * 1024 * 1024;
+  let offset = 0;
+  onProgress(0);
+  while (offset < file.size) {
+    const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
+    const response = await fetch(uploadUrl, {
+      method: 'PATCH',
+      headers: {
+        'Tus-Resumable': '1.0.0',
+        'Upload-Offset': String(offset),
+        'Content-Type': 'application/offset+octet-stream',
+        apikey: publishableKey,
+        Authorization: 'Bearer ' + accessToken,
+      },
+      body: chunk,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(detail || 'ファイルの転送中にエラーが発生しました。');
+    }
+    const nextOffset = Number(response.headers.get('Upload-Offset'));
+    if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > file.size) {
+      throw new Error('アップロードの進捗を確認できませんでした。');
+    }
+    offset = nextOffset;
+    onProgress(Math.min(100, Math.round((offset / file.size) * 100)));
+  }
+}
+
 export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:boolean }) {
   const [workspaces,setWorkspaces]=useState<Workspace[]>([]);
   const [selected,setSelected]=useState<Workspace|null>(null);
@@ -92,6 +168,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
   const [fileDescription,setFileDescription]=useState('');
   const [fileSearch,setFileSearch]=useState('');
   const [showUpload,setShowUpload]=useState(false);
+  const [uploadProgress,setUploadProgress]=useState(0);
 
   const dark=isDarkMode;
   const panelStyle=panelClass(dark);
@@ -355,20 +432,18 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
   };
 
   const upload=async(event:React.FormEvent)=>{
-    event.preventDefault();if(!selected||!uploadFile)return;setSaving(true);
+    event.preventDefault();if(!selected||!uploadFile)return;setSaving(true);setUploadProgress(0);
     try{
       const prepared=await api('/api/workspaces/'+selected.id+'/files','POST',{
         action:'prepare_upload',file_name:uploadFile.name,file_size:uploadFile.size,mime_type:uploadFile.type,
         folder_path:folderPath,description:fileDescription,
       });
-      const {error:uploadError}=await supabase.storage.from('workspace-files')
-        .uploadToSignedUrl(prepared.path,prepared.token,uploadFile,{contentType:prepared.mime_type});
-      if(uploadError)throw uploadError;
+      await uploadWorkspaceFileResumable(uploadFile,prepared.path,prepared.token,prepared.mime_type,setUploadProgress);
       await api('/api/workspaces/'+selected.id+'/files','POST',{
         action:'complete_upload',storage_path:prepared.path,file_name:prepared.file_name,file_size:prepared.file_size,
         folder_path:prepared.folder_path,description:prepared.description,
       });
-      setUploadFile(null);setFolderPath('');setFileDescription('');setShowUpload(false);
+      setUploadFile(null);setFolderPath('');setFileDescription('');setShowUpload(false);setUploadProgress(0);
       await loadFiles(selected.id);await loadOverview(selected.id,true);setMessage('ファイルをアップロードしました。');
     }catch(error){setMessage(error instanceof Error?error.message:'アップロードできませんでした。');}
     finally{setSaving(false);}
@@ -571,6 +646,7 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
               <h3 className="font-black">ファイルを追加</h3>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.pptx,.txt,.csv" onChange={(event)=>setUploadFile(event.target.files?.[0]||null)} className="block w-full text-xs"/>
               {uploadFile&&<p className={'text-xs '+muted}>{uploadFile.name} ・ {formatSize(uploadFile.size)}</p>}
+              {saving&&showUpload&&<div className="space-y-1"><div className="h-2 overflow-hidden rounded-full bg-slate-500/20"><div className="h-full rounded-full bg-cyan-500 transition-all" style={{width:uploadProgress+'%'}}/></div><p className={'text-right text-[10px] '+muted}>{uploadProgress}%</p></div>}
               <label className="block text-xs font-bold">フォルダ（任意）<input value={folderPath} onChange={(event)=>setFolderPath(event.target.value)} placeholder="例：会議資料/11月" maxLength={500} className={'mt-1 w-full rounded-xl border px-3 py-2.5 text-sm '+field}/></label>
               <label className="block text-xs font-bold">説明（任意）<input value={fileDescription} onChange={(event)=>setFileDescription(event.target.value)} maxLength={1000} placeholder="ファイルの内容" className={'mt-1 w-full rounded-xl border px-3 py-2.5 text-sm '+field}/></label>
               <div className="flex justify-end gap-2"><button type="button" onClick={()=>{setShowUpload(false);setUploadFile(null);}} className={'rounded-xl border px-3 py-2 text-xs '+buttonOutline}>取消</button><button type="submit" disabled={saving||!uploadFile} className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{saving?'アップロード中…':'アップロード'}</button></div>
