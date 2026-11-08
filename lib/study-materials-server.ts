@@ -52,6 +52,7 @@ export type StudyStudentContext = {
   studentId: string;
   userClass: string;
   studentName: string;
+  authUserId: string;
 };
 
 export async function getStudyStudentContext(request: Request): Promise<StudyStudentContext | null> {
@@ -101,7 +102,7 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
   const userClass = String(profile.user_class || '');
   if (!/^[1-3]-[1-8]$/.test(userClass)) return null;
 
-  return { admin, studentId, userClass, studentName: String(profile.student_name || '') };
+  return { admin, studentId, userClass, studentName: String(profile.student_name || ''), authUserId: String(user.id) };
 }
 
 export function canStudentViewMaterial(

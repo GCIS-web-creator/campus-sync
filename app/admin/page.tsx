@@ -17,6 +17,7 @@ import LineDeliveryDashboard from '@/components/LineDeliveryDashboard';
 import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
 import StudyMaterialsAdmin from '@/components/StudyMaterialsAdmin';
 import AttendanceReportsAdmin from '@/components/AttendanceReportsAdmin';
+import AdminWorkspaces from '@/components/AdminWorkspaces';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -24,7 +25,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -1828,6 +1829,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="出欠連絡管理" title="出欠連絡管理" onClick={() => setActiveTab('attendance-reports')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'attendance-reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
               <UserCheck size={18} /><span className="sr-only md:not-sr-only">出欠連絡管理</span>
             </button>
+            <button aria-label="共有ワークスペース管理" title="共有ワークスペース管理" onClick={() => setActiveTab('workspaces')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'workspaces' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
+              <Users size={18} /><span className="sr-only md:not-sr-only">共有ワークスペース管理</span>
+            </button>
             <button aria-label="図書貸出＆書籍登録" title="図書貸出＆書籍登録" onClick={() => setActiveTab('library')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BookOpen size={18} /><span className="sr-only md:not-sr-only">図書貸出＆書籍登録</span>
             </button>
@@ -1849,6 +1853,7 @@ export default function CampusSyncAdmin() {
         
         {activeTab === 'study-materials' && <StudyMaterialsAdmin />}
         {activeTab === 'attendance-reports' && <AttendanceReportsAdmin />}
+        {activeTab === 'workspaces' && <AdminWorkspaces />}
 
         {activeTab === 'line-analytics' && <LineDeliveryDashboard />}
 
