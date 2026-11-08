@@ -480,6 +480,7 @@ export default function CampusSyncAdmin() {
       previousBotActiveCount: number;
       otherBotActiveCount: number;
       targetBotConfigured: boolean;
+      registeredGroupConfigured: boolean;
     };
     noticeRetryEvent: { id: number; previous_bot_slot: number | null; new_bot_slot: number; effective_date: string; created_at: string; notice_status: string; notice_error: string | null } | null;
   } | null>(null);
@@ -2226,7 +2227,11 @@ export default function CampusSyncAdmin() {
                           BOT {lineBotRotation.manualSwitch.toBotSlot} のChannel SecretとアクセストークンがVercelに登録されていません。切替前に両方を設定してください。
                         </p>
                       )}
-                      {lineBotRotation.manualSwitch.groupReady ? (
+                      {!lineBotRotation.manualSwitch.registeredGroupConfigured ? (
+                        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-200">
+                          切替対象のグループが登録されていません。現在のBOTが参加しているグループを特定できる状態にしてから、もう一度確認してください。
+                        </p>
+                      ) : lineBotRotation.manualSwitch.groupReady ? (
                         <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-200">
                           <CheckCircle2 size={14} className="mr-1 inline" />
                           Webhook記録を確認しました。新BOTが参加し、旧BOTは有効なグループ接続から外れています。
