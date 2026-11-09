@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const from = url.searchParams.get('from') || '';
   const to = url.searchParams.get('to') || '';
-  if (!validDate(from) || !validDate(to) || from > to || to > from.slice(0, 4) + '-12-31' || (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) > 45 * 86400000) {
+  if (!validDate(from) || !validDate(to) || from > to || (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) > 45 * 86400000) {
     return fail('取得期間を確認してください（最大46日間）。', 400);
   }
   const [school, personal] = await Promise.all([
