@@ -37,7 +37,7 @@ type EarthquakeRow = {
 };
 
 function intensityRankFromLabel(value: unknown): number {
-  const normalized = String(value || '').normalize('NFKC').replace(/\\s/g, '').replace(/^震度/, '');
+  const normalized = String(value || '').normalize('NFKC').replace(/\s/g, '').replace(/^震度/, '');
   const ranks: Record<string, number> = {
     '1': 1, '2': 2, '3': 3, '4': 4,
     '5-': 5, '5弱': 5, '5+': 6, '5強': 6,
