@@ -636,6 +636,53 @@ function normalizeDailyDigestCarouselSize<T extends FlexCarouselMessage>(message
   } as T;
 }
 
+/**
+ * Split a digest carousel into LINE-safe Flex messages. LINE limits the JSON
+ * definition of a carousel to 50 KB and allows up to five message objects in
+ * a broadcast/push request. Use a 45 KB budget for headroom.
+ */
+function splitDailyDigestCarousel<T extends FlexCarouselMessage>(message: T): T[] {
+  const carousel = message.contents;
+  if (carousel.type !== 'carousel' || !Array.isArray(carousel.contents)) return [message];
+
+  const maxBytes = 45 * 1024;
+  const bubbles = carousel.contents;
+  const chunks: unknown[][] = [];
+  let current: unknown[] = [];
+
+  const makeMessage = (items: unknown[], index: number, total: number): T => ({
+    ...message,
+    altText: (String((message as { altText?: unknown }).altText || 'CampusSync 日次まとめ')
+      + '（' + index + '/' + total + '）').slice(0, 400),
+    contents: { ...carousel, contents: items },
+  } as T);
+
+  for (const bubble of bubbles) {
+    const candidate = [...current, bubble];
+    const candidateMessage = makeMessage(candidate, 1, 1);
+    const candidateBytes = Buffer.byteLength(JSON.stringify(candidateMessage), 'utf8');
+    if (candidateBytes <= maxBytes) {
+      current = candidate;
+      continue;
+    }
+    if (current.length === 0) {
+      throw new Error('日次まとめのFlexバブル単体が安全なカルーセル上限を超えています。');
+    }
+    chunks.push(current);
+    current = [bubble];
+    const singleBytes = Buffer.byteLength(JSON.stringify(makeMessage(current, 1, 1)), 'utf8');
+    if (singleBytes > maxBytes) {
+      throw new Error('日次まとめのFlexバブル単体が安全なカルーセル上限を超えています。');
+    }
+  }
+  if (current.length) chunks.push(current);
+
+  if (chunks.length > 5) {
+    throw new Error('日次まとめをLINEの1リクエスト上限5メッセージ以内に分割できません。');
+  }
+  return chunks.map((items, index) => makeMessage(items, index + 1, chunks.length));
+}
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
@@ -767,6 +814,13 @@ export async function POST(request: Request) {
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
       }));
+  let flexMessages: typeof flex[];
+  try {
+    flexMessages = splitDailyDigestCarousel(flex);
+  } catch (error) {
+    console.error('日次まとめのFlex分割に失敗:', error instanceof Error ? error.message : 'unknown');
+    return jsonError('日次まとめのメッセージサイズを調整できませんでした。', 500);
+  }
 
   const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');
   const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -776,11 +830,11 @@ export async function POST(request: Request) {
       'Content-Type': 'application/json',
       'X-Line-Retry-Key': retryKey,
     },
-    body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
+    body: JSON.stringify({ messages: applyCampusSyncFlexFooters(flexMessages) }),
     cache: 'no-store',
     signal: AbortSignal.timeout(25000),
   });
-  await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'daily_digest', accessToken, retryKey, deliveryBatchId: retryKey, messages: [flex] });
+  await recordLineDeliveryResponse(response, { channel: 'broadcast', kind: 'daily_digest', accessToken, retryKey, deliveryBatchId: retryKey, messages: flexMessages });
 
   if (!response.ok && response.status !== 409) {
     const errorBody = await response.text().catch(() => '');
@@ -810,7 +864,7 @@ export async function POST(request: Request) {
       else console.error('日次まとめの配信履歴を保存できません:', fallback.error.message);
     }
   }
-  const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,[flex],retryKey,'daily_digest',retryKey);
+  const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,flexMessages,retryKey,'daily_digest',retryKey);
 
   return NextResponse.json({
     success: true,
