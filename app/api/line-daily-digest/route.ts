@@ -611,6 +611,31 @@ function buildSaturdayDigest(input: {
   };
 }
 
+type FlexCarouselMessage = {
+  contents: { type?: unknown; contents?: unknown };
+};
+
+/**
+ * LINE Flex Message carousels require every bubble to use the same size.
+ * Keep the transit cards' wider layout and normalize all other daily-digest
+ * cards to giga before sending the carousel.
+ */
+function normalizeDailyDigestCarouselSize<T extends FlexCarouselMessage>(message: T): T {
+  const carousel = message.contents;
+  if (carousel.type !== 'carousel' || !Array.isArray(carousel.contents)) return message;
+
+  const normalizedContents = carousel.contents.map(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const bubble = item as Record<string, unknown>;
+    return bubble.type === 'bubble' ? { ...bubble, size: 'giga' } : item;
+  });
+
+  return {
+    ...message,
+    contents: { ...carousel, contents: normalizedContents },
+  } as T;
+}
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
@@ -618,6 +643,8 @@ function jsonError(message: string, status: number) {
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown };
   const manualRequest = payload.mode === 'manual';
+  // A replay is still protected by CRON_SECRET, but can run after the scheduled window.
+  const replayRequest = payload.mode === 'replay';
 
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
@@ -654,7 +681,7 @@ export async function POST(request: Request) {
   const inDispatchWindow = isSaturday
     ? currentHour === 12 && currentMinute >= 30 && currentMinute < 40
     : currentHour === 16 && currentMinute < 10;
-  if (!manualRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
+  if (!manualRequest && !replayRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
     return NextResponse.json({ success: true, skipped: true, message: '平日16:00・土曜12:30に配信します。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const todayLabel = Number(nowParts.month)+'月'+Number(nowParts.day)+'日';
@@ -713,7 +740,7 @@ export async function POST(request: Request) {
   const events = (eventResult.data || []) as EventRow[];
   const weatherDays = weatherResult as WeatherDayForecast[] | null;
   const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
-  const flex = isSaturday
+  const flex = normalizeDailyDigestCarouselSize(isSaturday
     ? buildSaturdayDigest({
         dateLabel: todayLabel,
         today,
@@ -739,7 +766,7 @@ export async function POST(request: Request) {
         weather: forecastDays,
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
-      });
+      }));
 
   const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');
   const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
