@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { pushLineMessagesToRegisteredChats } from '@/lib/line-group-chats';
 import { buildLineEarthquakeFlex, type EarthquakeNotificationPayload } from '@/lib/line-earthquake-flex';
+import { isTargetTokyoTamaMunicipality } from '@/lib/earthquake-local-areas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -59,10 +60,7 @@ type ParsedEarthquake = {
 };
 
 function isTokyoTamaMunicipality(area: ParsedEarthquake['observedAreas'][number]): boolean {
-  if (!String(area.prefectureCode || '').startsWith('13')) return false;
-  const cityCode = String(area.cityCode || '').trim();
-  return cityCode.startsWith('132')
-    || ['13303', '13305', '13307', '13308'].some(code => cityCode.startsWith(code));
+  return isTargetTokyoTamaMunicipality(area.prefectureCode, area.cityCode);
 }
 
 function observedAreaRank(area: ParsedEarthquake['observedAreas'][number]): number {
@@ -437,7 +435,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
   );
   const hasTokyoTamaIntensity2 = productCode === 'VXSE53'
     && observedAreas.some(area => isTokyoTamaMunicipality(area) && observedAreaRank(area) >= 2);
-  // Local LINE alerts trigger when Kodaira OR any Tokyo Tama municipality reaches intensity 2.
+  // Local LINE alerts trigger when Kodaira OR one of the five configured Tama municipalities reaches intensity 2.
   const notificationKind = isEewCancelled && eewKodairaTarget
     ? 'eew_cancelled'
     : isEew && eewKodairaTarget
@@ -507,6 +505,10 @@ function notificationPayload(item: ParsedEarthquake, kind: EarthquakeNotificatio
       prefecture: area.prefecture,
       intensity: area.intensity || intensityLabel(observedAreaRank(area)),
     }));
+  const localMaxRank = Math.max(
+    item.kodairaIntensityRank ?? 0,
+    ...item.observedAreas.filter(isTokyoTamaMunicipality).map(observedAreaRank),
+  );
   return {
     kind,
     eventTime: item.eventTime || item.issuedAt,
@@ -518,6 +520,7 @@ function notificationPayload(item: ParsedEarthquake, kind: EarthquakeNotificatio
     longitude: item.longitude,
     maxIntensity: item.maxIntensity,
     kodairaIntensity: item.kodairaIntensity,
+    localMaxIntensity: intensityLabel(localMaxRank),
     localImpactAreas,
     eewTargets: item.eewTargets,
     eewForecastIntensity: item.eewForecastIntensity,
