@@ -498,7 +498,7 @@ function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unkno
 
   const textbookBubble = buildBoardBubble({
     eyebrow: 'TODAY ONLY  /  EXAM RANGE RELEASED',
-    title: '２学期期末考査　化学試験範囲',
+    title: '２学期期末考査　化学試験範囲　が公開されました',
     subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲① 教科書',
     bodyContents: [
       section(
