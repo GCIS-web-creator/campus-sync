@@ -892,13 +892,7 @@ export async function GET(request: Request) {
         console.error('Earthquake detail enrichment failed:', enrichmentError instanceof Error ? enrichmentError.message : 'unknown');
       }
 
-      const { data: manualNotice, error: manualNoticeError } = await admin.from('jma_earthquake_admin_group_notices')
-        .select('event_key')
-        .eq('event_key', detailEventKey)
-        .eq('status', 'sent')
-        .maybeSingle();
-      if (manualNoticeError) throw manualNoticeError;
-      return NextResponse.json({ event: { ...enrichedRow, admin_group_notified: Boolean(manualNotice) } }, {
+      return NextResponse.json({ event: enrichedRow }, {
         headers: { 'Cache-Control': 'no-store, max-age=0' },
       });
     }
@@ -943,17 +937,14 @@ export async function GET(request: Request) {
       if (promotedResult.error) throw promotedResult.error;
       promotedEvents = (promotedResult.data || []) as Array<Record<string, unknown>>;
     }
-    const notifiedKeys = new Set(adminNoticeKeys);
     const eventMap = new Map<string, Record<string, unknown>>();
     for (const item of [...(eventsResult.data || []), ...promotedEvents]) {
-      eventMap.set(String(item.event_key), { ...item, admin_group_notified: notifiedKeys.has(String(item.event_key)) });
+      eventMap.set(String(item.event_key), item);
     }
     const mergedEvents = Array.from(eventMap.values())
       .sort((a, b) => Date.parse(String(b.event_time || b.issued_at || '')) - Date.parse(String(a.event_time || a.issued_at || '')))
       .slice(0, 80);
-    const majorEvents = (majorEventsResult.data || []).map(item => ({
-      ...item, admin_group_notified: notifiedKeys.has(String(item.event_key)),
-    }));
+    const majorEvents = majorEventsResult.data || [];
     const highAt = syncResult.data?.high_last_success_at || null;
     const stale = !highAt || Date.now() - Date.parse(highAt) > 5 * 60 * 1000;
     return NextResponse.json({

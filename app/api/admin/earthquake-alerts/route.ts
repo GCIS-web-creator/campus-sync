@@ -25,7 +25,8 @@ function fail(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store, private' } });
 }
 type ObservedArea = {
-  name?: string; prefecture?: string | null; intensity?: string | null; intensityRank?: number | null;
+  name?: string; prefecture?: string | null; prefectureCode?: string | null; cityCode?: string | null;
+  intensity?: string | null; intensityRank?: number | null;
 };
 type EarthquakeRow = {
   event_key: string; product_code: string; title: string; event_time: string | null; issued_at: string;
@@ -90,13 +91,26 @@ export async function POST(request: Request) {
       && Date.now() - Date.parse(existing.last_attempt_at) < 120_000) return fail('この地震情報は現在送信処理中です。', 409);
 
     const payload: EarthquakeNotificationPayload = {
-      kind: 'admin_manual_group',
+      kind: 'kodaira_intensity2',
       eventTime: quake.event_time || quake.issued_at, issuedAt: quake.issued_at,
       hypocenterName: quake.hypocenter_name || quake.title || '震源情報',
       magnitude: quake.magnitude === null ? null : Number(quake.magnitude),
       depthKm: quake.depth_km === null ? null : Number(quake.depth_km),
       latitude: quake.latitude, longitude: quake.longitude,
       maxIntensity: quake.max_intensity, kodairaIntensity: quake.kodaira_intensity,
+      localImpactAreas: quake.observed_areas.filter(area => {
+        const prefectureCode = String(area.prefectureCode || '');
+        const cityCode = String(area.cityCode || '');
+        const intensity = String(area.intensity || '').normalize('NFKC').replace(/\s/g, '').replace(/^震度/, '');
+        const rankByLabel: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
+        const rank = typeof area.intensityRank === 'number' ? area.intensityRank : (rankByLabel[intensity] || 0);
+        const isTama = prefectureCode.startsWith('13') && (cityCode.startsWith('132')
+          || ['13303', '13305', '13307', '13308'].some(code => cityCode.startsWith(code)));
+        return isTama && rank >= 2;
+      }).map(area => ({
+        name: String(area.name || '観測地域'), prefecture: area.prefecture || null,
+        intensity: area.intensity || (typeof area.intensityRank === 'number' ? String(area.intensityRank) : null),
+      })),
       eewTargets: quake.eew_targets || [], eewForecastIntensity: quake.eew_forecast_intensity,
       sourceUrl: 'https://www.jma.go.jp/bosai/map.html#contents=earthquake_map',
       observedAreas: quake.observed_areas.map(area => ({
