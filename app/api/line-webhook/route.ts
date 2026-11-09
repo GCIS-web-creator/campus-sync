@@ -596,7 +596,9 @@ async function handleLineEvents(
     if (event.type !== 'message' || event.message?.type !== 'text') return;
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
     const messageText = typeof event.message.text === 'string' ? event.message.text.trim() : '';
-    const miniTestHandled = await handleLineMiniTestContribution(event, event.replyToken, messageText, channelAccessToken);\n    if (miniTestHandled) return;\n    const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
+    const miniTestHandled = await handleLineMiniTestContribution(event, event.replyToken, messageText, channelAccessToken);
+    if (miniTestHandled) return;
+    const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
 
     // 1対1トークは自然文をそのままAIへ送る。グループ・ルームではCSAI接頭辞必須で誤反応を防ぐ。
