@@ -451,9 +451,9 @@ const LINE_MINI_TEST_SUBJECTS = ['国語演習', '古典探求', '物理', '生�
 function parseLineMiniTestDate(value: string): string | null {
   const normalized = value.normalize('NFKC').trim();
   let year = 0, month = 0, day = 0;
-  const full = normalized.match(/^(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})$/);
-  const short = normalized.match(/^(\\d{1,2})[/-](\\d{1,2})$/)
-    || normalized.match(/^(\\d{1,2})月(\\d{1,2})日$/);
+  const full = normalized.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  const short = normalized.match(/^(\d{1,2})[/-](\d{1,2})$/)
+    || normalized.match(/^(\d{1,2})月(\d{1,2})日$/);
   if (full) { year = Number(full[1]); month = Number(full[2]); day = Number(full[3]); }
   else if (short) {
     const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Tokyo', year: 'numeric' }).formatToParts(new Date());
@@ -474,16 +474,16 @@ function buildLineMiniTestPrompt(step: string, draft: LineMiniTestDraft): { text
     case 'subject':
       return { text: '📘 小テスト予定を登録します。まず教科を選んでください。', quickReplies: choices([...LINE_MINI_TEST_SUBJECTS]) };
     case 'date':
-      return { text: '実施日を入力してください。\\n例：2026/11/20、11/20、11月20日', quickReplies: [] };
+      return { text: '実施日を入力してください。\n例：2026/11/20、11/20、11月20日', quickReplies: [] };
     case 'title':
-      return { text: 'テスト名を入力してください。\\n例：英単語小テスト', quickReplies: [] };
+      return { text: 'テスト名を入力してください。\n例：英単語小テスト', quickReplies: [] };
     case 'scope':
       return { text: '出題範囲を入力してください。不要なら「範囲なし」と送信してください。', quickReplies: [{ label: '範囲なし', text: '範囲なし' }] };
     case 'notes':
       return { text: '備考があれば入力してください。なければ「なし」と送信してください。', quickReplies: [{ label: 'なし', text: 'なし' }] };
     case 'confirm':
       return {
-        text: ['📝 小テスト予定の確認', '', '教科：' + (draft.subject || ''), '実施日：' + (draft.testDate || ''), 'テスト名：' + (draft.title || ''), '範囲：' + (draft.scope || 'なし'), '備考：' + (draft.notes || 'なし'), '', '送信すると先生の承認待ちになります。承認後に学校の週間予定表とLINE週間配信へ掲載されます。'].join('\\n'),
+        text: ['📝 小テスト予定の確認', '', '教科：' + (draft.subject || ''), '実施日：' + (draft.testDate || ''), 'テスト名：' + (draft.title || ''), '範囲：' + (draft.scope || 'なし'), '備考：' + (draft.notes || 'なし'), '', '送信すると先生の承認待ちになります。承認後に学校の週間予定表とLINE週間配信へ掲載されます。'].join('\n'),
         quickReplies: [{ label: '申請する', text: '申請する' }, { label: '最初から', text: '最初からやり直す' }, { label: '中止', text: '中止' }],
       };
     default:
@@ -501,11 +501,11 @@ async function saveLineMiniTestSession(admin: ReturnType<typeof getLineAssignmen
 }
 async function replyLineMiniTestStep(replyToken: string, accessToken: string, step: string, draft: LineMiniTestDraft, prefix = '') {
   const prompt = buildLineMiniTestPrompt(step, draft);
-  await replyPlain(replyToken, (prefix ? prefix + '\\n\\n' : '') + prompt.text, accessToken, prompt.quickReplies);
+  await replyPlain(replyToken, (prefix ? prefix + '\n\n' : '') + prompt.text, accessToken, prompt.quickReplies);
 }
 async function handleLineMiniTestContribution(event: LineTextMessageEvent, replyToken: string, messageText: string, accessToken: string): Promise<boolean> {
   if (event.source?.type !== 'user' || !event.source.userId) return false;
-  const normalized = messageText.normalize('NFKC').replace(/[\\s　]/g, '').toLowerCase();
+  const normalized = messageText.normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
   const isStart = normalized.startsWith('csai') && /(小テスト|ミニテスト).*(追加|登録)|(追加|登録).*(小テスト|ミニテスト)/.test(normalized);
   const lineUserId = event.source.userId;
   const admin = getLineAssignmentAdmin();
