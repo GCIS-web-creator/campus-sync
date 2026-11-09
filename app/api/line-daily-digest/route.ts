@@ -496,10 +496,10 @@ function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unkno
     ],
   });
 
-  const textbookBubble = buildBoardBubble({
+  const examBubble = buildBoardBubble({
     eyebrow: 'TODAY ONLY  /  EXAM RANGE RELEASED',
-    title: '２学期期末考査　化学試験範囲',
-    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲① 教科書',
+    title: '２学期期末考査　化学試験範囲　が公開されました',
+    subtitle: dateLabel + ' 公開｜2026年度 58期理系',
     bodyContents: [
       section(
         '教科書① 実教出版「化学 academia」',
@@ -510,22 +510,13 @@ function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unkno
         '教科書② 実教出版「化学基礎 academia 新訂版」',
         'p.136〜164　第2節「酸と塩基」\np.164 節末問題／p.165 論述問題・グラフ問題\np.166〜182　第3節「酸化還元反応」\np.203 節末問題 1・2・3・5／p.204 論述問題 1・2\np.205〜211　特集4「滴定」\np.212 グラフ問題 1〜5／章末問題 4・5・6',
       ),
-    ],
-  });
-  textbookBubble.size = 'giga';
-
-  const workbookBubble = buildBoardBubble({
-    eyebrow: 'CHEMISTRY EXAM  /  WORKBOOK & NOTES',
-    title: '問題集・当日注意・提出物',
-    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲②',
-    bodyContents: [
       section(
         '問題集「エクセル 化学 総合版 化学基礎＋化学」',
         '6「酸・塩基」 p.100〜121\n7「酸化還元反応」 p.122〜133\n＋α：問題番号210 COD／211 DO／212 アスコルビン酸の定量\n12「溶液の性質」内の4「溶液の性質」\nWU 3〜5／基本例題51／基本問題261〜267\n応用例題53・54／応用問題269〜275',
       ),
       section(
         '重要問題集',
-        '問題番号72・73「コロイド」も含みます。\n重要問題集は冬休みの宿題です。時間に余裕がある人は、実力確認のため挑戦してください。',
+        '問題番号72・73「コロイド」も含みます。\n重要問題集は冬休みの宿題です。時間に余裕がある方は、実力確認のため挑戦してください。',
       ),
       section(
         '試験当日の注意',
@@ -533,13 +524,13 @@ function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unkno
       ),
       section(
         '学習ポイント・提出物',
-        '教科書の用語を覚え、エクセルの基本問題・エクササイズを繰り返しましょう。標準例題・標準問題・範囲の発展問題も学習。有効数字にこだわる計算もあります。\n提出物：問題集（エクセル）用ノート（期末試験範囲）\n提出日：試験終了日 11月27日\n提出場所：化学準備室の机上に名前順に並べて提出。',
+        '教科書の用語を覚え、エクセルの基本問題・エクササイズを繰り返しましょう。標準例題・標準問題・範囲の発展問題も学習。有効数字にこだわる計算もあります。\n提出物：問題集（エクセル）用ノート（期末試験範囲）\n提出日：試験終了日 11月27日\n提出場所：化学準備室の机上に名前の順に並べて提出。',
       ),
     ],
   });
-  workbookBubble.size = 'giga';
+  examBubble.size = 'giga';
 
-  return [textbookBubble, workbookBubble];
+  return [examBubble];
 }
 
 function buildDailyDigest(input: {
@@ -562,7 +553,7 @@ function buildDailyDigest(input: {
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（全範囲）' : '') + '。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -796,7 +787,7 @@ export async function POST(request: Request) {
       weather:forecastDays.length>0,
       assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
       assignmentError: Boolean(assignmentResult.error),
-      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) + (today === '2026-11-09' ? 2 : 0),
+      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) + (today === '2026-11-09' ? 1 : 0),
       chemistryExamScope: today === '2026-11-09',
       historySaved,
     },
