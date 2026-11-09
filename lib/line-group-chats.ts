@@ -10,7 +10,7 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
-type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'earthquake_alert' | 'daily_digest';
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'cafeteria_menu' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'earthquake_alert' | 'daily_digest';
 
 export type LineGroupDeliveryResult = {
   kind: LineGroupDeliveryKind;
@@ -113,7 +113,7 @@ export async function pushLineMessagesToRegisteredChats(
       ? 'receive_class_timetable'
       : kind === 'school_schedule'
         ? 'receive_school_schedule'
-        : kind === 'cafeteria_sold_out'
+        : kind === 'cafeteria_sold_out' || kind === 'cafeteria_menu'
         ? 'receive_cafeteria_sold_out'
         : kind === 'assignment_updates'
           ? 'receive_assignment_updates'
@@ -227,7 +227,9 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
         ? '週間学校予定表を受信するLINEグループはありません（receive_school_schedule を確認してください）。'
         : result.kind === 'cafeteria_sold_out'
         ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
-        : result.kind === 'assignment_updates'
+        : result.kind === 'cafeteria_menu'
+          ? '学食メニュー・売切情報を受信するLINEグループはありません（receive_cafeteria_sold_out を確認してください）。'
+          : result.kind === 'assignment_updates'
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
           : result.kind === 'quick_notice' || result.kind === 'weather_alert' || result.kind === 'earthquake_alert'
             ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
@@ -250,7 +252,9 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
       ? '週間学校予定表を受信するLINEグループ' + result.sent + '件にも配信しました。'
     : result.kind === 'cafeteria_sold_out'
         ? '学食売切通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
-        : result.kind === 'assignment_updates'
+        : result.kind === 'cafeteria_menu'
+          ? '学食メニュー・売切情報を受信するLINEグループ' + result.sent + '件にも今日のメニューを配信しました。'
+          : result.kind === 'assignment_updates'
           ? '課題通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
           : result.kind === 'quick_notice'
             ? 'クイックお知らせ・パトロールを受信するLINEグループ' + result.sent + '件にも配信しました。'

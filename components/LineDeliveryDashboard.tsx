@@ -24,7 +24,7 @@ type DashboardData = {
 
 const KIND_LABELS: Record<string, string> = {
   daily_digest: '毎日の学校情報まとめ', train_timetable: '電車時刻表', class_timetable: '翌日の時間割',
-  school_schedule: '週間学校予定表', school_event_countdown: '学校イベント', cafeteria_sold_out: '学食売切',
+  school_schedule: '週間学校予定表', school_event_countdown: '学校イベント', cafeteria_sold_out: '学食売切', cafeteria_menu: '今日の学食メニュー',
   assignment_updates: '課題通知', quick_notice: 'クイックお知らせ', school_notification: '学園総合通知',
   earthquake_alert: '地震情報', weather_alert: '気象警報', weather_forecast_test: '天気予報テスト',
   bot_rotation: 'BOT切替予告', club_note: '部活・委員会投稿', lost_found: '落とし物通知',
