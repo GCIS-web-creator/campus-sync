@@ -1,5 +1,5 @@
 export type EarthquakeNotificationPayload = {
-  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake' | 'eew_national_push' | 'observed_intensity2_push' | 'admin_manual_group';
+  kind: 'eew_kodaira' | 'kodaira_intensity2' | 'eew_cancelled' | 'major_earthquake' | 'eew_national_push' | 'observed_intensity2_push';
   severeAreas?: Array<{ name: string; prefecture: string | null; intensity: string | null }>;
   localImpactAreas?: Array<{ name: string; prefecture: string | null; intensity: string | null }>;
   observedAreas?: Array<{ name: string; prefecture: string | null; intensity: string | null }>;
@@ -122,9 +122,8 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
   const isEew = payload.kind === 'eew_kodaira';
   const isCancelled = payload.kind === 'eew_cancelled';
   const isMajor = payload.kind === 'major_earthquake';
-  const isAdminManual = payload.kind === 'admin_manual_group';
   const normalizedMaxIntensity = normalizeIntensity(payload.maxIntensity);
-  const observationTheme = payload.kind === 'kodaira_intensity2' || isMajor || isAdminManual
+  const observationTheme = payload.kind === 'kodaira_intensity2' || isMajor
     ? INTENSITY_THEMES[normalizedMaxIntensity]
     : undefined;
 
@@ -143,7 +142,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? '緊急地震速報（警報）'
       : isMajor
         ? '全国で大地震を観測'
-        : isAdminManual ? '管理者選定の地震情報' : '小平市または多摩地区で震度2以上を観測';
+        : '小平市または多摩地区で震度2以上を観測';
 
   const kicker = isCancelled
     ? 'CAMPUSSYNC / EEW CANCELLED'
@@ -151,7 +150,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? 'CAMPUSSYNC / EEW WARNING'
       : isMajor
         ? 'CAMPUSSYNC / MAJOR EARTHQUAKE'
-        : isAdminManual ? 'CAMPUSSYNC / ADMIN SELECTED EARTHQUAKE' : 'CAMPUSSYNC / KODAIRA + TAMA EARTHQUAKE ALERT';
+        : 'CAMPUSSYNC / KODAIRA + TAMA EARTHQUAKE ALERT';
 
   const eventTime = new Date(payload.eventTime).toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -175,7 +174,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? '小平市周辺で予想される震度'
       : isMajor
         ? '国内で観測された最大震度'
-        : isAdminManual ? '気象庁発表の最大震度' : '小平市・多摩地区で観測された震度';
+        : '小平市・多摩地区で観測された震度';
 
   const heroCaption = isCancelled
     ? '緊急地震速報は取り消されました'
@@ -183,7 +182,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? '強い揺れに備えてください'
       : isMajor
         ? '観測結果・気象庁発表'
-        : isAdminManual ? '管理者がLINEグループ通知対象に選定' : '気象庁発表';
+        : '気象庁発表';
 
   const topNotice = isCancelled
     ? '取消情報'
@@ -191,7 +190,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? 'ただちに身を守る行動を'
       : isMajor
         ? normalizedMaxIntensity === '7' ? '最大級の揺れを観測' : '震度6弱以上の強い揺れを観測'
-        : isAdminManual ? '管理者が通知対象として選択' : normalizedMaxIntensity === '7'
+        : normalizedMaxIntensity === '7'
           ? '最大級の揺れを観測'
           : normalizedMaxIntensity === '6弱' || normalizedMaxIntensity === '6強'
             ? '非常に強い揺れを観測'
@@ -240,20 +239,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
             },
             { type: 'text', text: '小平市の揺れの有無にかかわらず、国内の大地震としてお知らせしています。', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
           ]
-        : isAdminManual
-          ? [
-              { type: 'text', text: '気象庁が実際に観測した主な地域', size: 'xs', weight: 'bold', color: theme.text },
-              {
-                type: 'text',
-                text: payload.observedAreas?.length
-                  ? payload.observedAreas.slice(0, 12).map(area => (area.prefecture || '') + area.name + (area.intensity ? '（震度' + area.intensity + '）' : '')).join('、')
-                    + (payload.observedAreas.length > 12 ? ' ほか' + (payload.observedAreas.length - 12) + '市区町村' : '')
-                  : '気象庁発表の観測地域情報を確認してください。',
-                size: 'sm', weight: 'bold', color: theme.text, wrap: true, margin: 'sm',
-              },
-              { type: 'text', text: 'この通知は管理者が選定した気象庁発表の地震情報です。', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
-            ]
-          : [
+        : [
               { type: 'text', text: '小平市・多摩地区の観測震度', size: 'xs', weight: 'bold', color: theme.text },
               {
                 type: 'text',
