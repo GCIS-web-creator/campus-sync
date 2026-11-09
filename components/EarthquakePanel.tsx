@@ -8,7 +8,6 @@ type EarthquakeEvent = EarthquakeMapEvent & {
   depth_km: number | null; magnitude: number | null; kodaira_intensity: string | null; kodaira_intensity_rank: number | null;
   eew_targets: string[]; eew_kodaira_target: boolean; eew_forecast_intensity: string | null;
   is_eew: boolean; is_eew_cancelled: boolean; updated_at: string;
-  admin_group_notified?: boolean;
 };
 type EarthquakeResponse = {
   events: EarthquakeEvent[];
@@ -243,7 +242,6 @@ export default function EarthquakePanel() {
                         {rank > 0 && <IntensityOutline rank={rank} text={intensityLabel(rank, event.max_intensity)} />}
                         {event.is_eew && !event.is_eew_cancelled && <span className="text-[8px] font-black text-rose-600 dark:text-rose-300">緊急地震速報</span>}
                         {event.is_eew_cancelled && <span className="text-[8px] font-bold text-slate-400">速報取消</span>}
-                        {event.admin_group_notified && <span className="rounded-full bg-cyan-100 px-1.5 py-0.5 text-[8px] font-black text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">AdminからLINE通知済み</span>}
                       </div>
                     </button>
                   );
@@ -265,7 +263,6 @@ export default function EarthquakePanel() {
                         <p className="text-[9px] font-bold text-slate-400">選択中の地震</p>
                         <h4 className="mt-0.5 break-words text-sm font-black text-slate-900 dark:text-white">{selected.hypocenter_name || selected.title}</h4>
                         <p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">{dateText(selected.event_time || selected.issued_at)}</p>
-                        {selected.admin_group_notified && <span className="mt-1 inline-flex rounded-full bg-cyan-100 px-2 py-0.5 text-[9px] font-black text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">管理者選定・LINEグループ通知済み</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {selected.magnitude !== null && <span className="rounded-full border border-slate-300 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:border-slate-600 dark:text-slate-300">M{selected.magnitude.toFixed(1)}</span>}
