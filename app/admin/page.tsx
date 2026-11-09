@@ -310,7 +310,7 @@ const LINE_GROUP_PREFERENCES: Array<{ key: LineGroupPreferenceKey; label: string
   { key: 'receive_train_timetable', label: '電車時刻表' },
   { key: 'receive_class_timetable', label: '翌日の時間割' },
   { key: 'receive_school_schedule', label: '週間学校予定・行事' },
-  { key: 'receive_cafeteria_sold_out', label: '学食売切情報' },
+  { key: 'receive_cafeteria_sold_out', label: '学食メニュー・売切情報' },
   { key: 'receive_assignment_updates', label: '課題のお知らせ' },
   { key: 'receive_quick_notices', label: 'クイックお知らせ・パトロール' },
 ];
@@ -1409,7 +1409,7 @@ export default function CampusSyncAdmin() {
   // 本日の献立を、現在使用中の公式アカウントへFlex Messageで配信する。
   const sendTodayCafeteriaMenuFlex = async () => {
     if (cafeteriaMenuLineSending || cafeteriaControlLoading || menuItems.length === 0) return;
-    if (!window.confirm('本日の学食メニュー ' + menuItems.length + '件を、LINE公式アカウントの友だちと一般通知を受信する設定のグループへFlex Messageで送信します。よろしいですか？')) return;
+    if (!window.confirm('本日の学食メニュー ' + menuItems.length + '件を、LINE公式アカウントの友だちと「学食メニュー・売切情報」を受信する設定のグループへFlex Messageで送信します。よろしいですか？')) return;
     setCafeteriaMenuLineSending(true);
     setCafeteriaMenuLineMessage('本日の献立を確認してLINEへ送信しています...');
     try {
@@ -3142,7 +3142,7 @@ export default function CampusSyncAdmin() {
                     {cafeteriaMenuLineSending ? '今日のメニューを送信中...' : '今日のご飯をFlex Messageで送信（' + menuItems.length + '品）'}
                   </button>
                   {cafeteriaMenuLineMessage && <p role="status" className="text-xs leading-5 text-cyan-100">{cafeteriaMenuLineMessage}</p>}
-                  <p className="text-[10px] leading-4 text-slate-500">送信先：現在使用中のLINE公式アカウントの友だち／一般通知を受信する設定のグループ</p>
+                  <p className="text-[10px] leading-4 text-slate-500">送信先：現在使用中のLINE公式アカウントの友だち／学食メニュー・売切情報を受信する設定のグループ</p>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">
                   売切状態の保存とLINE通知は別操作です。送信ボタンを押すと、未送信の商品だけを1つのFlex Messageにまとめて配信します。
