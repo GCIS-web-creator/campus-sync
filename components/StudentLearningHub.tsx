@@ -10,6 +10,7 @@ type Exam = { id: string; school_year: number; term: number; exam_type: string; 
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
 type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
+type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
 type TimerSnapshot = {
   version: 1;
@@ -59,13 +60,14 @@ const duration = (seconds: number) => {
 };
 const dateLabel = (value: string) => new Date(value + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
 
-export default function StudentLearningHub({ userId, isDarkMode = false }: { userId: string; isDarkMode?: boolean }) {
-  const [tab, setTab] = useState<'overview' | 'tests' | 'assignments' | 'focus' | 'history'>('overview');
+export default function StudentLearningHub({ userId, userClass = '', isDarkMode = false }: { userId: string; userClass?: string; isDarkMode?: boolean }) {
+  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [miniTests, setMiniTests] = useState<MiniTestEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -109,18 +111,20 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     setLoading(true); setError('');
     try {
       const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e] = await Promise.all([
+      const [a, b, c, d, e, f] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
         supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
+        supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error;
+      const issue = a.error || b.error || c.error || d.error || e.error || f.error;
       if (issue) throw issue;
       const newExams = (a.data || []) as Exam[];
       setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions((d.data || []) as Session[]);
       setAssignments((e.data || []) as Assignment[]);
+      setMiniTests((f.data || []) as MiniTestEvent[]);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習データを読み込めませんでした。');
@@ -252,7 +256,8 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
     const todayKey = dayKey(new Date());
     return Math.round((new Date(dueKey + 'T00:00:00').getTime() - new Date(todayKey + 'T00:00:00').getTime()) / 86400000);
   };
-  const targetLabel = (assignment: Assignment) => assignment.subject_option?.trim()
+  const visibleMiniTests = miniTests.filter(item => item.target_class === 'all' || (userClass && item.target_class === userClass));
+    const targetLabel = (assignment: Assignment) => assignment.subject_option?.trim()
     ? '理系クラス・' + assignment.subject_option + '向け'
     : assignment.target_class === 'science' ? '理系クラス向け' : '全クラス';
 
@@ -338,8 +343,8 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC LEARNING</p><h1 className={'mt-1 text-2xl font-black ' + (dark ? 'text-white' : 'text-slate-900')}>学習・テスト対策</h1><p className={'mt-1 text-xs ' + muted}>考査の予定、集中時間、勉強の記録をまとめて管理。</p></div><div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-cyan-950"><p className="text-[9px] font-bold">今週の勉強時間</p><p className="text-sm font-black">{duration(weekSeconds)}</p></div></header>
-    <nav className={'grid grid-cols-5 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
-      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
+    <nav className={'grid grid-cols-6 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
@@ -379,6 +384,29 @@ export default function StudentLearningHub({ userId, isDarkMode = false }: { use
           <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：教科書 P20〜35、問題集 第2章" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>範囲を追加</button></form>
         </section>;
       })}
+    </div>}
+
+    {tab === 'mini-tests' && <div className="space-y-4">
+      <section className={panel}>
+        <div className="mb-2 flex items-center gap-2"><CalendarDays size={18} className="text-cyan-600"/><h2 className="font-black">小テスト予定</h2></div>
+        <p className={'text-xs leading-5 '+muted}>Adminで公開された小テストの日時・範囲・出題形式を確認できます。</p>
+      </section>
+      {visibleMiniTests.length ? visibleMiniTests.map(item => <article key={item.id} className={panel}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-[10px] font-black text-cyan-900">{item.subject}</span>
+          <span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold '+(dark?'bg-slate-700 text-slate-200':'bg-slate-100 text-slate-700')}>{item.target_class==='all'?'全生徒':item.target_class}</span>
+        </div>
+        <h3 className="mt-2 text-base font-black">{item.title}</h3>
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-cyan-700">
+          <span>{dateLabel(item.test_date)}</span>
+          {item.period ? <span>{item.period}限</span> : null}
+          <span>{item.start_note || '開始時刻は授業内で案内'}</span>
+          {item.duration_minutes ? <span>{item.duration_minutes}分間</span> : null}
+        </p>
+        {item.scope && <div className={'mt-3 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><p className={'mb-1 text-[10px] font-black '+muted}>試験範囲</p><p className="whitespace-pre-wrap text-sm leading-6">{item.scope}</p></div>}
+        {item.notes && <div className="mt-3"><p className={'mb-1 text-[10px] font-black '+muted}>出題内容・形式</p><p className="whitespace-pre-wrap text-sm leading-6">{item.notes}</p></div>}
+        {(item.question_count || item.full_score) && <p className={'mt-3 border-t pt-3 text-xs font-bold '+(dark?'border-slate-700 text-slate-300':'border-slate-200 text-slate-600')}>{item.question_count ? item.question_count+'問' : '問題数未定'} ・ {item.full_score ? item.full_score+'点満点' : '配点未定'}</p>}
+      </article>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>現在、所属クラスが対象の小テスト予定はありません。</p>}
     </div>}
 
     {tab === 'assignments' && <div className="space-y-3">

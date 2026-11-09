@@ -12,6 +12,7 @@ import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
 import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
 import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
 import ExamScheduleAdmin from '@/components/ExamScheduleAdmin';
+import MiniTestScheduleAdmin from '@/components/MiniTestScheduleAdmin';
 import AssignmentSuggestionsAdmin from '@/components/AssignmentSuggestionsAdmin';
 import LineDeliveryDashboard from '@/components/LineDeliveryDashboard';
 import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
@@ -1937,6 +1938,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="考査日程管理" title="考査日程管理" onClick={() => setActiveTab('exams')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'exams' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <CalendarDays size={18} /><span className="sr-only md:not-sr-only">考査日程管理</span>
             </button>
+            <button aria-label="小テスト管理" title="小テスト管理" onClick={() => setActiveTab('mini-tests')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'mini-tests' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <ClipboardList size={18} /><span className="sr-only md:not-sr-only">小テスト管理</span>
+            </button>
             <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
             </button>
@@ -2943,6 +2947,8 @@ export default function CampusSyncAdmin() {
         )}
 
         {activeTab === 'exams' && <ExamScheduleAdmin />}
+
+        {activeTab === 'mini-tests' && <MiniTestScheduleAdmin />}
 
         {/* ================= 月間献立表（次月分を入力して一括保存） ================= */}
         {activeTab === 'menu-calendar' && (

@@ -4409,7 +4409,7 @@ Supabaseの設定を確認してください。
 
       case 'study':
         return authUser?.id && !isGuestMode
-          ? <StudentLearningHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
+          ? <StudentLearningHub userId={String(authUser.id)} userClass={userClass} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習機能はログイン後に利用できます</h2></div>;
 
       case 'student-card':
