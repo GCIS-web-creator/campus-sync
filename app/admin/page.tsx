@@ -381,6 +381,8 @@ export default function CampusSyncAdmin() {
   const [cafeteriaControlSavingId, setCafeteriaControlSavingId] = useState<string | null>(null);
   const [cafeteriaControlMessage, setCafeteriaControlMessage] = useState('');
   const [cafeteriaLineSending, setCafeteriaLineSending] = useState(false);
+  const [cafeteriaMenuLineSending, setCafeteriaMenuLineSending] = useState(false);
+  const [cafeteriaMenuLineMessage, setCafeteriaMenuLineMessage] = useState('');
   const [lostItems, setLostItems] = useState<AdminLostReport[]>(INITIAL_LOST_REPORTS);
   const [lostLoading, setLostLoading] = useState(false);
   const [lostMessage, setLostMessage] = useState('');
@@ -1402,6 +1404,30 @@ export default function CampusSyncAdmin() {
       setCafeteriaControlMessage(result.message||'売切通知を送信しました。');
     }catch(error){setCafeteriaControlMessage(error instanceof Error?error.message:'売切通知を送信できませんでした。');}
     finally{setCafeteriaLineSending(false);}
+  };
+
+  // 本日の献立を、現在使用中の公式アカウントへFlex Messageで配信する。
+  const sendTodayCafeteriaMenuFlex = async () => {
+    if (cafeteriaMenuLineSending || cafeteriaControlLoading || menuItems.length === 0) return;
+    if (!window.confirm('本日の学食メニュー ' + menuItems.length + '件を、LINE公式アカウントの友だちと一般通知を受信する設定のグループへFlex Messageで送信します。よろしいですか？')) return;
+    setCafeteriaMenuLineSending(true);
+    setCafeteriaMenuLineMessage('本日の献立を確認してLINEへ送信しています...');
+    try {
+      const response = await fetch('/api/admin/cafeteria-daily-menu-flex', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) throw new Error(result?.message || '今日の学食メニューを送信できませんでした（HTTP ' + response.status + '）。');
+      setCafeteriaMenuLineMessage(result.message || '今日の学食メニューをLINEへ送信しました。');
+    } catch (error) {
+      setCafeteriaMenuLineMessage(error instanceof Error ? error.message : '今日の学食メニューを送信できませんでした。');
+    } finally {
+      setCafeteriaMenuLineSending(false);
+    }
   };
 
   const toggleSoldOut = async (id: string) => {
@@ -3105,6 +3131,19 @@ export default function CampusSyncAdmin() {
                 {cafeteriaControlMessage && (
                   <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">{cafeteriaControlMessage}</p>
                 )}
+                <div className="rounded-xl border border-cyan-800/60 bg-cyan-950/30 p-4 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-black text-cyan-100">今日のご飯をLINEへ配信</h4>
+                    <p className="mt-1 text-xs leading-5 text-cyan-200/80">月間献立表に保存された本日の5区分のメニューを、価格・カロリー・アレルギー情報・売切状況付きのFlex Messageにまとめて送信します。</p>
+                  </div>
+                  <button type="button" onClick={() => void sendTodayCafeteriaMenuFlex()}
+                    disabled={cafeteriaMenuLineSending || cafeteriaControlLoading || menuItems.length === 0}
+                    className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-sky-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-950/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+                    {cafeteriaMenuLineSending ? '今日のメニューを送信中...' : '今日のご飯をFlex Messageで送信（' + menuItems.length + '品）'}
+                  </button>
+                  {cafeteriaMenuLineMessage && <p role="status" className="text-xs leading-5 text-cyan-100">{cafeteriaMenuLineMessage}</p>}
+                  <p className="text-[10px] leading-4 text-slate-500">送信先：現在使用中のLINE公式アカウントの友だち／一般通知を受信する設定のグループ</p>
+                </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">
                   売切状態の保存とLINE通知は別操作です。送信ボタンを押すと、未送信の商品だけを1つのFlex Messageにまとめて配信します。
                 </div>

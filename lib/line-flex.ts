@@ -284,6 +284,93 @@ export function buildCafeteriaSoldOutFlexMessage(input: {
   };
 }
 
+/** 今日の学食メニュー5区分をまとめて配信するFlex Message */
+export function buildCafeteriaDailyMenuFlexMessage(input: {
+  dateLabel: string;
+  items: Array<{
+    category: string;
+    name: string;
+    price?: string | null;
+    calorie?: string | null;
+    allergy?: string | null;
+    isSoldOut?: boolean;
+  }>;
+  note?: string | null;
+}): FlexMessage {
+  const items = input.items.slice(0, 5).map(item => ({
+    category: String(item.category || '').trim().slice(0, 30),
+    name: String(item.name || '').trim().slice(0, 100),
+    price: String(item.price || '').trim().slice(0, 40),
+    calorie: String(item.calorie || '').trim().slice(0, 40),
+    allergy: String(item.allergy || '').trim().slice(0, 180),
+    isSoldOut: item.isSoldOut === true,
+  })).filter(item => item.name);
+  const dateLabel = String(input.dateLabel || '').trim().slice(0, 50);
+  const note = String(input.note || '').trim().slice(0, 300);
+  const body: Record<string, unknown>[] = [];
+
+  for (const [index, item] of items.entries()) {
+    if (index > 0) body.push({ type: 'separator', color: '#E2E8F0', margin: 'md' });
+    body.push({
+      type: 'box', layout: 'vertical', backgroundColor: '#F8FAFC',
+      cornerRadius: '10px', paddingAll: '12px', spacing: 'xs',
+      contents: [
+        {
+          type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'sm',
+          contents: [
+            { type: 'text', text: item.category || '本日のメニュー', size: 'xs', weight: 'bold', color: '#0E7490', flex: 1, wrap: true },
+            { type: 'text', text: item.isSoldOut ? '売切' : '販売予定', size: 'xxs', weight: 'bold', color: item.isSoldOut ? '#B91C1C' : '#047857', align: 'end', flex: 0 },
+          ],
+        },
+        { type: 'text', text: item.name, size: 'md', weight: 'bold', color: '#0F172A', wrap: true },
+        ...(item.price ? [{ type: 'text', text: '価格：' + item.price, size: 'xs', color: '#475569', wrap: true }] : []),
+        ...(item.calorie ? [{ type: 'text', text: 'カロリー：' + item.calorie, size: 'xs', color: '#475569', wrap: true }] : []),
+        ...(item.allergy ? [{
+          type: 'box', layout: 'vertical', backgroundColor: '#FFF7ED', cornerRadius: '7px',
+          paddingAll: '8px', spacing: 'xs',
+          contents: [
+            { type: 'text', text: 'アレルギー情報', size: 'xxs', weight: 'bold', color: '#9A3412' },
+            { type: 'text', text: item.allergy, size: 'xs', color: '#7C2D12', wrap: true },
+          ],
+        }] : []),
+      ],
+    });
+  }
+  if (note) {
+    body.push({
+      type: 'box', layout: 'vertical', backgroundColor: '#EFF6FF', cornerRadius: '9px',
+      paddingAll: '10px', spacing: 'xs', margin: 'md',
+      contents: [
+        { type: 'text', text: '学食からのお知らせ', size: 'xs', weight: 'bold', color: '#1D4ED8' },
+        { type: 'text', text: note, size: 'sm', color: '#1E3A8A', wrap: true },
+      ],
+    });
+  }
+  body.push({ type: 'text', text: '売切・販売状況は当日中に変更される場合があります。', size: 'xxs', color: '#94A3B8', wrap: true, margin: 'md' });
+  const menuSummary = items.map(item => item.category + '：' + item.name).join('／');
+  return {
+    type: 'flex',
+    altText: ('【今日の学食メニュー】' + (dateLabel ? dateLabel + '｜' : '') + menuSummary).slice(0, 400),
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#0F172A', paddingAll: '18px', spacing: 'sm',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC  /  CAFETERIA', size: 'xs', color: '#67E8F9', weight: 'bold' },
+          { type: 'text', text: '今日の学食メニュー', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+          { type: 'text', text: dateLabel, size: 'xs', color: '#CBD5E1', wrap: true },
+        ],
+      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: body },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '11px', backgroundColor: '#F8FAFC',
+        contents: [{ type: 'text', text: '最新情報はCampusSyncでも確認できます。', size: 'xs', color: '#64748B', align: 'center', wrap: true }],
+      },
+    },
+  };
+}
+
 /** 月曜〜日曜の週間学校予定表。LINE上で曜日ごとのカードを切り替えて確認できる。 */
 export function buildWeeklySchoolScheduleFlexMessage(input: {
   title: string;
