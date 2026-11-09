@@ -471,6 +471,77 @@ function buildAssignmentListBubble(input: { today: string; assignments: Assignme
   });
 }
 
+
+function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unknown>[] {
+  const section = (title: string, body: string, note?: string): Record<string, unknown> => ({
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: '#E2E8F0',
+    cornerRadius: '12px',
+    paddingAll: '2px',
+    contents: [
+      {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#FFFFFF',
+        cornerRadius: '10px',
+        paddingAll: '12px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
+          { type: 'text', text: body, size: 'xs', color: '#334155', wrap: true },
+          ...(note ? [{ type: 'text', text: note, size: 'xs', weight: 'bold', color: '#B45309', wrap: true }] : []),
+        ],
+      },
+    ],
+  });
+
+  const textbookBubble = buildBoardBubble({
+    eyebrow: 'TODAY ONLY  /  EXAM RANGE RELEASED',
+    title: '２学期期末考査　化学試験範囲',
+    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲① 教科書',
+    bodyContents: [
+      section(
+        '教科書① 実教出版「化学 academia」',
+        'p.65〜82：第3「希薄溶液の性質」・第4「コロイド」\\np.82 論述問題 2・3\\np.83 節末問題 3〜7\\np.86 章末問題 3・4',
+        '除外：p.67 発展「ラウールの法則と沸点上昇」／p.75 発展「蒸気圧と浸透圧」',
+      ),
+      section(
+        '教科書② 実教出版「化学基礎 academia 新訂版」',
+        'p.136〜164　第2節「酸と塩基」\\np.164 節末問題／p.165 論述問題・グラフ問題\\np.166〜182　第3節「酸化還元反応」\\np.203 節末問題 1・2・3・5／p.204 論述問題 1・2\\np.205〜211　特集4「滴定」\\np.212 グラフ問題 1〜5／章末問題 4・5・6',
+      ),
+    ],
+  });
+  textbookBubble.size = 'giga';
+
+  const workbookBubble = buildBoardBubble({
+    eyebrow: 'CHEMISTRY EXAM  /  WORKBOOK & NOTES',
+    title: '問題集・当日注意・提出物',
+    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲②',
+    bodyContents: [
+      section(
+        '問題集「エクセル 化学 総合版 化学基礎＋化学」',
+        '6「酸・塩基」 p.100〜121\\n7「酸化還元反応」 p.122〜133\\n＋α：問題番号210 COD／211 DO／212 アスコルビン酸の定量\\n12「溶液の性質」内の4「溶液の性質」\\nWU 3〜5／基本例題51／基本問題261〜267\\n応用例題53・54／応用問題269〜275',
+      ),
+      section(
+        '重要問題集',
+        '問題番号72・73「コロイド」も含みます。\\n重要問題集は冬休みの宿題です。時間に余裕がある人は、実力確認のため挑戦してください。',
+      ),
+      section(
+        '試験当日の注意',
+        '原子量は与えられます。\\n持ち込み・利用できるのは、計算機能のみの計算機・電卓です。\\n携帯電話・スマホ・電子辞書などの計算機能は使用できません。',
+      ),
+      section(
+        '学習ポイント・提出物',
+        '教科書の用語を覚え、エクセルの基本問題・エクササイズを繰り返しましょう。標準例題・標準問題・範囲の発展問題も学習。有効数字にこだわる計算もあります。\\n提出物：問題集（エクセル）用ノート（期末試験範囲）\\n提出日：試験終了日 11月27日\\n提出場所：化学準備室の机上に名前順に並べて提出。',
+      ),
+    ],
+  });
+  workbookBubble.size = 'giga';
+
+  return [textbookBubble, workbookBubble];
+}
+
 function buildDailyDigest(input: {
   dateLabel: string;
   today: string;
@@ -490,7 +561,8 @@ function buildDailyDigest(input: {
   const transitBubbles = buildTransitBubbles(input);
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
+  const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -506,6 +578,7 @@ function buildDailyDigest(input: {
         ]:[]),
         buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
         assignmentBubble,
+        ...examScopeBubbles,
       ],
     },
   };
@@ -723,12 +796,13 @@ export async function POST(request: Request) {
       weather:forecastDays.length>0,
       assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
       assignmentError: Boolean(assignmentResult.error),
-      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5),
+      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) + (today === '2026-11-09' ? 2 : 0),
+      chemistryExamScope: today === '2026-11-09',
       historySaved,
     },
     groupDelivery,
     message: isSaturday
       ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-      : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery),
+      : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (today === '2026-11-09' ? '、本日限定の化学試験範囲' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
