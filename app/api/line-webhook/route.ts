@@ -445,6 +445,145 @@ async function handleLineAssignmentContribution(
   return true;
 }
 
+
+type LineMiniTestDraft = { subject?: string; testDate?: string; title?: string; scope?: string; notes?: string };
+const LINE_MINI_TEST_SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健', 'その他'] as const;
+function parseLineMiniTestDate(value: string): string | null {
+  const normalized = value.normalize('NFKC').trim();
+  let year = 0, month = 0, day = 0;
+  const full = normalized.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  const short = normalized.match(/^(\d{1,2})[/-](\d{1,2})$/)
+    || normalized.match(/^(\d{1,2})月(\d{1,2})日$/);
+  if (full) { year = Number(full[1]); month = Number(full[2]); day = Number(full[3]); }
+  else if (short) {
+    const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Tokyo', year: 'numeric' }).formatToParts(new Date());
+    year = Number(parts.find(part => part.type === 'year')?.value || 0);
+    month = Number(short[1]); day = Number(short[2]);
+  } else return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  const key = date.toISOString().slice(0, 10);
+  const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const todayValues = Object.fromEntries(todayParts.map(part => [part.type, part.value]));
+  const today = String(todayValues.year) + '-' + String(todayValues.month) + '-' + String(todayValues.day);
+  return key >= today ? key : null;
+}
+function buildLineMiniTestPrompt(step: string, draft: LineMiniTestDraft): { text: string; quickReplies: AssignmentQuickReplyOption[] } {
+  const choices = (values: string[]) => values.map(value => ({ label: value, text: value }));
+  switch (step) {
+    case 'subject':
+      return { text: '📘 小テスト予定を登録します。まず教科を選んでください。', quickReplies: choices([...LINE_MINI_TEST_SUBJECTS]) };
+    case 'date':
+      return { text: '実施日を入力してください。\n例：2026/11/20、11/20、11月20日', quickReplies: [] };
+    case 'title':
+      return { text: 'テスト名を入力してください。\n例：英単語小テスト', quickReplies: [] };
+    case 'scope':
+      return { text: '出題範囲を入力してください。不要なら「範囲なし」と送信してください。', quickReplies: [{ label: '範囲なし', text: '範囲なし' }] };
+    case 'notes':
+      return { text: '備考があれば入力してください。なければ「なし」と送信してください。', quickReplies: [{ label: 'なし', text: 'なし' }] };
+    case 'confirm':
+      return {
+        text: ['📝 小テスト予定の確認', '', '教科：' + (draft.subject || ''), '実施日：' + (draft.testDate || ''), 'テスト名：' + (draft.title || ''), '範囲：' + (draft.scope || 'なし'), '備考：' + (draft.notes || 'なし'), '', '送信すると先生の承認待ちになります。承認後に学校の週間予定表とLINE週間配信へ掲載されます。'].join('\n'),
+        quickReplies: [{ label: '申請する', text: '申請する' }, { label: '最初から', text: '最初からやり直す' }, { label: '中止', text: '中止' }],
+      };
+    default:
+      return { text: '小テスト登録の状態を確認できませんでした。「CSAI 小テスト追加」と送信してやり直してください。', quickReplies: [] };
+  }
+}
+async function saveLineMiniTestSession(admin: ReturnType<typeof getLineAssignmentAdmin> & {}, lineUserId: string, step: string, draft: LineMiniTestDraft) {
+  const now = new Date();
+  const { error } = await admin.from('line_mini_test_sessions').upsert({
+    line_user_id: lineUserId, step, draft_data: draft,
+    expires_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(), updated_at: now.toISOString(),
+  }, { onConflict: 'line_user_id' });
+  if (error) console.error('LINE mini-test session save failed:', error.message);
+  return !error;
+}
+async function replyLineMiniTestStep(replyToken: string, accessToken: string, step: string, draft: LineMiniTestDraft, prefix = '') {
+  const prompt = buildLineMiniTestPrompt(step, draft);
+  await replyPlain(replyToken, (prefix ? prefix + '\n\n' : '') + prompt.text, accessToken, prompt.quickReplies);
+}
+async function handleLineMiniTestContribution(event: LineTextMessageEvent, replyToken: string, messageText: string, accessToken: string): Promise<boolean> {
+  if (event.source?.type !== 'user' || !event.source.userId) return false;
+  const normalized = messageText.normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
+  const isStart = normalized.startsWith('csai') && /(小テスト|ミニテスト).*(追加|登録)|(追加|登録).*(小テスト|ミニテスト)/.test(normalized);
+  const lineUserId = event.source.userId;
+  const admin = getLineAssignmentAdmin();
+  if (!admin) {
+    if (isStart) await replyPlain(replyToken, '小テスト登録サービスの設定を確認できません。', accessToken);
+    return isStart;
+  }
+  if (isStart) {
+    const saved = await saveLineMiniTestSession(admin, lineUserId, 'subject', {});
+    if (!saved) await replyPlain(replyToken, '小テスト登録を開始できませんでした。もう一度お試しください。', accessToken);
+    else await replyLineMiniTestStep(replyToken, accessToken, 'subject', {});
+    return true;
+  }
+  const { data: session, error } = await admin.from('line_mini_test_sessions').select('step,draft_data,expires_at').eq('line_user_id', lineUserId).maybeSingle();
+  if (error) { console.error('LINE mini-test session lookup failed:', error.message); return false; }
+  if (!session) return false;
+  if (/^(中止|キャンセル|やめる)$/.test(normalized)) {
+    await admin.from('line_mini_test_sessions').delete().eq('line_user_id', lineUserId);
+    await replyPlain(replyToken, '小テスト予定の登録を中止しました。', accessToken);
+    return true;
+  }
+  if (Date.parse(String(session.expires_at)) <= Date.now()) {
+    await admin.from('line_mini_test_sessions').delete().eq('line_user_id', lineUserId);
+    await replyPlain(replyToken, '入力期限（60分）が切れました。「CSAI 小テスト追加」からやり直してください。', accessToken);
+    return true;
+  }
+  const draft: LineMiniTestDraft = session.draft_data && typeof session.draft_data === 'object' ? { ...(session.draft_data as LineMiniTestDraft) } : {};
+  const input = messageText.normalize('NFKC').trim();
+  let next = String(session.step || 'subject');
+  let errorMessage = '';
+  if (next === 'subject') {
+    if (!LINE_MINI_TEST_SUBJECTS.includes(input as typeof LINE_MINI_TEST_SUBJECTS[number])) errorMessage = '教科を一覧から選択してください。';
+    else { draft.subject = input; next = 'date'; }
+  } else if (next === 'date') {
+    const date = parseLineMiniTestDate(input);
+    if (!date) errorMessage = '日付を読み取れません。今日以降の日付を YYYY/MM/DD または M/D で入力してください。';
+    else { draft.testDate = date; next = 'title'; }
+  } else if (next === 'title') {
+    if (!input || input.length > 160) errorMessage = 'テスト名は1〜160文字で入力してください。';
+    else { draft.title = input; next = 'scope'; }
+  } else if (next === 'scope') {
+    if (input.length > 1200) errorMessage = '範囲は1200文字以内にしてください。';
+    else { draft.scope = ['範囲なし', 'なし'].includes(input) ? '' : input; next = 'notes'; }
+  } else if (next === 'notes') {
+    if (input.length > 1200) errorMessage = '備考は1200文字以内にしてください。';
+    else { draft.notes = ['なし', '不要'].includes(input) ? '' : input; next = 'confirm'; }
+  } else if (next === 'confirm') {
+    if (input === '最初からやり直す') { Object.keys(draft).forEach(key => delete (draft as Record<string, unknown>)[key]); next = 'subject'; }
+    else if (input === '申請する') {
+      if (!draft.subject || !draft.testDate || !draft.title) errorMessage = '必須項目が不足しています。最初からやり直してください。';
+      else {
+        const { data: claim, error: claimError } = await admin.from('line_mini_test_sessions').update({ step: 'submitting', updated_at: new Date().toISOString() }).eq('line_user_id', lineUserId).eq('step', 'confirm').select('line_user_id').maybeSingle();
+        if (claimError || !claim) { await replyPlain(replyToken, '送信処理中です。連続送信は不要です。', accessToken); return true; }
+        const { error: insertError } = await admin.from('mini_test_events').insert({
+          subject: draft.subject, title: draft.title, test_date: draft.testDate, scope: draft.scope || '', notes: draft.notes || '',
+          audience: 'school', status: 'pending', source: 'line', line_user_id: lineUserId,
+        });
+        if (insertError) {
+          console.error('LINE mini-test insert failed:', insertError.message);
+          await saveLineMiniTestSession(admin, lineUserId, 'confirm', draft);
+          await replyPlain(replyToken, '申請を保存できませんでした。入力内容は保持しています。「申請する」をもう一度押してください。', accessToken, [{ label: '申請する', text: '申請する' }]);
+          return true;
+        }
+        await admin.from('line_mini_test_sessions').delete().eq('line_user_id', lineUserId);
+        await replyPlain(replyToken, '✅ 小テスト予定を先生へ申請しました。承認後、学校の週間予定表とLINE週間配信に掲載されます。', accessToken);
+        return true;
+      }
+    } else errorMessage = '「申請する」または「最初から」を選択してください。';
+  } else {
+    next = 'subject';
+    errorMessage = '入力状態を初期化しました。教科を選択してください。';
+  }
+  const saved = await saveLineMiniTestSession(admin, lineUserId, next, draft);
+  if (!saved) { await replyPlain(replyToken, '入力内容を保存できませんでした。もう一度お試しください。', accessToken); return true; }
+  await replyLineMiniTestStep(replyToken, accessToken, next, draft, errorMessage);
+  return true;
+}
+
 async function handleLineEvents(
   events: LineTextMessageEvent[],
   channelAccessToken: string,
@@ -457,6 +596,8 @@ async function handleLineEvents(
     if (event.type !== 'message' || event.message?.type !== 'text') return;
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
     const messageText = typeof event.message.text === 'string' ? event.message.text.trim() : '';
+    const miniTestHandled = await handleLineMiniTestContribution(event, event.replyToken, messageText, channelAccessToken);
+    if (miniTestHandled) return;
     const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
 

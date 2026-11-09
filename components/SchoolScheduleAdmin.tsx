@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import MiniTestApprovalsAdmin from '@/components/MiniTestApprovalsAdmin';
 import { CalendarDays, Plus, Trash2, Send, Save, CalendarCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ScheduleItem = { id: string; time: string; title: string; location: string; details: string };
@@ -201,7 +202,7 @@ export default function SchoolScheduleAdmin({ adminPassword }: Props) {
         </div>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
+      <MiniTestApprovalsAdmin />\n\n      <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
         <label className="block text-xs font-bold text-slate-300">
           Admin用パスワード
           <div className="mt-1 rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-3 text-xs font-bold text-emerald-300">管理者セッション認証済み</div>

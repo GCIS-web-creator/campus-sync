@@ -84,6 +84,7 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
 }
 
 type WeeklyEventRow = { id: string; title: string; summary?: string | null; event_date: string };
+type WeeklyMiniTestRow = { id: string; subject: string; title: string; test_date: string; scope?: string | null; target_class?: string | null };
 type WeeklyAssignmentRow = { id: string; title: string; details?: string | null; subject?: string | null; subject_option?: string | null; target_class?: string | null; due_at?: string | null };
 
 function getTokyoTodayKey(): string {
@@ -166,6 +167,37 @@ function buildWeeklyAssignmentsBubble(today: string, assignments: WeeklyAssignme
     eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS',
     title: '課題一覧',
     subtitle: 'SUBJECT  •  DEADLINE  •  REMAINING DAYS',
+    contents,
+  });
+}
+
+function buildWeeklyMiniTestsBubble(events: WeeklyMiniTestRow[], failed: boolean) {
+  const contents: Record<string, unknown>[] = [];
+  if (failed) {
+    contents.push({ type: 'text', text: '小テスト予定を取得できませんでした。CampusSyncで確認してください。', size: 'sm', color: '#B91C1C', wrap: true });
+  } else if (!events.length) {
+    contents.push({ type: 'text', text: '今週の小テスト予定はありません。', size: 'sm', color: '#64748B', wrap: true });
+  } else {
+    for (const item of events.slice(0, 10)) {
+      contents.push({
+        type: 'box', layout: 'vertical', backgroundColor: '#F5F3FF', cornerRadius: '10px', paddingAll: '11px', spacing: 'xs',
+        contents: [
+          { type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'sm', contents: [
+            { type: 'text', text: item.test_date.slice(5).replace('-', '/'), size: 'xs', color: '#6D28D9', weight: 'bold', flex: 0 },
+            { type: 'text', text: item.subject, size: 'xxs', color: '#7C3AED', weight: 'bold', flex: 1, wrap: true },
+            ...(item.target_class ? [{ type: 'text', text: item.target_class, size: 'xxs', color: '#64748B', flex: 0, wrap: true }] : []),
+          ] },
+          { type: 'text', text: item.title, size: 'sm', color: '#1E1B4B', weight: 'bold', wrap: true },
+          ...(item.scope ? [{ type: 'text', text: '範囲：' + item.scope.slice(0, 180), size: 'xs', color: '#5B21B6', wrap: true }] : []),
+        ],
+      });
+    }
+    if (events.length > 10) contents.push({ type: 'text', text: 'ほか' + (events.length - 10) + '件の小テストがあります。', size: 'xxs', color: '#64748B', wrap: true });
+  }
+  return buildWeeklyInfoBubble({
+    eyebrow: 'CAMPUSSYNC  /  MINI TESTS',
+    title: '小テスト予定',
+    subtitle: 'DATE  •  SUBJECT  •  TEST RANGE',
     contents,
   });
 }
@@ -259,7 +291,7 @@ export async function POST(request: Request) {
 
   const today = getTokyoTodayKey();
   const weekEnd = addDays(weekStart, 6);
-  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, forecast] = await Promise.all([
+  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, miniTestResult, timetableResult, forecast] = await Promise.all([
     supabase.from('school_weekly_schedules')
       .select('week_start,title,days').eq('week_start', weekStart).maybeSingle(),
     supabase.from('school_event_countdowns')
@@ -272,6 +304,11 @@ export async function POST(request: Request) {
     supabase.from('assignments')
       .select('id,title,details,subject,subject_option,target_class,due_at')
       .eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }).limit(8),
+    supabase.from('mini_test_events')
+      .select('id,subject,title,test_date,scope,target_class')
+      .eq('audience', 'school').eq('status', 'published')
+      .gte('test_date', weekStart).lte('test_date', weekEnd)
+      .order('test_date', { ascending: true }).limit(30),
     supabase.from('class_timetable_slots')
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('period', { ascending: true }),
@@ -284,6 +321,7 @@ export async function POST(request: Request) {
   if (weeklyEventsResult.error) console.error('週間予定表：学校行事の取得に失敗:', weeklyEventsResult.error.message);
   if (countdownResult.error) console.error('週間予定表：カウントダウン取得に失敗:', countdownResult.error.message);
   if (assignmentResult.error) console.error('週間予定表：課題取得に失敗:', assignmentResult.error.message);
+  if (miniTestResult.error) console.error('週間予定表：小テスト予定取得に失敗:', miniTestResult.error.message);
   if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
 
   const schedule = scheduleResult.data;
@@ -313,16 +351,19 @@ export async function POST(request: Request) {
   const baseFlex = buildWeeklySchoolScheduleFlexMessage({ title: scheduleTitle, weekStart, days });
   const weeklyScheduleBubble = baseFlex.contents as Record<string, unknown>;
   const assignmentBubble = buildWeeklyAssignmentsBubble(today, assignments, Boolean(assignmentResult.error));
+  const miniTests = (miniTestResult.data || []) as WeeklyMiniTestRow[];
+  const miniTestBubble = buildWeeklyMiniTestsBubble(miniTests, Boolean(miniTestResult.error));
   const countdownBubble = buildCountdownBubble(today, countdownEvents, Boolean(countdownResult.error));
   const flex = {
     ...baseFlex,
-    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題一覧・天気予報・カウントダウン').slice(0, 400),
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題一覧・小テスト予定・天気予報・カウントダウン').slice(0, 400),
     contents: {
       type: 'carousel',
       contents: [
         buildMondayClassBubble('7組', mondayLabel, timetable),
         buildMondayClassBubble('8組', mondayLabel, timetable),
         assignmentBubble,
+        miniTestBubble,
         buildWeatherForecastBubble(weeklyWeather),
         countdownBubble,
         weeklyScheduleBubble,
@@ -500,10 +541,11 @@ export async function POST(request: Request) {
         weeklyEventFallback: !hasSavedSchedule,
         mondayClassTimetable: true,
         assignments: assignments.length,
+        miniTests: miniTests.length,
         countdowns: countdownEvents.length,
         weather: weeklyWeather.length,
       },
-      message: weekStart + '〜' + weekEnd + ' の1週間の予定、月曜日の7組・8組時間割、課題一覧、天気、カウントダウンをLINEへ送信しました。' +
+      message: weekStart + '〜' + weekEnd + ' の1週間の予定、月曜日の7組・8組時間割、課題一覧、小テスト予定、天気、カウントダウンをLINEへ送信しました。' +
         (!hasSavedSchedule ? ' 詳細な週間予定表は未登録のため、行事情報を使った一覧にしています。' : '') + groupMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
