@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
-import { answerDetailed, isTaskTemplate, type Availability, type Counts, type Direction, type Target } from '@/lib/campus-ai/answer';
+type Direction = '国分寺方面' | '東村山方面' | '両方';
+type Target = 'なし' | '学食' | '課題' | '教室' | '部活' | '蔵書' | 'キャリア' | '落とし物' | '口コミ' | '貢献度' | '通知';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,8 @@ function findTarget(q: string, names: string[], minLen = 3): number {
   return bestIndex;
 }
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
+const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
+const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
 const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
@@ -132,7 +135,7 @@ export async function POST(req: Request) {
   const wantsNotifications = isNotificationQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
-  const wantsMenu = /メニュー|学食|ランチ|カロリー|アレルギー|食べられる/.test(question) && !wantsCrowd && !wantsReviews;
+  const wantsMenu = isMealQuestion(question) && !wantsCrowd && !wantsReviews;
   const direction: Direction = /東村山|本川越/.test(question)
     ? '東村山方面'
     : /国分寺/.test(question) ? '国分寺方面' : trainQuestion ? '両方' : '国分寺方面';
@@ -145,6 +148,8 @@ export async function POST(req: Request) {
   }).formatToParts(nowDate);
   const tokyoDateValues = Object.fromEntries(tokyoDateParts.map(part => [part.type, part.value]));
   const todayDateKey = String(tokyoDateValues.year) + '-' + String(tokyoDateValues.month) + '-' + String(tokyoDateValues.day);
+  // 混雑・教室・自習室の「現在」情報は24時間以内に更新された値だけを扱う。
+  const freshSince = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const now = (jstHour < 4 ? jstHour + 24 : jstHour) * 60 + jst.getUTCMinutes();
 
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') || '')?.[1] || '';
@@ -159,7 +164,7 @@ export async function POST(req: Request) {
   const userResult = authed ? await authed.auth.getUser().catch(() => ({ data: { user: null }, error: { message: 'auth lookup failed' } })) : null;
   const email = userResult?.data?.user?.email ?? '';
   const studentId = /^([0-9]{6})@tokyo\.soka\.ed\.jp$/i.exec(email)?.[1] ?? '';
-  let userClass = '1-1';
+  let userClass = '';
   let profileName = '';
   let profileClass = '';
 
@@ -227,9 +232,9 @@ export async function POST(req: Request) {
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'higashimurayama'),
-    db.from('room_status').select('room_id, room_name, status, temp, updated_at'),
+    db.from('room_status').select('room_id, room_name, status, temp, updated_at').gte('updated_at', freshSince),
     db.from('cafeteria_sold_out').select('menu_id, is_sold_out'),
-    db.from('cafeteria_votes').select('status').eq('scope_key', 'overall'),
+    db.from('cafeteria_votes').select('status, created_at').eq('scope_key', 'overall').gte('created_at', freshSince),
     authed
       ? authed.from('assignments').select('id, title, details, due, due_at, created_at').eq('is_active', true).order('created_at', { ascending: false })
       : Promise.resolve({ data: null, error: null }),
@@ -238,10 +243,10 @@ export async function POST(req: Request) {
       : Promise.resolve({ data: null, error: null }),
     db.from('club_notes').select('club_name, title, content, author, created_at').order('created_at', { ascending: false }).limit(100),
     db.from('library_books').select('id, title, author, code, status, created_at').order('created_at', { ascending: false }).limit(500),
-    db.from('study_room_status').select('room_key, room_name, occupied_seats, total_seats, updated_at').eq('room_key', 'career_center').maybeSingle(),
-    db.from('lost_and_found').select('*').order('created_at', { ascending: false }).limit(100),
+    db.from('study_room_status').select('room_key, room_name, occupied_seats, total_seats, updated_at').eq('room_key', 'career_center').gte('updated_at', freshSince).maybeSingle(),
+    db.from('lost_and_found').select('*').eq('status', 'approved').order('created_at', { ascending: false }).limit(100),
     db.from('cafeteria_reviews').select('menu_id, user_name, rating, comment, created_at').order('created_at', { ascending: false }).limit(200),
-    db.from('cafeteria_votes').select('menu_id, scope_key, status, voter_id').not('menu_id', 'is', null),
+    db.from('cafeteria_votes').select('menu_id, scope_key, status, voter_id, created_at').not('menu_id', 'is', null).gte('created_at', freshSince),
     db.from('notifications').select('id, title, created_at').order('created_at', { ascending: false }).limit(100),
   ]);
 
@@ -252,7 +257,7 @@ export async function POST(req: Request) {
 
   // 本日分は画面と同じ contribution_scores.score、累計は contribution_history のdelta合計を使う。
   let contributionPoints = 0;
-  let dailyScore = 65;
+  let dailyScore: number | null = null;
   let contributionError: { message?: string } | null = null;
   if (wantsContribution && authed && studentId) {
     const { data: scoreRow, error: scoreLookupError } = await authed.from('contribution_scores').select('score').eq('student_id', studentId).maybeSingle();
@@ -278,15 +283,15 @@ export async function POST(req: Request) {
   if (wantsRoom && roomRes.error) return NextResponse.json({ answer: '教室の状況を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsCrowd && voteRes.error) return NextResponse.json({ answer: '学食の混雑情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsSold && soldRes.error) return NextResponse.json({ answer: '売り切れ情報を読み込めませんでした。少し待ってからもう一度試してください。' });
-  if (wantsMenu && menuRes.error && !/今日|本日|現在|学食教えて|メニュー教えて|何がある/.test(question)) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
-  if (wantsMenu && /今日|本日|現在|学食教えて|メニュー教えて|何がある/.test(question) && !wantsCrowd && !wantsReviews) {
+  if (wantsMenu && menuRes.error && !isDailyMealQuestion(question)) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
+  if (wantsMenu && isDailyMealQuestion(question) && !wantsCrowd && !wantsReviews && !wantsSold && !wantsQueue) {
     if (todayMenuRes.error) {
       console.error('今日の学食メニュー取得エラー:', todayMenuRes.error.message);
       return NextResponse.json({ answer: '今日の献立データを読み込めませんでした。Adminの月間献立表とSupabaseの設定を確認してください。' });
     }
     const daily = todayMenuRes.data as Record<string, unknown> | null;
     if (!daily) {
-      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立はデータベースに登録されていません。サンプルメニューではなく、実際の献立データが登録されるとここに表示されます。' });
+      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立は、日別献立表に登録されていません。別の日の献立や過去のサンプルを今日の献立として表示することはありません。' });
     }
     if (daily.is_closed === true) {
       return NextResponse.json({ answer: '今日（' + todayDateKey + '）は学食の営業休止として登録されています。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
@@ -340,7 +345,7 @@ export async function POST(req: Request) {
       Number(data.total_seats) <= 0
     ) {
       return NextResponse.json({
-        answer: 'キャリアセンター自習室の座席状況は、まだデータベースに登録されていません。'
+        answer: 'キャリアセンター自習室の座席状況は、24時間以内に更新されたデータがありません。最新情報はまだ確認できません。'
       });
     }
 
@@ -363,10 +368,10 @@ export async function POST(req: Request) {
 
   type Menu = { id: string | number; name: string; calorie: string | number | null; allergy: string | null; is_active?: boolean | null };
   const liveMenus = ((menuRes.data ?? []) as Menu[]).filter(m => m.is_active !== false);
-  // app/page.tsxと同じく、DBに有効メニューがない場合は画面内の初期メニューを使う。
+  // AIでは有効状態のマスターメニューだけを使用する。日別献立は上の別テーブルを正とする。
   const allMenus: Menu[] = liveMenus;
   const menuDataIsLive = !menuRes.error && liveMenus.length > 0;
-  const menuForList = allMenus.slice(0, 5); // v3は5件まで {N1}〜{N5}
+  const menuForList = allMenus.slice(0, 5);
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
   const soldNames = allMenus.filter(m => soldIds.has(String(m.id))).map(m => m.name);
@@ -517,7 +522,7 @@ export async function POST(req: Request) {
   type Room = { room_id: string; room_name: string; status: string; temp: string | null; updated_at?: string | null };
   const roomMap = new Map<string, Room>();
   for (const original of DEFAULT_ROOMS) {
-    const r = original.room_id === '112' ? { ...original, room_name: `普通教室（${userClass}）` } : original;
+    const r = original.room_id === '112' ? { ...original, room_name: userClass ? `普通教室（${userClass}）` : '普通教室' } : original;
     roomMap.set(String(r.room_id), { ...r, room_id: String(r.room_id), temp: r.temp });
   }
   for (const raw of (roomRes.data ?? []) as Array<{ room_id: string | number | null; room_name: string | null; status: string | null; temp: string | number | null; updated_at?: string | null }>) {
@@ -535,8 +540,10 @@ export async function POST(req: Request) {
     });
   }
   const rooms = [...roomMap.values()];
-  const voteRows = (voteRes.data ?? []) as Array<{ status: string | null }>;
-  const menuVoteRows = (menuVoteRes.data ?? []) as Array<{ menu_id: string | number | null; scope_key: string | null; status: string | null }>;
+  const freshRoomIds = new Set(((roomRes.data ?? []) as Array<{ room_id: string | number | null }>).map(row => String(row.room_id ?? '')));
+  const currentRooms = rooms.filter(room => freshRoomIds.has(room.room_id));
+  const voteRows = (voteRes.data ?? []) as Array<{ status: string | null; created_at?: string | null }>;
+  const menuVoteRows = (menuVoteRes.data ?? []) as Array<{ menu_id: string | number | null; scope_key: string | null; status: string | null; created_at?: string | null }>;
   const voteCounts = voteRows.reduce((acc, row) => {
     if (row.status === 'empty') acc.empty++;
     if (row.status === 'normal') acc.normal++;
@@ -550,7 +557,7 @@ export async function POST(req: Request) {
       : voteCounts.empty > voteCounts.normal && voteCounts.empty > voteCounts.crowded
         ? '空いている'
         : '普通';
-  const roomList = `教室名　状態　温度\n${rooms.map(r => `${r.room_name}　${r.status}${r.temp ? `　${r.temp}` : ''}`).join('\n')}`;
+  const roomList = `教室名　状態　温度\n${currentRooms.map(r => `${r.room_name}　${r.status}${r.temp ? `　${r.temp}` : ''}`).join('\n')}`;
 
   const clubRows = (clubRes.data ?? []) as Array<{ club_name: string | null; title: string | null; content: string | null; author: string | null; created_at: string | null }>;
   let clubsFiltered = clubRows;
@@ -669,7 +676,7 @@ export async function POST(req: Request) {
   let targetRoom: (typeof rooms)[number] | undefined;
 
   const menuIndex = findTarget(question, allMenus.map(m => m.name), 3);
-  if (menuIndex >= 0 && (wantsSold || wantsQueue || wantsMenu || /栄光カレー|情熱ラーメン|ヘルシーバリュー|スナック|創価ランチ/.test(question))) {
+  if (menuIndex >= 0 && (wantsSold || wantsQueue || wantsMenu)) {
     targetMenu = allMenus[menuIndex]; target = '学食';
     slots.TN = str(targetMenu.name); slots.TK = str(targetMenu.calorie); slots.TA = str(targetMenu.allergy);
     const match = commonSub(question, targetMenu.name);
@@ -699,7 +706,7 @@ export async function POST(req: Request) {
     for (const row of rooms) {
       const name = str(row.room_name, ''); const short = name.replace(/教室$/, '');
       const candidates = [name, short];
-      if (row.room_id === '112') candidates.push('普通教室', `${userClass}教室`, `${userClass}の教室`);
+      if (row.room_id === '112') candidates.push('普通教室', ...(userClass ? [`${userClass}教室`, `${userClass}の教室`] : []));
       const hit = candidates.filter(x => x.length >= 2).sort((a, b) => b.length - a.length).find(x => qNorm.includes(normalize(x)));
       if (hit) { mentioned = { alias: hit, room: row }; break; }
     }
@@ -726,42 +733,26 @@ export async function POST(req: Request) {
   if (wantsContribution) target = '貢献度';
   if (wantsNotifications) target = '通知';
 
-  const soldContext: Availability = !wantsSold ? 'なし' : targetMenu
-    ? (soldIds.has(String(targetMenu.id)) ? 'あり' : 'なし')
-    : (isSoldListQuestion(question) && soldNames.length > 0 ? 'あり' : 'なし');
-  const counts: Counts = {
-    menu: Math.min(allMenus.length, 5),
-    kokubunji: kokubunji.length,
-    higashimurayama: higashimurayama.length,
-    task: Math.min(tasks.length, 3),
-    room: rooms.length ? 'あり' : 'なし',
-    vote: voteRows.length ? 'あり' : 'なし',
-    sold: soldContext,
-    club: clubRows.length ? 'あり' : 'なし',
-    books: bookRows.length ? 'あり' : 'なし',
-    career: careerRes.data ? 'あり' : 'なし',
-    lost: lostRows.length ? 'あり' : 'なし',
-    reviews: reviewRows.length ? 'あり' : 'なし',
-    contribution: authed && studentId ? 'あり' : 'なし',
-    notifications: schoolNotificationRows.length ? 'あり' : 'なし',
-  };
 
   const table = (headers: string[], rows: string[][]) => ({ headers, rows });
   const parseTemp = (value: string | null | undefined) => {
     const match = String(value ?? '').match(/-?\d+(?:\.\d+)?/);
     return match ? Number(match[0]) : Number.NEGATIVE_INFINITY;
   };
-  const sortedRooms = [...rooms].sort((a, b) => parseTemp(b.temp) - parseTemp(a.temp));
+  const sortedRooms = [...currentRooms].sort((a, b) => parseTemp(b.temp) - parseTemp(a.temp));
   const roomListQuestion = /教室の状況|各教室|教室一覧|教室の温度|教室の気温|教室の様子|どの教室|全教室|一覧|温度順/.test(question);
   const hottestQuestion = /一番高い|最も高い|最高温度|一番暑い|最も暑い/.test(question) && /温度|気温|暑い|部屋|教室/.test(question);
   const lowestQuestion = /一番低い|最も低い|最低温度|一番寒い|最も寒い/.test(question) && /温度|気温|寒い|部屋|教室/.test(question);
 
   // 単一教室の回答はモデルを通さず、最新の取得値をそのまま返して前置きの誤生成を防ぐ。
+  if (wantsRoom && targetRoom && !freshRoomIds.has(targetRoom.room_id)) {
+    return NextResponse.json({ answer: `${targetRoom.room_name}の現在の状況は、24時間以内に更新されたデータがありません。最新情報はまだ確認できません。` });
+  }
   if (wantsRoom && targetRoom && !hottestQuestion && !lowestQuestion) {
     return NextResponse.json({ answer: `${targetRoom.room_name}は${targetRoom.status}${targetRoom.temp ? `（${targetRoom.temp}）` : ''}です。` });
   }
   if (wantsRoom && (hottestQuestion || lowestQuestion)) {
-    const ordered = [...rooms].filter(r => parseTemp(r.temp) !== Number.NEGATIVE_INFINITY).sort((a, b) => parseTemp(a.temp) - parseTemp(b.temp));
+    const ordered = [...currentRooms].filter(r => parseTemp(r.temp) !== Number.NEGATIVE_INFINITY).sort((a, b) => parseTemp(a.temp) - parseTemp(b.temp));
     const chosen = hottestQuestion ? ordered[ordered.length - 1] : ordered[0];
     if (!chosen) return NextResponse.json({ answer: '教室の温度データを取得できませんでした。' });
     const extreme = parseTemp(chosen.temp);
@@ -769,16 +760,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ answer: `${hottestQuestion ? '最も温度が高い' : '最も温度が低い'}のは${ties.map(r => r.room_name).join('、')}です（${chosen.temp}）。`, table: table(['教室名', '状態', '温度'], ties.map(r => [r.room_name, r.status, r.temp ?? '—'])) });
   }
   if (wantsRoom && !targetRoom && roomListQuestion) {
-    const sorted = /温度順|高い順|暑い順/.test(question) ? sortedRooms : /低い順|寒い順/.test(question) ? [...rooms].sort((a, b) => parseTemp(a.temp) - parseTemp(b.temp)) : rooms;
-    return NextResponse.json({ answer: '現在の教室の状況です。', table: table(['教室名', '状態', '温度'], sorted.map(r => [r.room_name, r.status, r.temp ?? '—'])) });
+    if (!currentRooms.length) return NextResponse.json({ answer: '教室の現在の状況は、24時間以内に更新されたデータがありません。最新情報はまだ確認できません。' });
+    const sorted = /温度順|高い順|暑い順/.test(question) ? sortedRooms : /低い順|寒い順/.test(question) ? [...currentRooms].sort((a, b) => parseTemp(a.temp) - parseTemp(b.temp)) : currentRooms;
+    return NextResponse.json({ answer: '24時間以内に更新された教室の状況です。', table: table(['教室名', '状態', '温度'], sorted.map(r => [r.room_name, r.status, r.temp ?? '—'])) });
   }
 
   // メニュー一覧もモデルによる省略を避け、実際の有効メニューを表として返す。
-  if (wantsMenu && !wantsSold && !targetMenu && /今日|現在|一覧|何がある|メニューは|メニュー教えて/.test(question)) {
+  if (wantsMenu && !wantsSold && !wantsQueue && !targetMenu && !isDailyMealQuestion(question) && /一覧|何がある|メニュー|教えて/.test(question)) {
     return NextResponse.json({
       answer: menuDataIsLive
         ? 'データベースに登録されている有効な学食メニューです。今日の献立を確認したい場合は「今日の学食を教えて」と聞いてください。'
-        : '有効な学食メニューがデータベースに登録されていません。サンプルメニューは実際の献立と誤認されるため表示しません。',
+        : '有効な学食マスターメニューは登録されていません。今日の献立は日別献立表から確認してください。',
       table: allMenus.length ? table(['メニュー', 'カロリー', 'アレルギー', '販売状況'], allMenus.map(m => [
         str(m.name),
         str(m.calorie),
@@ -1250,12 +1242,13 @@ export async function POST(req: Request) {
       .reverse()
       .find(rank => currentContributionPoints >= rank.minPoints)?.name ?? 'ブロンズ';
 
+    const dailyScoreLabel = dailyScore === null ? '未記録' : `${dailyScore}/100`;
     return NextResponse.json({
-      answer: `現在の貢献度ランクは「${contributionRank}」です。本日の貢献度は${dailyScore}/100、累計貢献ポイントは${currentContributionPoints}ポイントです。`,
+      answer: `現在の貢献度ランクは「${contributionRank}」です。本日の貢献度は${dailyScoreLabel}、累計貢献ポイントは${currentContributionPoints}ポイントです。`,
       table: table(
         ['区分', 'ポイント'],
         [
-          ['本日', `${dailyScore}/100`],
+          ['本日', dailyScoreLabel],
           ['累計', `${currentContributionPoints}ポイント`],
           ['現在のランク', contributionRank],
         ]
@@ -1263,32 +1256,70 @@ export async function POST(req: Request) {
     });
   }
 
-  if (followupTrainAfter && trainQuestion) {
-    const future = direction === '東村山方面' ? higashimurayama : kokubunji;
-    const nextTrain = future[0];
-    return NextResponse.json({ answer: nextTrain ? `${direction}の次の電車は${String(nextTrain.departure_time).slice(0, 5)}発の${str(nextTrain.service, '種別未登録')}です。` : `${direction}の次の電車を時刻表から確認できませんでした。` });
+  if (trainQuestion) {
+    const directions: Array<{ label: Direction; rows: typeof kokubunji }> =
+      direction === '両方'
+        ? [
+            { label: '国分寺方面', rows: kokubunji },
+            { label: '東村山方面', rows: higashimurayama },
+          ]
+        : [{ label: direction, rows: direction === '東村山方面' ? higashimurayama : kokubunji }];
+
+    const ordinalMatch = /([1-3１-３]|二|三)本(?:目|後)/.exec(question.normalize('NFKC'));
+    const ordinalRaw = ordinalMatch?.[1] ?? '';
+    const ordinal = ordinalRaw
+      ? (ordinalRaw === '二' ? 2 : ordinalRaw === '三' ? 3 : Number(ordinalRaw))
+      : 1;
+    const requested = directions.map(({ label, rows }) => {
+      const selected = rows[ordinal - 1];
+      return selected ? {
+        label,
+        time: String(selected.departure_time).slice(0, 5),
+        service: str(selected.service, '種別未登録'),
+        minutes: Math.max(0, (selected._nextMinute ?? now) - now),
+      } : null;
+    }).filter((row): row is { label: Direction; time: string; service: string; minutes: number } => Boolean(row));
+
+    if (!requested.length) {
+      return NextResponse.json({ answer: '該当する方向の今後の時刻表データに列車が見つかりませんでした。推測した時刻は表示しません。' });
+    }
+
+    const minuteMode = /何分後|あと何分|何分くらい/.test(question);
+    const answer = ordinalMatch
+      ? `${ordinal}本目の電車について、時刻表に登録された情報です。`
+      : '時刻表に登録された次の電車です。';
+    return NextResponse.json({
+      answer,
+      table: table(
+        ['方面', '発車時刻', '種別', ...(minuteMode ? ['発車まで'] : [])],
+        requested.map(row => [
+          row.label,
+          row.time,
+          row.service,
+          ...(minuteMode ? [`${row.minutes}分後`] : []),
+        ]),
+      ),
+    });
   }
 
-  // 未登録の本は、モデルの文末に不自然な「です」が付かないよう直接案内する。
-  if (wantsLibrary && bookCandidate && !bookFound) {
-    return NextResponse.json({ answer: `蔵書データで「${bookCandidate}」は見つかりませんでした。タイトルや著者名を確認して検索してください。` });
-  }
-
-  try {
-    const { tpl, text } = answerDetailed(counts, direction, target, question, slots);
-    if (!tasksReadable && isTaskTemplate(tpl)) {
-      return NextResponse.json({ answer: authed
-        ? '課題を読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。'
-        : '課題は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
-    }
-    if (wantsContribution && !studentId) return NextResponse.json({ answer: '貢献度を確認するには学校アカウントでログインしてください。' });
-    // 本や教室の検索対象が質問中にあったのに別の出力型になった場合は、推測したデータを返さない。
-    if (wantsRoom && targetRoom && !/\{TR\}/.test(tpl) && !tpl.includes(targetRoom.room_name)) {
-      return NextResponse.json({ answer: `${targetRoom.room_name}の状況は${slots.TS}です。` });
-    }
-    return NextResponse.json({ answer: text });
-  } catch (e) {
-    console.error('campus-ai v3: model inference failed', e);
-    return NextResponse.json({ answer: 'AIの回答生成に失敗しました。少し待ってからもう一度試してください。' }, { status: 503 });
-  }
+  // 自由生成モデルは本番回答に使用しない。実データの分岐に当たらない質問には推測で回答しない。
+  const topicLabels: Record<Target, string> = {
+    'なし': '',
+    '学食': '学食',
+    '課題': '課題',
+    '教室': '教室',
+    '部活': '部活・委員会ノート',
+    '蔵書': '蔵書',
+    'キャリア': 'キャリアセンター',
+    '落とし物': '落とし物',
+    '口コミ': '学食の口コミ',
+    '貢献度': '貢献度',
+    '通知': '学園総合通知',
+  };
+  const topicLabel = topicLabels[target];
+  return NextResponse.json({
+    answer: topicLabel
+      ? `${topicLabel}の情報を実データから確認できませんでした。データが登録されているか、時間をおいてもう一度確認してください。`
+      : 'その質問に対応する実データ項目を特定できませんでした。CampusSyncの学食・電車・課題・教室・部活ノート・蔵書・落とし物・キャリアセンター・通知などについて質問してください。推測やサンプルの内容は回答しません。',
+  });
 }
