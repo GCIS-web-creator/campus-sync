@@ -4,6 +4,7 @@ import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { pushLineMessagesToRegisteredChats } from '@/lib/line-group-chats';
 import { buildLineEarthquakeFlex, type EarthquakeNotificationPayload } from '@/lib/line-earthquake-flex';
+import { isTargetTokyoTamaMunicipality } from '@/lib/earthquake-local-areas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,22 @@ type EarthquakeRow = {
   latitude: number | null; longitude: number | null; max_intensity: string | null; kodaira_intensity: string | null;
   eew_targets: string[] | null; eew_forecast_intensity: string | null; observed_areas: ObservedArea[] | null;
 };
+
+function intensityRankFromLabel(value: unknown): number {
+  const normalized = String(value || '').normalize('NFKC').replace(/\\s/g, '').replace(/^震度/, '');
+  const ranks: Record<string, number> = {
+    '1': 1, '2': 2, '3': 3, '4': 4,
+    '5-': 5, '5弱': 5, '5+': 6, '5強': 6,
+    '6-': 7, '6弱': 7, '6+': 8, '6強': 8, '7': 9,
+  };
+  return ranks[normalized] || 0;
+}
+function observedIntensityRank(area: ObservedArea): number {
+  return typeof area.intensityRank === 'number' ? area.intensityRank : intensityRankFromLabel(area.intensity);
+}
+function intensityLabelFromRank(rank: number): string | null {
+  return ({ 1: '1', 2: '2', 3: '3', 4: '4', 5: '5弱', 6: '5強', 7: '6弱', 8: '6強', 9: '7' } as Record<number, string>)[rank] || null;
+}
 
 export async function GET(request: Request) {
   if (!verifyAdminSessionRequest(request)) return fail('Adminログインが必要です。', 401);
@@ -98,16 +115,13 @@ export async function POST(request: Request) {
       depthKm: quake.depth_km === null ? null : Number(quake.depth_km),
       latitude: quake.latitude, longitude: quake.longitude,
       maxIntensity: quake.max_intensity, kodairaIntensity: quake.kodaira_intensity,
-      localImpactAreas: quake.observed_areas.filter(area => {
-        const prefectureCode = String(area.prefectureCode || '');
-        const cityCode = String(area.cityCode || '');
-        const intensity = String(area.intensity || '').normalize('NFKC').replace(/\s/g, '').replace(/^震度/, '');
-        const rankByLabel: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9 };
-        const rank = typeof area.intensityRank === 'number' ? area.intensityRank : (rankByLabel[intensity] || 0);
-        const isTama = prefectureCode.startsWith('13') && (cityCode.startsWith('132')
-          || ['13303', '13305', '13307', '13308'].some(code => cityCode.startsWith(code)));
-        return isTama && rank >= 2;
-      }).map(area => ({
+      localMaxIntensity: intensityLabelFromRank(Math.max(
+        intensityRankFromLabel(quake.kodaira_intensity),
+        ...quake.observed_areas.filter(area => isTargetTokyoTamaMunicipality(area.prefectureCode, area.cityCode)).map(observedIntensityRank),
+      )),
+      localImpactAreas: quake.observed_areas.filter(area =>
+        isTargetTokyoTamaMunicipality(area.prefectureCode, area.cityCode) && observedIntensityRank(area) >= 2
+      ).map(area => ({
         name: String(area.name || '観測地域'), prefecture: area.prefecture || null,
         intensity: area.intensity || (typeof area.intensityRank === 'number' ? String(area.intensityRank) : null),
       })),

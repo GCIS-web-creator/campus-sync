@@ -12,6 +12,7 @@ export type EarthquakeNotificationPayload = {
   longitude: number | null;
   maxIntensity: string | null;
   kodairaIntensity: string | null;
+  localMaxIntensity?: string | null;
   eewTargets: string[];
   eewForecastIntensity: string | null;
   sourceUrl: string;
@@ -174,7 +175,7 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
       ? '小平市周辺で予想される震度'
       : isMajor
         ? '国内で観測された最大震度'
-        : '小平市・多摩地区で観測された震度';
+        : 'この地震全体の最大震度';
 
   const heroCaption = isCancelled
     ? '緊急地震速報は取り消されました'
@@ -240,16 +241,14 @@ export function buildLineEarthquakeFlex(payload: EarthquakeNotificationPayload) 
             { type: 'text', text: '小平市の揺れの有無にかかわらず、国内の大地震としてお知らせしています。', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
           ]
         : [
-              { type: 'text', text: '小平市・多摩地区の観測震度', size: 'xs', weight: 'bold', color: theme.text },
+              { type: 'text', text: '小平市・多摩地区で観測された最大震度', size: 'xs', weight: 'bold', color: theme.text },
               {
                 type: 'text',
-                text: payload.localImpactAreas?.length
-                  ? payload.localImpactAreas.slice(0, 10).map(area => (area.prefecture || '') + area.name + (area.intensity ? '（震度' + area.intensity + '）' : '')).join('、')
-                    + (payload.localImpactAreas.length > 10 ? ' ほか' + (payload.localImpactAreas.length - 10) + '市町村' : '')
-                  : payload.kodairaIntensity ? '小平市（震度' + payload.kodairaIntensity + '）' : '多摩地区の観測情報',
-                size: 'sm', weight: 'bold', color: theme.text, margin: 'sm', wrap: true,
+                text: (payload.localMaxIntensity || payload.kodairaIntensity)
+                  ? '震度' + (payload.localMaxIntensity || payload.kodairaIntensity)
+                  : '観測なし',
+                size: 'xl', weight: 'bold', color: theme.text, margin: 'sm', wrap: true,
               },
-              { type: 'text', text: '※上の大きな表示は地震全体の最大震度です', size: 'xs', color: '#475569', wrap: true, margin: 'sm' },
             ];
 
   const detailContents: Array<Record<string, unknown>> = [
