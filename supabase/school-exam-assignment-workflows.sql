@@ -108,7 +108,7 @@ create table if not exists public.assignment_suggestions (
   title text not null check (char_length(trim(title)) between 1 and 200),
   details text not null default '' check (char_length(details) <= 5000),
   subject text not null check (subject in (
-    '国語演習', '古典探求', '物理', '生物', '数３', '数C',
+    '国語演習', '古典探求', '物理', '化学', '生物', '数３', '数C',
     '公共', '英コミュ', '論表', '情報', '保健', 'その他'
   )),
   target_class text not null default 'all' check (target_class in ('all', 'science')),

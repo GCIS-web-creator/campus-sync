@@ -57,7 +57,7 @@ function validatePayload(payload: AssignmentPayload): string | null {
   if (payload.due_at && Number.isNaN(new Date(payload.due_at).getTime())) return '提出期限の日付と時刻が不正です。';
   if (payload.type && !['paper', 'classroom', 'other'].includes(payload.type)) return '課題の種類が不正です。';
   const subject = payload.subject || 'その他';
-  if (!['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].includes(subject)) return '教科が不正です。';
+  if (!['国語演習','古典探求','物理','化学','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].includes(subject)) return '教科が不正です。';
   if (payload.target_class && !['all','science'].includes(payload.target_class)) return '課題の対象クラスが不正です。';
   const option = payload.subject_option || '';
   const validOptions: Record<string, string[]> = { '物理': ['物理選択者'], '生物': ['生物選択者'], '数３': ['アドバンスト','スタンダード'], '英コミュ': ['Intensive','Standard'] };

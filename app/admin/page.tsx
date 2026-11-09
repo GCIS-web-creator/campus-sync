@@ -2858,7 +2858,7 @@ export default function CampusSyncAdmin() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="block text-xs font-bold text-slate-400">教科
                   <select value={assignmentSubject} onChange={e => { setAssignmentSubject(e.target.value); setAssignmentSubjectOption(''); }} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
-                    {['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].map(item => <option key={item} value={item}>{item}</option>)}
+                    {['国語演習','古典探求','物理','化学','生物','数３','数C','公共','英コミュ','論表','情報','保健','その他'].map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </label>
                 <label className="block text-xs font-bold text-slate-400">対象

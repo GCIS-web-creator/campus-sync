@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const ASSIGNMENT_SUBJECTS = [
-  '国語演習', '古典探求', '物理', '生物', '数３', '数C',
+  '国語演習', '古典探求', '物理', '化学', '生物', '数３', '数C',
   '公共', '英コミュ', '論表', '情報', '保健', 'その他',
 ] as const;
 
