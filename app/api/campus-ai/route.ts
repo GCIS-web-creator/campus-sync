@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
-type Availability = 'あり' | 'なし';
 type Direction = '国分寺方面' | '東村山方面' | '両方';
 type Target = 'なし' | '学食' | '課題' | '教室' | '部活' | '蔵書' | 'キャリア' | '落とし物' | '口コミ' | '貢献度' | '通知';
 
@@ -372,6 +371,7 @@ export async function POST(req: Request) {
   // AIでは有効状態のマスターメニューだけを使用する。日別献立は上の別テーブルを正とする。
   const allMenus: Menu[] = liveMenus;
   const menuDataIsLive = !menuRes.error && liveMenus.length > 0;
+  const menuForList = allMenus.slice(0, 5);
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
   const soldNames = allMenus.filter(m => soldIds.has(String(m.id))).map(m => m.name);
@@ -733,9 +733,6 @@ export async function POST(req: Request) {
   if (wantsContribution) target = '貢献度';
   if (wantsNotifications) target = '通知';
 
-  const soldContext: Availability = !wantsSold ? 'なし' : targetMenu
-    ? (soldIds.has(String(targetMenu.id)) ? 'あり' : 'なし')
-    : (isSoldListQuestion(question) && soldNames.length > 0 ? 'あり' : 'なし');
 
   const table = (headers: string[], rows: string[][]) => ({ headers, rows });
   const parseTemp = (value: string | null | undefined) => {
