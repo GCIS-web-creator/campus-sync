@@ -58,6 +58,20 @@ type ParsedEarthquake = {
   pushNotificationKind: 'eew_national_push' | 'observed_intensity2_push' | null;
 };
 
+function isTokyoTamaMunicipality(area: ParsedEarthquake['observedAreas'][number]): boolean {
+  if (!String(area.prefectureCode || '').startsWith('13')) return false;
+  const cityCode = String(area.cityCode || '').trim();
+  return cityCode.startsWith('132')
+    || ['13303', '13305', '13307', '13308'].some(code => cityCode.startsWith(code));
+}
+
+function observedAreaRank(area: ParsedEarthquake['observedAreas'][number]): number {
+  return Math.max(
+    area.intensityRank ?? intensityRank(area.intensity || '') ?? 0,
+    ...area.stations.map(station => station.intensityRank ?? intensityRank(station.intensity || '') ?? 0),
+  );
+}
+
 function getAdmin(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -419,13 +433,11 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
     ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7
   );
   const hasObservedIntensity2 = productCode === 'VXSE53' && (
-    (maxIntensityRank ?? 0) >= 2
-    || observedAreas.some(area =>
-      ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 2
-      || area.stations.some(station => ((station.intensityRank ?? intensityRank(station.intensity || '')) ?? 0) >= 2)
-    )
+    (maxIntensityRank ?? 0) >= 2 || observedAreas.some(area => observedAreaRank(area) >= 2)
   );
-  // Keep the existing LINE rules unchanged. Nationwide-only cases use separate Push-only kinds.
+  const hasTokyoTamaIntensity2 = productCode === 'VXSE53'
+    && observedAreas.some(area => isTokyoTamaMunicipality(area) && observedAreaRank(area) >= 2);
+  // Local LINE alerts trigger when Kodaira OR any Tokyo Tama municipality reaches intensity 2.
   const notificationKind = isEewCancelled && eewKodairaTarget
     ? 'eew_cancelled'
     : isEew && eewKodairaTarget
@@ -433,7 +445,7 @@ function parseMessage(entry: FeedEntry, xml: string): ParsedEarthquake | null {
       : productCode === 'VXSE53' && !isDistant && maxIntensityRank !== null
         && maxIntensityRank >= 7 && hasObservedMajorIntensity
         ? 'major_earthquake'
-        : kodairaIntensityRank !== null && kodairaIntensityRank >= 2
+        : (kodairaIntensityRank !== null && kodairaIntensityRank >= 2) || hasTokyoTamaIntensity2
           ? 'kodaira_intensity2'
           : null;
   const pushNotificationKind = !notificationKind && isEew
@@ -482,11 +494,18 @@ function stableRetryKey(value: string): string {
 
 function notificationPayload(item: ParsedEarthquake, kind: EarthquakeNotificationPayload['kind']): EarthquakeNotificationPayload {
   const severeAreas = item.observedAreas
-    .filter(area => ((area.intensityRank ?? intensityRank(area.intensity || '')) ?? 0) >= 7)
+    .filter(area => observedAreaRank(area) >= 7)
     .map(area => ({
       name: area.name,
       prefecture: area.prefecture,
-      intensity: area.intensity,
+      intensity: area.intensity || intensityLabel(observedAreaRank(area)),
+    }));
+  const localImpactAreas = item.observedAreas
+    .filter(area => isTokyoTamaMunicipality(area) && observedAreaRank(area) >= 2)
+    .map(area => ({
+      name: area.name,
+      prefecture: area.prefecture,
+      intensity: area.intensity || intensityLabel(observedAreaRank(area)),
     }));
   return {
     kind,
@@ -499,6 +518,7 @@ function notificationPayload(item: ParsedEarthquake, kind: EarthquakeNotificatio
     longitude: item.longitude,
     maxIntensity: item.maxIntensity,
     kodairaIntensity: item.kodairaIntensity,
+    localImpactAreas,
     eewTargets: item.eewTargets,
     eewForecastIntensity: item.eewForecastIntensity,
     severeAreas,
@@ -872,13 +892,19 @@ export async function GET(request: Request) {
         console.error('Earthquake detail enrichment failed:', enrichmentError instanceof Error ? enrichmentError.message : 'unknown');
       }
 
-      return NextResponse.json({ event: enrichedRow }, {
+      const { data: manualNotice, error: manualNoticeError } = await admin.from('jma_earthquake_admin_group_notices')
+        .select('event_key')
+        .eq('event_key', detailEventKey)
+        .eq('status', 'sent')
+        .maybeSingle();
+      if (manualNoticeError) throw manualNoticeError;
+      return NextResponse.json({ event: { ...enrichedRow, admin_group_notified: Boolean(manualNotice) } }, {
         headers: { 'Cache-Control': 'no-store, max-age=0' },
       });
     }
     const eventColumns = 'event_key,latest_source_url,product_code,title,headline,issued_at,event_time,hypocenter_name,latitude,longitude,depth_km,magnitude,max_intensity,max_intensity_rank,kodaira_intensity,kodaira_intensity_rank,observed_areas,eew_targets,eew_kodaira_target,eew_forecast_intensity,is_eew,is_eew_cancelled,is_distant,updated_at';
     const majorWindowStart = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
-    const [eventsResult, majorEventsResult, syncResult] = await Promise.all([
+    const [eventsResult, majorEventsResult, syncResult, adminNoticesResult] = await Promise.all([
       admin.from('jma_earthquakes')
         .select(eventColumns)
         .order('event_time', { ascending: false, nullsFirst: false })
@@ -895,15 +921,44 @@ export async function GET(request: Request) {
         .select('high_last_success_at,long_last_success_at,last_attempt_at,last_error')
         .eq('id', 1)
         .maybeSingle(),
+      admin.from('jma_earthquake_admin_group_notices')
+        .select('event_key')
+        .eq('status', 'sent')
+        .order('created_at', { ascending: false })
+        .limit(100),
     ]);
     if (eventsResult.error) throw eventsResult.error;
     if (majorEventsResult.error) throw majorEventsResult.error;
     if (syncResult.error) throw syncResult.error;
+    if (adminNoticesResult.error) throw adminNoticesResult.error;
+
+    const adminNoticeKeys = (adminNoticesResult.data || []).map(item => String(item.event_key));
+    const presentKeys = new Set((eventsResult.data || []).map(item => String(item.event_key)));
+    const missingNoticeKeys = adminNoticeKeys.filter(key => !presentKeys.has(key));
+    let promotedEvents: Array<Record<string, unknown>> = [];
+    if (missingNoticeKeys.length) {
+      const promotedResult = await admin.from('jma_earthquakes')
+        .select(eventColumns)
+        .in('event_key', missingNoticeKeys.slice(0, 100));
+      if (promotedResult.error) throw promotedResult.error;
+      promotedEvents = (promotedResult.data || []) as Array<Record<string, unknown>>;
+    }
+    const notifiedKeys = new Set(adminNoticeKeys);
+    const eventMap = new Map<string, Record<string, unknown>>();
+    for (const item of [...(eventsResult.data || []), ...promotedEvents]) {
+      eventMap.set(String(item.event_key), { ...item, admin_group_notified: notifiedKeys.has(String(item.event_key)) });
+    }
+    const mergedEvents = Array.from(eventMap.values())
+      .sort((a, b) => Date.parse(String(b.event_time || b.issued_at || '')) - Date.parse(String(a.event_time || a.issued_at || '')))
+      .slice(0, 80);
+    const majorEvents = (majorEventsResult.data || []).map(item => ({
+      ...item, admin_group_notified: notifiedKeys.has(String(item.event_key)),
+    }));
     const highAt = syncResult.data?.high_last_success_at || null;
     const stale = !highAt || Date.now() - Date.parse(highAt) > 5 * 60 * 1000;
     return NextResponse.json({
-      events: eventsResult.data || [],
-      majorEvents: majorEventsResult.data || [],
+      events: mergedEvents,
+      majorEvents,
       sync: {
         highLastSuccessAt: highAt,
         longLastSuccessAt: syncResult.data?.long_last_success_at || null,

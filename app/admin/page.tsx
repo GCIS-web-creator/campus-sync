@@ -18,6 +18,7 @@ import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
 import StudyMaterialsAdmin from '@/components/StudyMaterialsAdmin';
 import AttendanceReportsAdmin from '@/components/AttendanceReportsAdmin';
 import AdminWorkspaces from '@/components/AdminWorkspaces';
+import EarthquakeAdmin from '@/components/EarthquakeAdmin';
 import React, { useEffect, useState } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -25,7 +26,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users, Activity
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -1942,6 +1943,9 @@ export default function CampusSyncAdmin() {
             <button aria-label="LINE配信ダッシュボード" title="LINE配信ダッシュボード" onClick={() => setActiveTab('line-analytics')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'line-analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <History size={18} /><span className="sr-only md:not-sr-only">LINE配信ダッシュボード</span>
             </button>
+            <button aria-label="地震情報・LINEグループ通知" title="地震情報・LINEグループ通知" onClick={() => setActiveTab('earthquake-alerts')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'earthquake-alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+              <Activity size={18} /><span className="sr-only md:not-sr-only">地震情報・LINE通知</span>
+            </button>
             <button aria-label="先生用アクセスコード管理" title="先生用アクセスコード管理" onClick={() => setActiveTab('teacher-access-codes')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'teacher-access-codes' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <UserCheck size={18} /><span className="sr-only md:not-sr-only">先生用アクセスコード</span>
             </button>
@@ -2011,6 +2015,7 @@ export default function CampusSyncAdmin() {
         {activeTab === 'workspaces' && <AdminWorkspaces />}
 
         {activeTab === 'line-analytics' && <LineDeliveryDashboard />}
+        {activeTab === 'earthquake-alerts' && <EarthquakeAdmin />}
 
         {activeTab === 'teacher-access-codes' && <TeacherAccessCodesAdmin />}
 
