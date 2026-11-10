@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
 import { buildCampusAiFlexMessage } from '@/lib/line-flex';
+import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,8 +45,7 @@ function verifyLineSignature(rawBody: string, signature: string, channelSecret: 
 }
 
 async function getCampusAiAnswer(question: string): Promise<CampusAiResponse> {
-  const baseUrl = (process.env.CAMPUS_SYNC_BASE_URL || 'https://campus-sync-mocha.vercel.app').replace(/\/+$/, '');
-  const endpoint = new URL('/api/campus-ai', baseUrl).toString();
+  const endpoint = new URL('/api/campus-ai', getCampusSyncBaseUrl()).toString();
 
   try {
     const response = await fetch(endpoint, {
