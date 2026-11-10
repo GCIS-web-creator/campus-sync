@@ -4,7 +4,7 @@
 
 - この設定は cloudflare-workers-migration ブランチ上で準備する。
 - main、Vercelの本番設定、Supabaseのテーブル・Cron、LINEのWebhook設定は変更しない。
-- Next.js 16.2.10 は Cloudflare OpenNext アダプターで動作させる。
+- Next.js 16.4.5 は Cloudflare OpenNext アダプターで動作させる。
 - Cloudflare側にR2、Images、Cron Trigger、Durable Objectsを追加しない初期構成とする。
 - Supabase側にある既存の定期実行は、移行後もSupabaseで継続する。
 
@@ -50,3 +50,7 @@ campus-sync-mocha.vercel.app はVercelが提供するホスト名なので、そ
 ## 無料枠の注意
 
 Workers Freeの主な上限は1日100,000リクエスト、HTTPリクエストごとのCPU時間10ms、メモリ128MB。無料枠を超えるアクセスやCPU負荷に備え、ログイン・地震データ・LINE Webhook・画像表示などの実測を行う。R2やCloudflare Imagesなど課金対象の追加機能は有効にしない。
+
+## 2026-11-10 Cloudflare ビルド起動コミット
+
+この更新は Cloudflare Workers Builds の新しいビルドを起動するためのドキュメントのみの変更。アプリケーションの実行コード、依存関係、main ブランチ、Vercel 本番設定、Supabase、LINE の設定は変更しない。
