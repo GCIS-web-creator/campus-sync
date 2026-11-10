@@ -1,9 +1,20 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 旧AIモデルの重みは本番APIで使用しない。天気アイコンのZIPだけを必要な関数へ同梱する。
-  outputFileTracingIncludes: {
-    "/api/weather/icons/[name]": ["./weather_icons (2).zip"],
+  // Weather icon files are extracted to public/ before next build.
+  // Keep the historical API URL stable while serving pre-generated static assets.
+  async rewrites() {
+    return [
+      {
+        source: "/api/weather/icons/:name",
+        has: [{ type: "query", key: "format", value: "png" }],
+        destination: "/weather-icons/:name.png",
+      },
+      {
+        source: "/api/weather/icons/:name",
+        destination: "/weather-icons/:name.svg",
+      },
+    ];
   },
 };
 

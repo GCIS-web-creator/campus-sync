@@ -4,10 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/generate-weather-icons.mjs && next build",
     "start": "next start",
     "lint": "eslint",
-    "verify:cslogson": "node scripts/verify-cslogson.mjs"
+    "verify:cslogson": "node scripts/verify-cslogson.mjs",
+    "cloudflare:install": "npm install --no-save --package-lock=false @opennextjs/cloudflare@1.20.16 wrangler@4.158.0",
+    "cloudflare:build": "npm run cloudflare:install && npx opennextjs-cloudflare build",
+    "cloudflare:preview": "npm run cloudflare:build && npx wrangler dev",
+    "cloudflare:deploy": "npm run cloudflare:build && npx opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
