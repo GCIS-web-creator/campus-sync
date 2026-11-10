@@ -23,8 +23,10 @@ export const viewport: Viewport = {
 };
 
 // 🌟 アプリの基本情報とPWA（iOSホーム画面対応）の設定
+const campusSyncBaseUrl = (process.env.CAMPUS_SYNC_BASE_URL || 'https://campus-sync.580098.workers.dev').replace(/\\/+$/, '');
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://campus-sync-mocha.vercel.app'),
+  metadataBase: new URL(campusSyncBaseUrl),
   title: 'CampusSync',
   description: '学校生活をひとつにつなぐ',
   appleWebApp: {
