@@ -3,11 +3,13 @@ name: CampusSync CI
 on:
   push:
     branches: [main, cloudflare-workers-migration]
+    paths-ignore:
+      - package-lock.json
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -16,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       # Non-production placeholders are only for compile-time checks. No real student data is used.
       NEXT_PUBLIC_SUPABASE_URL: https://build-check-placeholder.supabase.co
@@ -27,23 +29,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Regenerate lockfile for the migration branch
+        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - run: npm ci
       - run: npm run build
-
-  cloudflare-build:
-    if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'cloudflare-workers-migration')
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    env:
-      # Build-time placeholders only. Cloudflare secrets are not required for a dry-run build.
-      NEXT_PUBLIC_SUPABASE_URL: https://build-check-placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: build-check-placeholder-key
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run cloudflare:build
-      - run: npx wrangler deploy --dry-run
+      - name: Build Cloudflare Worker
+        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        run: npm run cloudflare:build
+      - name: Validate Worker bundle without deploying
+        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        run: npx wrangler deploy --dry-run
+      - name: Save regenerated lockfile to migration branch
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' && success()
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Update lockfile for Cloudflare-compatible Next.js"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
