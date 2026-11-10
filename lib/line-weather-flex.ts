@@ -67,9 +67,9 @@ function buildWeatherShareRow(day: WeatherDayForecast, index: number) {
 }
 
 export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
-  // LINEの画像・詳細ボタンは必ずCampusSyncの本番URLを使う。NEXT_PUBLIC_SITE_URL等の誤設定でVercel管理画面へ飛ばないよう固定。
-  const origin = 'https://campus-sync-mocha.vercel.app';
-  const icon = (name: string) => origin + '/api/weather/icons/' + name + '?format=png';
+  // LINE画像はWorkerの静的アセットを直接参照する（Next.js rewriteを経由しない）。
+  const origin = (process.env.CAMPUS_SYNC_BASE_URL || 'https://campus-sync.580098.workers.dev').replace(/\\/+$/, '');
+  const icon = (name: string) => origin + '/weather-icons/' + encodeURIComponent(name) + '.png';
   const days = weather.slice(0, 3);
   const dayCards: Record<string, unknown>[] = days.map((day, index) => ({
     type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', paddingAll: '6px', cornerRadius: '10px',
