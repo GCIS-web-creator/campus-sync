@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import RouteSpecificOverlays from '@/components/RouteSpecificOverlays';
+import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,7 +27,7 @@ export const viewport: Viewport = {
 const campusSyncBaseUrl = (process.env.CAMPUS_SYNC_BASE_URL || 'https://campus-sync.580098.workers.dev').replace(/\\/+$/, '');
 
 export const metadata: Metadata = {
-  metadataBase: new URL(campusSyncBaseUrl),
+  metadataBase: new URL(getCampusSyncBaseUrl()),
   title: 'CampusSync',
   description: '学校生活をひとつにつなぐ',
   appleWebApp: {
