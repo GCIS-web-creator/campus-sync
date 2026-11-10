@@ -1,4 +1,5 @@
 import type { WeatherDayForecast } from '@/lib/weather';
+import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
 type WeatherShareItem = { key: 'sunny' | 'cloudy' | 'precipitation'; label: string; emoji: string; color: string; count: number; percent: number };
 
@@ -68,7 +69,7 @@ function buildWeatherShareRow(day: WeatherDayForecast, index: number) {
 
 export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
   // LINE画像はWorkerの静的アセットを直接参照する（Next.js rewriteを経由しない）。
-  const origin = (process.env.CAMPUS_SYNC_BASE_URL || 'https://campus-sync.580098.workers.dev').replace(/\\/+$/, '');
+  const origin = getCampusSyncBaseUrl();
   const icon = (name: string) => origin + '/weather-icons/' + encodeURIComponent(name) + '.png';
   const days = weather.slice(0, 3);
   const dayCards: Record<string, unknown>[] = days.map((day, index) => ({
