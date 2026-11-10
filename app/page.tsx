@@ -428,6 +428,46 @@ const FAVORITE_DASHBOARD_OPTIONS = [
   { id: 'notifications', label: 'お知らせ', icon: BellRing },
 ] as const;
 
+type StudentNavigationItem = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  isActive: boolean;
+  keywords?: string[];
+  badge?: number;
+  onSelect: () => void;
+};
+
+type StudentNavigationGroup = {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  keywords: string[];
+  items: StudentNavigationItem[];
+};
+
+const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'tools'] as const;
+const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
+  study: 'learning',
+  materials: 'learning',
+  timetable: 'learning',
+  'school-schedule': 'learning',
+  countdowns: 'learning',
+  facilities: 'campus',
+  cafeteria: 'campus',
+  attendance: 'community',
+  workspaces: 'community',
+  chat: 'community',
+  club: 'community',
+  notifications: 'community',
+  weather: 'weather',
+  bus: 'weather',
+  'student-card': 'tools',
+  calculator: 'tools',
+  ai: 'tools',
+  notes: 'tools',
+};
+
 // --- 🚃 鷹の台駅：平日ダイヤ（ユーザー提供の時刻表） ---
 const createWeekdayTrains = (times: string, destination: string) =>
   times.trim().split(/\s+/).filter(Boolean).map(time => ({
@@ -856,6 +896,9 @@ export default function CampusSyncApp() {
   const [hashScrollTarget, setHashScrollTarget] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [navigationSearchQuery, setNavigationSearchQuery] = useState('');
+  const [expandedNavigationGroups, setExpandedNavigationGroups] = useState<string[]>(['learning']);
+  const [navigationPreferencesReady, setNavigationPreferencesReady] = useState(false);
   const [favoriteDashboardTabs, setFavoriteDashboardTabs] = useState<string[]>(['timetable', 'cafeteria', 'ai', 'chat']);
   const [showFavoriteEditor, setShowFavoriteEditor] = useState(false);
   const activeTabHashSyncRef = useRef(false);
@@ -1977,6 +2020,43 @@ useEffect(() => {
     console.warn('お気に入りダッシュボードを保存できませんでした。', error);
   }
 }, [favoriteDashboardTabs]);
+
+// メニューのカテゴリ開閉状態は端末内に保存する。アカウント情報や個人情報は保存しない。
+useEffect(() => {
+  try {
+    const saved = window.localStorage.getItem('campus-sync-navigation-expanded-v1');
+    if (saved) {
+      const parsed = JSON.parse(saved) as unknown;
+      if (Array.isArray(parsed)) {
+        setExpandedNavigationGroups(parsed.filter((value): value is string =>
+          typeof value === 'string' && STUDENT_NAV_GROUP_IDS.some(groupId => groupId === value)
+        ));
+      }
+    }
+  } catch (error) {
+    console.warn('メニューカテゴリの状態を読み込めませんでした。', error);
+  } finally {
+    setNavigationPreferencesReady(true);
+  }
+}, []);
+
+useEffect(() => {
+  if (!navigationPreferencesReady) return;
+  try {
+    window.localStorage.setItem('campus-sync-navigation-expanded-v1', JSON.stringify(expandedNavigationGroups));
+  } catch (error) {
+    console.warn('メニューカテゴリの状態を保存できませんでした。', error);
+  }
+}, [expandedNavigationGroups, navigationPreferencesReady]);
+
+// URLや画面遷移から特定機能を開いた場合、その機能が属するカテゴリも開く。
+useEffect(() => {
+  const groupId = STUDENT_NAV_GROUP_BY_TAB[activeTab];
+  if (!groupId) return;
+  setExpandedNavigationGroups(current =>
+    current.includes(groupId) ? current : [...current, groupId]
+  );
+}, [activeTab]);
 
 useEffect(() => {
   const onShortcut = (event: KeyboardEvent) => {
@@ -6043,6 +6123,314 @@ Supabaseの設定を確認してください。
     setActiveTab(item.tab);
   };
 
+  const studentNavigationGroups: StudentNavigationGroup[] = [
+    {
+      id: 'learning',
+      label: '授業・学習',
+      icon: <BookOpenCheck size={17} />,
+      keywords: ['時間割', '学校予定', '行事', '課題', 'テスト', '資料', 'プリント'],
+      items: [
+        ...(authUser?.id ? [{
+          key: 'study', label: '学習・テスト対策', icon: <BookOpenCheck size={17} />,
+          isActive: activeTab === 'study', keywords: ['勉強', '小テスト', '定期試験', '学習記録'],
+          onSelect: () => setActiveTab('study'),
+        }] : []),
+        {
+          key: 'timetable', label: '時間割表', icon: <Calendar size={17} />,
+          isActive: activeTab === 'timetable', keywords: ['授業', '時間割'],
+          onSelect: () => setActiveTab('timetable'),
+        },
+        {
+          key: 'school-schedule', label: '学校予定表', icon: <Calendar size={17} />,
+          isActive: activeTab === 'school-schedule', keywords: ['学校行事', '予定'],
+          onSelect: () => setActiveTab('school-schedule'),
+        },
+        {
+          key: 'countdowns', label: 'イベントカウントダウン', icon: <Clock size={17} />,
+          isActive: activeTab === 'countdowns', keywords: ['学校イベント', '行事まであと何日'],
+          onSelect: () => setActiveTab('countdowns'),
+        },
+        {
+          key: 'tasks', label: '課題・提出物', icon: <ClipboardList size={17} />,
+          isActive: activeTab === 'home' && hashScrollTarget === 'tasks', keywords: ['宿題', '締切', '提出期限'],
+          onSelect: () => { setHashScrollTarget('tasks'); setActiveTab('home'); },
+        },
+        ...(authUser?.id ? [{
+          key: 'materials', label: 'プリント・資料室', icon: <FolderOpen size={17} />,
+          isActive: activeTab === 'materials', keywords: ['教材', '配布資料', 'プリント'],
+          onSelect: () => setActiveTab('materials'),
+        }] : []),
+      ],
+    },
+    {
+      id: 'campus',
+      label: '校内生活',
+      icon: <Utensils size={17} />,
+      keywords: ['学食', '施設', '落とし物', '忘れ物', 'マップ', '図書館', '自習室'],
+      items: [
+        {
+          key: 'cafeteria', label: '学食混雑＆レビュー', icon: <Utensils size={17} />,
+          isActive: activeTab === 'cafeteria', keywords: ['食堂', 'メニュー', '売切'],
+          onSelect: () => setActiveTab('cafeteria'),
+        },
+        {
+          key: 'facilities', label: '校内施設・落とし物', icon: <BookOpen size={17} />,
+          isActive: activeTab === 'facilities' && facilitiesSubTab !== 'map', keywords: ['施設状況', '忘れ物', '図書館', '自習室'],
+          onSelect: () => { setFacilitiesSubTab('status'); setActiveTab('facilities'); },
+        },
+        {
+          key: 'campus-map', label: '校内マップ', icon: <MapPin size={17} />,
+          isActive: activeTab === 'facilities' && facilitiesSubTab === 'map', keywords: ['校舎', '場所', '地図'],
+          onSelect: () => { setFacilitiesSubTab('map'); setActiveTab('facilities'); },
+        },
+      ],
+    },
+    {
+      id: 'community',
+      label: '連絡・交流',
+      icon: <MessageCircle size={17} />,
+      keywords: ['連絡', 'お知らせ', 'チャット', '出欠', '共有', '部活', '委員会'],
+      items: [
+        ...(authUser?.id ? [{
+          key: 'attendance', label: '出欠連絡', icon: <ClipboardList size={17} />,
+          isActive: activeTab === 'attendance', keywords: ['欠席', '遅刻', '早退'],
+          onSelect: () => setActiveTab('attendance'),
+        }, {
+          key: 'workspaces', label: '共有ワークスペース', icon: <Users size={17} />,
+          isActive: activeTab === 'workspaces', keywords: ['共同作業', '共有'],
+          onSelect: () => setActiveTab('workspaces'),
+        }] : []),
+        {
+          key: 'chat', label: 'クラスチャット', icon: <MessageCircle size={17} />,
+          isActive: activeTab === 'chat', keywords: ['クラス', '学年', '学校全体', 'メッセージ'],
+          badge: classChatUnreadCount > 0 ? classChatUnreadCount : undefined,
+          onSelect: () => { setActiveTab('chat'); setClassChatUnreadCount(0); },
+        },
+        {
+          key: 'club', label: '部活・委員会ノート', icon: <MessageSquare size={17} />,
+          isActive: activeTab === 'club', keywords: ['部活動', '委員会', '投稿'],
+          onSelect: () => setActiveTab('club'),
+        },
+        {
+          key: 'notifications', label: '通知・連絡', icon: <Bell size={17} />,
+          isActive: activeTab === 'notifications', keywords: ['お知らせ', '重要連絡'],
+          badge: notifications.filter(note => !note.isRead).length,
+          onSelect: () => setActiveTab('notifications'),
+        },
+      ],
+    },
+    {
+      id: 'weather',
+      label: '交通・気象情報',
+      icon: <ThermometerSun size={17} />,
+      keywords: ['天気', '地震', '電車', '発車', '運行情報'],
+      items: [
+        {
+          key: 'weather', label: '気象パネル', icon: <ThermometerSun size={17} />,
+          isActive: activeTab === 'weather', keywords: ['天気予報', '地震情報', '警報'],
+          onSelect: () => setActiveTab('weather'),
+        },
+        {
+          key: 'bus', label: '電車発車案内', icon: <Train size={17} />,
+          isActive: activeTab === 'bus', keywords: ['電車', '鷹の台駅', '発車時刻'],
+          onSelect: () => setActiveTab('bus'),
+        },
+      ],
+    },
+    {
+      id: 'tools',
+      label: '便利ツール',
+      icon: <Sparkles size={17} />,
+      keywords: ['AI', '生徒証', 'メモ', '電卓', '計算'],
+      items: [
+        ...(authUser?.id ? [{
+          key: 'student-card', label: 'デジタル生徒証', icon: <QrCode size={17} />,
+          isActive: activeTab === 'student-card', keywords: ['学生証', '身分証', 'QR'],
+          onSelect: () => setActiveTab('student-card'),
+        }] : []),
+        {
+          key: 'calculator', label: '電卓', icon: <Calculator size={17} />,
+          isActive: activeTab === 'calculator', keywords: ['計算', '数学'],
+          onSelect: () => setActiveTab('calculator'),
+        },
+        {
+          key: 'ai', label: 'CampusSync AI', icon: <Sparkles size={17} />,
+          isActive: activeTab === 'ai', keywords: ['AI', '質問', '相談'],
+          onSelect: () => setActiveTab('ai'),
+        },
+        ...(authUser?.id ? [{
+          key: 'notes', label: '高機能メモ', icon: <BookOpenCheck size={17} />,
+          isActive: activeTab === 'notes', keywords: ['ノート', 'メモ'],
+          onSelect: () => setActiveTab('notes'),
+        }] : []),
+      ],
+    },
+  ];
+
+  const renderStudentNavigation = (isMobile: boolean) => {
+    const query = navigationSearchQuery.trim().toLocaleLowerCase();
+    const matchingGroups = studentNavigationGroups.map(group => {
+      const groupMatches = !query || (group.label + ' ' + group.keywords.join(' ')).toLocaleLowerCase().includes(query);
+      const items = group.items.filter(item =>
+        groupMatches || (item.label + ' ' + (item.keywords || []).join(' ')).toLocaleLowerCase().includes(query)
+      );
+      return { ...group, items };
+    }).filter(group => group.items.length > 0);
+
+    const matchingFavorites = favoriteDashboardTabs
+      .map(id => FAVORITE_DASHBOARD_OPTIONS.find(option => option.id === id))
+      .filter((item): item is (typeof FAVORITE_DASHBOARD_OPTIONS)[number] =>
+        item !== undefined && (!query || (item.label + ' ' + item.id).toLocaleLowerCase().includes(query))
+      );
+    const showHomeItem = !query || 'ホーム ダッシュボード home'.includes(query);
+    const showSettingsItem = !query || '設定 環境設定 マイ設定 settings'.includes(query);
+    const hasResults = showHomeItem || showSettingsItem || matchingFavorites.length > 0 || matchingGroups.length > 0;
+
+    const choose = (action: () => void) => {
+      action();
+      setNavigationSearchQuery('');
+      if (isMobile) setMobileMenuOpen(false);
+    };
+    const chooseFavorite = (id: string) => {
+      if (id === 'tasks') {
+        setHashScrollTarget('tasks');
+        setActiveTab('home');
+      } else if (id === 'campus-map') {
+        setFacilitiesSubTab('map');
+        setActiveTab('facilities');
+      } else {
+        setActiveTab(id);
+      }
+      setNavigationSearchQuery('');
+      if (isMobile) setMobileMenuOpen(false);
+    };
+
+    return (
+      <div className="space-y-2">
+        <SidebarItem
+          icon={<GlobalSearchIcon size={18} />}
+          label="CampusSync全体検索"
+          isActive={showGlobalSearch}
+          onClick={() => choose(() => setShowGlobalSearch(true))}
+          themeCls={themeCls}
+        />
+
+        <div className="relative">
+          <GlobalSearchIcon size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            aria-label="メニュー内を検索"
+            value={navigationSearchQuery}
+            onChange={event => setNavigationSearchQuery(event.target.value)}
+            placeholder="メニュー内を検索…"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-xs font-semibold text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-cyan-400 focus:bg-white focus:ring-2 focus:ring-cyan-100"
+          />
+        </div>
+
+        {showHomeItem && (
+          <SidebarItem
+            icon={<Home size={18} />}
+            label="ホーム"
+            isActive={activeTab === 'home' && hashScrollTarget !== 'tasks'}
+            onClick={() => choose(() => setActiveTab('home'))}
+            themeCls={themeCls}
+          />
+        )}
+
+        {matchingFavorites.length > 0 && (
+          <section className="pt-1">
+            <p className="mb-1.5 px-2 text-[10px] font-black tracking-wide text-gray-400">よく使う機能</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {matchingFavorites.map(item => {
+                const Icon = item.icon;
+                const favoriteIsActive = item.id === 'tasks'
+                  ? activeTab === 'home' && hashScrollTarget === 'tasks'
+                  : item.id === 'campus-map'
+                    ? activeTab === 'facilities' && facilitiesSubTab === 'map'
+                    : activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => chooseFavorite(item.id)}
+                    className={'flex min-w-0 items-center gap-1.5 rounded-xl border px-2 py-2 text-left text-[10px] font-black transition ' + (favoriteIsActive ? themeCls.lightBg + ' ' + themeCls.text + ' border-cyan-200' : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-cyan-200 hover:bg-cyan-50')}
+                  >
+                    <Icon size={14} className="shrink-0" />
+                    <span className="min-w-0 truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <div className="pt-1">
+          {matchingGroups.map(group => {
+            const isExpanded = Boolean(query) || expandedNavigationGroups.includes(group.id);
+            const groupIsActive = group.items.some(item => item.isActive);
+            const panelId = 'campus-nav-' + (isMobile ? 'mobile-' : 'desktop-') + group.id;
+            return (
+              <section key={group.id} className="mb-1">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={panelId}
+                  onClick={() => {
+                    if (query) return;
+                    setExpandedNavigationGroups(current =>
+                      current.includes(group.id)
+                        ? current.filter(id => id !== group.id)
+                        : [...current, group.id]
+                    );
+                  }}
+                  className={'flex w-full items-center gap-2 rounded-xl px-2.5 py-2.5 text-left text-xs font-black transition ' + (groupIsActive ? themeCls.lightBg + ' ' + themeCls.text : 'text-gray-600 hover:bg-gray-50')}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center">{group.icon}</span>
+                  <span className="min-w-0 flex-1">{group.label}</span>
+                  <span className="text-[9px] font-bold text-gray-400">{group.items.length}</span>
+                  <ChevronRight size={15} className={'shrink-0 transition-transform ' + (isExpanded ? 'rotate-90' : '')} />
+                </button>
+                {isExpanded && (
+                  <div id={panelId} className="ml-3 space-y-0.5 border-l border-gray-100 pl-2">
+                    {group.items.map(item => (
+                      <SidebarItem
+                        key={item.key}
+                        icon={item.icon}
+                        label={item.label}
+                        isActive={item.isActive}
+                        onClick={() => choose(item.onSelect)}
+                        badge={item.badge}
+                        themeCls={themeCls}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+
+        {showSettingsItem && (
+          <div className="border-t border-gray-100 pt-2">
+            <SidebarItem
+              icon={<Settings size={18} />}
+              label="設定"
+              isActive={activeTab === 'settings'}
+              onClick={() => choose(() => setActiveTab('settings'))}
+              themeCls={themeCls}
+            />
+          </div>
+        )}
+
+        {query && !hasResults && (
+          <p className="rounded-xl border border-dashed border-gray-200 p-3 text-center text-[11px] font-semibold text-gray-400">
+            該当する機能がありません。キーワードを変えて検索してください。
+          </p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       data-campus-mode={isDarkMode ? 'dark' : 'light'}
@@ -6073,29 +6461,8 @@ Supabaseの設定を確認してください。
             <span className="flex items-center gap-2">{isDarkMode ? <Sun size={16} /> : <Moon size={16} />}{isDarkMode ? 'ライトモード' : 'ダークモード'}</span>
             <span className="text-[10px] opacity-70">{isDarkMode ? 'ON' : 'OFF'}</span>
           </button>
-          <nav aria-label="メインメニュー" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
-            <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => setShowGlobalSearch(true)} themeCls={themeCls} />
-            <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} themeCls={themeCls} />
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="学習・テスト対策" isActive={activeTab === 'study'} onClick={() => setActiveTab('study')} themeCls={themeCls} />}
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<FolderOpen size={18} />} label="プリント・資料室" isActive={activeTab === 'materials'} onClick={() => setActiveTab('materials')} themeCls={themeCls} />}
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<ClipboardList size={18} />} label="出欠連絡" isActive={activeTab === 'attendance'} onClick={() => setActiveTab('attendance')} themeCls={themeCls} />}
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<Users size={18} />} label="共有ワークスペース" isActive={activeTab === 'workspaces'} onClick={() => setActiveTab('workspaces')} themeCls={themeCls} />}
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<QrCode size={18} />} label="デジタル生徒証" isActive={activeTab === 'student-card'} onClick={() => setActiveTab('student-card')} themeCls={themeCls} />}
-            <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => setActiveTab('weather')} themeCls={themeCls} />
-            <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} themeCls={themeCls} />
-            <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => setActiveTab('school-schedule')} themeCls={themeCls} />
-            <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => setActiveTab('countdowns')} themeCls={themeCls} />
-            <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => setActiveTab('cafeteria')} themeCls={themeCls} />
-            <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); }} themeCls={themeCls} />
-            <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); }} themeCls={themeCls} />
-            <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => setActiveTab('bus')} themeCls={themeCls} />
-            <SidebarItem icon={<Calculator size={18} />} label="電卓" isActive={activeTab === 'calculator'} onClick={() => setActiveTab('calculator')} themeCls={themeCls} />
-            <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} themeCls={themeCls} />
-            {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => setActiveTab('notes')} themeCls={themeCls} />}
-            <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
-            <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => setActiveTab('club')} themeCls={themeCls} />
-            <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
-            <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} themeCls={themeCls} />
+          <nav aria-label="メインメニュー" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            {renderStudentNavigation(false)}
           </nav>
           <div className="mt-3 shrink-0 border-t pt-3 text-[10px] font-bold text-gray-400">
             <span>© 2026 CampusSync Pro</span>
@@ -6173,29 +6540,8 @@ Supabaseの設定を確認してください。
                   <X size={21} className="h-[21px] w-[21px] shrink-0" />
                 </button>
               </header>
-              <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
-                <SidebarItem icon={<GlobalSearchIcon size={18} />} label="CampusSync全体検索" isActive={showGlobalSearch} onClick={() => { setShowGlobalSearch(true); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Home size={18} />} label="ダッシュボード" isActive={activeTab === 'home'} onClick={() => { setActiveTab('home'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="学習・テスト対策" isActive={activeTab === 'study'} onClick={() => { setActiveTab('study'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<FolderOpen size={18} />} label="プリント・資料室" isActive={activeTab === 'materials'} onClick={() => { setActiveTab('materials'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<ClipboardList size={18} />} label="出欠連絡" isActive={activeTab === 'attendance'} onClick={() => { setActiveTab('attendance'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<Users size={18} />} label="共有ワークスペース" isActive={activeTab === 'workspaces'} onClick={() => { setActiveTab('workspaces'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<QrCode size={18} />} label="デジタル生徒証" isActive={activeTab === 'student-card'} onClick={() => { setActiveTab('student-card'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                <SidebarItem icon={<ThermometerSun size={18} />} label="気象パネル" isActive={activeTab === 'weather'} onClick={() => { setActiveTab('weather'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Calendar size={18} />} label="時間割表" isActive={activeTab === 'timetable'} onClick={() => { setActiveTab('timetable'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Calendar size={18} />} label="学校予定表" isActive={activeTab === 'school-schedule'} onClick={() => { setActiveTab('school-schedule'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Clock size={18} />} label="カウントダウン" isActive={activeTab === 'countdowns'} onClick={() => { setActiveTab('countdowns'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Utensils size={18} />} label="学食混雑＆レビュー" isActive={activeTab === 'cafeteria'} onClick={() => { setActiveTab('cafeteria'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<BookOpen size={18} />} label="校内施設＆落とし物" isActive={activeTab === 'facilities' && facilitiesSubTab !== 'map'} onClick={() => { setFacilitiesSubTab('status'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<MapPin size={18} />} label="校内マップ" isActive={activeTab === 'facilities' && facilitiesSubTab === 'map'} onClick={() => { setFacilitiesSubTab('map'); setActiveTab('facilities'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Train size={18} />} label="電車発車案内" isActive={activeTab === 'bus'} onClick={() => { setActiveTab('bus'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Calculator size={18} />} label="電卓" isActive={activeTab === 'calculator'} onClick={() => { setActiveTab('calculator'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<Sparkles size={18} />} label="CampusSync AI" isActive={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                {authUser?.id && !isGuestMode && <SidebarItem icon={<BookOpenCheck size={18} />} label="高機能メモ" isActive={activeTab === 'notes'} onClick={() => { setActiveTab('notes'); setMobileMenuOpen(false); }} themeCls={themeCls} />}
-                <SidebarItem icon={<MessageCircle size={18} />} label="クラスチャット" isActive={activeTab === 'chat'} onClick={() => { setActiveTab('chat'); setClassChatUnreadCount(0); setMobileMenuOpen(false); }} badge={classChatUnreadCount > 0 ? classChatUnreadCount : undefined} themeCls={themeCls} />
-                <SidebarItem icon={<MessageSquare size={18} />} label="部活・委員会ノート" isActive={activeTab === 'club'} onClick={() => { setActiveTab('club'); setMobileMenuOpen(false); }} themeCls={themeCls} />
-                <SidebarItem icon={<img src="/animated/bell-ring.svg" alt="" />} label="通知・連絡" isActive={activeTab === 'notifications'} onClick={() => { setActiveTab('notifications'); setMobileMenuOpen(false); }} badge={notifications.filter(note => !note.isRead).length} themeCls={themeCls} />
-                <SidebarItem icon={<Settings size={18} />} label="環境マイ設定" isActive={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }} themeCls={themeCls} />
+              <nav aria-label="全機能" className="campus-mobile-drawer-nav min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+                {renderStudentNavigation(true)}
               </nav>
               <footer className="shrink-0 border-t border-slate-100 px-4 py-3 text-[10px] font-bold text-slate-400">
                 <div>© 2026 CampusSync Pro</div>
