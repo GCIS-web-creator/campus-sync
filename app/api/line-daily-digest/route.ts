@@ -554,15 +554,16 @@ function buildDailyDigest(input: {
   events: EventRow[];
   eventError: boolean;
   includeClassTimetable: boolean;
+  includeTrainTimetable: boolean;
   weather: WeatherDayForecast[];
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
-  const transitBubbles = buildTransitBubbles(input);
+  const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -688,10 +689,12 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const payload = await request.json().catch(() => ({})) as { mode?: unknown };
+  const payload = await request.json().catch(() => ({})) as { mode?: unknown; excludeTrainTimetable?: unknown };
   const manualRequest = payload.mode === 'manual';
   // A replay is still protected by CRON_SECRET, but can run after the scheduled window.
   const replayRequest = payload.mode === 'replay';
+  // Replay callers may omit the railway departure cards while preserving the rest of the weekday digest.
+  const excludeTrainTimetable = replayRequest && payload.excludeTrainTimetable === true;
 
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
@@ -810,6 +813,7 @@ export async function POST(request: Request) {
         events,
         eventError: Boolean(eventResult.error),
         includeClassTimetable,
+        includeTrainTimetable: !excludeTrainTimetable,
         weather: forecastDays,
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
@@ -822,7 +826,7 @@ export async function POST(request: Request) {
     return jsonError('日次まとめのメッセージサイズを調整できませんでした。', 500);
   }
 
-  const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');
+  const retryKey = stableRetryKey(today, excludeTrainTimetable ? 'weekday-no-train-timetable' : (isSaturday ? 'saturday' : 'weekday'));
   const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
     method: 'POST',
     headers: {
@@ -844,7 +848,9 @@ export async function POST(request: Request) {
       : 'LINEへの日次まとめ配信に失敗しました（HTTP ' + response.status + '）。', 502);
   }
 
-  const digestTitle = isSaturday ? '12:30 CampusSync 土曜時刻表・天気' : '16:00 CampusSync 学校情報まとめ';
+  const digestTitle = excludeTrainTimetable
+    ? '臨時再送 CampusSync 学校情報まとめ（電車時刻表除く）'
+    : (isSaturday ? '12:30 CampusSync 土曜時刻表・天気' : '16:00 CampusSync 学校情報まとめ');
   const digestText = String((flex as { altText?: unknown }).altText || digestTitle);
   let historySaved = false;
   const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', retryKey).maybeSingle();
@@ -877,13 +883,15 @@ export async function POST(request: Request) {
       weather:forecastDays.length>0,
       assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
       assignmentError: Boolean(assignmentResult.error),
-      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) + (today === '2026-11-09' ? 2 : 0),
+      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) - (excludeTrainTimetable ? 2 : 0) + (today === '2026-11-09' ? 2 : 0),
       chemistryExamScope: today === '2026-11-09',
       historySaved,
     },
     groupDelivery,
-    message: isSaturday
-      ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-      : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (today === '2026-11-09' ? '、本日限定の化学試験範囲' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery),
+    message: excludeTrainTimetable
+      ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+      : (isSaturday
+        ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (today === '2026-11-09' ? '、本日限定の化学試験範囲' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery)),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
