@@ -165,7 +165,7 @@ const getNumber = (values: WeatherValueMap | undefined, key: string): number | n
 };
 
 const getIcon = (name: string, className = 'h-8 w-8') =>
-  <img src={'/api/weather/icons/' + name} alt="" aria-hidden="true" className={className + ' object-contain'} loading="lazy" />;
+  <img src={'/weather-icons/' + encodeURIComponent(name) + '.svg'} alt="" aria-hidden="true" className={className + ' object-contain'} loading="lazy" />;
 
 function fmt(value: WeatherScalar | undefined, unit = ''): string {
   if (value === null || value === undefined || value === '') return '—';
