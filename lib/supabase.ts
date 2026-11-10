@@ -13,7 +13,7 @@ const supabasePublishableKey = configuredPublishableKey || 'missing-supabase-pub
 
 if (typeof window !== 'undefined' && (!configuredUrl || !configuredPublishableKey)) {
   console.error(
-    'CampusSync: Supabase environment variables are missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in Vercel.',
+    'CampusSync: Supabase environment variables are missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in the Cloudflare Workers build/runtime settings.',
   );
 }
 
