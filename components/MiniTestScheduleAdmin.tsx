@@ -19,6 +19,7 @@ type MiniTest = {
   status: 'pending' | 'published' | 'rejected' | 'cancelled';
   source: string;
   created_at: string;
+  priority?: 'normal' | 'important' | 'urgent';
 };
 
 const INITIAL_DRAFT = {
@@ -33,6 +34,7 @@ const INITIAL_DRAFT = {
   question_count: '',
   full_score: '',
   target_class: 'all',
+  priority: 'normal',
 };
 const SUBJECTS = ['国語演習', '古典探求', '物理', '化学', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健', 'その他'];
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500';
@@ -43,6 +45,8 @@ const statusLabel = (value: MiniTest['status']) => value === 'pending' ? 'Admin�
 export default function MiniTestScheduleAdmin() {
   const [rows, setRows] = useState<MiniTest[]>([]);
   const [draft, setDraft] = useState(INITIAL_DRAFT);
+  const [editingId, setEditingId] = useState('');
+  const [editingDraft, setEditingDraft] = useState(INITIAL_DRAFT);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState('');
@@ -80,12 +84,59 @@ export default function MiniTestScheduleAdmin() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.message || '小テストを登録できませんでした。');
-      setMessage('小テストを公開しました。生徒の「学習・テスト対策」内に表示されます。');
+      setMessage('小テストを公開しました。日程情報は次回の定期LINEまとめにも反映されます。');
       setDraft(INITIAL_DRAFT);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '小テストを登録できませんでした。');
     } finally { setSaving(false); }
+  };
+
+  const beginEdit = (row: MiniTest) => {
+    setEditingId(row.id);
+    setEditingDraft({
+      subject: row.subject || '',
+      title: row.title || '',
+      test_date: row.test_date || '',
+      period: String(row.period ?? ''),
+      start_note: row.start_note || '',
+      duration_minutes: String(row.duration_minutes ?? ''),
+      scope: row.scope || '',
+      notes: row.notes || '',
+      question_count: String(row.question_count ?? ''),
+      full_score: String(row.full_score ?? ''),
+      target_class: row.target_class || 'all',
+      priority: row.priority || 'normal',
+    });
+    setMessage('');
+  };
+
+  const saveEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingId) return;
+    setBusyId(editingId); setMessage('');
+    try {
+      const response = await fetch('/api/admin/mini-tests', {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...editingDraft,
+          id: editingId,
+          action: 'update',
+          period: Number(editingDraft.period),
+          duration_minutes: Number(editingDraft.duration_minutes),
+          question_count: Number(editingDraft.question_count),
+          full_score: Number(editingDraft.full_score),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.message || '小テストを更新できませんでした。');
+      setEditingId('');
+      setMessage('小テストを更新しました。変更内容は次回の定期LINEまとめに掲載されます。');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '小テストを更新できませんでした。');
+    } finally { setBusyId(''); }
   };
 
   const act = async (row: MiniTest, action: 'approve' | 'reject' | 'cancel') => {
@@ -113,6 +164,7 @@ export default function MiniTestScheduleAdmin() {
       <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-[10px] font-black text-cyan-200">{row.subject}</span>
       <span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold ' + (row.status === 'pending' ? 'bg-amber-950 text-amber-200' : 'bg-emerald-950 text-emerald-200')}>{statusLabel(row.status)}</span>
       <span className="text-[10px] text-slate-500">{row.source === 'line' ? 'LINEからの提案' : 'Admin登録'}</span>
+      <span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold ' + ((row.priority||'normal')==='urgent'?'bg-rose-950 text-rose-200':(row.priority||'normal')==='important'?'bg-amber-950 text-amber-200':'bg-slate-800 text-slate-300')}>{(row.priority||'normal')==='urgent'?'緊急':(row.priority||'normal')==='important'?'重要':'通常'}</span>
     </div>
     <h4 className="mt-2 text-base font-black text-white">{row.title}</h4>
     <p className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-cyan-200"><CalendarDays size={14}/>{dateLabel(row.test_date)} ・ {row.period ? row.period + '限' : '時限未設定'} ・ {row.start_note} ・ {row.duration_minutes ? row.duration_minutes + '分間' : '時間未設定'}</p>
@@ -120,12 +172,31 @@ export default function MiniTestScheduleAdmin() {
     <div className="mt-3 rounded-lg bg-slate-950 p-3"><p className="mb-1 text-[10px] font-black text-slate-500">試験範囲</p><p className="whitespace-pre-wrap text-xs leading-5 text-slate-200">{row.scope}</p></div>
     {row.notes && <div className="mt-3"><p className="mb-1 text-[10px] font-black text-slate-500">出題内容・形式</p><p className="whitespace-pre-wrap text-xs leading-5 text-slate-300">{row.notes}</p></div>}
     <div className="mt-3 flex flex-wrap justify-end gap-2">
+      {(row.status === 'pending' || row.status === 'published') && <button type="button" onClick={() => editingId===row.id?setEditingId(''):beginEdit(row)} disabled={!!busyId} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 disabled:opacity-40">{editingId===row.id?'編集を閉じる':'編集'}</button>}
       {row.status === 'pending' && <>
         <button type="button" onClick={() => void act(row, 'reject')} disabled={!!busyId} className="rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 disabled:opacity-40"><X size={13} className="mr-1 inline"/>却下</button>
         <button type="button" onClick={() => void act(row, 'approve')} disabled={!!busyId} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-40"><Check size={13} className="mr-1 inline"/>承認して公開</button>
       </>}
       {row.status === 'published' && <button type="button" onClick={() => void act(row, 'cancel')} disabled={!!busyId} className="rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 disabled:opacity-40">中止する</button>}
     </div>
+    {editingId===row.id&&<form onSubmit={saveEdit} className="mt-4 space-y-3 rounded-xl border border-cyan-900 bg-slate-950 p-4">
+      <h5 className="text-sm font-black text-cyan-200">小テストの変更</h5>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={labelClass}>教科<select className={inputClass} value={editingDraft.subject} onChange={e=>setEditingDraft(current=>({...current,subject:e.target.value}))} required>{SUBJECTS.map(subject=><option key={subject}>{subject}</option>)}</select></label>
+        <label className={labelClass}>小テスト名<input className={inputClass} value={editingDraft.title} onChange={e=>setEditingDraft(current=>({...current,title:e.target.value}))} maxLength={160} required/></label>
+        <label className={labelClass}>実施日<input className={inputClass} type="date" value={editingDraft.test_date} onChange={e=>setEditingDraft(current=>({...current,test_date:e.target.value}))} required/></label>
+        <label className={labelClass}>時限<input className={inputClass} type="number" min="1" max="12" value={editingDraft.period} onChange={e=>setEditingDraft(current=>({...current,period:e.target.value}))} required/></label>
+        <label className={labelClass}>開始タイミング<input className={inputClass} value={editingDraft.start_note} onChange={e=>setEditingDraft(current=>({...current,start_note:e.target.value}))} maxLength={120} required/></label>
+        <label className={labelClass}>所要時間（分）<input className={inputClass} type="number" min="1" max="180" value={editingDraft.duration_minutes} onChange={e=>setEditingDraft(current=>({...current,duration_minutes:e.target.value}))} required/></label>
+        <label className={labelClass}>問題数<input className={inputClass} type="number" min="1" max="500" value={editingDraft.question_count} onChange={e=>setEditingDraft(current=>({...current,question_count:e.target.value}))} required/></label>
+        <label className={labelClass}>満点<input className={inputClass} type="number" min="1" max="1000" value={editingDraft.full_score} onChange={e=>setEditingDraft(current=>({...current,full_score:e.target.value}))} required/></label>
+        <label className={labelClass}>重要度<select className={inputClass} value={editingDraft.priority} onChange={e=>setEditingDraft(current=>({...current,priority:e.target.value}))}><option value="normal">通常</option><option value="important">重要</option><option value="urgent">緊急</option></select></label>
+        <label className={labelClass}>対象<input className={inputClass} value={editingDraft.target_class} onChange={e=>setEditingDraft(current=>({...current,target_class:e.target.value}))} maxLength={80} required/></label>
+      </div>
+      <label className={labelClass}>試験範囲<textarea className={inputClass} rows={4} value={editingDraft.scope} onChange={e=>setEditingDraft(current=>({...current,scope:e.target.value}))} maxLength={1200} required/></label>
+      <label className={labelClass}>出題内容・形式<textarea className={inputClass} rows={3} value={editingDraft.notes} onChange={e=>setEditingDraft(current=>({...current,notes:e.target.value}))} maxLength={1200}/></label>
+      <div className="flex justify-end gap-2"><button type="button" onClick={()=>setEditingId('')} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300">キャンセル</button><button type="submit" disabled={busyId===row.id} className="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{busyId===row.id?'保存中…':'変更を保存'}</button></div>
+    </form>}
   </article>;
 
   const pending = rows.filter(row => row.status === 'pending');
@@ -148,6 +219,7 @@ export default function MiniTestScheduleAdmin() {
         <label className={labelClass}>所要時間（分）<input className={inputClass} type="number" min="1" max="180" value={draft.duration_minutes} onChange={e=>setDraft(current=>({...current,duration_minutes:e.target.value}))} required/></label>
         <label className={labelClass}>問題数<input className={inputClass} type="number" min="1" max="500" value={draft.question_count} onChange={e=>setDraft(current=>({...current,question_count:e.target.value}))} required/></label>
         <label className={labelClass}>満点<input className={inputClass} type="number" min="1" max="1000" value={draft.full_score} onChange={e=>setDraft(current=>({...current,full_score:e.target.value}))} required/></label>
+        <label className={labelClass}>重要度<select className={inputClass} value={draft.priority} onChange={e=>setDraft(current=>({...current,priority:e.target.value}))}><option value="normal">通常</option><option value="important">重要</option><option value="urgent">緊急</option></select></label>
         <label className={labelClass + ' sm:col-span-2'}>対象<input className={inputClass} value={draft.target_class} onChange={e=>setDraft(current=>({...current,target_class:e.target.value}))} placeholder="全生徒は all、クラス指定は 1-1 の形式" maxLength={80} required/></label>
       </div>
       <label className={labelClass}>試験範囲<textarea className={inputClass} rows={5} value={draft.scope} onChange={e=>setDraft(current=>({...current,scope:e.target.value}))} maxLength={1200} placeholder="教材名、ページ、単元など" required/></label>
