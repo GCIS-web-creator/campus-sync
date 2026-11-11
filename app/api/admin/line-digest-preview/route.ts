@@ -8,11 +8,6 @@ export const dynamic = 'force-dynamic';
 function fail(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store, private' } });
 }
-function sameOrigin(request: Request) {
-  const origin = request.headers.get('origin');
-  try { return Boolean(origin && new URL(origin).origin === new URL(request.url).origin); }
-  catch { return false; }
-}
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
