@@ -1,12 +1,6 @@
-import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
-import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
-import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { buildNoticeFlexMessage } from '@/lib/line-flex';
-import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -68,28 +62,6 @@ export async function POST(request:Request){
   }).eq('id',suggestion.id).eq('status','processing');
   if(updateError)console.error('Assignment suggestion approval state update failed:',updateError.message);
 
-  let notification='LINE通知は送信できませんでした。';
-  const bot=await getActiveLineBot();
-  if(bot?.accessToken){
-    const dueLabel=assignment.due_at?new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(assignment.due_at)):'期限未設定';
-    const body=[
-      '教科：'+assignment.subject,
-      '対象：'+(assignment.target_class==='science'?'理系クラス':'全クラス')+(assignment.subject_option?'（'+assignment.subject_option+'向け）':''),
-      '課題名：'+assignment.title,
-      '指示事項：'+(assignment.details||'詳細なし'),
-      '提出期限：'+dueLabel,
-    ].join('\n\n').slice(0,1800);
-    const messages=[buildNoticeFlexMessage('新しい課題が公開されました',body)];
-    const retryKey=randomUUID();
-    try{
-      const groupResult=await pushLineMessagesToRegisteredChats(bot.accessToken,messages,retryKey,'assignment_updates');
-      const response=await fetch('https://api.line.me/v2/bot/message/broadcast',{
-        method:'POST',headers:{Authorization:'Bearer '+bot.accessToken,'Content-Type':'application/json','X-Line-Retry-Key':retryKey},
-        body:JSON.stringify({messages:applyCampusSyncFlexFooters(messages)}),cache:'no-store',signal:AbortSignal.timeout(20000),
-      });
-      await recordLineDeliveryResponse(response,{channel:'broadcast',kind:'assignment_updates',accessToken:bot.accessToken,retryKey,deliveryBatchId:retryKey,messages});
-      notification=response.ok?'LINE公式アカウントへ通知しました。'+summarizeLineGroupDelivery(groupResult):'LINE通知に失敗しました（HTTP '+response.status+'）。';
-    }catch(error){notification='課題は公開しましたがLINE送信中にエラーが発生しました。';console.error('Approved LINE assignment notification failed:',error instanceof Error?error.message:'unknown');}
-  }
+  const notification='個別LINE通知は行わず、次回のCampusSync定期まとめに掲載します。';
   return NextResponse.json({success:true,assignment,notification});
 }
