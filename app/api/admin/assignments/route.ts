@@ -203,6 +203,7 @@ export async function PATCH(request: Request) {
     subject: payload.subject || 'その他',
     target_class: payload.target_class || 'all',
     subject_option: payload.subject_option || '',
+    priority: payload.priority || 'normal',
     due: payload.due_at ? '期限あり' : '期限未設定',
     due_at: payload.due_at || null,
     is_active: payload.is_active ?? true,
