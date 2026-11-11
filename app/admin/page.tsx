@@ -14,6 +14,7 @@ import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
 import ExamScheduleAdmin from '@/components/ExamScheduleAdmin';
 import MiniTestScheduleAdmin from '@/components/MiniTestScheduleAdmin';
 import AssignmentSuggestionsAdmin from '@/components/AssignmentSuggestionsAdmin';
+import LineDigestPreviewAdmin from '@/components/LineDigestPreviewAdmin';
 import LineDeliveryDashboard from '@/components/LineDeliveryDashboard';
 import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
 import StudyMaterialsAdmin from '@/components/StudyMaterialsAdmin';
@@ -3036,6 +3037,7 @@ export default function CampusSyncAdmin() {
                 <p className="mt-1 text-xs leading-5 text-cyan-100/90">1対1トークで「CSAI 課題追加」と送信し、返ってくるテンプレートに沿って返信してください。提案はSupabaseに承認待ちとして保存され、ここでAdminが承認すると正式課題になります。</p>
               </div>
             </div>
+            <LineDigestPreviewAdmin />
             <AssignmentSuggestionsAdmin />
           </div>
         )}
