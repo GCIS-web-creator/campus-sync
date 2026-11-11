@@ -219,6 +219,10 @@ type CampusAssignment = {
   subject?: string;
   subject_option?: string;
   target_class?: 'all' | 'science';
+  priority?: 'normal' | 'important' | 'urgent';
+  completion_total?: number;
+  completion_completed?: number;
+  completion_details?: Array<{ student_id: string; student_name: string | null; user_class: string | null; completed: boolean; updated_at: string | null }>;
 };
 
 const toAdminDateTimeInput = (value: string | null | undefined): string => {
@@ -405,6 +409,11 @@ export default function CampusSyncAdmin() {
   const [assignmentTargetClass, setAssignmentTargetClass] = useState<'all' | 'science'>('all');
   const [assignmentSubjectOption, setAssignmentSubjectOption] = useState('');
   const [assignmentDueAt, setAssignmentDueAt] = useState('');
+  const [assignmentPriority, setAssignmentPriority] = useState<'normal' | 'important' | 'urgent'>('normal');
+  const [assignmentActive, setAssignmentActive] = useState(true);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'active' | 'overdue' | 'archived'>('active');
+  const [assignmentPriorityFilter, setAssignmentPriorityFilter] = useState<'all' | 'normal' | 'important' | 'urgent'>('all');
 
   // 月間献立表（デフォルトは翌月）
   const [selectedMenuMonth, setSelectedMenuMonth] = useState(getNextMonthValue);
@@ -1667,6 +1676,8 @@ export default function CampusSyncAdmin() {
     setAssignmentTargetClass('all');
     setAssignmentSubjectOption('');
     setAssignmentDueAt('');
+    setAssignmentPriority('normal');
+    setAssignmentActive(true);
   };
 
   const editAssignment = (row: CampusAssignment) => {
@@ -1678,6 +1689,8 @@ export default function CampusSyncAdmin() {
     setAssignmentTargetClass(row.target_class || 'all');
     setAssignmentSubjectOption(row.subject_option || '');
     setAssignmentDueAt(toAdminDateTimeInput(row.due_at));
+    setAssignmentPriority(row.priority || 'normal');
+    setAssignmentActive(row.is_active);
     setAssignmentMessage('編集中です。変更後に「保存」を押してください。');
   };
 
@@ -1716,7 +1729,8 @@ export default function CampusSyncAdmin() {
         source: 'Admin／先生',
         due_at: dueAtISO,
         due: dueAtISO ? '期限あり' : '期限未設定',
-        is_active: true,
+        priority: assignmentPriority,
+        is_active: editingAssignmentId ? assignmentActive : true,
       };
       const response = await fetch('/api/admin/assignments', {
         method: editingAssignmentId ? 'PATCH' : 'POST',
@@ -1879,6 +1893,39 @@ export default function CampusSyncAdmin() {
       setLineBotRotationRefreshKey(key => key + 1);
     } finally {
       setLineBotRotationNoticeRetrySaving(false);
+    }
+  };
+
+  const updateAssignmentCompletion = async (row: CampusAssignment, studentId: string, completed: boolean) => {
+    try {
+      const response = await fetch('/api/admin/assignments', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ id: row.id, action: 'completion', student_id: studentId, completed }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || '提出状況を更新できませんでした。');
+      await loadAssignments();
+      setAssignmentMessage('提出状況を更新しました。');
+    } catch (error) {
+      setAssignmentMessage(error instanceof Error ? error.message : '提出状況を更新できませんでした。');
+    }
+  };
+
+  const updateAssignmentVisibility = async (row: CampusAssignment) => {
+    const action = row.is_active ? 'archive' : 'restore';
+    try {
+      const response = await fetch('/api/admin/assignments', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-admin-password': adminApiPassword },
+        body: JSON.stringify({ id: row.id, action }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || '公開状態を変更できませんでした。');
+      await loadAssignments();
+      setAssignmentMessage(row.is_active ? '課題を非公開にしました。履歴と提出状況は残ります。' : '課題を再公開しました。');
+    } catch (error) {
+      setAssignmentMessage(error instanceof Error ? error.message : '公開状態を変更できませんでした。');
     }
   };
 
@@ -2895,6 +2942,14 @@ export default function CampusSyncAdmin() {
                 <label className="block text-xs font-bold text-slate-400">実際の提出期限（日付・時刻）
                   <input type="datetime-local" value={assignmentDueAt} onChange={e => setAssignmentDueAt(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
                 </label>
+                <label className="block text-xs font-bold text-slate-400">重要度
+                  <select value={assignmentPriority} onChange={e => setAssignmentPriority(e.target.value as 'normal' | 'important' | 'urgent')} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                    <option value="normal">通常</option>
+                    <option value="important">重要</option>
+                    <option value="urgent">緊急</option>
+                  </select>
+                </label>
+                {editingAssignmentId && <label className="flex items-center gap-2 self-end rounded-xl border border-slate-700 px-3 py-3 text-xs font-bold text-slate-300"><input type="checkbox" checked={assignmentActive} onChange={e => setAssignmentActive(e.target.checked)} className="h-4 w-4 accent-blue-500"/>生徒画面に公開</label>}
               </div>
               <p className="text-xs text-slate-500">時刻まで設定すると、自動リマインダーの期限として使えます。期限が決まっていない場合は空欄のまま保存できます。</p>
               {!editingAssignmentId && <p className="rounded-lg border border-cyan-900/70 bg-cyan-950/30 px-3 py-2 text-xs leading-5 text-cyan-200">課題はCampusSync内に公開され、LINEへの個別Flex Message通知は行いません。次回の定期まとめに掲載されます。</p>}
@@ -2907,23 +2962,62 @@ export default function CampusSyncAdmin() {
 
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h3 className="text-base font-black">登録済みの共通課題</h3>
+                <div><h3 className="text-base font-black">登録済みの共通課題</h3><p className="mt-1 text-xs text-slate-500">期限・重要度・提出状況を検索し、非公開にした課題も復元できます。</p></div>
                 <button type="button" onClick={() => void loadAssignments()} disabled={assignmentLoading} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">再読み込み</button>
+              </div>
+              <div className="grid gap-2 md:grid-cols-[1fr_160px_160px]">
+                <input value={assignmentSearch} onChange={e=>setAssignmentSearch(e.target.value)} placeholder="課題名・教科・内容を検索" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"/>
+                <select value={assignmentFilter} onChange={e=>setAssignmentFilter(e.target.value as typeof assignmentFilter)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white">
+                  <option value="active">公開中</option><option value="overdue">期限超過</option><option value="archived">非公開</option><option value="all">すべて</option>
+                </select>
+                <select value={assignmentPriorityFilter} onChange={e=>setAssignmentPriorityFilter(e.target.value as typeof assignmentPriorityFilter)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white">
+                  <option value="all">すべての重要度</option><option value="normal">通常</option><option value="important">重要</option><option value="urgent">緊急</option>
+                </select>
               </div>
               {assignmentLoading ? <p className="text-sm text-slate-500">読み込み中…</p> : assignmentRows.length === 0 ? <p className="text-sm text-slate-500">課題がありません。管理用パスワードを入力して「課題一覧を読み込む」を押してください。</p> : (
                 <div className="space-y-2">
-                  {assignmentRows.map(row => (
-                    <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><p className="font-black text-white">{row.title}</p><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300">{row.source || 'Admin／先生'}</span></div>
-                        <p className="mt-1 flex flex-wrap gap-2 text-[10px] font-bold text-cyan-300"><span>{row.subject || 'その他'}</span><span>{row.target_class === 'science' ? '理系クラス' : '全クラス'}</span>{row.subject_option && <span>{row.subject_option}向け</span>}</p>
-                        <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap">{row.details || '詳細なし'}</p>
-                        <p className="mt-2 text-xs font-bold text-blue-300">{row.due_at ? new Date(row.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
+                  {assignmentRows.filter(row => {
+                    const query = assignmentSearch.trim().toLocaleLowerCase();
+                    const haystack = [row.title, row.subject, row.details, row.source].filter(Boolean).join(' ').toLocaleLowerCase();
+                    if (query && !haystack.includes(query)) return false;
+                    if (assignmentPriorityFilter !== 'all' && (row.priority || 'normal') !== assignmentPriorityFilter) return false;
+                    const overdue = Boolean(row.due_at && new Date(row.due_at).getTime() < Date.now());
+                    if (assignmentFilter === 'active' && !row.is_active) return false;
+                    if (assignmentFilter === 'archived' && row.is_active) return false;
+                    if (assignmentFilter === 'overdue' && (!row.is_active || !overdue)) return false;
+                    return true;
+                  }).map(row => (
+                    <div key={row.id} className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-black text-white">{row.title}</p>
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300">{row.source || 'Admin／先生'}</span>
+                            <span className={'rounded-full px-2 py-1 text-[10px] font-bold ' + ((row.priority || 'normal') === 'urgent' ? 'bg-rose-950 text-rose-200' : (row.priority || 'normal') === 'important' ? 'bg-amber-950 text-amber-200' : 'bg-slate-800 text-slate-300')}>{(row.priority || 'normal') === 'urgent' ? '緊急' : (row.priority || 'normal') === 'important' ? '重要' : '通常'}</span>
+                            <span className={'rounded-full px-2 py-1 text-[10px] font-bold ' + (row.is_active ? 'bg-emerald-950 text-emerald-200' : 'bg-slate-800 text-slate-400')}>{row.is_active ? '公開中' : '非公開'}</span>
+                          </div>
+                          <p className="mt-1 flex flex-wrap gap-2 text-[10px] font-bold text-cyan-300"><span>{row.subject || 'その他'}</span><span>{row.target_class === 'science' ? '理系クラス' : '全クラス'}</span>{row.subject_option && <span>{row.subject_option}向け</span>}</p>
+                          <p className="mt-1 text-xs text-slate-400 whitespace-pre-wrap">{row.details || '詳細なし'}</p>
+                          <p className={'mt-2 text-xs font-bold ' + (row.due_at && new Date(row.due_at).getTime() < Date.now() ? 'text-rose-300' : 'text-blue-300')}>{row.due_at ? new Date(row.due_at).toLocaleString('ja-JP') + (new Date(row.due_at).getTime() < Date.now() ? ' ・期限超過' : '') : '提出期限未設定'}</p>
+                          <p className="mt-2 text-xs font-bold text-slate-300">提出状況：{row.completion_completed ?? 0} / {row.completion_total ?? 0} 人完了</p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <button type="button" onClick={() => editAssignment(row)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800">編集</button>
+                          <button type="button" onClick={() => void updateAssignmentVisibility(row)} className="rounded-lg border border-amber-900 px-3 py-2 text-xs font-bold text-amber-200">{row.is_active ? '非公開にする' : '再公開する'}</button>
+                          <button type="button" onClick={() => void deleteAssignment(row)} className="rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-950/50">削除</button>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <button type="button" onClick={() => editAssignment(row)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800">編集</button>
-                        <button type="button" onClick={() => void deleteAssignment(row)} className="rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-950/50">削除</button>
-                      </div>
+                      <details className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                        <summary className="cursor-pointer text-xs font-bold text-slate-300">生徒ごとの提出状況を管理</summary>
+                        <div className="mt-3 space-y-2">
+                          {(row.completion_details || []).length ? row.completion_details!.map(student => (
+                            <label key={student.student_id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 px-3 py-2 text-xs">
+                              <span className="min-w-0"><b>{student.student_name || '生徒'}</b><span className="ml-2 text-slate-500">{student.user_class || ''}</span></span>
+                              <span className="flex shrink-0 items-center gap-2"><span className={student.completed ? 'text-emerald-300' : 'text-slate-500'}>{student.completed ? '完了' : '未完了'}</span><input type="checkbox" checked={student.completed} onChange={e=>void updateAssignmentCompletion(row,student.student_id,e.target.checked)} className="h-4 w-4 accent-emerald-500"/></span>
+                            </label>
+                          )) : <p className="text-xs text-slate-500">生徒プロフィールがまだ登録されていません。</p>}
+                        </div>
+                      </details>
                     </div>
                   ))}
                 </div>
