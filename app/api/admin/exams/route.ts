@@ -56,6 +56,20 @@ export async function POST(request:Request){
     if(inserted.error){await admin.from('school_test_exams').delete().eq('id',exam.id);return fail('実施教科を保存できなかったため、考査日程も取り消しました。',500);}
     examSubjects=inserted.data||[];
   }
+  const { data: createdEvent } = await admin.from('campussync_schedule_change_events')
+    .select('id,next_value')
+    .eq('entity_type','exam')
+    .eq('entity_id',exam.id)
+    .eq('action','created')
+    .order('created_at',{ascending:false})
+    .limit(1)
+    .maybeSingle();
+  if (createdEvent) {
+    const { error: eventUpdateError } = await admin.from('campussync_schedule_change_events')
+      .update({ next_value: { ...(createdEvent.next_value || {}), subjects: examSubjects.map((row:any)=>({subject:row.subject,exam_date:row.exam_date,sort_order:row.sort_order})) } })
+      .eq('id',createdEvent.id);
+    if (eventUpdateError) console.error('Exam creation event subject details update failed:',eventUpdateError.message);
+  }
   return NextResponse.json({success:true,exam:{...exam,subjects:examSubjects}},{status:201,headers:{'Cache-Control':'no-store, private'}});
 }
 export async function PATCH(request:Request){
@@ -81,7 +95,7 @@ export async function PATCH(request:Request){
   for(const row of payload.subjects){
     const subject=String(row.subject||''),date=row.exam_date;
     if(!SUBJECTS.includes(subject as typeof SUBJECTS[number]))return fail('教科の指定が不正です。',400);
-    if(!validDate(date)||date<start||date>end)return fail(subject+'の試験日は考査期間内にしてください。',400);
+    if(!validDate(date)||date<start||date>end)return fail(subject+'の試験日は変更後の考査期間内にしてください。',400);
     if(names.has(subject))return fail('同じ考査に同じ教科は重複登録できません。',400);
     names.add(subject);
     const count=(counts.get(date)||0)+1;counts.set(date,count);
@@ -91,28 +105,61 @@ export async function PATCH(request:Request){
 
   const oldSubjectsResult=await admin.from('school_test_subjects').select('subject,exam_date,sort_order').eq('exam_id',payload.id).order('exam_date').order('sort_order');
   if(oldSubjectsResult.error)return fail('現在の実施教科を取得できませんでした。',500);
-  const oldSubjects=oldSubjectsResult.data||[];
+  const oldSubjects=(oldSubjectsResult.data||[]).map((row:any)=>({subject:row.subject,exam_date:row.exam_date,sort_order:row.sort_order}));
+  const parentChanged=start!==exam.start_date||end!==exam.end_date||priority!==(exam.priority||'normal');
+  const normalizedRows=[...rows].sort((x,y)=>x.exam_date.localeCompare(y.exam_date)||x.sort_order-y.sort_order||x.subject.localeCompare(y.subject));
+  const subjectPayloadChanged=JSON.stringify(oldSubjects)!==JSON.stringify(normalizedRows);
+
+  // Update child rows first, so a failed subject save never records a parent date change.
+  const {data:saved,error:saveError}=await admin.rpc('replace_school_test_subjects',{p_exam_id:payload.id,p_rows:rows});
+  if(saveError)return fail('実施教科を更新できませんでした。変更は保存されていません。',500);
+  const nextSubjects=(saved||[]).map((row:any)=>({subject:row.subject,exam_date:row.exam_date,sort_order:row.sort_order}));
+
+  const eventCreatedAfter=new Date().toISOString();
   const parentUpdate=await admin.from('school_test_exams')
     .update({start_date:start,end_date:end,priority,updated_at:new Date().toISOString()})
     .eq('id',payload.id).select('*').single();
-  if(parentUpdate.error)return fail('考査期間・重要度を更新できませんでした。',500);
-
-  const {data:saved,error:saveError}=await admin.rpc('replace_school_test_subjects',{p_exam_id:payload.id,p_rows:rows});
-  if(saveError){
-    await admin.from('school_test_exams').update({start_date:exam.start_date,end_date:exam.end_date,priority:exam.priority||'normal'}).eq('id',payload.id);
-    return fail('実施教科を更新できませんでした。変更は保存されていません。',500);
+  if(parentUpdate.error){
+    const rollback=await admin.rpc('replace_school_test_subjects',{p_exam_id:payload.id,p_rows:oldSubjects});
+    if(rollback.error)console.error('Exam subjects rollback failed after parent update error:',rollback.error.message);
+    return fail('考査期間・重要度を更新できませんでした。実施教科の変更も元に戻しました。',500);
   }
 
-  const nextSubjects=(saved||[]).map((row:any)=>({subject:row.subject,exam_date:row.exam_date,sort_order:row.sort_order}));
-  if(JSON.stringify(oldSubjects)!==JSON.stringify(nextSubjects)){
-    const {error:historyError}=await admin.from('campussync_schedule_change_events').insert({
+  if(parentChanged||subjectPayloadChanged){
+    const changedParts:string[]=[];
+    if(start!==exam.start_date)changedParts.push('開始日');
+    if(end!==exam.end_date)changedParts.push('終了日');
+    if(priority!==(exam.priority||'normal'))changedParts.push('重要度');
+    if(subjectPayloadChanged)changedParts.push('各教科の実施日・割り当て');
+    const historyRecord={
       entity_type:'exam',entity_id:payload.id,action:'updated',title:exam.exam_type,priority,
-      summary:'各教科の実施日・割り当てを変更しました。',
-      previous_value:{subjects:oldSubjects,start_date:exam.start_date,end_date:exam.end_date},
-      next_value:{subjects:nextSubjects,start_date:start,end_date:end},
+      summary:changedParts.join('・')+'を変更しました。',
+      previous_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:exam.start_date,end_date:exam.end_date,priority:exam.priority||'normal',subjects:oldSubjects},
+      next_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:start,end_date:end,priority,subjects:nextSubjects},
       reason:typeof payload.reason==='string'?payload.reason.trim().slice(0,300):null,
-    });
-    if(historyError)console.error('Exam schedule change history insert failed:',historyError.message);
+    };
+    if(parentChanged){
+      // The DB trigger already inserted one event. Enrich that event instead of
+      // creating a duplicate for the same Admin save.
+      const {data:triggerEvent,error:lookupError}=await admin.from('campussync_schedule_change_events')
+        .select('id')
+        .eq('entity_type','exam')
+        .eq('entity_id',payload.id)
+        .eq('action','updated')
+        .gte('created_at',eventCreatedAfter)
+        .order('created_at',{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      if(lookupError||!triggerEvent)console.error('Exam trigger event lookup failed:',lookupError?.message||'not found');
+      else{
+        const {error:historyUpdateError}=await admin.from('campussync_schedule_change_events')
+          .update(historyRecord).eq('id',triggerEvent.id);
+        if(historyUpdateError)console.error('Exam schedule change history update failed:',historyUpdateError.message);
+      }
+    }else{
+      const {error:historyInsertError}=await admin.from('campussync_schedule_change_events').insert(historyRecord);
+      if(historyInsertError)console.error('Exam schedule change history insert failed:',historyInsertError.message);
+    }
   }
   return NextResponse.json({success:true,exam:parentUpdate.data,subjects:saved||[]},{headers:{'Cache-Control':'no-store, private'}});
 }
