@@ -517,8 +517,8 @@ function buildAssignmentListBubble(input: {
     paddingAll: '13px',
     spacing: 'sm',
     contents: [
-      { type: 'text', text: '課題の追加もLINE公式アカウントから', size: 'sm', weight: 'bold', color: '#065F46', wrap: true },
-      { type: 'text', text: '公式アカウントの1対1トークで「CSAI 課題追加」と送信すると、教科・対象・課題名・内容・提出期限を順番に登録できます。提案はAdminの承認後に正式公開されます。', size: 'xs', color: '#334155', wrap: true },
+      { type: 'text', text: '課題の追加・変更はAdminパネルからも可能', size: 'sm', weight: 'bold', color: '#065F46', wrap: true },
+      { type: 'text', text: 'LINE公式アカウントの1対1トークで「CSAI 課題追加」と送信して提案することもできます。提案はAdminで内容を確認・編集・承認した後に正式公開されます。', size: 'xs', color: '#334155', wrap: true },
     ],
   });
   return buildBoardBubble({
@@ -668,7 +668,7 @@ function buildSaturdayDigest(input: {
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
   return {
     type: 'flex',
-    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題一覧。横にスワイプして確認できます。').slice(0, 400),
+    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題・期限超過・予定変更。横にスワイプして確認できます。').slice(0, 400),
     contents: { type: 'carousel', contents: [...transitBubbles, buildWeatherForecastBubble(input.weather), assignmentBubble] },
   };
 }
