@@ -349,7 +349,7 @@ export async function POST(request: Request) {
   const countdownBubble = buildCountdownBubble(today, countdownEvents, Boolean(countdownResult.error));
   const flex = {
     ...baseFlex,
-    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題一覧・天気予報・カウントダウン').slice(0, 400),
+    altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題・期限超過・日程変更・天気予報・カウントダウン').slice(0, 400),
     contents: {
       type: 'carousel',
       contents: [
