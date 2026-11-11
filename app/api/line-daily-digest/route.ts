@@ -923,14 +923,6 @@ export async function POST(request: Request) {
       : 'LINEへの日次まとめ配信に失敗しました（HTTP ' + response.status + '）。', 502);
   }
 
-  if (changeEvents.length) {
-    const { error: markChangesError } = await admin.from('campussync_schedule_change_events')
-      .update({ digest_sent_at: new Date().toISOString() })
-      .in('id', changeEvents.map(item => item.id))
-      .is('digest_sent_at', null);
-    if (markChangesError) console.error('日次まとめに含めた予定変更の処理済み記録に失敗:', markChangesError.message);
-  }
-
   const digestTitle = excludeTrainTimetable
     ? '臨時再送 CampusSync 学校情報まとめ（電車時刻表除く）'
     : (isSaturday ? '12:30 CampusSync 土曜時刻表・天気' : '16:00 CampusSync 学校情報まとめ');
@@ -954,6 +946,16 @@ export async function POST(request: Request) {
     }
   }
   const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,flexMessages,retryKey,'daily_digest',retryKey);
+
+  // Keep schedule changes queued if any registered group push failed, so the
+  // next regular digest can retry them instead of silently dropping them.
+  if (changeEvents.length && !groupDelivery.lookupError && (groupDelivery.registered === 0 || groupDelivery.failed === 0)) {
+    const { error: markChangesError } = await admin.from('campussync_schedule_change_events')
+      .update({ digest_sent_at: new Date().toISOString() })
+      .in('id', changeEvents.map(item => item.id))
+      .is('digest_sent_at', null);
+    if (markChangesError) console.error('日次まとめに含めた予定変更の処理済み記録に失敗:', markChangesError.message);
+  }
 
   return NextResponse.json({
     success: true,
