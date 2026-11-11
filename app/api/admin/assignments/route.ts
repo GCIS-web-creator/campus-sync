@@ -167,7 +167,7 @@ export async function PATCH(request: Request) {
   if (!payload.id) return NextResponse.json({ message: '編集対象の課題IDがありません。' }, { status: 400 });
 
   if (payload.action === 'completion') {
-    if (!/^\\d{6}$/.test(payload.student_id || '') || typeof payload.completed !== 'boolean') {
+    if (!/^\d{6}$/.test(payload.student_id || '') || typeof payload.completed !== 'boolean') {
       return NextResponse.json({ message: '提出状況の更新内容が正しくありません。' }, { status: 400 });
     }
     const { error } = await supabase.from('assignment_completions').upsert({
