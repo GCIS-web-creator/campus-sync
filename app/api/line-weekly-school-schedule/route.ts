@@ -523,7 +523,7 @@ export async function POST(request: Request) {
     const deliveryBatchId = randomUUID();
     const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'school_schedule', deliveryBatchId);
     const groupMessage = summarizeLineGroupDelivery(groupDelivery);
-    if (changeEvents.length) {
+    if (changeEvents.length && !groupDelivery.lookupError && (groupDelivery.registered === 0 || groupDelivery.failed === 0)) {
       const { error: markChangesError } = await supabase.from('campussync_schedule_change_events')
         .update({ digest_sent_at: new Date().toISOString() })
         .in('id', changeEvents.map(item => item.id))
