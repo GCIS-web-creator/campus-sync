@@ -20,7 +20,6 @@ function getAdmin() {
 }
 
 export async function GET(request: Request) {
-  if (!sameOrigin(request)) return fail('不正な管理操作です。', 403);
   if (!verifyAdminSessionRequest(request)) return fail('Adminログインが必要です。', 401);
   const admin = getAdmin();
   if (!admin) return fail('Supabase設定がありません。', 503);
