@@ -16,7 +16,8 @@ export const maxDuration = 60;
 
 type TrainRow = { direction: string; departure_time: string; service?: string | null };
 type EventRow = { title: string; summary?: string | null; event_date: string };
-type AssignmentDigestRow = { id: string; title: string; details: string | null; subject: string | null; subject_option: string | null; target_class: string | null; due_at: string | null };
+type AssignmentDigestRow = { id: string; title: string; details: string | null; subject: string | null; subject_option: string | null; target_class: string | null; due_at: string | null; priority?: 'normal' | 'important' | 'urgent' | null };
+type ScheduleChangeDigestRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string };
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -401,56 +402,113 @@ function buildSchoolEventsBubble(input: {
 }
 
 
-function buildAssignmentListBubble(input: { today: string; assignments: AssignmentDigestRow[]; error: boolean }) {
+function buildAssignmentListBubble(input: {
+  today: string;
+  assignments: AssignmentDigestRow[];
+  overdueAssignments: AssignmentDigestRow[];
+  changeEvents: ScheduleChangeDigestRow[];
+  error: boolean;
+}) {
   const bodyContents: Record<string, unknown>[] = [];
+  const priorityLabel = (priority?: string | null) => priority === 'urgent' ? '緊急' : priority === 'important' ? '重要' : '';
+  const renderAssignment = (assignment: AssignmentDigestRow, overdue: boolean) => {
+    const option = assignment.subject_option ? '・' + assignment.subject_option + '向け' : '';
+    const target = assignment.target_class === 'science' ? '理系クラス' + option : '全クラス';
+    let dueLabel = '期限未設定';
+    if (assignment.due_at) {
+      const dueDate = new Date(assignment.due_at);
+      const dueDateKey = dateKeyFromParts(tokyoParts(dueDate));
+      const days = daysUntil(input.today, dueDateKey);
+      const calendar = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(dueDate);
+      const remaining = overdue
+        ? (days < 0 ? Math.abs(days) + '日超過' : '本日期限超過')
+        : days === 0 ? '今日が期限' : 'あと' + days + '日';
+      dueLabel = calendar + ' ・ ' + remaining;
+    }
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: overdue ? '#FFF7F7' : '#F8FAFC',
+      cornerRadius: '12px',
+      paddingAll: '12px',
+      spacing: 'xs',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          alignItems: 'center',
+          spacing: 'sm',
+          contents: [
+            { type: 'text', text: assignment.subject || 'その他', size: 'xxs', weight: 'bold', color: '#0E7490', flex: 0 },
+            { type: 'text', text: target, size: 'xxs', color: '#64748B', wrap: true, flex: 1 },
+            ...(priorityLabel(assignment.priority) ? [{ type: 'text', text: priorityLabel(assignment.priority), size: 'xxs', weight: 'bold', color: assignment.priority === 'urgent' ? '#B91C1C' : '#B45309' }] : []),
+          ],
+        },
+        { type: 'text', text: assignment.title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
+        ...(assignment.details ? [{ type: 'text', text: assignment.details.replace(/\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
+        { type: 'text', text: dueLabel, size: 'xs', weight: 'bold', color: overdue ? '#B91C1C' : '#1D4ED8', wrap: true },
+      ],
+    });
+    bodyContents.push({ type: 'separator', color: '#E2E8F0' });
+  };
+
   if (input.error) {
     bodyContents.push({ type: 'text', text: '課題一覧を取得できませんでした。CampusSyncで最新情報を確認してください。', size: 'sm', color: '#B91C1C', wrap: true });
-  } else if (!input.assignments.length) {
-    bodyContents.push({ type: 'text', text: '現在公開中の課題はありません。', size: 'sm', color: '#64748B', wrap: true });
   } else {
-    for (const assignment of input.assignments.slice(0, 8)) {
-      const option = assignment.subject_option ? '・' + assignment.subject_option + '向け' : '';
-      const target = assignment.target_class === 'science' ? '理系クラス' + option : '全クラス';
-      let dueLabel = '期限未設定';
-      if (assignment.due_at) {
-        const dueDate = new Date(assignment.due_at);
-        const dueDateKey = dateKeyFromParts(tokyoParts(dueDate));
-        const days = daysUntil(input.today, dueDateKey);
-        const calendar = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(dueDate);
-        const remaining = days < 0 ? Math.abs(days) + '日超過' : days === 0 ? '今日が期限' : 'あと' + days + '日';
-        dueLabel = calendar + ' ・ ' + remaining;
+    bodyContents.push({ type: 'text', text: '提出期限内・期限未設定', size: 'sm', weight: 'bold', color: '#0F766E', wrap: true });
+    if (!input.assignments.length) {
+      bodyContents.push({ type: 'text', text: '現在、期限内に提出できる公開課題はありません。', size: 'xs', color: '#64748B', wrap: true });
+    } else {
+      for (const assignment of input.assignments.slice(0, 8)) renderAssignment(assignment, false);
+    }
+
+    if (input.overdueAssignments.length) {
+      bodyContents.push({ type: 'separator', color: '#FECACA', margin: 'lg' });
+      bodyContents.push({ type: 'text', text: '期限超過・確認用', size: 'sm', weight: 'bold', color: '#B91C1C', wrap: true });
+      bodyContents.push({ type: 'text', text: '期限を過ぎた公開課題です。提出が必要かどうかは先生・Adminに確認してください。', size: 'xxs', color: '#7F1D1D', wrap: true });
+      for (const assignment of input.overdueAssignments.slice(0, 8)) renderAssignment(assignment, true);
+    }
+  }
+
+  if (input.changeEvents.length) {
+    bodyContents.push({ type: 'separator', color: '#CBD5E1', margin: 'lg' });
+    bodyContents.push({ type: 'text', text: '予定の変更・新規公開', size: 'sm', weight: 'bold', color: '#1D4ED8', wrap: true });
+    for (const event of input.changeEvents.slice(0, 8)) {
+      const actionLabel = event.action === 'created' ? '新規登録' : event.action === 'published' ? '公開' : event.action === 'cancelled' ? '中止・非公開' : '変更';
+      const subject = event.subject ? ' ・ ' + event.subject : '';
+      const dateText = (value: unknown) => {
+        if (typeof value !== 'string' || !value) return '';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+      };
+      const before = event.previous_value || {};
+      const after = event.next_value || {};
+      let beforeAfter = '';
+      if (event.entity_type === 'assignment' && (before.due_at !== after.due_at)) {
+        beforeAfter = '提出期限：' + (dateText(before.due_at) || '未設定') + ' → ' + (dateText(after.due_at) || '未設定');
+      } else if (event.entity_type === 'exam' && (before.start_date !== after.start_date || before.end_date !== after.end_date)) {
+        beforeAfter = '考査期間：' + String(before.start_date || '未設定') + '〜' + String(before.end_date || '未設定') + ' → ' + String(after.start_date || '未設定') + '〜' + String(after.end_date || '未設定');
+      } else if (event.entity_type === 'mini_test' && (before.test_date !== after.test_date || before.period !== after.period)) {
+        beforeAfter = '実施日時：' + String(before.test_date || '未設定') + ' ' + String(before.period || '') + '限 → ' + String(after.test_date || '未設定') + ' ' + String(after.period || '') + '限';
       }
       bodyContents.push({
         type: 'box',
         layout: 'vertical',
-        backgroundColor: '#F8FAFC',
-        cornerRadius: '12px',
-        paddingAll: '12px',
+        backgroundColor: '#EFF6FF',
+        cornerRadius: '10px',
+        paddingAll: '10px',
         spacing: 'xs',
         contents: [
-          {
-            type: 'box',
-            layout: 'horizontal',
-            alignItems: 'center',
-            spacing: 'sm',
-            contents: [
-              { type: 'text', text: assignment.subject || 'その他', size: 'xxs', weight: 'bold', color: '#0E7490', flex: 0 },
-              { type: 'text', text: target, size: 'xxs', color: '#64748B', wrap: true, flex: 1 },
-            ],
-          },
-          { type: 'text', text: assignment.title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
-          ...(assignment.details ? [{ type: 'text', text: assignment.details.replace(/\s+/g, ' ').slice(0, 110), size: 'xs', color: '#475569', wrap: true }] : []),
-          { type: 'text', text: dueLabel, size: 'xs', weight: 'bold', color: assignment.due_at && dueLabel.includes('超過') ? '#B91C1C' : '#1D4ED8', wrap: true },
+          { type: 'text', text: actionLabel + ' ・ ' + event.title + subject, size: 'xs', weight: 'bold', color: event.priority === 'urgent' ? '#B91C1C' : '#1E40AF', wrap: true },
+          { type: 'text', text: event.summary, size: 'xs', color: '#334155', wrap: true },
+          ...(beforeAfter ? [{ type: 'text', text: beforeAfter, size: 'xxs', color: '#475569', wrap: true }] : []),
+          ...(event.reason ? [{ type: 'text', text: '理由：' + event.reason, size: 'xxs', color: '#64748B', wrap: true }] : []),
         ],
       });
-      bodyContents.push({ type: 'separator', color: '#E2E8F0' });
     }
   }
-  bodyContents.push({
-    type: 'separator',
-    color: '#E2E8F0',
-    margin: 'lg',
-  });
+
+  bodyContents.push({ type: 'separator', color: '#E2E8F0', margin: 'lg' });
   bodyContents.push({
     type: 'box',
     layout: 'vertical',
@@ -459,18 +517,17 @@ function buildAssignmentListBubble(input: { today: string; assignments: Assignme
     paddingAll: '13px',
     spacing: 'sm',
     contents: [
-      { type: 'text', text: '課題の追加もLINE公式アカウントから', size: 'sm', weight: 'bold', color: '#065F46', wrap: true },
-      { type: 'text', text: '公式アカウントの1対1トークで「CSAI 課題追加」と送信すると、LINEトーク内で教科・対象・課題名・内容・提出期限を順番に登録できます。選択ボタンと通常のメッセージ入力で完結し、送信前に内容を確認できます。提案は管理者の承認後に正式公開されます。', size: 'xs', color: '#334155', wrap: true },
+      { type: 'text', text: '課題の追加・変更はAdminパネルからも可能', size: 'sm', weight: 'bold', color: '#065F46', wrap: true },
+      { type: 'text', text: 'LINE公式アカウントの1対1トークで「CSAI 課題追加」と送信して提案することもできます。提案はAdminで内容を確認・編集・承認した後に正式公開されます。', size: 'xs', color: '#334155', wrap: true },
     ],
   });
   return buildBoardBubble({
-    eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS',
-    title: '課題一覧',
-    subtitle: 'SUBJECT  •  DEADLINE  •  REMAINING DAYS',
+    eyebrow: 'CAMPUSSYNC  /  ASSIGNMENTS & UPDATES',
+    title: '課題・予定情報',
+    subtitle: 'UPCOMING  •  OVERDUE  •  SCHEDULE CHANGES',
     bodyContents,
   });
 }
-
 
 function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unknown>[] {
   const section = (title: string, body: string, note?: string): Record<string, unknown> => ({
@@ -557,11 +614,13 @@ function buildDailyDigest(input: {
   includeTrainTimetable: boolean;
   weather: WeatherDayForecast[];
   assignments: AssignmentDigestRow[];
+  overdueAssignments: AssignmentDigestRow[];
+  changeEvents: ScheduleChangeDigestRow[];
   assignmentError: boolean;
 }) {
   const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
-  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
+  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
   const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
   const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
 
@@ -593,6 +652,8 @@ function buildSaturdayDigest(input: {
   trainError: boolean;
   weather: WeatherDayForecast[];
   assignments: AssignmentDigestRow[];
+  overdueAssignments: AssignmentDigestRow[];
+  changeEvents: ScheduleChangeDigestRow[];
   assignmentError: boolean;
 }) {
   const transitBubbles = buildTransitBubbles({
@@ -604,10 +665,10 @@ function buildSaturdayDigest(input: {
     startLabel: '12:30',
     endLabel: '14:00',
   });
-  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
+  const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
   return {
     type: 'flex',
-    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題一覧。横にスワイプして確認できます。').slice(0, 400),
+    altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題・期限超過・予定変更。横にスワイプして確認できます。').slice(0, 400),
     contents: { type: 'carousel', contents: [...transitBubbles, buildWeatherForecastBubble(input.weather), assignmentBubble] },
   };
 }
@@ -740,7 +801,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service,service_day')
       .eq('service_day', isSaturday ? 'saturday' : 'weekday')
@@ -758,9 +819,14 @@ export async function POST(request: Request) {
     // 今日を除外しても明日から3日分を確保できるよう、5日分の予報を取得する。
     fetchSchoolWeatherForecast(5).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
     admin.from('assignments')
-      .select('id,title,details,subject,subject_option,target_class,due_at,is_active')
+      .select('id,title,details,subject,subject_option,target_class,due_at,is_active,priority')
       .eq('is_active', true)
       .order('due_at', { ascending: true, nullsFirst: false })
+      .limit(40),
+    admin.from('campussync_schedule_change_events')
+      .select('id,entity_type,entity_id,action,title,subject,priority,summary,previous_value,next_value,reason,created_at')
+      .is('digest_sent_at', null)
+      .order('created_at', { ascending: true })
       .limit(8),
   ]);
 
@@ -768,7 +834,12 @@ export async function POST(request: Request) {
   if (eventResult.error) console.error('日次まとめ：行事取得エラー', eventResult.error.message);
   if (classTimetableResult.error) console.error('日次まとめ：時間割取得エラー（初期データへフォールバック）', classTimetableResult.error.message);
   if (assignmentResult.error) console.error('日次まとめ：課題一覧取得エラー', assignmentResult.error.message);
+  if (changeResult.error) console.error('日次まとめ：予定変更一覧取得エラー', changeResult.error.message);
 
+  const assignmentRows = (assignmentResult.data || []) as AssignmentDigestRow[];
+  const currentAssignments = assignmentRows.filter(row => !row.due_at || new Date(row.due_at).getTime() >= now.getTime()).slice(0, 8);
+  const overdueAssignments = assignmentRows.filter(row => Boolean(row.due_at) && new Date(row.due_at as string).getTime() < now.getTime()).slice(0, 8);
+  const changeEvents = (changeResult.data || []) as ScheduleChangeDigestRow[];
   const timetableRows = (classTimetableResult.data || []) as ClassTimetableRow[];
   const timetable: ClassTimetableData = timetableRows.length ? mapClassTimetableRows(timetableRows) : CLASS_TIMETABLE_DATA;
   const trainRows = (trainResult.data || []) as TrainRow[];
@@ -798,7 +869,9 @@ export async function POST(request: Request) {
         higashimurayama,
         trainError: Boolean(trainResult.error),
         weather: forecastDays,
-        assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
+        assignments: currentAssignments,
+        overdueAssignments,
+        changeEvents,
         assignmentError: Boolean(assignmentResult.error),
       })
     : buildDailyDigest({
@@ -815,7 +888,9 @@ export async function POST(request: Request) {
         includeClassTimetable,
         includeTrainTimetable: !excludeTrainTimetable,
         weather: forecastDays,
-        assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
+        assignments: currentAssignments,
+        overdueAssignments,
+        changeEvents,
         assignmentError: Boolean(assignmentResult.error),
       }));
   let flexMessages: typeof flex[];
@@ -872,6 +947,16 @@ export async function POST(request: Request) {
   }
   const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,flexMessages,retryKey,'daily_digest',retryKey);
 
+  // Keep schedule changes queued if any registered group push failed, so the
+  // next regular digest can retry them instead of silently dropping them.
+  if (changeEvents.length && !groupDelivery.lookupError && (groupDelivery.registered === 0 || groupDelivery.failed === 0)) {
+    const { error: markChangesError } = await admin.from('campussync_schedule_change_events')
+      .update({ digest_sent_at: new Date().toISOString() })
+      .in('id', changeEvents.map(item => item.id))
+      .is('digest_sent_at', null);
+    if (markChangesError) console.error('日次まとめに含めた予定変更の処理済み記録に失敗:', markChangesError.message);
+  }
+
   return NextResponse.json({
     success: true,
     date: today,
@@ -881,7 +966,9 @@ export async function POST(request: Request) {
       classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
       events:events.length,
       weather:forecastDays.length>0,
-      assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
+      assignments: currentAssignments.length,
+      overdueAssignments: overdueAssignments.length,
+      scheduleChanges: changeEvents.length,
       assignmentError: Boolean(assignmentResult.error),
       carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) - (excludeTrainTimetable ? 2 : 0) + (today === '2026-11-09' ? 2 : 0),
       chemistryExamScope: today === '2026-11-09',

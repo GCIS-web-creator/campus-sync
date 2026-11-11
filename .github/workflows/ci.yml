@@ -35,10 +35,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Build Cloudflare Worker
-        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: npm run cloudflare:build
       - name: Validate Worker bundle without deploying
-        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: npx wrangler deploy --dry-run
       - name: Save regenerated lockfile to migration branch
         if: github.ref == 'refs/heads/cloudflare-workers-migration' && success()

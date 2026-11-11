@@ -2870,7 +2870,7 @@ useEffect(() => {
   const loadAdminAssignments = async () => {
     const { data: assignmentRows, error: assignmentsError } = await supabase
       .from('assignments')
-      .select('id, title, details, source, type, due, due_at, is_active, created_at, classroom_course_id, classroom_coursework_id')
+      .select('id, title, details, source, type, due, due_at, is_active, priority, created_at, classroom_course_id, classroom_coursework_id')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -2910,6 +2910,7 @@ useEffect(() => {
         due: dueLabel,
         due_at: dueAt,
         details: row.details || '',
+        priority: row.priority || 'normal',
         completed: completionByAssignmentId.get(String(row.id)) || false,
         classroom_course_id: row.classroom_course_id || null,
         classroom_coursework_id: row.classroom_coursework_id || null,
@@ -4681,6 +4682,8 @@ Supabaseの設定を確認してください。
                           {todo.completed ? '提出完了' : todo.due}
                         </span>
                         <span className={`text-[10px] font-medium ${subTextClass}`}>{todo.source}</span>
+                        {todo.isAdminAssigned && todo.priority === 'urgent' && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-700">緊急</span>}
+                        {todo.isAdminAssigned && todo.priority === 'important' && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">重要</span>}
                       </div>
                       <h4 className={`text-sm font-black truncate ${todo.completed ? 'line-through text-gray-400' : ''}`}>
                         {todo.title}

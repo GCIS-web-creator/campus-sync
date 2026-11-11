@@ -17,6 +17,7 @@ type MiniTestPayload = {
   question_count?: unknown;
   full_score?: unknown;
   target_class?: unknown;
+  priority?: unknown;
 };
 
 function fail(message: string, status: number) {
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
   const denied = authError(request); if (denied) return denied;
   const admin = getAdmin(); if (!admin) return fail('Supabase設定がありません。', 503);
   const { data, error } = await admin.from('mini_test_events')
-    .select('id,subject,title,test_date,period,start_note,duration_minutes,scope,notes,question_count,full_score,target_class,audience,status,source,created_at,approved_at')
+    .select('id,subject,title,test_date,period,start_note,duration_minutes,scope,notes,question_count,full_score,target_class,audience,status,source,priority,created_at,approved_at')
     .eq('audience', 'school')
     .order('test_date', { ascending: true })
     .order('created_at', { ascending: false })
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
   const scope = typeof payload.scope === 'string' ? payload.scope.trim() : '';
   const notes = typeof payload.notes === 'string' ? payload.notes.trim() : '';
   const targetClass = typeof payload.target_class === 'string' ? payload.target_class.trim() : 'all';
+  const priority = typeof payload.priority === 'string' ? payload.priority : 'normal';
 
   if (!subject || subject.length > 80) return fail('教科は1〜80文字で入力してください。', 400);
   if (!title || title.length > 160) return fail('小テスト名は1〜160文字で入力してください。', 400);
@@ -94,11 +96,12 @@ export async function POST(request: Request) {
   if (!startNote || startNote.length > 120) return fail('開始タイミングは1〜120文字で入力してください。', 400);
   if (!scope || scope.length > 1200 || notes.length > 1200) return fail('試験範囲・出題内容はそれぞれ1200文字以内で入力してください。', 400);
   if (!targetClass || targetClass.length > 80) return fail('対象は1〜80文字で入力してください。', 400);
+  if (!['normal', 'important', 'urgent'].includes(priority)) return fail('重要度の指定が正しくありません。', 400);
 
   const { data, error } = await admin.from('mini_test_events').insert({
     subject, title, test_date: testDate, period, start_note: startNote,
     duration_minutes: durationMinutes, scope, notes, question_count: questionCount,
-    full_score: fullScore, target_class: targetClass, audience: 'school',
+    full_score: fullScore, target_class: targetClass, priority, audience: 'school',
     status: 'published', source: 'admin', created_by: null, line_user_id: null,
     approved_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).select('*').single();
@@ -113,10 +116,55 @@ export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return fail('不正な管理操作です。', 403);
   const denied = authError(request); if (denied) return denied;
   const admin = getAdmin(); if (!admin) return fail('Supabase設定がありません。', 503);
-  const payload = await request.json().catch(() => null) as { id?: unknown; action?: unknown } | null;
+  const payload = await request.json().catch(() => null) as (MiniTestPayload & { id?: unknown; action?: unknown }) | null;
   if (typeof payload?.id !== 'string' || !payload.id.trim()) return fail('対象の小テストIDがありません。', 400);
-  if (!['approve', 'reject', 'cancel'].includes(String(payload.action))) return fail('操作内容が正しくありません。', 400);
 
+  if (payload.action === 'update') {
+    const subject = typeof payload.subject === 'string' ? payload.subject.trim() : '';
+    const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+    const testDate = payload.test_date;
+    const period = numberOrNull(payload.period, 1, 12);
+    const durationMinutes = numberOrNull(payload.duration_minutes, 1, 180);
+    const questionCount = numberOrNull(payload.question_count, 1, 500);
+    const fullScore = numberOrNull(payload.full_score, 1, 1000);
+    const startNote = typeof payload.start_note === 'string' ? payload.start_note.trim() : '';
+    const scope = typeof payload.scope === 'string' ? payload.scope.trim() : '';
+    const notes = typeof payload.notes === 'string' ? payload.notes.trim() : '';
+    const targetClass = typeof payload.target_class === 'string' ? payload.target_class.trim() : 'all';
+    const priority = typeof payload.priority === 'string' ? payload.priority : 'normal';
+
+    if (!subject || subject.length > 80) return fail('教科は1〜80文字で入力してください。', 400);
+    if (!title || title.length > 160) return fail('小テスト名は1〜160文字で入力してください。', 400);
+    if (!validDate(testDate)) return fail('実施日を正しく入力してください。', 400);
+    if (period === undefined) return fail('時限は1〜12限で指定してください。', 400);
+    if (durationMinutes === undefined || durationMinutes === null) return fail('時間は1〜180分で指定してください。', 400);
+    if (questionCount === undefined || questionCount === null || fullScore === undefined || fullScore === null) return fail('問題数と満点を確認してください。', 400);
+    if (!startNote || startNote.length > 120) return fail('開始タイミングは1〜120文字で入力してください。', 400);
+    if (!scope || scope.length > 1200 || notes.length > 1200) return fail('試験範囲・出題内容はそれぞれ1200文字以内で入力してください。', 400);
+    if (!targetClass || targetClass.length > 80) return fail('対象は1〜80文字で入力してください。', 400);
+    if (!['normal', 'important', 'urgent'].includes(priority)) return fail('重要度の指定が正しくありません。', 400);
+
+    const { data, error } = await admin.from('mini_test_events')
+      .update({
+        subject, title, test_date: testDate, period, start_note: startNote,
+        duration_minutes: durationMinutes, scope, notes, question_count: questionCount,
+        full_score: fullScore, target_class: targetClass, priority,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.id)
+      .eq('audience', 'school')
+      .in('status', ['pending', 'published'])
+      .select('*')
+      .maybeSingle();
+    if (error) {
+      console.error('Admin mini-test edit failed:', error.message);
+      return fail('小テストの変更を保存できませんでした。', 500);
+    }
+    if (!data) return fail('変更対象の小テストが見つかりません。', 404);
+    return NextResponse.json({ success: true, event: data }, { headers: { 'Cache-Control': 'no-store, private' } });
+  }
+
+  if (!['approve', 'reject', 'cancel'].includes(String(payload.action))) return fail('操作内容が正しくありません。', 400);
   const isReview = payload.action === 'approve' || payload.action === 'reject';
   const expectedStatus = isReview ? 'pending' : 'published';
   const nextStatus = payload.action === 'approve' ? 'published' : payload.action === 'reject' ? 'rejected' : 'cancelled';
