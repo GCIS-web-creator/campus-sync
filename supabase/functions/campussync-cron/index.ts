@@ -18,6 +18,17 @@ Deno.serve(async (request: Request) => {
   }
 
   const task = new URL(request.url).searchParams.get("task") || "";
+
+  // Safe, side-effect-free test for the shared Cron secret.
+  if (task === "auth-check") {
+    const expected = Deno.env.get("CRON_SECRET") || "";
+    const received = request.headers.get("authorization") || "";
+    if (!expected || received !== `Bearer ${expected}`) {
+      return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    return Response.json({ success: true, authenticated: true });
+  }
+
   const handler = handlers[task];
   if (!handler) {
     return Response.json({ success: false, message: "Unknown CampusSync task" }, { status: 400 });
