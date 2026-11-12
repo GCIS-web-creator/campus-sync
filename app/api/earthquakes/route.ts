@@ -152,21 +152,67 @@ function firstText(node: XmlNode, name: string): string {
 }
 
 function parseFeed(xml: string, feedUrl: string): FeedEntry[] {
-  const root = parseXml(xml);
-  return descendantsNamed(root, 'entry').map(entry => {
-    const links = childrenNamed(entry, 'link');
-    const bestLink = links.find(link => /xml/i.test(link.attributes.type || '') || /alternate/i.test(link.attributes.rel || '')) || links[0];
-    const id = childText(entry, 'id');
-    const raw = bestLink?.attributes.href || id || '';
+  // JMA feeds are Atom documents. Read only the small set of fields we need
+  // instead of constructing a full XmlNode tree for every 5-10 second poll.
+  const entries: FeedEntry[] = [];
+  const entryPattern = /<(?:[\w.-]+:)?entry\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?entry\s*>/gi;
+  const tagPatterns = {
+    id: /<(?:[\w.-]+:)?id\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?id\s*>/i,
+    title: /<(?:[\w.-]+:)?title\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?title\s*>/i,
+    updated: /<(?:[\w.-]+:)?updated\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?updated\s*>/i,
+    published: /<(?:[\w.-]+:)?published\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?published\s*>/i,
+  };
+  const readText = (block: string, pattern: RegExp): string => {
+    const raw = pattern.exec(block)?.[1] || '';
+    return decodeXml(
+      raw
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/<[^>]*>/g, '')
+        .trim(),
+    );
+  };
+
+  for (const match of xml.matchAll(entryPattern)) {
+    const block = match[1] || '';
+    const links: Array<Record<string, string>> = [];
+    for (const linkMatch of block.matchAll(/<(?:[\w.-]+:)?link\b([^>]*)\/?>/gi)) {
+      const attributes: Record<string, string> = {};
+      const attributePattern = /([^\s=]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+      let attribute: RegExpExecArray | null;
+      while ((attribute = attributePattern.exec(linkMatch[1] || '')) !== null) {
+        attributes[localName(attribute[1])] = decodeXml(attribute[3] ?? attribute[4] ?? '');
+      }
+      links.push(attributes);
+    }
+
+    const bestLink = links.find(link =>
+      /xml/i.test(link.type || '') || /alternate/i.test(link.rel || '')
+    ) || links[0];
+    const id = readText(block, tagPatterns.id);
+    const title = readText(block, tagPatterns.title);
+    const raw = bestLink?.href || id || '';
     let href = '';
     try {
       const resolved = new URL(raw, feedUrl);
-      if (resolved.protocol === 'https:' && (resolved.hostname === 'www.data.jma.go.jp' || resolved.hostname === 'xml.kishou.go.jp')) href = resolved.toString();
+      if (
+        resolved.protocol === 'https:' &&
+        (resolved.hostname === 'www.data.jma.go.jp' || resolved.hostname === 'xml.kishou.go.jp')
+      ) {
+        href = resolved.toString();
+      }
     } catch {
       href = '';
     }
-    return { id: id || href, title: childText(entry, 'title'), href, publishedAt: childText(entry, 'updated') || childText(entry, 'published') || null };
-  }).filter(entry => entry.id && entry.href && (
+
+    entries.push({
+      id: id || href,
+      title,
+      href,
+      publishedAt: readText(block, tagPatterns.updated) || readText(block, tagPatterns.published) || null,
+    });
+  }
+
+  return entries.filter(entry => entry.id && entry.href && (
     /VXSE(43|51|52|53)/i.test(entry.href + ' ' + entry.id)
     || /緊急地震速報|震度速報|震源に関する情報|震源・震度.*情報|遠地地震に関する情報/.test(entry.title)
   ));
