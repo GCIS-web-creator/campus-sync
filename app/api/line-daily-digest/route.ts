@@ -554,15 +554,16 @@ function buildDailyDigest(input: {
   events: EventRow[];
   eventError: boolean;
   includeClassTimetable: boolean;
+  includeTrainTimetable: boolean;
   weather: WeatherDayForecast[];
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
-  const transitBubbles = buildTransitBubbles(input);
+  const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜電車時刻表・天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -688,10 +689,11 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const payload = await request.json().catch(() => ({})) as { mode?: unknown };
+  const payload = await request.json().catch(() => ({})) as { mode?: unknown; probe?: unknown };
   const manualRequest = payload.mode === 'manual';
+  const replayWithoutTrain = payload.mode === 'replay_no_train';
   // A replay is still protected by CRON_SECRET, but can run after the scheduled window.
-  const replayRequest = payload.mode === 'replay';
+  const replayRequest = payload.mode === 'replay' || replayWithoutTrain;
 
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
@@ -716,6 +718,10 @@ export async function POST(request: Request) {
     return jsonError('Supabaseのサーバー設定またはLINE_CHANNEL_ACCESS_TOKENが不足しています。', 503);
   }
 
+  if (replayWithoutTrain && payload.probe === true) {
+    return NextResponse.json({ success: true, mode: 'replay_no_train', ready: true });
+  }
+
   const now = new Date();
   const nowParts = tokyoParts(now);
   const today = dateKeyFromParts(nowParts);
@@ -738,11 +744,13 @@ export async function POST(request: Request) {
   });
 
   const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult] = await Promise.all([
-    admin.from('takanodai_timetable')
-      .select('direction,departure_time,service,service_day')
-      .eq('service_day', isSaturday ? 'saturday' : 'weekday')
-      .order('direction', { ascending: true })
-      .order('departure_time', { ascending: true }),
+    replayWithoutTrain
+      ? Promise.resolve({ data: [] as TrainRow[], error: null })
+      : admin.from('takanodai_timetable')
+          .select('direction,departure_time,service,service_day')
+          .eq('service_day', isSaturday ? 'saturday' : 'weekday')
+          .order('direction', { ascending: true })
+          .order('departure_time', { ascending: true }),
     admin.from('school_event_countdowns')
       .select('id,title,summary,event_date,is_active')
       .eq('is_active', true)
@@ -810,6 +818,7 @@ export async function POST(request: Request) {
         events,
         eventError: Boolean(eventResult.error),
         includeClassTimetable,
+        includeTrainTimetable: !replayWithoutTrain,
         weather: forecastDays,
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
@@ -822,7 +831,7 @@ export async function POST(request: Request) {
     return jsonError('日次まとめのメッセージサイズを調整できませんでした。', 500);
   }
 
-  const retryKey = stableRetryKey(today, isSaturday ? 'saturday' : 'weekday');
+  const retryKey = stableRetryKey(today, replayWithoutTrain ? 'weekday-no-train-makeup' : isSaturday ? 'saturday' : 'weekday');
   const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
     method: 'POST',
     headers: {
