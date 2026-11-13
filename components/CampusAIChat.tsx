@@ -583,25 +583,25 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                                     </div>
                                     <div className="space-y-2 border-t border-slate-100 p-3 dark:border-slate-800">
                                       {scheduleSections.length > 0 && (
-                                        <details open={m.examView.mode === 'schedule'} className="rounded-lg border border-blue-200 dark:border-blue-900">
+                                        <details className="rounded-lg border border-blue-200 dark:border-blue-900">
                                           <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-blue-800 dark:text-blue-200">テスト実施日程（{scheduleSections.length}項目）</summary>
                                           <div className="p-2 pt-0">{renderSections(scheduleSections)}</div>
                                         </details>
                                       )}
                                       {rangeSections.length > 0 && (
-                                        <details open={m.examView.mode === 'detail'} className="rounded-lg border border-slate-200 dark:border-slate-700">
+                                        <details open={m.examView?.mode === 'detail'} className="rounded-lg border border-slate-200 dark:border-slate-700">
                                           <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-cyan-800 dark:text-cyan-200">試験範囲（{rangeSections.length}項目）</summary>
                                           <div className="p-2 pt-0">{renderSections(rangeSections)}</div>
                                         </details>
                                       )}
                                       {submissionSections.length > 0 && (
-                                        <details open={m.examView.mode === 'submissions' || m.examView.mode === 'detail'} className="rounded-lg border border-emerald-200 dark:border-emerald-900">
+                                        <details open={m.examView?.mode === 'submissions' || m.examView?.mode === 'detail'} className="rounded-lg border border-emerald-200 dark:border-emerald-900">
                                           <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-emerald-800 dark:text-emerald-200">提出物・提出方法（{submissionSections.length}項目）</summary>
                                           <div className="p-2 pt-0">{renderSections(submissionSections)}</div>
                                         </details>
                                       )}
                                       {noticeSections.length > 0 && (
-                                        <details open={m.examView.mode === 'detail' || m.examView.mode === 'submissions'} className="rounded-lg border border-amber-200 dark:border-amber-900">
+                                        <details open={m.examView?.mode === 'detail' || m.examView?.mode === 'submissions'} className="rounded-lg border border-amber-200 dark:border-amber-900">
                                           <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-amber-800 dark:text-amber-200">注意事項（{noticeSections.length}項目）</summary>
                                           <div className="p-2 pt-0">{renderSections(noticeSections)}</div>
                                         </details>
