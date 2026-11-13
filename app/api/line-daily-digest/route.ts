@@ -18,6 +18,8 @@ type TrainRow = { direction: string; departure_time: string; service?: string | 
 type EventRow = { title: string; summary?: string | null; event_date: string };
 type AssignmentDigestRow = { id: string; title: string; details: string | null; subject: string | null; subject_option: string | null; target_class: string | null; due_at: string | null; priority?: 'normal' | 'important' | 'urgent' | null };
 type ScheduleChangeDigestRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string };
+type SchoolExamRangeSection = { title: string; body: string; note?: string | null };
+type SchoolExamRangeDigestRow = { subject: string; display_subject: string; audience: string; range_sections: SchoolExamRangeSection[]; sort_order: number };
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -529,74 +531,40 @@ function buildAssignmentListBubble(input: {
   });
 }
 
-function buildChemistryExamRangeBubbles(dateLabel: string): Record<string, unknown>[] {
-  const section = (title: string, body: string, note?: string): Record<string, unknown> => ({
+function buildSchoolExamRangeBubbles(dateLabel: string, rows: SchoolExamRangeDigestRow[]): Record<string, unknown>[] {
+  const section = (item: SchoolExamRangeSection): Record<string, unknown> => ({
     type: 'box',
     layout: 'vertical',
     backgroundColor: '#E2E8F0',
     cornerRadius: '12px',
     paddingAll: '2px',
-    contents: [
-      {
-        type: 'box',
-        layout: 'vertical',
-        backgroundColor: '#FFFFFF',
-        cornerRadius: '10px',
-        paddingAll: '12px',
-        spacing: 'sm',
-        contents: [
-          { type: 'text', text: title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
-          { type: 'text', text: body, size: 'xs', color: '#334155', wrap: true },
-          ...(note ? [{ type: 'text', text: note, size: 'xs', weight: 'bold', color: '#B45309', wrap: true }] : []),
-        ],
-      },
-    ],
+    contents: [{
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#FFFFFF',
+      cornerRadius: '10px',
+      paddingAll: '12px',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: item.title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
+        { type: 'text', text: item.body, size: 'xs', color: '#334155', wrap: true },
+        ...(item.note ? [{ type: 'text', text: item.note, size: 'xs', weight: 'bold', color: '#B45309', wrap: true }] : []),
+      ],
+    }],
   });
 
-  const textbookBubble = buildBoardBubble({
-    eyebrow: 'TODAY ONLY  /  EXAM RANGE RELEASED',
-    title: '２学期期末考査　化学試験範囲　が公開されました',
-    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲① 教科書',
-    bodyContents: [
-      section(
-        '教科書① 実教出版「化学 academia」',
-        'p.65〜82：第3「希薄溶液の性質」・第4「コロイド」\np.82 論述問題 2・3\np.83 節末問題 3〜7\np.86 章末問題 3・4',
-        '除外：p.67 発展「ラウールの法則と沸点上昇」／p.75 発展「蒸気圧と浸透圧」',
-      ),
-      section(
-        '教科書② 実教出版「化学基礎 academia 新訂版」',
-        'p.136〜164　第2節「酸と塩基」\np.164 節末問題／p.165 論述問題・グラフ問題\np.166〜182　第3節「酸化還元反応」\np.203 節末問題 1・2・3・5／p.204 論述問題 1・2\np.205〜211　特集4「滴定」\np.212 グラフ問題 1〜5／章末問題 4・5・6',
-      ),
-    ],
+  // One subject = one bubble; all subject bubbles stay in this single digest carousel.
+  return rows.map(row => {
+    const sections = Array.isArray(row.range_sections)
+      ? row.range_sections.filter(item => item && typeof item.title === 'string' && typeof item.body === 'string')
+      : [];
+    return buildBoardBubble({
+      eyebrow: '2026 2ND TERM FINAL / EXAM RANGE',
+      title: '２学期期末考査｜' + row.display_subject,
+      subtitle: dateLabel + ' 公開｜' + row.audience + '｜2026年度 2学期期末考査',
+      bodyContents: sections.map(section),
+    });
   });
-  textbookBubble.size = 'giga';
-
-  const workbookBubble = buildBoardBubble({
-    eyebrow: 'CHEMISTRY EXAM  /  WORKBOOK & NOTES',
-    title: '問題集・当日注意・提出物',
-    subtitle: dateLabel + ' 公開｜2026年度 58期理系｜試験範囲②',
-    bodyContents: [
-      section(
-        '問題集「エクセル 化学 総合版 化学基礎＋化学」',
-        '6「酸・塩基」 p.100〜121\n7「酸化還元反応」 p.122〜133\n＋α：問題番号210 COD／211 DO／212 アスコルビン酸の定量\n12「溶液の性質」内の4「溶液の性質」\nWU 3〜5／基本例題51／基本問題261〜267\n応用例題53・54／応用問題269〜275',
-      ),
-      section(
-        '重要問題集',
-        '問題番号72・73「コロイド」も含みます。\n重要問題集は冬休みの宿題です。時間に余裕がある人は、実力確認のため挑戦してください。',
-      ),
-      section(
-        '試験当日の注意',
-        '原子量は与えられます。\n持ち込み・利用できるのは、計算機能のみの計算機・電卓です。\n携帯電話・スマホ・電子辞書などの計算機能は使用できません。',
-      ),
-      section(
-        '学習ポイント・提出物',
-        '教科書の用語を覚え、エクセルの基本問題・エクササイズを繰り返しましょう。標準例題・標準問題・範囲の発展問題も学習。有効数字にこだわる計算もあります。\n提出物：問題集（エクセル）用ノート（期末試験範囲）\n提出日：試験終了日 11月27日\n提出場所：化学準備室の机上に名前順に並べて提出。',
-      ),
-    ],
-  });
-  workbookBubble.size = 'giga';
-
-  return [textbookBubble, workbookBubble];
 }
 
 function buildDailyDigest(input: {
@@ -617,12 +585,13 @@ function buildDailyDigest(input: {
   overdueAssignments: AssignmentDigestRow[];
   changeEvents: ScheduleChangeDigestRow[];
   assignmentError: boolean;
+  examScopeBubbles: Record<string, unknown>[];
 }) {
   const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
-  const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
+  const examScopeBubbles = input.examScopeBubbles;
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・2年理系向け2学期期末考査の試験範囲（化学・数学C・国語演習・古典探究・公共）' : '') + '。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -801,7 +770,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult, examRangeResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service,service_day')
       .eq('service_day', isSaturday ? 'saturday' : 'weekday')
@@ -828,6 +797,10 @@ export async function POST(request: Request) {
       .is('digest_sent_at', null)
       .order('created_at', { ascending: true })
       .limit(8),
+    admin.from('school_test_ranges')
+      .select('subject,display_subject,audience,range_sections,sort_order')
+      .eq('broadcast_on', today)
+      .order('sort_order', { ascending: true }),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
@@ -835,7 +808,10 @@ export async function POST(request: Request) {
   if (classTimetableResult.error) console.error('日次まとめ：時間割取得エラー（初期データへフォールバック）', classTimetableResult.error.message);
   if (assignmentResult.error) console.error('日次まとめ：課題一覧取得エラー', assignmentResult.error.message);
   if (changeResult.error) console.error('日次まとめ：予定変更一覧取得エラー', changeResult.error.message);
+  if (examRangeResult.error) console.error('日次まとめ：試験範囲取得エラー', examRangeResult.error.message);
 
+  const examRangeRows = (examRangeResult.data || []) as SchoolExamRangeDigestRow[];
+  const examScopeBubbles = buildSchoolExamRangeBubbles(todayLabel, examRangeRows);
   const assignmentRows = (assignmentResult.data || []) as AssignmentDigestRow[];
   const currentAssignments = assignmentRows.filter(row => !row.due_at || new Date(row.due_at).getTime() >= now.getTime()).slice(0, 8);
   const overdueAssignments = assignmentRows.filter(row => Boolean(row.due_at) && new Date(row.due_at as string).getTime() < now.getTime()).slice(0, 8);
@@ -892,6 +868,7 @@ export async function POST(request: Request) {
         overdueAssignments,
         changeEvents,
         assignmentError: Boolean(assignmentResult.error),
+        examScopeBubbles,
       }));
   let flexMessages: typeof flex[];
   try {
@@ -957,6 +934,10 @@ export async function POST(request: Request) {
     if (markChangesError) console.error('日次まとめに含めた予定変更の処理済み記録に失敗:', markChangesError.message);
   }
 
+  const flexCarouselCards = Array.isArray((flex as { contents?: { contents?: unknown[] } }).contents?.contents)
+    ? (flex as { contents: { contents: unknown[] } }).contents.contents.length
+    : 1;
+
   return NextResponse.json({
     success: true,
     date: today,
@@ -970,8 +951,8 @@ export async function POST(request: Request) {
       overdueAssignments: overdueAssignments.length,
       scheduleChanges: changeEvents.length,
       assignmentError: Boolean(assignmentResult.error),
-      carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) - (excludeTrainTimetable ? 2 : 0) + (today === '2026-11-09' ? 2 : 0),
-      chemistryExamScope: today === '2026-11-09',
+      carouselCards: flexCarouselCards,
+      examRanges: examRangeRows.length,
       historySaved,
     },
     groupDelivery,
@@ -979,6 +960,6 @@ export async function POST(request: Request) {
       ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
       : (isSaturday
         ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (today === '2026-11-09' ? '、本日限定の化学試験範囲' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery)),
+        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (examRangeRows.length ? '、2年理系向け2学期期末考査の試験範囲（' + examRangeRows.length + '科目）' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery)),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -4,7 +4,7 @@ import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const SUBJECTS = ['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健'] as const;
+const SUBJECTS = ['国語演習','古典探求','物理','化学','生物','数３','数C','公共','英コミュ','論表','情報','保健'] as const;
 
 function fail(message:string,status:number){return NextResponse.json({success:false,message},{status,headers:{'Cache-Control':'no-store, private'}});}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');try{return Boolean(origin&&new URL(origin).origin===new URL(request.url).origin);}catch{return false;}}

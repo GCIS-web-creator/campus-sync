@@ -4,11 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
-const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
+const SUBJECTS = ['国語演習', '古典探求', '物理', '化学', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
 type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string };
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
 type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
+type SchoolRangeSection = { title: string; body: string; note?: string | null };
+type SchoolExamRange = { id: string; exam_id: string; subject: string; display_subject: string; audience: string; range_sections: SchoolRangeSection[]; sort_order: number };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
@@ -65,6 +67,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
+  const [schoolRanges, setSchoolRanges] = useState<SchoolExamRange[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [miniTests, setMiniTests] = useState<MiniTestEvent[]>([]);
@@ -111,18 +114,19 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     setLoading(true); setError('');
     try {
       const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e, f] = await Promise.all([
+      const [a, b, c, d, e, f, g] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
         supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
         supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
+        supabase.from('school_test_ranges').select('id,exam_id,subject,display_subject,audience,range_sections,sort_order').order('sort_order', { ascending: true }),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error || f.error;
+      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error;
       if (issue) throw issue;
       const newExams = (a.data || []) as Exam[];
-      setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions((d.data || []) as Session[]);
+      setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions((d.data || []) as Session[]);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
@@ -366,6 +370,17 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
             <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=><span key={item.id} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">{item.sort_order} ・ {item.subject}</span>)}</div></div>)}
             {!examSubjects.length&&<p className={'text-xs '+muted}>実施教科・日ごとの日程は調整中です。確定後にここへ表示されます。</p>}</div>
+            {schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || userClass.startsWith('2-'))).length > 0 && <section className={'mt-4 rounded-xl border p-3 '+(dark?'border-cyan-900 bg-cyan-950/20':'border-cyan-100 bg-cyan-50/60')}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-black">学校公開の試験範囲</h4><span className="rounded-full bg-cyan-700 px-2.5 py-1 text-[10px] font-black text-white">2年理系向け</span></div>
+              <div className="space-y-3">{schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || userClass.startsWith('2-'))).map(item=><article key={item.id} className={'rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-white bg-white')}>
+                <div className="mb-2 flex flex-wrap items-center gap-2"><span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-xs font-black text-cyan-950">{item.display_subject}</span><span className={'text-[10px] font-bold '+muted}>{item.audience}</span></div>
+                <div className="space-y-2">{(item.range_sections || []).map((section,index)=><div key={item.id+'-'+index} className={'rounded-lg p-2.5 '+(dark?'bg-slate-800':'bg-slate-50')}>
+                  <h5 className="text-xs font-black">{section.title}</h5>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5">{section.body}</p>
+                  {section.note && <p className="mt-1 whitespace-pre-wrap text-[11px] font-bold leading-5 text-amber-700">{section.note}</p>}
+                </div>)}</div>
+              </article>)}</div>
+            </section>}
           </article>;
         }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はまだ登録されていません。Admin・先生の登録後にここへ表示されます。</p>}
       </section>

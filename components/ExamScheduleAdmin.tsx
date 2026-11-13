@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { CalendarDays, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 
-const SUBJECTS = ['国語演習','古典探求','物理','生物','数３','数C','公共','英コミュ','論表','情報','保健'] as const;
+const SUBJECTS = ['国語演習','古典探求','物理','化学','生物','数３','数C','公共','英コミュ','論表','情報','保健'] as const;
 type Subject = typeof SUBJECTS[number];
 type Draft = { subject: Subject; exam_date: string };
 type ExamSubject = Draft & { id: string; sort_order: number };
