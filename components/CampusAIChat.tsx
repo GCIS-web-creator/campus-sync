@@ -26,6 +26,9 @@ type TaskViewPayload = {
   cards: TaskCardPayload[];
   omittedCount: number;
 };
+type ExamViewSection = { title: string; body: string; note: string; kind: 'range' | 'submission' | 'notice' };
+type ExamViewSubject = { subject: string; audience: string; examDate: string; sections: ExamViewSection[] };
+type ExamViewPayload = { mode: 'overview' | 'list' | 'detail' | 'submissions'; schoolYear: number; term: number; examType: string; startDate: string; endDate: string; totalSubjects: number; scheduledSubjectCount: number; subjects: ExamViewSubject[] };
 type QuickReply = { label: string; status: 'empty' | 'normal' | 'crowded' };
 type Msg = {
   id: string;
@@ -33,13 +36,14 @@ type Msg = {
   text: string;
   table?: TablePayload;
   taskView?: TaskViewPayload;
+  examView?: ExamViewPayload;
   quickReplies?: QuickReply[];
   queueMenuId?: string;
 };
 type SavedConversation = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
-const SUGGESTIONS = ['今日のメニューは?', '課題の概要を教えて', '未完了課題を一覧で見せて', '課題の詳細を見たい'];
-const GREETING = 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。課題は概要・一覧・個別の詳細も確認できます。';
+const SUGGESTIONS = ['今日のメニューは?', '課題の概要を教えて', '課題を一覧で見せて', '定期テストの概要', 'テスト範囲一覧', '定期テストの提出物'];
+const GREETING = 'こんにちは！学食・電車・課題・定期テストの範囲や提出物・教室・部活ノート・蔵書・落とし物などについて聞いてください。課題や考査は概要・一覧・詳細を確認できます。';
 
 async function getSessionHeaders(): Promise<{ headers: Record<string, string>; studentId: string }> {
   const { data } = await supabase.auth.getSession();
@@ -381,7 +385,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
       }));
       const res = await fetch('/api/campus-ai', { method: 'POST', headers, body: JSON.stringify({ question, history, voterId: getOrCreateVoteId(studentId) }) });
       const data = await res.json().catch(() => null) as {
-        answer?: string; error?: string; table?: TablePayload; taskView?: TaskViewPayload;
+        answer?: string; error?: string; table?: TablePayload; taskView?: TaskViewPayload; examView?: ExamViewPayload;
         quickReplies?: QuickReply[]; queueMenuId?: string;
       } | null;
       reply = {
@@ -390,6 +394,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
         text: data?.answer ?? data?.error ?? reply.text,
         ...(data?.table ? { table: data.table } : {}),
         ...(data?.taskView ? { taskView: data.taskView } : {}),
+        ...(data?.examView ? { examView: data.examView } : {}),
         ...(data?.quickReplies?.length && data.queueMenuId ? { quickReplies: data.quickReplies, queueMenuId: data.queueMenuId } : {}),
       };
     } catch {
@@ -520,6 +525,93 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words">{m.text}</div>
+                        {m.examView && (
+                          <section className="mt-4 space-y-3">
+                            <header className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 dark:border-cyan-900 dark:bg-cyan-950/30">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="rounded-md bg-cyan-800 px-2 py-1 text-[10px] font-black text-white">定期考査</span>
+                                <span className="text-[10px] font-bold text-cyan-900 dark:text-cyan-200">{m.examView.schoolYear}年度・{m.examView.term}学期</span>
+                              </div>
+                              <h3 className="mt-2 text-base font-black text-slate-900 dark:text-slate-100">{m.examView.examType}</h3>
+                              <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">{m.examView.startDate} 〜 {m.examView.endDate}</p>
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                <div className="rounded-lg bg-white/90 px-3 py-2 dark:bg-slate-900/80">
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">公開済み範囲</p>
+                                  <p className="text-lg font-black text-cyan-800 dark:text-cyan-200">{m.examView.totalSubjects}<span className="ml-1 text-[10px]">科目</span></p>
+                                </div>
+                                <div className="rounded-lg bg-white/90 px-3 py-2 dark:bg-slate-900/80">
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">科目別の日程</p>
+                                  <p className="text-lg font-black text-slate-800 dark:text-slate-100">{m.examView.scheduledSubjectCount}<span className="ml-1 text-[10px]">科目</span></p>
+                                </div>
+                              </div>
+                            </header>
+                            {m.examView.scheduledSubjectCount === 0 && (
+                              <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                科目ごとの実施日はまだ登録されていません。考査期間のみ表示しています。
+                              </p>
+                            )}
+                            <div className="space-y-2.5">
+                              {m.examView.subjects.map((subject,index) => {
+                                const rangeSections = subject.sections.filter(section => section.kind === 'range');
+                                const submissionSections = subject.sections.filter(section => section.kind === 'submission');
+                                const noticeSections = subject.sections.filter(section => section.kind === 'notice');
+                                const renderSections = (sections: ExamViewSection[]) => (
+                                  <div className="space-y-2">
+                                    {sections.map((section,sectionIndex) => (
+                                      <div key={section.title + '-' + sectionIndex} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                                        <h5 className="text-xs font-black text-slate-800 dark:text-slate-100">{section.title}</h5>
+                                        <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-6 text-slate-700 dark:text-slate-200">{section.body}</p>
+                                        {section.note && <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-amber-50 px-2.5 py-2 text-[11px] font-bold leading-5 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{section.note}</p>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                                return (
+                                  <article key={subject.subject + '-' + index} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-100 text-xs font-black text-cyan-900 dark:bg-cyan-950 dark:text-cyan-200">{index + 1}</span>
+                                        <div>
+                                          <h4 className="text-sm font-black text-slate-900 dark:text-slate-100">{subject.subject}</h4>
+                                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{subject.audience}</p>
+                                        </div>
+                                      </div>
+                                      <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                        {subject.examDate || '科目別日程未登録'}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-2 border-t border-slate-100 p-3 dark:border-slate-800">
+                                      {rangeSections.length > 0 && (
+                                        <details open={m.examView.mode === 'detail'} className="rounded-lg border border-slate-200 dark:border-slate-700">
+                                          <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-cyan-800 dark:text-cyan-200">試験範囲（{rangeSections.length}項目）</summary>
+                                          <div className="p-2 pt-0">{renderSections(rangeSections)}</div>
+                                        </details>
+                                      )}
+                                      {submissionSections.length > 0 && (
+                                        <details open={m.examView.mode === 'submissions' || m.examView.mode === 'detail'} className="rounded-lg border border-emerald-200 dark:border-emerald-900">
+                                          <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-emerald-800 dark:text-emerald-200">提出物・提出方法（{submissionSections.length}項目）</summary>
+                                          <div className="p-2 pt-0">{renderSections(submissionSections)}</div>
+                                        </details>
+                                      )}
+                                      {noticeSections.length > 0 && (
+                                        <details open={m.examView.mode === 'detail' || m.examView.mode === 'submissions'} className="rounded-lg border border-amber-200 dark:border-amber-900">
+                                          <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-amber-800 dark:text-amber-200">注意事項（{noticeSections.length}項目）</summary>
+                                          <div className="p-2 pt-0">{renderSections(noticeSections)}</div>
+                                        </details>
+                                      )}
+                                      {subject.sections.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400">この科目の詳細範囲はまだ登録されていません。</p>}
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                              {!m.examView.subjects.length && (
+                                <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                                  この考査の科目別範囲・提出物はまだ公開されていません。
+                                </p>
+                              )}
+                            </div>
+                          </section>
+                        )}
                         {m.taskView && (
                           <section className="mt-4 space-y-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">

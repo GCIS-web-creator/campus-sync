@@ -40,6 +40,7 @@ const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|�
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
 const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
+const isExamQuestion = (q: string) => /定期テスト|定期考査|中間考査|期末考査|中間テスト|期末テスト|考査|試験範囲|テスト範囲|考査範囲|定期試験/.test(q) || (/提出物/.test(q) && /化学|数学|数C|数３|国語|古典|公共|物理|生物|英コミュ|情報/.test(q));
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
 const isClubQuestion = (q: string) => /部活|部活動|委員会|連絡ノート|吹奏楽部/.test(q);
 const isLibraryQuestion = (q: string) => /蔵書|図書館.*本|図書室.*本|本ある|本は|本を|本のタイトル|書籍|著者|作者|ISBN|貸出|貸し出し|借り|所蔵状況/.test(q);
@@ -106,6 +107,9 @@ export async function POST(req: Request) {
           ['課題の概要・期限状況', '課題の概要を教えて'],
           ['未完了課題の一覧', '課題を一覧で見せて'],
           ['個別課題の詳細', '化学の課題の詳細を教えて'],
+          ['定期テストの概要', '定期テストの概要を教えて'],
+          ['科目別テスト範囲', 'テスト範囲を一覧で見せて'],
+          ['定期テストの提出物', '定期テストの提出物を教えて'],
           ['教室・室温', '教室の状況や温度を教えて'],
           ['学校イベント・週間予定', '今週の学校予定やカウントダウンは？'],
           ['部活・委員会ノート', '部活の最新連絡を教えて'],
@@ -120,12 +124,13 @@ export async function POST(req: Request) {
   }
   const isGreeting = /^(こんにちは|こんにちわ|おはよう|こんばんは|やあ|どうも)[!！。?？]*$/.test(normalizedQuestion);
   const isFarewell = /^(さようなら|さよなら|またね|バイバイ|ばいばい|失礼します)[!！。?？]*$/.test(normalizedQuestion);
-  if (isGreeting) return NextResponse.json({ answer: 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。' });
+  if (isGreeting) return NextResponse.json({ answer: 'こんにちは！学食・電車・課題・定期テストの範囲や提出物・教室・部活ノート・蔵書・落とし物などについて聞いてください。' });
   if (isFarewell) return NextResponse.json({ answer: 'またね！気をつけて帰ってください。' });
 
   const wantsCrowd = isCrowdQuestion(question);
   const wantsSold = isSoldQuestion(question);
-  const wantsTask = isTaskQuestion(question);
+  const wantsExam = isExamQuestion(question);
+  const wantsTask = isTaskQuestion(question) && !wantsExam;
   const trainQuestion = isTrainQuestion(question);
   const wantsClub = isClubQuestion(question);
   const wantsLibrary = isLibraryQuestion(question);
@@ -170,7 +175,7 @@ export async function POST(req: Request) {
   let profileName = '';
   let profileClass = '';
 
-  if ((wantsRoom || wantsProfile) && authed && studentId) {
+  if ((wantsRoom || wantsProfile || wantsExam) && authed && studentId) {
     let profile: { user_class?: unknown; student_name?: unknown } | null = null;
     try {
       const profileResult = await authed
@@ -197,6 +202,205 @@ export async function POST(req: Request) {
         profileClass = userClass;
       }
     }
+  }
+
+  // 定期考査の公式日程・科目別範囲・提出物は、学校公開データと本人用日程を分けて確認する。
+  if (wantsExam) {
+    const authUserId = userResult?.data?.user?.id ?? '';
+    if (!authed || !studentId || !authUserId) {
+      return NextResponse.json({
+        answer: '定期テストの範囲・提出物を確認するには、学校アカウントでログインしてください。'
+      });
+    }
+
+    const [schoolExamRes, schoolSubjectRes, schoolRangeRes, personalExamRes, personalSubjectRes] = await Promise.all([
+      authed.from('school_test_exams')
+        .select('id,school_year,term,exam_type,start_date,end_date,priority')
+        .order('start_date', { ascending: false })
+        .limit(12),
+      authed.from('school_test_subjects')
+        .select('id,exam_id,subject,exam_date,sort_order')
+        .order('exam_date', { ascending: true })
+        .order('sort_order', { ascending: true }),
+      authed.from('school_test_ranges')
+        .select('id,exam_id,subject,display_subject,audience,range_sections,sort_order')
+        .order('sort_order', { ascending: true }),
+      authed.from('student_test_exams')
+        .select('id,school_year,term,exam_type,start_date,end_date')
+        .eq('user_id', authUserId)
+        .order('start_date', { ascending: false })
+        .limit(12),
+      authed.from('student_test_subjects')
+        .select('id,exam_id,subject,exam_date,sort_order')
+        .eq('user_id', authUserId)
+        .order('exam_date', { ascending: true })
+        .order('sort_order', { ascending: true }),
+    ]);
+
+    const loadError = schoolExamRes.error || schoolSubjectRes.error || schoolRangeRes.error || personalExamRes.error || personalSubjectRes.error;
+    if (loadError) {
+      console.error('定期考査データの取得に失敗:', loadError.message);
+      return NextResponse.json({
+        answer: '定期テストの情報を読み込めませんでした。ログイン状態と考査データの閲覧権限を確認してください。'
+      }, { status: 500 });
+    }
+
+    type ExamRow = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string };
+    type ExamSubjectRow = { id?: string; exam_id: string; subject: string; exam_date: string; sort_order: number };
+    type ExamRangeSection = { title: string; body: string; note?: string | null };
+    type ExamRangeRow = { id: string; exam_id: string; subject: string; display_subject: string; audience: string; range_sections: ExamRangeSection[]; sort_order: number };
+    const examRows = (schoolExamRes.data || []) as ExamRow[];
+    const personalExamRows = (personalExamRes.data || []) as ExamRow[];
+    const schoolSubjects = (schoolSubjectRes.data || []) as ExamSubjectRow[];
+    const personalSubjects = (personalSubjectRes.data || []) as ExamSubjectRow[];
+    const allExamRows = examRows.length ? examRows : personalExamRows;
+    if (!allExamRows.length) {
+      return NextResponse.json({
+        answer: '学校から公開された定期考査の日程はまだ登録されていません。'
+      });
+    }
+
+    const todayJst = todayDateKey;
+    const normalizedRequest = question.normalize('NFKC');
+    const requestedTermMatch = /([1-3])学期/.exec(normalizedRequest);
+    const requestedTerm = requestedTermMatch ? Number(requestedTermMatch[1]) : null;
+    const requestedYearMatch = /(20\d{2})年度?/.exec(normalizedRequest);
+    const requestedYear = requestedYearMatch ? Number(requestedYearMatch[1]) : null;
+    const requestedType = /中間|前期/.test(normalizedRequest) ? '中間' : /期末|後期/.test(normalizedRequest) ? '期末' : '';
+    const candidates = allExamRows
+      .filter(exam => !requestedTerm || Number(exam.term) === requestedTerm)
+      .filter(exam => !requestedYear || Number(exam.school_year) === requestedYear)
+      .filter(exam => !requestedType || String(exam.exam_type).includes(requestedType))
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const upcomingExam = candidates.find(exam => exam.end_date >= todayJst);
+    const selectedExam = upcomingExam || candidates[candidates.length - 1];
+    if (!selectedExam) {
+      return NextResponse.json({
+        answer: '指定された学期・年度の定期考査は登録されていません。年度や学期を変えて質問してください。'
+      });
+    }
+
+    const audienceRanges = ((schoolRangeRes.data || []) as ExamRangeRow[])
+      .filter(row => row.exam_id === selectedExam.id)
+      .filter(row => row.audience !== '2年理系' || userClass.startsWith('2-'));
+    const selectedSchoolSubjects = schoolSubjects.filter(row => row.exam_id === selectedExam.id);
+    const personalExamIds = new Set(personalExamRows
+      .filter(row => row.school_year === selectedExam.school_year && row.term === selectedExam.term && row.exam_type === selectedExam.exam_type)
+      .map(row => row.id));
+    const selectedPersonalSubjects = personalSubjects.filter(row => personalExamIds.has(row.exam_id));
+
+    const subjectAliases: Array<{ label: string; aliases: string[] }> = [
+      { label: '数学C', aliases: ['数学C', '数C'] },
+      { label: '数学Ⅲ', aliases: ['数学Ⅲ', '数Ⅲ', '数III', '数3', '数３'] },
+      { label: '英コミュ', aliases: ['英コミュ', '英語コミュニケーション'] },
+      { label: '国語演習', aliases: ['国語演習'] },
+      { label: '古典探究', aliases: ['古典探究', '古典探求'] },
+      { label: '論表', aliases: ['論表', '論理・表現'] },
+      { label: '数学', aliases: ['数学'] },
+      { label: '英語', aliases: ['英語'] },
+      { label: '国語', aliases: ['国語'] },
+      { label: '物理', aliases: ['物理'] },
+      { label: '化学', aliases: ['化学'] },
+      { label: '生物', aliases: ['生物'] },
+      { label: '公共', aliases: ['公共'] },
+      { label: '情報', aliases: ['情報'] },
+      { label: '日本史', aliases: ['日本史'] },
+      { label: '世界史', aliases: ['世界史'] },
+      { label: '地理', aliases: ['地理'] },
+      { label: '古典', aliases: ['古典'] },
+      { label: '現代文', aliases: ['現代文'] },
+    ];
+    const normalizedExamQuestion = normalize(question.normalize('NFKC'));
+    const subjectMatch = subjectAliases.find(item => item.aliases.some(alias => normalizedExamQuestion.includes(normalize(alias))));
+    const isSubmissionQuestion = /提出物|提出するもの|提出する課題|提出ノート|答案返却時|レポートの提出/.test(question);
+    const isDetailQuestion = /詳細|詳しく|範囲を教えて|どこ|何ページ|何番|出題内容/.test(question);
+    const isListQuestion = /一覧|全部|すべて|全て|全科目|各科目|まとめて|科目別/.test(question);
+
+    const formatDate = (raw: string | null | undefined) => {
+      if (!raw) return '';
+      const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+      return match ? Number(match[2]) + '月' + Number(match[3]) + '日' : raw;
+    };
+    const classifySection = (section: ExamRangeSection): 'range' | 'submission' | 'notice' => {
+      const text = section.title + ' ' + section.body;
+      if (/提出|答案返却|新聞.*レポート|提出日|提出場所/.test(text)) return 'submission';
+      if (/注意|除く|百人一首|持ち込み|出題上の|原子量/.test(text)) return 'notice';
+      return 'range';
+    };
+
+    const scheduleMap = new Map<string, string>();
+    for (const item of selectedPersonalSubjects) scheduleMap.set(normalize(item.subject), item.exam_date);
+    for (const item of selectedSchoolSubjects) {
+      if (!scheduleMap.has(normalize(item.subject))) scheduleMap.set(normalize(item.subject), item.exam_date);
+    }
+
+    const subjectRows = audienceRanges.map(row => {
+      const sections = Array.isArray(row.range_sections) ? row.range_sections : [];
+      const normalizedName = normalize(row.display_subject || row.subject);
+      const scheduleDate = scheduleMap.get(normalizedName)
+        || [...scheduleMap.entries()].find(([name]) => name.includes(normalizedName) || normalizedName.includes(name))?.[1]
+        || '';
+      return {
+        subject: row.display_subject || row.subject,
+        audience: row.audience,
+        examDate: scheduleDate,
+        sections: sections.map(section => ({
+          title: String(section.title || ''),
+          body: String(section.body || ''),
+          note: section.note ? String(section.note) : '',
+          kind: classifySection(section),
+        })),
+      };
+    });
+
+    let filteredSubjects = subjectRows;
+    if (subjectMatch) {
+      filteredSubjects = subjectRows.filter(row =>
+        subjectMatch.aliases.some(alias => normalize(row.subject).includes(normalize(alias)) || normalize(alias).includes(normalize(row.subject)))
+      );
+      if (!filteredSubjects.length) {
+        return NextResponse.json({
+          answer: '「' + subjectMatch.label + '」の試験範囲は、今回の公開データには登録されていません。'
+        });
+      }
+    }
+
+    const submissionRows = filteredSubjects.map(row => ({
+      ...row,
+      sections: row.sections.filter(section => section.kind === 'submission' || section.kind === 'notice')
+    })).filter(row => row.sections.length > 0);
+    const mode: 'overview' | 'list' | 'detail' | 'submissions' = isSubmissionQuestion
+      ? 'submissions'
+      : subjectMatch || isDetailQuestion
+        ? 'detail'
+        : isListQuestion || /テスト範囲|試験範囲|考査範囲/.test(question)
+          ? 'list'
+          : 'overview';
+    const viewSubjects = mode === 'submissions' ? submissionRows : filteredSubjects;
+    const examPeriod = selectedExam.school_year + '年度・' + selectedExam.term + '学期 ' + selectedExam.exam_type;
+    const subjectCount = audienceRanges.length;
+    const answer = mode === 'overview'
+      ? examPeriod + 'は' + formatDate(selectedExam.start_date) + '〜' + formatDate(selectedExam.end_date) + 'です。公開されている試験範囲は' + subjectCount + '科目分あります。科目別範囲や提出物は、科目名または「提出物一覧」と聞くと詳しく確認できます。'
+      : mode === 'submissions'
+        ? (viewSubjects.length ? examPeriod + 'の提出物・返却時の案内です。' : examPeriod + 'には独立した提出物の記載がありません。各科目カードの注意事項も確認してください。')
+        : mode === 'detail'
+          ? examPeriod + 'の「' + (viewSubjects[0]?.subject || subjectMatch?.label || '') + '」の試験範囲です。提出物・注意事項も科目カード内に分けて表示します。'
+          : examPeriod + 'の科目別試験範囲です。カードを開いて内容を確認してください。';
+
+    return NextResponse.json({
+      answer,
+      examView: {
+        mode,
+        schoolYear: selectedExam.school_year,
+        term: selectedExam.term,
+        examType: selectedExam.exam_type,
+        startDate: selectedExam.start_date,
+        endDate: selectedExam.end_date,
+        totalSubjects: subjectCount,
+        scheduledSubjectCount: new Set([...selectedSchoolSubjects, ...selectedPersonalSubjects].map(row => row.subject)).size,
+        subjects: viewSubjects,
+      }
+    });
   }
 
   if (wantsProfile) {
