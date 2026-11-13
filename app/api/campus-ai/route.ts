@@ -103,7 +103,9 @@ export async function POST(req: Request) {
           ['今日の学食・メニュー', '今日の学食を教えて／売り切れは？'],
           ['学食の混雑・行列', '学食は混んでる？／カレーの列は？'],
           ['電車の時刻表', '国分寺方面の次の電車は？'],
-          ['課題・提出期限', '自分の課題と締切を教えて'],
+          ['課題の概要・期限状況', '課題の概要を教えて'],
+          ['未完了課題の一覧', '課題を一覧で見せて'],
+          ['個別課題の詳細', '化学の課題の詳細を教えて'],
           ['教室・室温', '教室の状況や温度を教えて'],
           ['学校イベント・週間予定', '今週の学校予定やカウントダウンは？'],
           ['部活・委員会ノート', '部活の最新連絡を教えて'],
@@ -236,7 +238,7 @@ export async function POST(req: Request) {
     db.from('cafeteria_sold_out').select('menu_id, is_sold_out'),
     db.from('cafeteria_votes').select('status, created_at').eq('scope_key', 'overall').gte('created_at', freshSince),
     authed
-      ? authed.from('assignments').select('id, title, details, due, due_at, created_at').eq('is_active', true).order('created_at', { ascending: false })
+      ? authed.from('assignments').select('id, title, details, due, due_at, created_at, subject, target_class, subject_option, priority, type, source').eq('is_active', true).order('created_at', { ascending: false })
       : Promise.resolve({ data: null, error: null }),
     authed && studentId
       ? authed.from('todos').select('id, title, due, due_at, completed, created_at, details').eq('student_id', studentId).order('created_at', { ascending: true })
@@ -406,7 +408,7 @@ export async function POST(req: Request) {
       .slice(0, 3);
   const kokubunji = cleanTrains(kokubunjiRes.data as Array<{ departure_time: string; service: string | null }> | null);
   const higashimurayama = cleanTrains(eastRes.data as Array<{ departure_time: string; service: string | null }> | null);
-  type TaskRow = { id?: string | number; title: string; due: string | null; due_at: string | null; completed?: boolean | null; created_at?: string | null; details?: string | null; source?: 'personal' | 'assignment' };
+  type TaskRow = { id?: string | number; title: string; due: string | null; due_at: string | null; completed?: boolean | null; created_at?: string | null; details?: string | null; source?: 'personal' | 'assignment'; subject?: string | null; target_class?: string | null; subject_option?: string | null; priority?: string | null; type?: string | null };
   const assignmentRows = (taskRes.data ?? []) as TaskRow[];
   const personalRows = (todoRes.data ?? []) as TaskRow[];
   const completedAssignmentIds = new Set(((completionRes.data ?? []) as Array<{ assignment_id: string | number; completed: boolean | null }>).filter(r => r.completed).map(r => String(r.assignment_id)));
@@ -514,6 +516,11 @@ export async function POST(req: Request) {
         : str(r.due, '期限未設定'),
       dueAtMs,
       details: str(r.details, ''),
+      subject: str(r.subject, ''),
+      targetClass: str(r.target_class, ''),
+      subjectOption: str(r.subject_option, ''),
+      priority: ['urgent', 'important'].includes(String(r.priority || '')) ? String(r.priority) : 'normal',
+      type: str(r.type, 'other'),
     };
   }).sort((a, b) => a.dueAtMs - b.dueAtMs);
 
@@ -968,17 +975,35 @@ export async function POST(req: Request) {
 
     const q = question.normalize('NFKC');
 
-    const subjects = [
-      '数学', '英語', '国語', '物理', '化学', '生物',
-      '日本史', '世界史', '地理', '情報', '古典', '現代文'
+    const subjectAliases: Array<{ label: string; aliases: string[] }> = [
+      { label: '数学C', aliases: ['数学C', '数C'] },
+      { label: '数学Ⅲ', aliases: ['数学Ⅲ', '数Ⅲ', '数III', '数3', '数３'] },
+      { label: '英コミュ', aliases: ['英コミュ', '英語コミュニケーション'] },
+      { label: '国語演習', aliases: ['国語演習'] },
+      { label: '古典探究', aliases: ['古典探究', '古典探求'] },
+      { label: '論表', aliases: ['論表', '論理・表現'] },
+      { label: '数学', aliases: ['数学'] },
+      { label: '英語', aliases: ['英語'] },
+      { label: '国語', aliases: ['国語'] },
+      { label: '物理', aliases: ['物理'] },
+      { label: '化学', aliases: ['化学'] },
+      { label: '生物', aliases: ['生物'] },
+      { label: '公共', aliases: ['公共'] },
+      { label: '情報', aliases: ['情報'] },
+      { label: '日本史', aliases: ['日本史'] },
+      { label: '世界史', aliases: ['世界史'] },
+      { label: '地理', aliases: ['地理'] },
+      { label: '古典', aliases: ['古典'] },
+      { label: '現代文', aliases: ['現代文'] },
     ];
+    const subjectMatch = subjectAliases.find(item => item.aliases.some(alias => normalize(q).includes(normalize(alias))));
+    const subject = subjectMatch?.label || '';
 
-    const subject = subjects.find(name => q.includes(name));
-
-    const subjectTasks = subject
-      ? tasks.filter(t =>
-          normalize(`${t.title} ${t.details}`).includes(normalize(subject))
-        )
+    const subjectTasks = subjectMatch
+      ? tasks.filter(t => {
+          const searchText = normalize(`${t.subject} ${t.title} ${t.details}`);
+          return subjectMatch.aliases.some(alias => searchText.includes(normalize(alias)));
+        })
       : tasks;
 
     if (subject && !subjectTasks.length) {
@@ -1039,17 +1064,119 @@ export async function POST(req: Request) {
       });
     }
 
-    const heading = isToday
-      ? '今日が期限の未完了課題です。'
-      : subject
-        ? `「${subject}」に関する未完了課題です。`
-        : '未完了の課題一覧です。';
+    const detailIntent = /詳細|詳しく|詳しい|内容を確認|中身|提出方法|何をすれば|何をやれば|どこまで/.test(q);
+    const listIntent = /一覧|リスト|全部|すべて|全て|まとめて|並べて|課題を見せて/.test(q);
+    const overviewIntent = /概要|全体|状況|何件|件数|まとめ|全体像/.test(q);
+    const ordinalMatch = /(?:上から\s*)?(\d+|一|二|三|四|五|六|七|八|九|十)\s*(?:番目|番|件目|つ目)/.exec(q);
+    const ordinalWords: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+    const ordinal = ordinalMatch ? (Number(ordinalMatch[1]) || ordinalWords[ordinalMatch[1]] || null) : null;
+
+    const canonicalTask = (value: string) =>
+      normalize(value)
+        .normalize('NFKC')
+        .toLocaleLowerCase()
+        .replace(/(?:課題|宿題|提出物|詳細|詳しく|詳しい|内容|中身|教えて|見せて|ください|お願いします)/g, '')
+        .replace(/[のをはがにへも？?！!。、・「」『』"'“”（）()\s]/g, '');
+
+    const detailSearch = canonicalTask(q);
+    const exactTask = subjectTasks.find(t => canonicalTask(t.title) === detailSearch);
+    const partialTaskMatches = subjectTasks.filter(t => {
+      const title = canonicalTask(t.title);
+      return title.length >= 3 && detailSearch.length >= 3 &&
+        (title.includes(detailSearch) || detailSearch.includes(title));
+    });
+    const namedTask = exactTask || (partialTaskMatches.length === 1 ? partialTaskMatches[0] : null);
+    const selectedDetailTask = listIntent
+      ? null
+      : detailIntent && ordinal !== null
+        ? subjectTasks[ordinal - 1] || null
+        : namedTask || (detailIntent && subjectTasks.length === 1 ? subjectTasks[0] : null);
+
+    const taskStatus = (task: typeof tasks[number]): { code: 'overdue' | 'today' | 'soon' | 'later' | 'no_due'; label: string } => {
+      if (!Number.isFinite(task.dueAtMs)) return { code: 'no_due', label: '期限未設定' };
+      const dueKey = tokyoDateKey(new Date(task.dueAtMs));
+      if (task.dueAtMs < Date.now()) return { code: 'overdue', label: '期限超過' };
+      if (dueKey === todayKey) return { code: 'today', label: '今日が期限' };
+      if (task.dueAtMs <= Date.now() + 7 * 24 * 60 * 60 * 1000) return { code: 'soon', label: '7日以内' };
+      return { code: 'later', label: '期限あり' };
+    };
+
+    const statusRows = selectedTasks.map(task => ({ task, status: taskStatus(task) }));
+    const taskCounts = {
+      total: statusRows.length,
+      overdue: statusRows.filter(row => row.status.code === 'overdue').length,
+      today: statusRows.filter(row => row.status.code === 'today').length,
+      next7Days: statusRows.filter(row => row.status.code === 'soon').length,
+      later: statusRows.filter(row => row.status.code === 'later').length,
+      noDeadline: statusRows.filter(row => row.status.code === 'no_due').length,
+    };
+
+    const buildTaskCard = (task: typeof tasks[number], expanded = false) => {
+      const status = taskStatus(task);
+      const priorityLabel = task.priority === 'urgent' ? '最優先' : task.priority === 'important' ? '重要' : '通常';
+      const typeLabel = task.type === 'paper' ? 'プリント・ノート' : task.type === 'classroom' ? 'Classroom' : task.type === 'other' ? 'その他' : task.type;
+      const audienceLabel = task.targetClass === 'science'
+        ? '理系クラス' + (task.subjectOption && task.subjectOption !== '未登録' ? '・' + task.subjectOption : '')
+        : '全クラス';
+      return {
+        id: String(task.id || task.title),
+        title: task.title,
+        subject: task.subject === '未登録' ? '' : task.subject,
+        due: task.due,
+        details: task.details && task.details !== '未登録' ? task.details.slice(0, 2400) : '詳細は登録されていません。Classroomなどの案内も確認してください。',
+        sourceLabel: task.source === 'assignment' ? '先生・Adminからの共通課題' : '自分用の課題',
+        typeLabel,
+        audienceLabel,
+        priorityLabel,
+        status: status.code,
+        statusLabel: status.label,
+        expanded,
+      };
+    };
+
+    const viewMode: 'overview' | 'list' | 'detail' = selectedDetailTask
+      ? 'detail'
+      : listIntent || isToday || isNearest
+        ? 'list'
+        : overviewIntent || !detailIntent
+          ? 'overview'
+          : 'list';
+    const detailAmbiguous = detailIntent && !listIntent && !selectedDetailTask && subjectTasks.length > 1 && !ordinal;
+    const cardsSource = selectedDetailTask
+      ? [selectedDetailTask]
+      : viewMode === 'overview'
+        ? selectedTasks.slice(0, 3)
+        : selectedTasks.slice(0, 20);
+    const taskView = {
+      mode: detailAmbiguous ? 'list' : viewMode,
+      counts: taskCounts,
+      cards: cardsSource.map(task => buildTaskCard(task, viewMode === 'detail' && task === selectedDetailTask)),
+      omittedCount: Math.max(0, selectedTasks.length - cardsSource.length),
+    };
+
+    const overviewText = [
+      `未完了課題は${taskCounts.total}件あります。`,
+      taskCounts.overdue ? `期限超過：${taskCounts.overdue}件。` : '',
+      taskCounts.today ? `今日が期限：${taskCounts.today}件。` : '',
+      taskCounts.next7Days ? `7日以内：${taskCounts.next7Days}件。` : '',
+      taskCounts.later ? `それ以降：${taskCounts.later}件。` : '',
+      taskCounts.noDeadline ? `期限未設定：${taskCounts.noDeadline}件。` : '',
+    ].filter(Boolean).join(' ');
+
+    const answer = detailAmbiguous
+      ? `「${subject || '課題'}」の候補が複数あります。各カードを開いて詳細を確認できます。課題名を指定するか、「上から2番目の詳細」のようにも質問できます。`
+      : selectedDetailTask
+        ? `「${selectedDetailTask.title}」の詳細です。登録されている情報を表示しています。提出方法などが未記載の場合は、Classroomや先生からの案内も確認してください。`
+        : viewMode === 'overview'
+          ? overviewText
+          : (isToday ? '今日が期限の未完了課題です。' : subject ? `「${subject}」に関する未完了課題です。` : '未完了の課題一覧です。') + `（${selectedTasks.length}件）期限が近い順に表示しています。`;
 
     return NextResponse.json({
-      answer: heading,
+      answer,
+      taskView,
       table: table(
-        ['課題', '期限', '詳細'],
-        selectedTasks.map(t => [t.title, t.due, t.details || '—'])
+        ['課題', '教科', '期限', '状況'],
+        (selectedDetailTask ? [selectedDetailTask] : selectedTasks).slice(0, 20).map(task => [task.title, task.subject && task.subject !== '未登録' ? task.subject : '—', task.due, taskStatus(task).label])
       )
     });
   }

@@ -6,19 +6,40 @@ import { Send, Sparkles, Plus, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type TablePayload = { headers: string[]; rows: string[][] };
+type TaskCardPayload = {
+  id: string;
+  title: string;
+  subject: string;
+  due: string;
+  details: string;
+  sourceLabel: string;
+  typeLabel: string;
+  audienceLabel: string;
+  priorityLabel: string;
+  status: 'overdue' | 'today' | 'soon' | 'later' | 'no_due';
+  statusLabel: string;
+  expanded: boolean;
+};
+type TaskViewPayload = {
+  mode: 'overview' | 'list' | 'detail';
+  counts: { total: number; overdue: number; today: number; next7Days: number; later: number; noDeadline: number };
+  cards: TaskCardPayload[];
+  omittedCount: number;
+};
 type QuickReply = { label: string; status: 'empty' | 'normal' | 'crowded' };
 type Msg = {
   id: string;
   role: 'user' | 'ai';
   text: string;
   table?: TablePayload;
+  taskView?: TaskViewPayload;
   quickReplies?: QuickReply[];
   queueMenuId?: string;
 };
 type SavedConversation = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
-const SUGGESTIONS = ['今日のメニューは?', '次の電車は?', '課題ある?', '教室の状況は?'];
-const GREETING = 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。';
+const SUGGESTIONS = ['今日のメニューは?', '課題の概要を教えて', '未完了課題を一覧で見せて', '課題の詳細を見たい'];
+const GREETING = 'こんにちは！学食・電車・課題・教室・部活ノート・蔵書・落とし物・口コミ・キャリアセンターなどについて聞いてください。課題は概要・一覧・個別の詳細も確認できます。';
 
 async function getSessionHeaders(): Promise<{ headers: Record<string, string>; studentId: string }> {
   const { data } = await supabase.auth.getSession();
@@ -360,7 +381,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
       }));
       const res = await fetch('/api/campus-ai', { method: 'POST', headers, body: JSON.stringify({ question, history, voterId: getOrCreateVoteId(studentId) }) });
       const data = await res.json().catch(() => null) as {
-        answer?: string; error?: string; table?: TablePayload;
+        answer?: string; error?: string; table?: TablePayload; taskView?: TaskViewPayload;
         quickReplies?: QuickReply[]; queueMenuId?: string;
       } | null;
       reply = {
@@ -368,6 +389,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
         role: 'ai',
         text: data?.answer ?? data?.error ?? reply.text,
         ...(data?.table ? { table: data.table } : {}),
+        ...(data?.taskView ? { taskView: data.taskView } : {}),
         ...(data?.quickReplies?.length && data.queueMenuId ? { quickReplies: data.quickReplies, queueMenuId: data.queueMenuId } : {}),
       };
     } catch {
@@ -498,7 +520,86 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words">{m.text}</div>
-                        {m.table && (
+                        {m.taskView && (
+                          <section className="mt-4 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="text-sm font-black text-slate-800 dark:text-slate-100">
+                                {m.taskView.mode === 'overview' ? '課題の概要' : m.taskView.mode === 'detail' ? '課題の詳細' : '未完了課題一覧'}
+                              </h3>
+                              <span className="rounded-full bg-[#EAF2F1] px-2.5 py-1 text-[10px] font-black text-[#376C69] dark:bg-[#173B40] dark:text-[#A7D3CD]">
+                                {m.taskView.counts.total}件
+                              </span>
+                            </div>
+                            {m.taskView.mode === 'overview' && (
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {[
+                                  { label: '未完了', value: m.taskView.counts.total, tone: 'text-slate-800 dark:text-white' },
+                                  { label: '期限超過', value: m.taskView.counts.overdue, tone: 'text-rose-600 dark:text-rose-300' },
+                                  { label: '今日が期限', value: m.taskView.counts.today, tone: 'text-amber-600 dark:text-amber-300' },
+                                  { label: '7日以内', value: m.taskView.counts.next7Days, tone: 'text-cyan-700 dark:text-cyan-300' },
+                                ].map(item => (
+                                  <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900">
+                                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{item.label}</p>
+                                    <p className={'mt-1 text-xl font-black tabular-nums ' + item.tone}>{item.value}<span className="ml-0.5 text-[10px]">件</span></p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {m.taskView.counts.noDeadline > 0 && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                期限未設定：{m.taskView.counts.noDeadline}件
+                              </p>
+                            )}
+                            <div className="space-y-2.5">
+                              {m.taskView.cards.map((task, index) => {
+                                const statusStyle = task.status === 'overdue'
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200'
+                                  : task.status === 'today'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
+                                    : task.status === 'soon'
+                                      ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-200'
+                                      : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
+                                return (
+                                  <article key={task.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                                    <div className="p-3">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {task.subject && <span className="rounded-md bg-[#EAF2F1] px-2 py-1 text-[10px] font-black text-[#376C69] dark:bg-[#173B40] dark:text-[#A7D3CD]">{task.subject}</span>}
+                                        <span className={'rounded-md px-2 py-1 text-[10px] font-black ' + statusStyle}>{task.statusLabel}</span>
+                                        {task.priorityLabel !== '通常' && <span className="rounded-md bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800 dark:bg-violet-950/50 dark:text-violet-200">{task.priorityLabel}</span>}
+                                      </div>
+                                      <h4 className="mt-2 break-words text-sm font-black leading-6 text-slate-900 dark:text-slate-100">
+                                        {index + 1}. {task.title}
+                                      </h4>
+                                      <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">期限：{task.due}</p>
+                                      <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                        {task.audienceLabel} ・ {task.typeLabel} ・ {task.sourceLabel}
+                                      </p>
+                                      <details open={task.expanded} className="mt-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                                        <summary className="cursor-pointer select-none text-xs font-black text-[#376C69] marker:text-[#5C9291] dark:text-[#A7D3CD]">
+                                          詳細を見る／閉じる
+                                        </summary>
+                                        <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-xs leading-6 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                          {task.details}
+                                        </p>
+                                      </details>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                              {!m.taskView.cards.length && (
+                                <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                                  表示できる課題はありません。
+                                </p>
+                              )}
+                            </div>
+                            {m.taskView.omittedCount > 0 && (
+                              <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                ほかに{m.taskView.omittedCount}件あります。教科名や課題名を指定すると絞り込めます。
+                              </p>
+                            )}
+                          </section>
+                        )}
+                        {m.table && !m.taskView && (
                           <div className="mt-4 max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-600">
                             <table className="min-w-full border-collapse text-left text-xs">
                               <thead className="bg-slate-100 dark:bg-slate-700">
