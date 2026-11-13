@@ -40,7 +40,7 @@ const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|�
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
 const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
-const isExamQuestion = (q: string) => /定期テスト|定期考査|中間考査|期末考査|中間テスト|期末テスト|考査|試験範囲|テスト範囲|考査範囲|定期試験/.test(q) || (/提出物/.test(q) && /化学|数学|数C|数３|国語|古典|公共|物理|生物|英コミュ|情報/.test(q));
+const isExamQuestion = (q: string) => /定期テスト|定期考査|中間考査|期末考査|中間テスト|期末テスト|考査|試験範囲|テスト範囲|考査範囲|定期試験/.test(q) || (/英コミュ|コミ英|コミュ英|論表|アクティブリスニング|Active Listening|音読テスト|メイクアップテスト|Speaking test/i.test(q) && /テスト|範囲|日程|試験|実施|提出|内容|いつ|対象|欠席/i.test(q)) || (/提出物/.test(q) && /化学|数学|数C|数３|国語|古典|公共|物理|生物|英コミュ|コミ英|コミュ英|論表|情報/.test(q));
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
 const isClubQuestion = (q: string) => /部活|部活動|委員会|連絡ノート|吹奏楽部/.test(q);
 const isLibraryQuestion = (q: string) => /蔵書|図書館.*本|図書室.*本|本ある|本は|本を|本のタイトル|書籍|著者|作者|ISBN|貸出|貸し出し|借り|所蔵状況/.test(q);
@@ -291,6 +291,7 @@ export async function POST(req: Request) {
 
     const subjectAliases: Array<{ label: string; aliases: string[] }> = [
       { label: '数学C', aliases: ['数学C', '数C'] },
+      { label: '英コミュ', aliases: ['英コミュ', 'コミ英', 'コミュ英', '英語コミュニケーション'] },
       { label: '数学Ⅲ', aliases: ['数学Ⅲ', '数Ⅲ', '数III', '数3', '数３'] },
       { label: '英コミュ', aliases: ['英コミュ', '英語コミュニケーション'] },
       { label: '国語演習', aliases: ['国語演習'] },
@@ -313,6 +314,7 @@ export async function POST(req: Request) {
     const normalizedExamQuestion = normalize(question.normalize('NFKC'));
     const subjectMatch = subjectAliases.find(item => item.aliases.some(alias => normalizedExamQuestion.includes(normalize(alias))));
     const isSubmissionQuestion = /提出物|提出するもの|提出する課題|提出ノート|答案返却時|レポートの提出/.test(question);
+    const isScheduleQuestion = /日程|いつ|実施日|実施時間|何日に|メイクアップ|make-up|欠席者|音読|リスニングテスト|アクティブリスニング|Active Listening|Speaking test|Upgradeテスト/i.test(question);
     const isDetailQuestion = /詳細|詳しく|範囲を教えて|どこ|何ページ|何番|出題内容/.test(question);
     const isListQuestion = /一覧|全部|すべて|全て|全科目|各科目|まとめて|科目別/.test(question);
 
@@ -321,10 +323,11 @@ export async function POST(req: Request) {
       const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
       return match ? Number(match[2]) + '月' + Number(match[3]) + '日' : raw;
     };
-    const classifySection = (section: ExamRangeSection): 'range' | 'submission' | 'notice' => {
+    const classifySection = (section: ExamRangeSection): 'range' | 'submission' | 'notice' | 'schedule' => {
       const text = section.title + ' ' + section.body;
+      if (/テスト実施日程|実施日|メイクアップ|欠席者対象|欠席者向け|make-up|Active Listeningテスト|音読テスト|Speaking test|Upgradeテスト/i.test(text)) return 'schedule';
       if (/提出|答案返却|新聞.*レポート|提出日|提出場所/.test(text)) return 'submission';
-      if (/注意|除く|百人一首|持ち込み|出題上の|原子量/.test(text)) return 'notice';
+      if (/注意|除く|百人一首|持ち込み|出題上の|原子量|DBテスト.*ありません|リスニング問題.*ありません/.test(text)) return 'notice';
       return 'range';
     };
 
@@ -369,20 +372,28 @@ export async function POST(req: Request) {
       ...row,
       sections: row.sections.filter(section => section.kind === 'submission' || section.kind === 'notice')
     })).filter(row => row.sections.length > 0);
-    const mode: 'overview' | 'list' | 'detail' | 'submissions' = isSubmissionQuestion
+    const scheduleRows = filteredSubjects.map(row => ({
+      ...row,
+      sections: row.sections.filter(section => section.kind === 'schedule')
+    })).filter(row => row.sections.length > 0);
+    const mode: 'overview' | 'list' | 'detail' | 'submissions' | 'schedule' = isSubmissionQuestion
       ? 'submissions'
-      : subjectMatch || isDetailQuestion
-        ? 'detail'
-        : isListQuestion || /テスト範囲|試験範囲|考査範囲/.test(question)
-          ? 'list'
-          : 'overview';
-    const viewSubjects = mode === 'submissions' ? submissionRows : filteredSubjects;
+      : isScheduleQuestion
+        ? 'schedule'
+        : subjectMatch || isDetailQuestion
+          ? 'detail'
+          : isListQuestion || /テスト範囲|試験範囲|考査範囲/.test(question)
+            ? 'list'
+            : 'overview';
+    const viewSubjects = mode === 'submissions' ? submissionRows : mode === 'schedule' ? scheduleRows : filteredSubjects;
     const examPeriod = selectedExam.school_year + '年度・' + selectedExam.term + '学期 ' + selectedExam.exam_type;
     const subjectCount = audienceRanges.length;
     const answer = mode === 'overview'
       ? examPeriod + 'は' + formatDate(selectedExam.start_date) + '〜' + formatDate(selectedExam.end_date) + 'です。公開されている試験範囲は' + subjectCount + '科目分あります。科目別範囲や提出物は、科目名または「提出物一覧」と聞くと詳しく確認できます。'
       : mode === 'submissions'
         ? (viewSubjects.length ? examPeriod + 'の提出物・返却時の案内です。' : examPeriod + 'には独立した提出物の記載がありません。各科目カードの注意事項も確認してください。')
+        : mode === 'schedule'
+          ? (viewSubjects.length ? examPeriod + 'に関連するテスト実施日程です。クラスごとに日程が異なる場合があるので、自分のクラスを確認してください。' : 'この考査に関連するテスト実施日程は、現在登録されていません。')
         : mode === 'detail'
           ? examPeriod + 'の「' + (viewSubjects[0]?.subject || subjectMatch?.label || '') + '」の試験範囲です。提出物・注意事項も科目カード内に分けて表示します。'
           : examPeriod + 'の科目別試験範囲です。カードを開いて内容を確認してください。';

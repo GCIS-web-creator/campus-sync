@@ -26,7 +26,7 @@ type TaskViewPayload = {
   cards: TaskCardPayload[];
   omittedCount: number;
 };
-type ExamViewSection = { title: string; body: string; note: string; kind: 'range' | 'submission' | 'notice' };
+type ExamViewSection = { title: string; body: string; note: string; kind: 'range' | 'submission' | 'notice' | 'schedule' };
 type ExamViewSubject = { subject: string; audience: string; examDate: string; sections: ExamViewSection[] };
 type ExamViewPayload = { mode: 'overview' | 'list' | 'detail' | 'submissions'; schoolYear: number; term: number; examType: string; startDate: string; endDate: string; totalSubjects: number; scheduledSubjectCount: number; subjects: ExamViewSubject[] };
 type QuickReply = { label: string; status: 'empty' | 'normal' | 'crowded' };
@@ -42,7 +42,7 @@ type Msg = {
 };
 type SavedConversation = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
-const SUGGESTIONS = ['今日のメニューは?', '課題の概要を教えて', '課題を一覧で見せて', '定期テストの概要', 'テスト範囲一覧', '定期テストの提出物'];
+const SUGGESTIONS = ['今日のメニューは?', '課題の概要を教えて', '課題を一覧で見せて', '定期テストの概要', 'テスト範囲一覧', '定期テストの提出物', '英コミュのテスト日程'];
 const GREETING = 'こんにちは！学食・電車・課題・定期テストの範囲や提出物・教室・部活ノート・蔵書・落とし物などについて聞いてください。課題や考査は概要・一覧・詳細を確認できます。';
 
 async function getSessionHeaders(): Promise<{ headers: Record<string, string>; studentId: string }> {
@@ -555,6 +555,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                                 const rangeSections = subject.sections.filter(section => section.kind === 'range');
                                 const submissionSections = subject.sections.filter(section => section.kind === 'submission');
                                 const noticeSections = subject.sections.filter(section => section.kind === 'notice');
+                                const scheduleSections = subject.sections.filter(section => section.kind === 'schedule');
                                 const renderSections = (sections: ExamViewSection[]) => (
                                   <div className="space-y-2">
                                     {sections.map((section,sectionIndex) => (
@@ -581,6 +582,12 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
                                       </span>
                                     </div>
                                     <div className="space-y-2 border-t border-slate-100 p-3 dark:border-slate-800">
+                                      {scheduleSections.length > 0 && (
+                                        <details open={m.examView.mode === 'schedule'} className="rounded-lg border border-blue-200 dark:border-blue-900">
+                                          <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-blue-800 dark:text-blue-200">テスト実施日程（{scheduleSections.length}項目）</summary>
+                                          <div className="p-2 pt-0">{renderSections(scheduleSections)}</div>
+                                        </details>
+                                      )}
                                       {rangeSections.length > 0 && (
                                         <details open={m.examView.mode === 'detail'} className="rounded-lg border border-slate-200 dark:border-slate-700">
                                           <summary className="cursor-pointer select-none px-3 py-2.5 text-xs font-black text-cyan-800 dark:text-cyan-200">試験範囲（{rangeSections.length}項目）</summary>

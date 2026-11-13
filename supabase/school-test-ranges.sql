@@ -114,6 +114,56 @@ P76〜79「啼く鳥の」
       jsonb_build_object('title','提出物・答案返却時','body','試験当日の提出物はありません。遅れたプリントの最終受付は答案返却時まで。答案返却時に新聞切り抜きレポートの発表・提出があります。詳細はClassroomを確認してください。')
     )
   from target_exam
+  union all
+  select id, '英コミュ', '英コミュ', '2年理系', 5::smallint, date '2026-11-13',
+    jsonb_build_array(
+      jsonb_build_object('title','Regular 2学期期末考査｜実施形式・配点','body',$e1$50分・100点満点
+教科書① Flex Lesson 5：30%
+② Heart of Okinawa：40%
+DB Regular：20%
+応用問題：10%$e1$),
+      jsonb_build_object('title','教科書① Flex Lesson 5（30%）','body',$e2$内容理解に関する問題
+True / False（TF）問題
+キーワード等の空欄補充
+英文を並び替える問題
+新出語を書く・意味を選ぶ問題$e2$),
+      jsonb_build_object('title','教科書② Heart of Okinawa（40%）','body','Lesson 5・6・10・13'),
+      jsonb_build_object('title','DB Regular（20%）','body',$e3$Regular：pp.8〜127
+選択問題20問。$e3$,'note','11月16日以降はDBテストはありません。'),
+      jsonb_build_object('title','応用問題（10%）','body','初見の入試長文読解問題（英検2級レベル）。'),
+      jsonb_build_object('title','リスニング・提出物','body','定期考査の問題にリスニング問題はありません。
+すべての提出物の締切：11月24日（火）23:00。','note','Active Listeningテスト・音読テストは別日程で実施します。'),
+      jsonb_build_object('title','Active Listeningテスト実施日程','body',$e4$11月16日（月）：1〜7組
+11月20日（金）：8組
+範囲：Active Listening 3rd Edition L9〜L13
+すべて選択問題です。読まれる英文と問いは変わりませんが、選択肢が変わる場合があります。音源をよく聞いて復習してください。$e4$),
+      jsonb_build_object('title','音読テスト実施日程','body',$e5$1〜6組：11月16日（月）・24日（火）
+7組：11月16日（月）・20日（金）
+8組：11月20日（金）・24日（火）
+範囲：Flex Lesson 5／Heart of Okinawa Lesson 5・6・10・13
+各Lessonの指定パラグラフから出題。該当パラグラフは直前まで分かりません。$e5$),
+      jsonb_build_object('title','欠席者向けMake-upテスト｜英コミュRegular','body','11月27日（金）13:10〜13:40／2-4・2-5教室。
+対象：RegularのActive Listeningテスト・音読テスト・沖縄presentation。
+DBテストは対象外。'),
+      jsonb_build_object('title','欠席者向けMake-upテスト｜Intensive','body','Regularと同じ時間帯（11月27日（金）13:10〜13:40）／2-6教室。
+対象：Upgradeテスト。'),
+      jsonb_build_object('title','別枠：英会話 Speaking test Make-up','body','11月25日（水）13:30〜14:10／CALL。
+対象：Speaking test。英コミュRegularのMake-upとは別枠です。')
+    )
+  from target_exam
+  union all
+  select id, '論表', '論表', '2年理系', 6::smallint, date '2026-11-13',
+    jsonb_build_array(
+      jsonb_build_object('title','2学期期末考査｜実施形式・配点','body','30分・50点満点。'),
+      jsonb_build_object('title','Worksheet・教科書','body',$l1$58期2年2学期 論表Worksheet ①〜⑧
+How to write a summary、opinion essay など
+教科書（Crown）：Lesson 1〜4$l1$),
+      jsonb_build_object('title','プリント・文法','body',$l2$青の両面刷りA・B面プリント（A4サイズ）計4枚
+応用文法（選択問題）$l2$),
+      jsonb_build_object('title','提出物・リスニング','body','すべての提出物の締切：11月24日（火）23:00。
+リスニング問題はありません。')
+    )
+  from target_exam
 )
 insert into public.school_test_ranges (exam_id, subject, display_subject, audience, sort_order, broadcast_on, range_sections)
 select exam_id, subject, display_subject, audience, sort_order, broadcast_on, range_sections from range_rows
