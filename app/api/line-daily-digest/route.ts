@@ -567,6 +567,17 @@ function buildSchoolExamRangeBubbles(dateLabel: string, rows: SchoolExamRangeDig
   });
 }
 
+function buildSchoolExamRangeFlex(dateLabel: string, rows: SchoolExamRangeDigestRow[]): Record<string, unknown> | null {
+  const bubbles = buildSchoolExamRangeBubbles(dateLabel, rows);
+  if (bubbles.length === 0) return null;
+  const subjects = rows.map(row => row.display_subject).filter(Boolean);
+  return {
+    type: 'flex',
+    altText: ('【2学期期末考査・試験範囲】' + subjects.join('・') + '。科目別カードを横にスワイプして確認できます。').slice(0, 400),
+    contents: { type: 'carousel', contents: bubbles },
+  };
+}
+
 function buildDailyDigest(input: {
   dateLabel: string;
   today: string;
@@ -585,13 +596,11 @@ function buildDailyDigest(input: {
   overdueAssignments: AssignmentDigestRow[];
   changeEvents: ScheduleChangeDigestRow[];
   assignmentError: boolean;
-  examScopeBubbles: Record<string, unknown>[];
 }) {
   const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
-  const examScopeBubbles = input.examScopeBubbles;
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・2年理系向け2学期期末考査の試験範囲（化学・数学C・国語演習・古典探究・公共）' : '') + '。横にスワイプして確認できます。';
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -607,7 +616,6 @@ function buildDailyDigest(input: {
         ]:[]),
         buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
         assignmentBubble,
-        ...examScopeBubbles,
       ],
     },
   };
@@ -811,7 +819,7 @@ export async function POST(request: Request) {
   if (examRangeResult.error) console.error('日次まとめ：試験範囲取得エラー', examRangeResult.error.message);
 
   const examRangeRows = (examRangeResult.data || []) as SchoolExamRangeDigestRow[];
-  const examScopeBubbles = buildSchoolExamRangeBubbles(todayLabel, examRangeRows);
+  const examFlex = buildSchoolExamRangeFlex(todayLabel, examRangeRows);
   const assignmentRows = (assignmentResult.data || []) as AssignmentDigestRow[];
   const currentAssignments = assignmentRows.filter(row => !row.due_at || new Date(row.due_at).getTime() >= now.getTime()).slice(0, 8);
   const overdueAssignments = assignmentRows.filter(row => Boolean(row.due_at) && new Date(row.due_at as string).getTime() < now.getTime()).slice(0, 8);
@@ -868,7 +876,6 @@ export async function POST(request: Request) {
         overdueAssignments,
         changeEvents,
         assignmentError: Boolean(assignmentResult.error),
-        examScopeBubbles,
       }));
   let flexMessages: typeof flex[];
   try {
@@ -924,6 +931,72 @@ export async function POST(request: Request) {
   }
   const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,flexMessages,retryKey,'daily_digest',retryKey);
 
+  // Send exam scopes as an independent Flex Message after the ordinary daily digest.
+  let examBroadcastAccepted = false;
+  let examBroadcastError: string | null = null;
+  let examGroupDelivery: Awaited<ReturnType<typeof pushLineMessagesToRegisteredChats>> | null = null;
+  let examHistorySaved = false;
+  if (examFlex) {
+    const examRetryKey = stableRetryKey(today, 'weekday-exam-scope');
+    try {
+      const examResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + accessToken,
+          'Content-Type': 'application/json',
+          'X-Line-Retry-Key': examRetryKey,
+        },
+        body: JSON.stringify({ messages: applyCampusSyncFlexFooters([examFlex]) }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(20000),
+      });
+      await recordLineDeliveryResponse(examResponse, {
+        channel: 'broadcast',
+        kind: 'exam_scope',
+        accessToken,
+        retryKey: examRetryKey,
+        deliveryBatchId: examRetryKey,
+        messages: [examFlex],
+      });
+      examBroadcastAccepted = examResponse.ok || examResponse.status === 409;
+      if (!examBroadcastAccepted) {
+        examBroadcastError = (await examResponse.text().catch(() => '')).slice(0, 500) || 'LINE公式アカウントへの試験範囲配信に失敗しました。';
+        console.error('LINE試験範囲Flexの一斉配信に失敗:', examResponse.status, examBroadcastError);
+      } else {
+        const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', examRetryKey).maybeSingle();
+        if (!historyLookup.error && historyLookup.data) {
+          examHistorySaved = true;
+        } else {
+          const { error: historyError } = await admin.from('line_broadcast_history').insert({
+            title: '16:00 2学期期末考査 試験範囲',
+            message: String((examFlex as { altText?: unknown }).altText || '2学期期末考査 試験範囲'),
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            delivery_batch_id: examRetryKey,
+            bot_slot: activeLineBot?.slot && activeLineBot.slot > 0 ? activeLineBot.slot : null,
+          });
+          if (!historyError) examHistorySaved = true;
+          else console.error('試験範囲Flexの配信履歴保存に失敗:', historyError.message);
+        }
+      }
+    } catch (error) {
+      examBroadcastError = error instanceof Error ? error.message : 'LINE試験範囲配信の通信エラー';
+      console.error('LINE試験範囲Flexの通信エラー:', examBroadcastError);
+    }
+
+    try {
+      examGroupDelivery = await pushLineMessagesToRegisteredChats(
+        accessToken,
+        [examFlex],
+        examRetryKey,
+        'exam_scope',
+        examRetryKey,
+      );
+    } catch (error) {
+      console.error('LINEグループへの試験範囲Flex配信に失敗:', error instanceof Error ? error.message : 'unknown error');
+    }
+  }
+
   // Keep schedule changes queued if any registered group push failed, so the
   // next regular digest can retry them instead of silently dropping them.
   if (changeEvents.length && !groupDelivery.lookupError && (groupDelivery.registered === 0 || groupDelivery.failed === 0)) {
@@ -952,14 +1025,25 @@ export async function POST(request: Request) {
       scheduleChanges: changeEvents.length,
       assignmentError: Boolean(assignmentResult.error),
       carouselCards: flexCarouselCards,
-      examRanges: examRangeRows.length,
+      examRangeSubjects: examRangeRows.length,
+      examSeparateFlexMessage: Boolean(examFlex),
       historySaved,
     },
     groupDelivery,
+    examScopeDelivery: examFlex ? {
+      subjects: examRangeRows.length,
+      carouselCards: Array.isArray((examFlex as { contents?: { contents?: unknown[] } }).contents?.contents)
+        ? (examFlex as { contents: { contents: unknown[] } }).contents.contents.length
+        : 1,
+      broadcastAccepted: examBroadcastAccepted,
+      broadcastError: examBroadcastError,
+      groupDelivery: examGroupDelivery,
+      historySaved: examHistorySaved,
+    } : null,
     message: excludeTrainTimetable
       ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
       : (isSaturday
         ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (examRangeRows.length ? '、2年理系向け2学期期末考査の試験範囲（' + examRangeRows.length + '科目）' : '') + 'を配信しました。' + summarizeLineGroupDelivery(groupDelivery)),
+        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery) + (examFlex ? ' 試験範囲7科目は別のFlex Messageで配信処理しました。' : '')),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

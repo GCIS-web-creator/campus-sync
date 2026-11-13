@@ -10,7 +10,7 @@ export type LineChatSource = {
 };
 
 type RegisteredChat = { chat_id: string; chat_type: string };
-type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'cafeteria_menu' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'earthquake_alert' | 'daily_digest';
+type LineGroupDeliveryKind = 'general' | 'train_timetable' | 'class_timetable' | 'school_schedule' | 'cafeteria_sold_out' | 'cafeteria_menu' | 'assignment_updates' | 'quick_notice' | 'weather_alert' | 'earthquake_alert' | 'daily_digest' | 'exam_scope';
 
 export type LineGroupDeliveryResult = {
   kind: LineGroupDeliveryKind;
@@ -125,7 +125,7 @@ export async function pushLineMessagesToRegisteredChats(
     .eq('active', true);
   // Cafeteria sold-out notices are operational alerts: send them to every active
   // registered chat. Other notification categories continue to respect opt-in flags.
-  const { data, error } = kind === 'daily_digest'
+  const { data, error } = kind === 'daily_digest' || kind === 'exam_scope'
     ? await activeChatsQuery.or(
         'receive_train_timetable.eq.true,receive_class_timetable.eq.true,receive_school_schedule.eq.true',
       )
@@ -233,8 +233,8 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
           ? '課題の公開・期限リマインダーを受信するLINEグループはありません（receive_assignment_updates を確認してください）。'
           : result.kind === 'quick_notice' || result.kind === 'weather_alert' || result.kind === 'earthquake_alert'
             ? '有効なLINEグループが登録されていません。現在使用中のBOTをグループに招待し、グループ内でメッセージを送ってWebhook登録してください。'
-            : result.kind === 'daily_digest'
-              ? '日次まとめを受信する設定のLINEグループはありません（電車時刻表・時間割・学校行事の受信設定を確認してください）。'
+            : result.kind === 'daily_digest' || result.kind === 'exam_scope'
+              ? (result.kind === 'exam_scope' ? '試験範囲を受信する設定のLINEグループはありません。' : '日次まとめを受信する設定のLINEグループはありません（電車時刻表・時間割・学校行事の受信設定を確認してください）。')
               : '一般通知を受信するLINEグループはありません（初期状態では配信しません）。';
   if (result.failed > 0) {
     const statusSummary = Object.entries(result.failureStatuses || {})
@@ -258,7 +258,7 @@ export function summarizeLineGroupDelivery(result: LineGroupDeliveryResult): str
           ? '課題通知を受信するLINEグループ' + result.sent + '件にも配信しました。'
           : result.kind === 'quick_notice'
             ? 'クイックお知らせ・パトロールを受信するLINEグループ' + result.sent + '件にも配信しました。'
-            : result.kind === 'daily_digest'
-              ? '日次まとめを受信する設定のLINEグループ' + result.sent + '件にも配信しました。'
+            : result.kind === 'daily_digest' || result.kind === 'exam_scope'
+              ? (result.kind === 'exam_scope' ? '試験範囲を受信する設定のLINEグループ' : '日次まとめを受信する設定のLINEグループ') + result.sent + '件にも配信しました。'
               : '一般通知を受信する設定のLINEグループ' + result.sent + '件にも配信しました。';
 }
