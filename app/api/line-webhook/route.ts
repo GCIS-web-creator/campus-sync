@@ -928,27 +928,29 @@ async function handleLineEvents(
     const question = hasTrigger
       ? messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim()
       : messageText;
-    if (!question) {
-      if (hasTrigger && isGroupOrRoom) {
-        const destinationType = event.source?.type === 'room' ? 'room' : 'group';
-        const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
-        await replyToLine(
-          event.replyToken,
-          { answer: '話したい内容を「CSAI こんにちは」のように送ってください。学校情報は今までどおり質問できます。「CSAI リセット」で雑談履歴を消せます。' },
-          'CSAI',
-          channelAccessToken,
-          destinationType,
-          destinationId || null,
-          'campus_ai_chat',
-        );
-      }
-      return;
-    }
-
     if (isGroupOrRoom) {
       const destinationType = event.source?.type === 'room' ? 'room' : 'group';
       const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
       if (destinationId) {
+        if (!question) {
+          const chatAnswer = await getLineGroupConversationAnswer(
+            destinationId,
+            event.source?.type === 'room' ? 'room' : 'group',
+            botSlot,
+            'こんにちは！何か気軽に話そう。',
+          );
+          await replyToLine(
+            event.replyToken,
+            { answer: chatAnswer },
+            'CSAI',
+            channelAccessToken,
+            destinationType,
+            destinationId,
+            'campus_ai_chat',
+          );
+          return;
+        }
+
         if (isLineGroupChatReset(question)) {
           const reset = await resetLineGroupConversation(destinationId);
           await replyToLine(
@@ -962,28 +964,11 @@ async function handleLineEvents(
           );
           return;
         }
-
-        const chatIntent = parseLineGroupChatIntent(question);
-        if (chatIntent.forceChat || !CAMPUS_SYNC_DATA_QUESTION.test(question)) {
-          const chatAnswer = await getLineGroupConversationAnswer(
-            destinationId,
-            event.source?.type === 'room' ? 'room' : 'group',
-            botSlot,
-            chatIntent.prompt,
-          );
-          await replyToLine(
-            event.replyToken,
-            { answer: chatAnswer },
-            question,
-            channelAccessToken,
-            destinationType,
-            destinationId,
-            'campus_ai_chat',
-          );
-          return;
-        }
       }
     }
+
+    // グループでCSAIの後ろに本文がある場合は、従来のCampusSync学校情報AIへ送る。
+    // 1対1トークも従来どおり学校情報AIを使用する。
 
     const answer = await getCampusAiAnswer(question);
     await replyToLine(
