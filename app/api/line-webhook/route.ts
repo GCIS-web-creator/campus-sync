@@ -170,10 +170,8 @@ function isLineGroupChatReset(question: string): boolean {
   return /^(?:会話(?:を)?リセット|リセット|reset)$/i.test(question.trim());
 }
 
-async function generateLineGroupAiAnswer(history: LineGroupAiMessage[], question: string): Promise<string> {
-  const context = getCloudflareContext() as unknown as { env?: { AI?: WorkersAiBinding } };
-  const ai = context.env?.AI;
-  if (!ai) throw new Error('Workers AI binding is not configured');
+async function generateLineGroupAiAnswer(ai: WorkersAiBinding | undefined, history: LineGroupAiMessage[], question: string): Promise<string> {
+  if (!ai) throw new Error('Workers AI binding "AI" is not available on the LINE webhook request');
   const result = await ai.run(LINE_GROUP_AI_MODEL, {
     messages: [
       { role: 'system', content: LINE_GROUP_AI_SYSTEM_PROMPT },
@@ -194,6 +192,7 @@ async function getLineGroupConversationAnswer(
   chatType: 'group' | 'room',
   botSlot: 0 | 1 | 2 | 3 | 4 | 5,
   question: string,
+  ai: WorkersAiBinding | undefined,
 ): Promise<string> {
   const admin = getLineAssignmentAdmin();
   if (!admin) return '雑談AIの会話保存設定を確認できません。しばらくしてからもう一度お試しください。';
@@ -243,9 +242,10 @@ async function getLineGroupConversationAnswer(
 
   let answer: string;
   try {
-    answer = await generateLineGroupAiAnswer(history, question);
+    answer = await generateLineGroupAiAnswer(ai, history, question);
   } catch (error) {
-    console.error('LINE group AI generation failed:', error instanceof Error ? error.name : 'unknown error');
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error('LINE group AI generation failed:', detail.slice(0, 300));
     return '雑談AIに接続できませんでした。Cloudflareの設定を確認して、少し待ってからもう一度お試しください。';
   }
 
@@ -896,6 +896,7 @@ async function handleLineEvents(
   events: LineTextMessageEvent[],
   channelAccessToken: string,
   botSlot: 0 | 1 | 2 | 3 | 4 | 5,
+  ai: WorkersAiBinding | undefined,
 ): Promise<void> {
   await Promise.all(events.map(async event => {
     if (event.source?.type === 'group' || event.source?.type === 'room') {
@@ -930,6 +931,7 @@ async function handleLineEvents(
             event.source?.type === 'room' ? 'room' : 'group',
             botSlot,
             'こんにちは！何か気軽に話そう。',
+            ai,
           );
           await replyToLine(
             event.replyToken,
@@ -1025,8 +1027,17 @@ export async function POST(request: Request) {
   }
 
   const events = Array.isArray(payload.events) ? payload.events : [];
+  // Capture request-scoped Cloudflare bindings before scheduling Next.js after().
+  // The deferred callback must not resolve request context for the first time.
+  let workersAi: WorkersAiBinding | undefined;
+  try {
+    workersAi = (getCloudflareContext() as unknown as { env?: { AI?: WorkersAiBinding } }).env?.AI;
+  } catch (error) {
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error('LINE webhook Cloudflare context lookup failed:', detail.slice(0, 300));
+  }
   after(async () => {
-    await handleLineEvents(events, matchedCredentials.accessToken, matchedCredentials.slot);
+    await handleLineEvents(events, matchedCredentials.accessToken, matchedCredentials.slot, workersAi);
   });
 
   return new Response('OK', {
