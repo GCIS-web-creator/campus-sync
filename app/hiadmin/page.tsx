@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Activity, AlertCircle, ArrowLeft, ArrowRight, BookOpen, FileClock, KeyRound, LockKeyhole, LogOut, RefreshCw, Search, ShieldCheck, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import HiAdminDataExplorer from '@/components/HiAdminDataExplorer';
+import HiAdminSystemMonitor from '@/components/HiAdminSystemMonitor';
 
 type Access = 'checking' | 'login' | 'denied' | 'misconfigured' | 'gate' | 'ready';
 type Profile = { student_id: string; student_name: string; user_class: string; setup_completed_at: string | null; created_at?: string | null };
@@ -24,7 +25,7 @@ export default function HiAdminPage() {
   const [hiadminPassword2, setHiadminPassword2] = useState('');
   const [hiadminPassword3, setHiadminPassword3] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database' | 'monitor'>('overview');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<Account[]>([]);
   const [page, setPage] = useState(1);
@@ -192,7 +193,7 @@ export default function HiAdminPage() {
   return <main className="min-h-screen bg-slate-950 text-slate-100">
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
-        <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200"><ShieldCheck size={25}/></div><div><p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-300">CampusSync / Root Console</p><h1 className="text-2xl font-black">最高管理者コンソール</h1><p className="mt-1 text-xs text-slate-400">ユーザーアカウント・登録データ・監査記録</p></div></div>
+        <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200"><ShieldCheck size={25}/></div><div><p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-300">CampusSync / Root Console</p><h1 className="text-2xl font-black">最高管理者コンソール</h1><p className="mt-1 text-xs text-slate-400">ユーザー管理・データベース・運用監視・監査記録</p></div></div>
         {access === 'ready' && <div className="flex items-center gap-3"><span className="hidden text-right text-xs text-slate-300 sm:block">{email}<br/><span className="text-emerald-300">3段階認証済み</span></span><button onClick={() => void signOut()} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold"><LogOut size={14}/>ログアウト</button></div>}
       </header>
 
@@ -225,9 +226,11 @@ export default function HiAdminPage() {
       </section>}
 
       {access === 'ready' && <>
-        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
+        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'monitor',label:'運用監視'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
 
         {tab === 'overview' && <section><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">システムデータ概要</h2><p className="text-xs text-slate-400">個別本文ではなく、管理対象の件数のみ表示します。</p></div><button onClick={() => void checkAccess()} className="rounded-xl border border-white/10 p-2"><RefreshCw size={16}/></button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaryCards.map(([label,value,Icon]) => <article key={label} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5"><div className="flex justify-between text-xs font-bold text-slate-400"><span>{label}</span><Icon size={18} className="text-cyan-300"/></div><p className="mt-3 text-3xl font-black tabular-nums">{value.toLocaleString('ja-JP')}</p></article>)}</div><div className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={17}/><b className="text-sm">保護状態</b></div><p className="mt-2 text-xs leading-5 text-slate-300">学校メール許可リストと3段階の認証をサーバー側で確認しています。パスワード・ハッシュ・チャット本文は画面に出力しません。</p></div></section>}
+
+        {tab === 'monitor' && <HiAdminSystemMonitor token={token} password2={hiadminPassword2} password3={hiadminPassword3} />}
 
         {tab === 'database' && <HiAdminDataExplorer token={token} password2={hiadminPassword2} password3={hiadminPassword3} />}
 

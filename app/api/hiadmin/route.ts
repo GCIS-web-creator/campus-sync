@@ -298,6 +298,188 @@ export async function GET(request: Request) {
       return NextResponse.json({ logs: data || [] }, { headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' } });
     }
 
+
+    if (view === 'ai-conversations') {
+      const { data: rows, error } = await auth.admin
+        .from('line_ai_group_conversations')
+        .select('chat_id,chat_type,bot_slot,messages,expires_at,updated_at,daily_requests,last_request_at')
+        .order('updated_at', { ascending: false })
+        .limit(30);
+      if (error) throw new Error('雑談AIの会話履歴を取得できません。');
+
+      const chats = (rows || []).map((row) => {
+        const stored = Array.isArray(row.messages) ? row.messages : [];
+        const messages = stored
+          .filter((item): item is Record<string, unknown> =>
+            Boolean(item && typeof item === 'object')
+            && ((item as Record<string, unknown>).role === 'user' || (item as Record<string, unknown>).role === 'assistant')
+            && typeof (item as Record<string, unknown>).content === 'string')
+          .slice(-6)
+          .map((item) => ({
+            role: item.role === 'assistant' ? 'assistant' : 'user',
+            content: String(item.content).slice(0, 600),
+          }));
+        const marker = stored.some((item) =>
+          Boolean(item && typeof item === 'object')
+          && (item as Record<string, unknown>).role === 'system'
+          && (item as Record<string, unknown>).content === '__CAMPUSSYNC_LINE_AI_CHAT_ACTIVE__');
+        return {
+          label: (row.chat_type === 'room' ? 'LINEルーム' : 'LINEグループ') + ' #' + String(row.chat_id || '').slice(-5),
+          chat_type: row.chat_type,
+          bot_slot: row.bot_slot,
+          messages,
+          expires_at: row.expires_at,
+          updated_at: row.updated_at,
+          daily_requests: row.daily_requests,
+          last_request_at: row.last_request_at,
+          active: marker && Date.parse(String(row.expires_at || '')) > Date.now(),
+        };
+      });
+
+      const { error: auditError } = await auth.admin.from('hiadmin_audit_logs').insert({
+        actor_user_id: auth.user.id,
+        actor_email: auth.user.email || '',
+        action: 'system.line_ai_conversations_viewed',
+        details: { conversation_count: chats.length },
+      });
+      if (auditError) return fail('監査記録を保存できなかったため、会話履歴の表示を中止しました。', 500);
+      return NextResponse.json({ chats }, {
+        headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' },
+      });
+    }
+
+    if (view === 'cloudflare-logs') {
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
+      const apiToken = process.env.CLOUDFLARE_API_TOKEN || '';
+      if (!/^[a-f0-9]{32}$/i.test(accountId) || !apiToken) {
+        return fail('Cloudflareログ連携が未設定です。WorkerのVariables and SecretsにCLOUDFLARE_ACCOUNT_IDとCLOUDFLARE_API_TOKENを設定してください。', 503);
+      }
+
+      const requestedMinutes = Number(params.get('minutes') || 15);
+      const minutes = [5, 15, 60].includes(requestedMinutes) ? requestedMinutes : 15;
+      const errorsOnly = params.get('errors') !== '0';
+      const filters: Array<Record<string, unknown>> = [
+        { key: '$metadata.service', operation: 'eq', type: 'string', value: 'campus-sync' },
+      ];
+      if (errorsOnly) {
+        filters.push({
+          kind: 'group',
+          filterCombination: 'or',
+          filters: [
+            { key: '$metadata.level', operation: 'eq', type: 'string', value: 'error' },
+            { key: '$workers.event.response.status', operation: 'gte', type: 'number', value: 400 },
+            { key: '$workers.outcome', operation: 'neq', type: 'string', value: 'ok' },
+          ],
+        });
+      }
+
+      const to = Date.now();
+      const from = to - minutes * 60 * 1000;
+      let cloudflareResponse: Response;
+      let cloudflarePayload: Record<string, unknown> | null = null;
+      try {
+        cloudflareResponse = await fetch(
+          'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/workers/observability/telemetry/query',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + apiToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              queryId: 'campus-sync-hiadmin-' + (errorsOnly ? 'errors' : 'events'),
+              view: 'events',
+              timeframe: { from, to },
+              limit: 80,
+              parameters: {
+                datasets: ['cloudflare-workers'],
+                filterCombination: 'and',
+                filters,
+              },
+            }),
+            cache: 'no-store',
+            signal: AbortSignal.timeout(15000),
+          },
+        );
+        cloudflarePayload = await cloudflareResponse.json().catch(() => null) as Record<string, unknown> | null;
+      } catch {
+        return fail('Cloudflare Observability APIへの接続に失敗しました。設定とネットワークを確認してください。', 502);
+      }
+
+      if (!cloudflareResponse.ok || cloudflarePayload?.success !== true) {
+        const apiErrors = Array.isArray(cloudflarePayload?.errors)
+          ? cloudflarePayload.errors.map((item) => item && typeof item === 'object' ? String((item as Record<string, unknown>).message || '') : '').filter(Boolean).join('; ').slice(0, 300)
+          : '';
+        console.error('HiAdmin Cloudflare telemetry query failed:', cloudflareResponse.status, apiErrors || 'unknown API error');
+        return fail('Cloudflareログを取得できませんでした。APIトークンのWorkers Observability Write権限とアカウントIDを確認してください。', 502);
+      }
+
+      const result = cloudflarePayload.result && typeof cloudflarePayload.result === 'object'
+        ? cloudflarePayload.result as Record<string, unknown>
+        : {};
+      const eventContainer = result.events && typeof result.events === 'object'
+        ? result.events as Record<string, unknown>
+        : {};
+      const rawEvents = Array.isArray(eventContainer.events) ? eventContainer.events : [];
+
+      const redactLogText = (input: unknown): string => {
+        let value = String(input || '');
+        value = value.replace(/https?:\/\/[^\s"'<>]+/gi, (raw) => {
+          try {
+            const parsed = new URL(raw);
+            return parsed.origin + parsed.pathname;
+          } catch {
+            return '[URL]';
+          }
+        });
+        value = value
+          .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
+          .replace(/\b(authorization|cookie|set-cookie|x-admin-password|password|secret|api[_-]?key|token)\b(\s*[:=]\s*)([^\s,;]+)/gi, '$1$2[REDACTED]')
+          .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[メールアドレス]');
+        return value.slice(0, 420);
+      };
+
+      const logs = rawEvents.map((raw) => {
+        const event = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+        const metadata = event.$metadata && typeof event.$metadata === 'object' ? event.$metadata as Record<string, unknown> : {};
+        const workers = event.$workers && typeof event.$workers === 'object' ? event.$workers as Record<string, unknown> : {};
+        const workerEvent = workers.event && typeof workers.event === 'object' ? workers.event as Record<string, unknown> : {};
+        const response = workerEvent.response && typeof workerEvent.response === 'object' ? workerEvent.response as Record<string, unknown> : {};
+        const source = event.source && typeof event.source === 'object' ? event.source as Record<string, unknown> : {};
+        const level = String(metadata.level || source.level || 'info').toLowerCase();
+        const message = redactLogText(metadata.message || source.message || (typeof event.source === 'string' ? event.source : 'Worker event'));
+        const error = redactLogText(metadata.error || source.error || '');
+        const trigger = redactLogText(metadata.trigger || workerEvent.path || '—').split('?')[0];
+        const statusValue = Number(response.status);
+        return {
+          time: Number.isFinite(Number(event.timestamp)) ? new Date(Number(event.timestamp)).toISOString() : null,
+          level,
+          message,
+          error: error && error !== message ? error : null,
+          trigger,
+          status: Number.isFinite(statusValue) && statusValue > 0 ? statusValue : null,
+          outcome: redactLogText(workers.outcome || ''),
+        };
+      });
+
+      const { error: auditError } = await auth.admin.from('hiadmin_audit_logs').insert({
+        actor_user_id: auth.user.id,
+        actor_email: auth.user.email || '',
+        action: 'system.cloudflare_logs_viewed',
+        details: { minutes, errors_only: errorsOnly, result_count: logs.length },
+      });
+      if (auditError) return fail('監査記録を保存できなかったため、Cloudflareログの表示を中止しました。', 500);
+
+      return NextResponse.json({
+        logs,
+        count: logs.length,
+        minutes,
+        errorsOnly,
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+      }, { headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' } });
+    }
+
     if (view === 'overview') {
       const [profiles, todos, assignments, classMessages, schoolMessages, lostItems] = await Promise.all([
         countRows(auth.admin, 'profiles'), countRows(auth.admin, 'todos'), countRows(auth.admin, 'assignments'),

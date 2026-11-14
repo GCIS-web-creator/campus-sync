@@ -1976,76 +1976,110 @@ export default function CampusSyncAdmin() {
             <p className="hidden text-[10px] text-slate-500 font-mono mt-1 md:block">Soka High School Admin</p>
           </div>
           
-          <nav className="space-y-1">
-            <button aria-label="ダッシュボード概要" title="ダッシュボード概要" onClick={() => setActiveTab('dashboard')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+          <nav className="space-y-2">
+            <div className="pb-1">
+              <button aria-label="ダッシュボード概要" title="ダッシュボード概要" onClick={() => setActiveTab('dashboard')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <LayoutDashboard size={18} /><span className="sr-only md:not-sr-only">ダッシュボード概要</span>
-            </button>
-            <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
-            </button>
-            <button aria-label="考査日程管理" title="考査日程管理" onClick={() => setActiveTab('exams')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'exams' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">考査日程管理</span>
-            </button>
-            <button aria-label="小テスト管理" title="小テスト管理" onClick={() => setActiveTab('mini-tests')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'mini-tests' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <ClipboardList size={18} /><span className="sr-only md:not-sr-only">小テスト管理</span>
-            </button>
-            <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
-            </button>
-            <button aria-label="LINE配信ダッシュボード" title="LINE配信ダッシュボード" onClick={() => setActiveTab('line-analytics')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'line-analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <History size={18} /><span className="sr-only md:not-sr-only">LINE配信ダッシュボード</span>
-            </button>
-            <button aria-label="地震情報・LINEグループ通知" title="地震情報・LINEグループ通知" onClick={() => setActiveTab('earthquake-alerts')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'earthquake-alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Activity size={18} /><span className="sr-only md:not-sr-only">地震情報・LINE通知</span>
-            </button>
-            <button aria-label="先生用アクセスコード管理" title="先生用アクセスコード管理" onClick={() => setActiveTab('teacher-access-codes')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'teacher-access-codes' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <UserCheck size={18} /><span className="sr-only md:not-sr-only">先生用アクセスコード</span>
-            </button>
-            <button aria-label="校内マップ・施設案内管理" title="校内マップ・施設案内管理" onClick={() => setActiveTab('campus-facilities')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'campus-facilities' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <MapPin size={18} /><span className="sr-only md:not-sr-only">校内マップ管理</span>
-            </button>
-            <button aria-label="チャット管理・監査ログ" title="チャット管理・監査ログ" onClick={() => setActiveTab('chat-moderation')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'chat-moderation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
-            </button>
-            <button aria-label="部活・委員会投稿管理" title="部活・委員会投稿管理" onClick={() => setActiveTab('club-posts')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'club-posts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Megaphone size={18} /><span className="sr-only md:not-sr-only">部活・委員会投稿管理</span>
-            </button>
-            <button aria-label="生徒プロフィール書き出し" title="生徒プロフィール書き出し" onClick={() => setActiveTab('student-profile-export')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'student-profile-export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <FilePlus size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
-            </button>
-            <button aria-label="7組・8組時間割編集" title="7組・8組時間割編集" onClick={() => setActiveTab('class-timetable')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'class-timetable' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">時間割編集</span>
-            </button>
-            <button aria-label="週間学校予定表" title="週間学校予定表" onClick={() => setActiveTab('school-schedule')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-schedule' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">週間学校予定表</span>
-            </button>
-            <button aria-label="学校イベント・カウントダウン" title="学校イベント・カウントダウン" onClick={() => setActiveTab('event-countdowns')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'event-countdowns' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">学校イベント・カウントダウン</span>
-            </button>
-            <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
-            </button>
-            <button aria-label="学食・売切情報の操作" title="学食・売切情報の操作" onClick={() => setActiveTab('cafeteria')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'cafeteria' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Utensils size={18} /><span className="sr-only md:not-sr-only">学食・売切情報の操作</span>
-            </button>
-            <button aria-label="落とし物「承認」管理" title="落とし物「承認」管理" onClick={() => setActiveTab('lost')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'lost' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Package size={18} /><span className="sr-only md:not-sr-only">落とし物「承認」管理</span>
-            </button>
-            <button aria-label="キャリアセンター自習室" title="キャリアセンター自習室" onClick={() => setActiveTab('study-room')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'study-room' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <Monitor size={18} /><span className="sr-only md:not-sr-only">キャリアセンター自習室</span>
-            </button>
-            <button aria-label="プリント・資料管理" title="プリント・資料管理" onClick={() => setActiveTab('study-materials')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'study-materials' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
-              <Files size={18} /><span className="sr-only md:not-sr-only">プリント・資料管理</span>
-            </button>
-            <button aria-label="出欠連絡管理" title="出欠連絡管理" onClick={() => setActiveTab('attendance-reports')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'attendance-reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
-              <UserCheck size={18} /><span className="sr-only md:not-sr-only">出欠連絡管理</span>
-            </button>
-            <button aria-label="共有ワークスペース管理" title="共有ワークスペース管理" onClick={() => setActiveTab('workspaces')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'workspaces' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
-              <Users size={18} /><span className="sr-only md:not-sr-only">共有ワークスペース管理</span>
-            </button>
-            <button aria-label="図書貸出＆書籍登録" title="図書貸出＆書籍登録" onClick={() => setActiveTab('library')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
-              <BookOpen size={18} /><span className="sr-only md:not-sr-only">図書貸出＆書籍登録</span>
-            </button>
+              </button>
+            </div>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["assignments","exams","mini-tests","class-timetable","study-materials","attendance-reports"].includes(activeTab)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
+                <span>授業・学習</span>
+                <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="space-y-1 px-1 pb-1">
+                <button aria-label="課題・提出期限管理" title="課題・提出期限管理" onClick={() => setActiveTab('assignments')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <ClipboardList size={18} /><span className="sr-only md:not-sr-only">課題・提出期限管理</span>
+                </button>
+                <button aria-label="考査日程管理" title="考査日程管理" onClick={() => setActiveTab('exams')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'exams' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <CalendarDays size={18} /><span className="sr-only md:not-sr-only">考査日程管理</span>
+                </button>
+                <button aria-label="小テスト管理" title="小テスト管理" onClick={() => setActiveTab('mini-tests')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'mini-tests' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <ClipboardList size={18} /><span className="sr-only md:not-sr-only">小テスト管理</span>
+                </button>
+                <button aria-label="7組・8組時間割編集" title="7組・8組時間割編集" onClick={() => setActiveTab('class-timetable')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'class-timetable' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <CalendarDays size={18} /><span className="sr-only md:not-sr-only">時間割編集</span>
+                </button>
+                <button aria-label="プリント・資料管理" title="プリント・資料管理" onClick={() => setActiveTab('study-materials')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'study-materials' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
+                <Files size={18} /><span className="sr-only md:not-sr-only">プリント・資料管理</span>
+                </button>
+                <button aria-label="出欠連絡管理" title="出欠連絡管理" onClick={() => setActiveTab('attendance-reports')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'attendance-reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
+                <UserCheck size={18} /><span className="sr-only md:not-sr-only">出欠連絡管理</span>
+                </button>
+              </div>
+            </details>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["school-schedule","event-countdowns","menu-calendar","cafeteria","lost","study-room","library","campus-facilities"].includes(activeTab)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
+                <span>校内情報・施設</span>
+                <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="space-y-1 px-1 pb-1">
+                <button aria-label="週間学校予定表" title="週間学校予定表" onClick={() => setActiveTab('school-schedule')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-schedule' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <CalendarDays size={18} /><span className="sr-only md:not-sr-only">週間学校予定表</span>
+                </button>
+                <button aria-label="学校イベント・カウントダウン" title="学校イベント・カウントダウン" onClick={() => setActiveTab('event-countdowns')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'event-countdowns' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <CalendarDays size={18} /><span className="sr-only md:not-sr-only">学校イベント・カウントダウン</span>
+                </button>
+                <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
+                </button>
+                <button aria-label="学食・売切情報の操作" title="学食・売切情報の操作" onClick={() => setActiveTab('cafeteria')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'cafeteria' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <Utensils size={18} /><span className="sr-only md:not-sr-only">学食・売切情報の操作</span>
+                </button>
+                <button aria-label="落とし物「承認」管理" title="落とし物「承認」管理" onClick={() => setActiveTab('lost')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'lost' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <Package size={18} /><span className="sr-only md:not-sr-only">落とし物「承認」管理</span>
+                </button>
+                <button aria-label="キャリアセンター自習室" title="キャリアセンター自習室" onClick={() => setActiveTab('study-room')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'study-room' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <Monitor size={18} /><span className="sr-only md:not-sr-only">キャリアセンター自習室</span>
+                </button>
+                <button aria-label="図書貸出＆書籍登録" title="図書貸出＆書籍登録" onClick={() => setActiveTab('library')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'library' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <BookOpen size={18} /><span className="sr-only md:not-sr-only">図書貸出＆書籍登録</span>
+                </button>
+                <button aria-label="校内マップ・施設案内管理" title="校内マップ・施設案内管理" onClick={() => setActiveTab('campus-facilities')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'campus-facilities' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <MapPin size={18} /><span className="sr-only md:not-sr-only">校内マップ管理</span>
+                </button>
+              </div>
+            </details>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["school-notifications","line-analytics","earthquake-alerts","chat-moderation","club-posts","workspaces"].includes(activeTab)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
+                <span>連絡・コミュニティ</span>
+                <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="space-y-1 px-1 pb-1">
+                <button aria-label="学園総合通知" title="学園総合通知" onClick={() => setActiveTab('school-notifications')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'school-notifications' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <BellRing size={18} /><span className="sr-only md:not-sr-only">学園総合通知</span>
+                </button>
+                <button aria-label="LINE配信ダッシュボード" title="LINE配信ダッシュボード" onClick={() => setActiveTab('line-analytics')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'line-analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <History size={18} /><span className="sr-only md:not-sr-only">LINE配信ダッシュボード</span>
+                </button>
+                <button aria-label="地震情報・LINEグループ通知" title="地震情報・LINEグループ通知" onClick={() => setActiveTab('earthquake-alerts')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'earthquake-alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <Activity size={18} /><span className="sr-only md:not-sr-only">地震情報・LINE通知</span>
+                </button>
+                <button aria-label="チャット管理・監査ログ" title="チャット管理・監査ログ" onClick={() => setActiveTab('chat-moderation')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'chat-moderation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <MessageSquare size={18} /><span className="sr-only md:not-sr-only">チャット管理・監査ログ</span>
+                </button>
+                <button aria-label="部活・委員会投稿管理" title="部活・委員会投稿管理" onClick={() => setActiveTab('club-posts')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'club-posts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <Megaphone size={18} /><span className="sr-only md:not-sr-only">部活・委員会投稿管理</span>
+                </button>
+                <button aria-label="共有ワークスペース管理" title="共有ワークスペース管理" onClick={() => setActiveTab('workspaces')} className={'w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ' + (activeTab === 'workspaces' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white')}>
+                <Users size={18} /><span className="sr-only md:not-sr-only">共有ワークスペース管理</span>
+                </button>
+              </div>
+            </details>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["teacher-access-codes","student-profile-export"].includes(activeTab)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
+                <span>生徒・権限管理</span>
+                <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="space-y-1 px-1 pb-1">
+                <button aria-label="先生用アクセスコード管理" title="先生用アクセスコード管理" onClick={() => setActiveTab('teacher-access-codes')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'teacher-access-codes' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <UserCheck size={18} /><span className="sr-only md:not-sr-only">先生用アクセスコード</span>
+                </button>
+                <button aria-label="生徒プロフィール書き出し" title="生徒プロフィール書き出し" onClick={() => setActiveTab('student-profile-export')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'student-profile-export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                <FilePlus size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
+                </button>
+              </div>
+            </details>
           </nav>
         </div>
         
