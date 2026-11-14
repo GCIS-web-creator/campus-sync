@@ -143,16 +143,20 @@ function getLineAssignmentAdmin() {
 }
 
 type LineGroupAiMessage = { role: 'user' | 'assistant'; content: string };
+type WorkersAiOutput = {
+  response?: unknown;
+  choices?: Array<{ message?: { content?: unknown } }>;
+};
 type WorkersAiBinding = {
   run: (
     model: string,
     input: {
       messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-      max_tokens: number;
+      max_completion_tokens: number;
       temperature: number;
       chat_template_kwargs: { enable_thinking: false };
     },
-  ) => Promise<{ response?: unknown }>;
+  ) => Promise<WorkersAiOutput>;
 };
 
 const LINE_GROUP_AI_MODEL = '@cf/zai-org/glm-4.7-flash';
@@ -171,19 +175,27 @@ function isLineGroupChatReset(question: string): boolean {
 }
 
 async function generateLineGroupAiAnswer(ai: WorkersAiBinding | undefined, history: LineGroupAiMessage[], question: string): Promise<string> {
-  if (!ai) throw new Error('Workers AI binding "AI" is not available on the LINE webhook request');
+  if (!ai) throw new Error('AI binding is missing');
   const result = await ai.run(LINE_GROUP_AI_MODEL, {
     messages: [
       { role: 'system', content: LINE_GROUP_AI_SYSTEM_PROMPT },
       ...history,
       { role: 'user', content: question.slice(0, 300) },
     ],
-    max_tokens: 140,
+    max_completion_tokens: 140,
     temperature: 0.7,
     chat_template_kwargs: { enable_thinking: false },
   });
-  const answer = typeof result.response === 'string' ? result.response.trim() : '';
-  if (!answer) throw new Error('Workers AI returned an empty response');
+
+  // GLM-4.7-Flash returns OpenAI-compatible choices[0].message.content.
+  // Keep response as a fallback for Workers AI models using the older text-generation shape.
+  const candidate = typeof result.response === 'string'
+    ? result.response
+    : typeof result.choices?.[0]?.message?.content === 'string'
+      ? result.choices[0].message.content
+      : '';
+  const answer = candidate.trim();
+  if (!answer) throw new Error('Workers AI returned no supported text field');
   return answer.slice(0, 600);
 }
 
@@ -245,8 +257,14 @@ async function getLineGroupConversationAnswer(
     answer = await generateLineGroupAiAnswer(ai, history, question);
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    console.error('LINE group AI generation failed:', detail.slice(0, 300));
-    return '雑談AIに接続できませんでした。Cloudflareの設定を確認して、少し待ってからもう一度お試しください。';
+    console.error('LINE group AI generation failed:', detail.slice(0, 500));
+    if (detail.includes('AI binding is missing')) {
+      return '雑談AIの設定がCloudflare Workerに読み込まれていません。（AI-101）';
+    }
+    if (detail.includes('no supported text field')) {
+      return '雑談AIから応答を受け取りましたが、文章を読み取れませんでした。（AI-103）';
+    }
+    return '雑談AIの生成処理でエラーが発生しました。（AI-102）';
   }
 
   const nextHistory: LineGroupAiMessage[] = [
@@ -296,6 +314,8 @@ async function replyPlain(
   accessToken: string,
   quickReplies: AssignmentQuickReplyOption[] = [],
   deliveryKind = 'assignment_contribution',
+  destinationType: 'user' | 'group' | 'room' = 'user',
+  destinationId: string | null = null,
 ): Promise<void> {
   try {
     const message: Record<string, unknown> = { type: 'text', text: text.slice(0, 4500) };
@@ -319,13 +339,13 @@ async function replyPlain(
       cache: 'no-store',
       signal: AbortSignal.timeout(12000),
     });
-    await recordLineDeliveryResponse(response, { channel: 'reply', destinationType: 'user', kind: deliveryKind, accessToken, messages });
+    await recordLineDeliveryResponse(response, { channel: 'reply', destinationType, destinationId, kind: deliveryKind, accessToken, messages });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      console.error('LINE assignment reply failed:', response.status, detail.slice(0, 300));
+      console.error('LINE plain-text reply failed:', response.status, detail.slice(0, 300));
     }
   } catch (error) {
-    console.error('LINE assignment reply request failed:', error instanceof Error ? error.name : 'unknown');
+    console.error('LINE plain-text reply request failed:', error instanceof Error ? error.name : 'unknown');
   }
 }
 
@@ -933,28 +953,28 @@ async function handleLineEvents(
             'こんにちは！何か気軽に話そう。',
             ai,
           );
-          await replyToLine(
+          await replyPlain(
             event.replyToken,
-            { answer: chatAnswer },
-            'CSAI',
+            chatAnswer,
             channelAccessToken,
+            [],
+            'campus_ai_chat',
             destinationType,
             destinationId,
-            'campus_ai_chat',
           );
           return;
         }
 
         if (isLineGroupChatReset(question)) {
           const reset = await resetLineGroupConversation(destinationId);
-          await replyToLine(
+          await replyPlain(
             event.replyToken,
-            { answer: reset ? 'このグループの雑談履歴をリセットしました。新しい話題で話しかけてください。' : '履歴をリセットできませんでした。少し待ってからもう一度お試しください。' },
-            question,
+            reset ? 'このグループの雑談履歴をリセットしました。新しい話題で話しかけてください。' : '履歴をリセットできませんでした。少し待ってからもう一度お試しください。',
             channelAccessToken,
+            [],
+            'campus_ai_chat',
             destinationType,
             destinationId,
-            'campus_ai_chat',
           );
           return;
         }
