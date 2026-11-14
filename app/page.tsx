@@ -1134,6 +1134,14 @@ export default function CampusSyncApp() {
       if (!alive) return;
       const email = String(user?.email || '').trim().toLowerCase();
       const derivedStudentId = getStudentIdFromSchoolEmail(email);
+      if (user && !derivedStudentId) {
+        authUserIdRef.current = null;
+        setAuthUser(null);
+        setStudentId('');
+        setProfileSetupStatus('complete');
+        setAuthMessage('CampusSyncは6桁の学籍番号@tokyo.soka.ed.jp の学校Googleアカウントのみ利用できます。学校アカウントを選び直してください。');
+        return;
+      }
       if (user && derivedStudentId) {
         const nextAuthUserId = String(user.id || '');
         if (authUserIdRef.current !== nextAuthUserId) {
@@ -1159,6 +1167,7 @@ export default function CampusSyncApp() {
       if (user && !getStudentIdFromSchoolEmail(user.email)) {
         await supabase.auth.signOut({ scope: 'local' });
         acceptSessionUser(null);
+        if (alive) setAuthMessage('CampusSyncは6桁の学籍番号@tokyo.soka.ed.jp の学校Googleアカウントのみ利用できます。学校アカウントでログインしてください。');
       } else {
         acceptSessionUser(user);
       }
@@ -1184,7 +1193,16 @@ export default function CampusSyncApp() {
     })();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      acceptSessionUser(session?.user ?? null);
+      const user = session?.user ?? null;
+      if (user && !getStudentIdFromSchoolEmail(user.email)) {
+        acceptSessionUser(user);
+        // Do not await Supabase Auth methods inside onAuthStateChange; it can deadlock the auth lock.
+        window.setTimeout(() => {
+          void supabase.auth.signOut({ scope: 'local' });
+        }, 0);
+        return;
+      }
+      acceptSessionUser(user);
     });
     return () => {
       alive = false;
@@ -1446,6 +1464,38 @@ export default function CampusSyncApp() {
       setTeacherDisplayName('');
       setTeacherAccessEndsOn('');
       window.location.replace('/');
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      const redirectTo = new URL('/', window.location.origin).toString();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          scopes: 'openid email profile',
+          queryParams: {
+            hd: 'tokyo.soka.ed.jp',
+            prompt: 'select_account',
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
+      const normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.includes('provider is not enabled') || normalizedMessage.includes('unsupported provider')) {
+        setAuthMessage('Googleログインはまだ有効化されていません。SupabaseのAuthenticationでGoogleプロバイダーを設定してください。');
+      } else if (normalizedMessage.includes('redirect_uri_mismatch')) {
+        setAuthMessage('Googleログインの戻り先URLが一致しません。Google CloudとSupabaseのOAuth設定を確認してください。');
+      } else {
+        setAuthMessage('Googleログインを開始できませんでした: ' + message);
+      }
+    } finally {
+      setAuthBusy(false);
     }
   };
 
@@ -5976,18 +6026,33 @@ Supabaseの設定を確認してください。
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-5">
-          <div className="text-center space-y-2"><div className="mx-auto h-14 w-14 rounded-2xl bg-cyan-400/15 border border-cyan-300/30 flex items-center justify-center"><CampusSyncLogo variant="mark" height={28} className="text-cyan-200" /></div><h1 className="text-3xl font-black tracking-tight">Campus<span className="text-cyan-300">Sync</span></h1><p className="text-sm text-slate-300">生徒は学校メール、先生は専用コードでログイン</p><p className="pt-1 text-xs font-bold tracking-wide text-cyan-200">GCISプログラミングコース</p><p className="text-[10px] text-slate-400">Created by Fuku</p></div>
+          <div className="text-center space-y-2"><div className="mx-auto h-14 w-14 rounded-2xl bg-cyan-400/15 border border-cyan-300/30 flex items-center justify-center"><CampusSyncLogo variant="mark" height={28} className="text-cyan-200" /></div><h1 className="text-3xl font-black tracking-tight">Campus<span className="text-cyan-300">Sync</span></h1><p className="text-sm text-slate-300">生徒は学校Googleアカウント、先生は専用コードでログイン</p><p className="pt-1 text-xs font-bold tracking-wide text-cyan-200">GCISプログラミングコース</p><p className="text-[10px] text-slate-400">Created by Fuku</p></div>
           <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl space-y-4">
             {authStep === 'email' ? (
               <>
-                <div><h2 className="text-lg font-black">生徒ログイン</h2><p className="mt-1 text-xs leading-relaxed text-slate-300">@tokyo.soka.ed.jp の学校メールのみ利用できます。メールの@より前にある6桁を学籍番号として自動設定します。</p></div>
-                <div className="space-y-2"><label className="block text-xs font-bold text-slate-300">学校メールアドレス</label><input type="email" autoComplete="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="123456@tokyo.soka.ed.jp" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" /><p className="text-[11px] text-slate-400">例：123456@tokyo.soka.ed.jp → 学籍番号 123456</p></div>
-                <button type="button" onClick={() => void requestSchoolEmailCode()} disabled={authBusy} className="w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black py-3 text-sm disabled:opacity-50">{authBusy ? '送信中…' : 'メールにログインコードを送る'}</button>
-                <div className="space-y-2 rounded-xl border border-white/10 bg-slate-950/40 p-3">
-                  <label htmlFor="campus-sync-login-password" className="block text-xs font-bold text-slate-300">パスワードでログイン（初回登録後）</label>
-                  <input id="campus-sync-login-password" type="password" autoComplete="current-password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="設定済みのパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
-                  <button type="button" onClick={() => void signInWithSchoolPassword()} disabled={authBusy || !loginPassword} className="w-full rounded-xl border border-cyan-300/40 py-2.5 text-xs font-black text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40">{authBusy ? 'ログイン中…' : '学校メール＋パスワードでログイン'}</button>
+                <div><h2 className="text-lg font-black">生徒ログイン</h2><p className="mt-1 text-xs leading-relaxed text-slate-300">学校のGoogleアカウントでログインできます。6桁の学籍番号@tokyo.soka.ed.jp のアカウントを選択してください。初回はプロフィール登録とCampusSync用パスワードの設定が必要です。</p></div>
+                <button type="button" onClick={() => void signInWithGoogle()} disabled={authBusy} className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60">
+                  <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5" focusable="false">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 3.06 13.22l7.98 6.19C12.93 13.72 18.05 9.5 24 9.5Z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.93c-.58 2.96-2.26 5.48-4.74 7.18l7.73 6C44.43 38.16 46.98 31.93 46.98 24.55Z"/>
+                    <path fill="#FBBC05" d="M10.04 28.59A14.4 14.4 0 0 1 9.28 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.52 2.57 10.78l7.47-6.19Z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.14 1.45-4.9 2.3-8.18 2.3-5.95 0-11.07-4.22-12.96-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/>
+                  </svg>
+                  <span>{authBusy ? 'Googleに接続中…' : 'Googleでログイン'}</span>
+                </button>
+                <div className="flex items-center gap-3 py-1">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-[10px] font-bold text-slate-400">以前のアカウント</span>
+                  <div className="h-px flex-1 bg-white/10" />
                 </div>
+                <div className="space-y-2 rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                  <label className="block text-xs font-bold text-slate-300">学校メールアドレス</label>
+                  <input type="email" autoComplete="username" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="123456@tokyo.soka.ed.jp" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+                  <label htmlFor="campus-sync-login-password" className="block pt-1 text-xs font-bold text-slate-300">CampusSyncパスワード</label>
+                  <input id="campus-sync-login-password" type="password" autoComplete="current-password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="設定済みのパスワード" className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-300" />
+                  <button type="button" onClick={() => void signInWithSchoolPassword()} disabled={authBusy || !loginEmail.trim() || !loginPassword} className="w-full rounded-xl border border-cyan-300/40 py-2.5 text-xs font-black text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40">{authBusy ? 'ログイン中…' : '学校メール＋パスワードでログイン'}</button>
+                </div>
+                <p className="text-[10px] leading-relaxed text-slate-400">Googleログイン後、学校アカウントのメールアドレスから学籍番号を自動設定します。個人用Googleアカウントではログインできません。</p>
                 <button type="button" onClick={() => { setShowCardScanner(true); setCardScanDone(false); setScannedStudent(null); setCardScanStatus('カメラを準備しています…'); }} className="w-full rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 py-3 text-sm font-bold flex items-center justify-center gap-2"><QrCode size={17} /> 別の端末のログインQRを読み取る</button>
                 <div className="space-y-3 border-t border-white/10 pt-4">
                   <div><h3 className="text-sm font-black text-white">アカウントなしでお試し</h3><p className="mt-1 text-[11px] leading-relaxed text-slate-300">メール認証不要。CampusSyncの画面をサンプルデータで閲覧できます。</p></div>
