@@ -1506,7 +1506,14 @@ export default function CampusSyncApp() {
       setAuthMessage('学校メールにログイン確認コードを送信しました。日本語メールに記載された6桁コードを入力してください。');
     } catch (error) {
       const message = error instanceof Error ? error.message : String((error as any)?.message || '不明なエラー');
-      setAuthMessage(`確認コードを送信できませんでした: ${message}`);
+      const normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.includes('error sending confirmation email')) {
+        setAuthMessage('ログインコードを送信できませんでした。現在、メール送信サーバーがテスト用設定のため、管理者以外の学校メールアドレスへ送信できません。管理者による送信ドメインの認証とメール送信設定が完了するまで、新規ログイン用コードは届きません。メールアドレスの入力ミスではありません。');
+      } else if (normalizedMessage.includes('email rate limit') || normalizedMessage.includes('over_email_send_rate_limit')) {
+        setAuthMessage('ログインコードの送信上限に達しました。時間をおいてから、もう一度お試しください。');
+      } else {
+        setAuthMessage(`確認コードを送信できませんでした: ${message}`);
+      }
     } finally {
       setAuthBusy(false);
     }

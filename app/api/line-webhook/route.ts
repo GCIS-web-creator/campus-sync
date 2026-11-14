@@ -166,15 +166,6 @@ const LINE_GROUP_AI_SYSTEM_PROMPT = [
   '気持ちの落ち込みや困りごとには落ち着いて寄り添い、必要に応じて信頼できる大人や学校の先生に相談するよう勧めてください。',
 ].join('\n');
 
-const CAMPUS_SYNC_DATA_QUESTION = /学食|食堂|メニュー|献立|ランチ|昼食|電車|時刻表|何時発|何分後|国分寺|東村山|課題|宿題|提出期限|提出物|テスト範囲|試験範囲|定期考査|中間考査|期末考査|小テスト|時間割|学校行事|学校予定|お知らせ|通知|部活|委員会|蔵書|図書館|図書室|落とし物|忘れ物|キャリアセンター|教室|空席|座席状況|貢献度|貢献ポイント|売り切れ|売切|地震|震度|警報|天気予報|気象パネル|降水確率|気温/;
-
-function parseLineGroupChatIntent(question: string): { forceChat: boolean; prompt: string } {
-  const match = /^(?:雑談|フリートーク|おしゃべり)(?:[\s:：,、-]+|$)/i.exec(question);
-  const forceChat = Boolean(match);
-  const prompt = (match ? question.slice(match[0].length) : question).trim();
-  return { forceChat, prompt: prompt || '何か気軽に話そう。' };
-}
-
 function isLineGroupChatReset(question: string): boolean {
   return /^(?:会話(?:を)?リセット|リセット|reset)$/i.test(question.trim());
 }
@@ -932,6 +923,7 @@ async function handleLineEvents(
       const destinationType = event.source?.type === 'room' ? 'room' : 'group';
       const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
       if (destinationId) {
+        // 「CSAI」だけなら雑談AIを起動。本文付きの「CSAI ○○」は下の従来AIへ渡す。
         if (!question) {
           const chatAnswer = await getLineGroupConversationAnswer(
             destinationId,
@@ -967,8 +959,8 @@ async function handleLineEvents(
       }
     }
 
-    // グループでCSAIの後ろに本文がある場合は、従来のCampusSync学校情報AIへ送る。
-    // 1対1トークも従来どおり学校情報AIを使用する。
+    // グループで「CSAI」の後ろに本文がある場合は従来のCampusSync学校情報AIへ送る。
+    // 「CSAI」単独は上の分岐で雑談AIが処理済み。1対1トークは従来どおり学校情報AIを使用する。
 
     const answer = await getCampusAiAnswer(question);
     await replyToLine(
