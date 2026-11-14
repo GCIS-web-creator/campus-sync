@@ -251,8 +251,8 @@ async function getLineGroupConversationAnswer(
 
   const nextHistory: LineGroupAiMessage[] = [
     ...history,
-    { role: 'user', content: question.slice(0, 300) },
-    { role: 'assistant', content: answer },
+    { role: 'user' as const, content: question.slice(0, 300) },
+    { role: 'assistant' as const, content: answer },
   ].slice(-6);
   const now = new Date();
   const { error: saveError } = await admin
