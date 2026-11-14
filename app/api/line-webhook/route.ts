@@ -143,6 +143,8 @@ function getLineAssignmentAdmin() {
 }
 
 type LineGroupAiMessage = { role: 'user' | 'assistant'; content: string };
+type StoredLineGroupAiMessage = LineGroupAiMessage | { role: 'system'; content: string };
+const LINE_GROUP_AI_ACTIVE_MARKER = '__CAMPUSSYNC_LINE_AI_CHAT_ACTIVE__';
 type WorkersAiOutput = {
   response?: unknown;
   choices?: Array<{ message?: { content?: unknown } }>;
@@ -199,12 +201,39 @@ async function generateLineGroupAiAnswer(ai: WorkersAiBinding | undefined, histo
   return answer.slice(0, 600);
 }
 
+function hasActiveLineGroupConversation(messages: unknown): boolean {
+  return Array.isArray(messages) && messages.some(item =>
+    Boolean(item && typeof item === 'object')
+    && (item as Record<string, unknown>).role === 'system'
+    && (item as Record<string, unknown>).content === LINE_GROUP_AI_ACTIVE_MARKER
+  );
+}
+
+async function isLineGroupConversationActive(chatId: string): Promise<boolean> {
+  const admin = getLineAssignmentAdmin();
+  if (!admin) return false;
+  const { data, error } = await admin
+    .from('line_ai_group_conversations')
+    .select('messages, expires_at')
+    .eq('chat_id', chatId)
+    .maybeSingle();
+  if (error) {
+    console.error('LINE group AI active-session lookup failed:', error.message);
+    return false;
+  }
+  const expiresAt = Date.parse(String(data?.expires_at || ''));
+  return hasActiveLineGroupConversation(data?.messages)
+    && Number.isFinite(expiresAt)
+    && expiresAt > Date.now();
+}
+
 async function getLineGroupConversationAnswer(
   chatId: string,
   chatType: 'group' | 'room',
   botSlot: 0 | 1 | 2 | 3 | 4 | 5,
   question: string,
   ai: WorkersAiBinding | undefined,
+  activateChatMode = false,
 ): Promise<string> {
   const admin = getLineAssignmentAdmin();
   if (!admin) return '雑談AIの会話保存設定を確認できません。しばらくしてからもう一度お試しください。';
@@ -238,19 +267,20 @@ async function getLineGroupConversationAnswer(
     return '会話履歴を読み込めませんでした。少し待ってからもう一度お試しください。';
   }
 
-  const history = Array.isArray(conversation?.messages)
-    ? (conversation.messages as unknown[])
-      .filter((item): item is Record<string, unknown> =>
-        Boolean(item && typeof item === 'object')
-        && (item as Record<string, unknown>).role !== undefined
-        && ((item as Record<string, unknown>).role === 'user' || (item as Record<string, unknown>).role === 'assistant')
-        && typeof (item as Record<string, unknown>).content === 'string')
-      .slice(-6)
-      .map(item => ({
-        role: item.role as 'user' | 'assistant',
-        content: String(item.content).slice(0, 300),
-      }))
+  const storedMessages = Array.isArray(conversation?.messages)
+    ? conversation.messages as unknown[]
     : [];
+  const chatModeActive = activateChatMode || hasActiveLineGroupConversation(storedMessages);
+  const history: LineGroupAiMessage[] = storedMessages
+    .filter((item): item is Record<string, unknown> =>
+      Boolean(item && typeof item === 'object')
+      && ((item as Record<string, unknown>).role === 'user' || (item as Record<string, unknown>).role === 'assistant')
+      && typeof (item as Record<string, unknown>).content === 'string')
+    .slice(-6)
+    .map(item => ({
+      role: item.role as 'user' | 'assistant',
+      content: String(item.content).slice(0, 300),
+    }));
 
   let answer: string;
   try {
@@ -267,11 +297,14 @@ async function getLineGroupConversationAnswer(
     return '雑談AIの生成処理でエラーが発生しました。（AI-102）';
   }
 
-  const nextHistory: LineGroupAiMessage[] = [
-    ...history,
-    { role: 'user' as const, content: question.slice(0, 300) },
-    { role: 'assistant' as const, content: answer },
-  ].slice(-6);
+  const nextHistory: StoredLineGroupAiMessage[] = [
+    ...(chatModeActive ? [{ role: 'system' as const, content: LINE_GROUP_AI_ACTIVE_MARKER }] : []),
+    ...[
+      ...history,
+      { role: 'user' as const, content: question.slice(0, 300) },
+      { role: 'assistant' as const, content: answer },
+    ].slice(-6),
+  ];
   const now = new Date();
   const { error: saveError } = await admin
     .from('line_ai_group_conversations')
@@ -289,14 +322,14 @@ async function getLineGroupConversationAnswer(
   return answer;
 }
 
-async function resetLineGroupConversation(chatId: string): Promise<boolean> {
+async function resetLineGroupConversation(chatId: string, keepActive = true): Promise<boolean> {
   const admin = getLineAssignmentAdmin();
   if (!admin) return false;
   const now = new Date();
   const { error } = await admin
     .from('line_ai_group_conversations')
     .update({
-      messages: [],
+      messages: keepActive ? [{ role: 'system', content: LINE_GROUP_AI_ACTIVE_MARKER }] : [],
       updated_at: now.toISOString(),
       expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
     })
@@ -944,14 +977,15 @@ async function handleLineEvents(
       const destinationType = event.source?.type === 'room' ? 'room' : 'group';
       const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
       if (destinationId) {
-        // 「CSAI」だけなら雑談AIを起動。本文付きの「CSAI ○○」は下の従来AIへ渡す。
-        if (!question) {
+        // 「CSAI」で会話モードを開始。以降の通常メッセージもAIに渡す。
+        if (hasTrigger && !question) {
           const chatAnswer = await getLineGroupConversationAnswer(
             destinationId,
             event.source?.type === 'room' ? 'room' : 'group',
             botSlot,
             'こんにちは！何か気軽に話そう。',
             ai,
+            true,
           );
           await replyPlain(
             event.replyToken,
@@ -965,11 +999,46 @@ async function handleLineEvents(
           return;
         }
 
-        if (isLineGroupChatReset(question)) {
-          const reset = await resetLineGroupConversation(destinationId);
+        if (hasTrigger && isLineGroupChatReset(question)) {
+          const reset = await resetLineGroupConversation(destinationId, true);
           await replyPlain(
             event.replyToken,
-            reset ? 'このグループの雑談履歴をリセットしました。新しい話題で話しかけてください。' : '履歴をリセットできませんでした。少し待ってからもう一度お試しください。',
+            reset ? '雑談履歴をリセットしました。会話モードは続いているよ。' : '履歴をリセットできませんでした。少し待ってからもう一度お試しください。',
+            channelAccessToken,
+            [],
+            'campus_ai_chat',
+            destinationType,
+            destinationId,
+          );
+          return;
+        }
+
+        if (hasTrigger && /^(?:終了|おわり|stop)$/i.test(question.trim())) {
+          const stopped = await resetLineGroupConversation(destinationId, false);
+          await replyPlain(
+            event.replyToken,
+            stopped ? '雑談AIを終了しました。また「CSAI」で話しかけてね。' : '終了処理に失敗しました。もう一度お試しください。',
+            channelAccessToken,
+            [],
+            'campus_ai_chat',
+            destinationType,
+            destinationId,
+          );
+          return;
+        }
+
+        // 起動後は接頭辞なしの通常メッセージも雑談AIへ渡す。
+        if (!hasTrigger && await isLineGroupConversationActive(destinationId)) {
+          const chatAnswer = await getLineGroupConversationAnswer(
+            destinationId,
+            event.source?.type === 'room' ? 'room' : 'group',
+            botSlot,
+            messageText,
+            ai,
+          );
+          await replyPlain(
+            event.replyToken,
+            chatAnswer,
             channelAccessToken,
             [],
             'campus_ai_chat',
