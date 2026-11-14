@@ -968,7 +968,7 @@ async function handleLineEvents(
     const hasTrigger = messageText.toUpperCase().startsWith(trigger);
     const isDirectChat = event.source?.type === 'user';
     const isGroupOrRoom = event.source?.type === 'group' || event.source?.type === 'room';
-    if (!hasTrigger && !isDirectChat) return;
+    if (!hasTrigger && !isDirectChat && !isGroupOrRoom) return;
 
     const question = hasTrigger
       ? messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim()
@@ -1048,6 +1048,8 @@ async function handleLineEvents(
           return;
         }
       }
+      // 会話モードが有効でないグループの通常発言はAIへ送らず、そのまま無視する。
+      if (!hasTrigger) return;
     }
 
     // グループで「CSAI」の後ろに本文がある場合は従来のCampusSync学校情報AIへ送る。
