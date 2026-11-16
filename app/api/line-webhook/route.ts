@@ -155,6 +155,101 @@ async function replyToLine(
 }
 
 
+
+async function handleDailyDigestFailureAlertCommand(
+  event: LineTextMessageEvent,
+  replyToken: string,
+  messageText: string,
+  accessToken: string,
+): Promise<boolean> {
+  if (event.source?.type !== 'user' || !event.source.userId) return false;
+  const userId = event.source.userId;
+  const normalized = messageText.normalize('NFKC').replace(/[\\s　]/g, '').toUpperCase();
+  const registerCommand = /^(?:CSAI)?(?:失敗通知登録|配信失敗通知登録)$/.test(normalized);
+  const unregisterCommand = /^(?:CSAI)?(?:失敗通知解除|配信失敗通知解除)$/.test(normalized);
+  const retryMatch = normalized.match(/^CSAI16時配信の失敗分を再送(\\d{4}-\\d{2}-\\d{2})$/);
+  if (!registerCommand && !unregisterCommand && !retryMatch) return false;
+
+  const admin = getLineAssignmentAdmin();
+  if (!admin) {
+    await replyPlain(replyToken, '配信通知の設定に接続できません。Supabaseのサーバー設定を確認してください。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+  const { data: rotation, error: lookupError } = await admin
+    .from('line_bot_rotation').select('daily_digest_alert_user_id').eq('id', 1).maybeSingle();
+  if (lookupError || !rotation) {
+    console.error('LINE日次配信通知先の取得に失敗:', lookupError?.message || 'rotation row missing');
+    await replyPlain(replyToken, '配信通知設定を読み込めませんでした。管理設定を確認してください。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+  const registeredUserId = typeof rotation.daily_digest_alert_user_id === 'string' ? rotation.daily_digest_alert_user_id : '';
+
+  if (registerCommand) {
+    if (registeredUserId === userId) {
+      await replyPlain(replyToken, 'このLINEアカウントは、16時定期配信の失敗通知先に登録済みです。', accessToken, [], 'daily_digest_recovery');
+      return true;
+    }
+    if (registeredUserId) {
+      await replyPlain(replyToken, '失敗通知先はすでに別のLINEアカウントに登録されています。現在の登録先から「CSAI 失敗通知解除」を送ってから登録してください。', accessToken, [], 'daily_digest_recovery');
+      return true;
+    }
+    const { data: updated, error: updateError } = await admin
+      .from('line_bot_rotation')
+      .update({ daily_digest_alert_user_id: userId, updated_at: new Date().toISOString() })
+      .eq('id', 1).is('daily_digest_alert_user_id', null)
+      .select('daily_digest_alert_user_id').maybeSingle();
+    if (updateError || updated?.daily_digest_alert_user_id !== userId) {
+      await replyPlain(replyToken, '通知先を登録できませんでした。別のアカウントが先に登録した可能性があります。', accessToken, [], 'daily_digest_recovery');
+      return true;
+    }
+    await replyPlain(replyToken, '✅ このLINEアカウントを16時定期配信の失敗通知先に登録しました。今後、平日16時の配信に失敗した場合、この1対1トークに通知と手動再送ボタンを送ります。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+  if (unregisterCommand) {
+    if (registeredUserId !== userId) {
+      await replyPlain(replyToken, 'このLINEアカウントは失敗通知先に登録されていません。', accessToken, [], 'daily_digest_recovery');
+      return true;
+    }
+    const { error: clearError } = await admin.from('line_bot_rotation')
+      .update({ daily_digest_alert_user_id: null, updated_at: new Date().toISOString() })
+      .eq('id', 1).eq('daily_digest_alert_user_id', userId);
+    await replyPlain(replyToken, clearError ? '通知先の解除に失敗しました。もう一度お試しください。' : '16時定期配信の失敗通知先を解除しました。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+
+  if (registeredUserId !== userId) {
+    await replyPlain(replyToken, 'この再送ボタンは、失敗通知先に登録されたLINEアカウントだけが利用できます。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+  const dateKey = retryMatch?.[1] || '';
+  const cronSecret = process.env.CRON_SECRET || '';
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  if (!cronSecret || !supabaseUrl) {
+    await replyPlain(replyToken, '手動再送のサーバー設定が不足しています。管理者に連絡してください。', accessToken, [], 'daily_digest_recovery');
+    return true;
+  }
+  try {
+    const endpoint = new URL('/functions/v1/campussync-line-digest', supabaseUrl).toString();
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + cronSecret, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'button_retry', date: dateKey }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(60000),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      await replyPlain(replyToken, '⚠️ ' + (payload?.message || '再送処理に失敗しました（HTTP ' + response.status + '）。'), accessToken, [], 'daily_digest_recovery');
+      return true;
+    }
+    await replyPlain(replyToken, payload.message || '手動再送を完了しました。', accessToken, [], 'daily_digest_recovery');
+  } catch (error) {
+    console.error('LINE日次配信の手動再送呼び出し失敗:', error instanceof Error ? error.message : 'unknown');
+    await replyPlain(replyToken, '手動再送サービスに接続できませんでした。少し待ってからもう一度お試しください。', accessToken, [], 'daily_digest_recovery');
+  }
+  return true;
+}
+
 type AssignmentQuickReplyOption = { label: string; text: string };
 type LineAssignmentDraft = {
   subject?: string;
@@ -1059,6 +1154,8 @@ async function handleLineEvents(
     if (miniTestHandled) return;
     const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
+    const digestAlertHandled = await handleDailyDigestFailureAlertCommand(event, event.replyToken, messageText, channelAccessToken);
+    if (digestAlertHandled) return;
 
     // 1対1トークは従来どおり学校情報AIへ。グループ・ルームはCSAI接頭辞がある発言だけを扱う。
     const trigger = 'CSAI';
