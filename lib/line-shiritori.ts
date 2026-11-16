@@ -163,12 +163,12 @@ export function isLineShiritoriStartCommand(input: string): boolean {
   return /^(?:しりとり|しりとりしよう|しりとりしよ|しりとりやろう|しりとりやろ|しりとり開始|しりとりスタート|shiritori)$/i.test(normalized);
 }
 
-function isStopCommand(input: string): boolean {
+export function isLineShiritoriStopCommand(input: string): boolean {
   const normalized = input.normalize('NFKC').replace(/[\s　]/g, '').replace(/[!！。]+$/g, '');
   return /^(?:しりとり終了|ゲーム終了|やめる|やめよう|stop)$/i.test(normalized);
 }
 
-export function startLineShiritori(): LineShiritoriTurnResult {
+export function isLineShiritoriControlCommand(input: string): boolean {\n  return isLineShiritoriStartCommand(input) || isLineShiritoriStopCommand(input);\n}\n\nexport function startLineShiritori(): LineShiritoriTurnResult {
   const firstWord = 'しりとり';
   return {
     answer: 'しりとり開始！まずは「' + firstWord + '」から。次は「り」ではじまる言葉を送ってね。ひらがな・カタカナで判定するよ（漢字は読みをひらがなにしてね）。',
@@ -192,7 +192,7 @@ function chooseBotWord(startKana: string, usedWords: Set<string>, turn: number):
 
 export function takeLineShiritoriTurn(input: string, current: LineShiritoriState): LineShiritoriTurnResult {
   if (isLineShiritoriStartCommand(input)) return startLineShiritori();
-  if (isStopCommand(input)) {
+  if (isLineShiritoriStopCommand(input)) {
     return { answer: 'しりとりを終了したよ！また遊びたくなったら「しりとり」と送ってね。', state: null };
   }
 
