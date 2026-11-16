@@ -74,6 +74,7 @@ const INDICES: Array<{ re: RegExp; value: EquityTarget }> = [
   { re: /NYダウ|ダウ平均|ダウ工業株/i, value: { symbol: '^DJI', label: 'NYダウ', assetType: 'index' } },
 ];
 const KNOWN: Array<{ re: RegExp; value: EquityTarget }> = [
+  { re: /キオクシア|KIOXIA|285A/i, value: { symbol: '285A.T', label: 'キオクシアホールディングス', assetType: 'stock' } },
   { re: /トヨタ|TOYOTA/i, value: { symbol: '7203.T', label: 'トヨタ自動車', assetType: 'stock' } },
   { re: /ソニー|SONY/i, value: { symbol: '6758.T', label: 'ソニーグループ', assetType: 'stock' } },
   { re: /任天堂|NINTENDO/i, value: { symbol: '7974.T', label: '任天堂', assetType: 'stock' } },
