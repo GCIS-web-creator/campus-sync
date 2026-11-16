@@ -258,8 +258,7 @@ export async function POST(request: Request) {
     }
   } else {
     const expectedSecret = Deno.env.get('CRON_SECRET') || '';
-    const authorization = request.headers.get('authorization') || '';
-    const receivedSecret = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const receivedSecret = request.headers.get('x-cron-secret') || '';
     if (!expectedSecret || !receivedSecret || !constantTimeEqual(expectedSecret, receivedSecret)) {
       return jsonError('学校予定表の定期配信認証に失敗しました。', 401);
     }

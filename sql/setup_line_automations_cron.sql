@@ -4,19 +4,25 @@
 -- 月〜木のみ、翌日の7組・8組時間割も同じFlexカルーセルに含めます。
 -- 日曜 09:00 JST: 翌週の学校スケジュール＋月曜日の7組・8組時間割。
 -- 毎日 21:00 JST: 翌日がBOT切替日の場合だけ、現在BOTの友だちへ予告（グループ配信なし）。
--- Vault Secret: campussync_push_reminders_cron_secret（既存Push Cronと共通）
+-- Supabase Edge Function用: campussync_supabase_publishable_key と campussync_push_reminders_cron_secret をVaultに登録。
 
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 
--- Vault Secretが未登録なら、スケジュールを作らず明示的に停止。
+-- 必須Vault Secretが未登録なら、既存ジョブを変更する前に停止。
 do $$
 begin
   if not exists (
     select 1 from vault.decrypted_secrets
     where name = 'campussync_push_reminders_cron_secret'
   ) then
-    raise exception 'Vault secret campussync_push_reminders_cron_secret が見つかりません。先に既存のPush Cron用Secretを登録してください。';
+    raise exception 'Vault secret campussync_push_reminders_cron_secret が見つかりません。';
+  end if;
+  if not exists (
+    select 1 from vault.decrypted_secrets
+    where name = 'campussync_supabase_publishable_key'
+  ) then
+    raise exception 'Vault secret campussync_supabase_publishable_key が見つかりません。';
   end if;
 end;
 $$;
@@ -52,17 +58,20 @@ select cron.schedule(
   '0 7 * * 1-5',
   $cron$
     select net.http_post(
-      url := 'https://campus-sync-mocha.vercel.app/api/line-daily-digest',
+      url := 'https://sgvhktudhxufluuaipwt.supabase.co/functions/v1/campussync-line-digest',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (
-          select decrypted_secret
-          from vault.decrypted_secrets
+        'apikey', (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'campussync_supabase_publishable_key'
+        ),
+        'x-cron-secret', (
+          select decrypted_secret from vault.decrypted_secrets
           where name = 'campussync_push_reminders_cron_secret'
         )
       ),
       body := '{}'::jsonb,
-      timeout_milliseconds := 25000
+      timeout_milliseconds := 60000
     );
   $cron$
 );
@@ -73,17 +82,20 @@ select cron.schedule(
   '0 0 * * 0',
   $cron$
     select net.http_post(
-      url := 'https://campus-sync-mocha.vercel.app/api/line-weekly-school-schedule',
+      url := 'https://sgvhktudhxufluuaipwt.supabase.co/functions/v1/campussync-line-digest',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (
-          select decrypted_secret
-          from vault.decrypted_secrets
+        'apikey', (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'campussync_supabase_publishable_key'
+        ),
+        'x-cron-secret', (
+          select decrypted_secret from vault.decrypted_secrets
           where name = 'campussync_push_reminders_cron_secret'
         )
       ),
-      body := '{}'::jsonb,
-      timeout_milliseconds := 25000
+      body := '{"mode":"weekly_school_schedule"}'::jsonb,
+      timeout_milliseconds := 60000
     );
   $cron$
 );
@@ -94,7 +106,7 @@ select cron.schedule(
   '0 12 * * *',
   $cron$
     select net.http_post(
-      url := 'https://campus-sync-mocha.vercel.app/api/line-bot-switch-reminder',
+      url := 'https://campus-sync.gcis-webcreator.workers.dev/api/line-bot-switch-reminder',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
         'Authorization', 'Bearer ' || (

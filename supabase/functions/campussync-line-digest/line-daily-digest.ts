@@ -907,8 +907,7 @@ export async function POST(request: Request) {
     }
   } else {
     const expectedSecret = Deno.env.get('CRON_SECRET') || '';
-    const authorization = request.headers.get('authorization') || '';
-    const receivedSecret = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const receivedSecret = request.headers.get('x-cron-secret') || '';
     if (!expectedSecret || !receivedSecret || !constantTimeEqual(expectedSecret, receivedSecret)) {
       return jsonError('日次まとめの定期配信認証に失敗しました。', 401);
     }
