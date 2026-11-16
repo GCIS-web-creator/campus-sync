@@ -28,7 +28,7 @@ const KIND_LABELS: Record<string, string> = {
   assignment_updates: '課題通知', quick_notice: 'クイックお知らせ', school_notification: '学園総合通知',
   earthquake_alert: '地震情報', weather_alert: '気象警報', weather_forecast_test: '天気予報テスト',
   bot_rotation: 'BOT切替予告', club_note: '部活・委員会投稿', lost_found: '落とし物通知',
-  campus_ai: 'CampusSync AI返信', legacy: '過去の配信',
+  campus_ai: 'CampusSync AI返信', campus_ai_market: '為替・株価情報', legacy: '過去の配信',
 };
 const jst = (value: string | null | undefined) => {
   if (!value) return '日時不明';

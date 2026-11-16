@@ -7,6 +7,8 @@ import { after, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
 import { buildCampusAiFlexMessage } from '@/lib/line-flex';
+import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
+import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
 export const runtime = 'nodejs';
@@ -65,6 +67,37 @@ async function getCampusAiAnswer(question: string): Promise<CampusAiResponse> {
   } catch (error) {
     console.error('CampusSync AI request failed:', error instanceof Error ? error.name : 'unknown error');
     return { answer: 'CampusSync AIに接続できませんでした。しばらくしてからもう一度お試しください。' };
+  }
+}
+
+
+async function replyLineMarket(
+  replyToken: string,
+  question: string,
+  accessToken: string,
+  destinationType: 'user' | 'group' | 'room' = 'user',
+  destinationId: string | null = null,
+): Promise<void> {
+  const snapshots = await getLineMarketSnapshots(question);
+  const message = buildLineMarketFlexMessage(question, snapshots);
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyToken, messages: applyCampusSyncFlexFooters([message]) }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+    await recordLineDeliveryResponse(response, {
+      channel: 'reply', destinationType, destinationId, kind: 'campus_ai_market',
+      accessToken, messages: [message],
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('LINE market Flex reply failed:', response.status, detail.slice(0, 400));
+    }
+  } catch (error) {
+    console.error('LINE market Flex reply request failed:', error instanceof Error ? error.name : 'unknown error');
   }
 }
 
@@ -976,6 +1009,10 @@ async function handleLineEvents(
     if (isGroupOrRoom) {
       const destinationType = event.source?.type === 'room' ? 'room' : 'group';
       const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
+      if (hasTrigger && question && isLineMarketQuestion(question)) {
+        await replyLineMarket(event.replyToken, question, channelAccessToken, destinationType, destinationId || null);
+        return;
+      }
       if (destinationId) {
         // 「CSAI」で会話モードを開始。以降の通常メッセージもAIに渡す。
         if (hasTrigger && !question) {
@@ -1029,6 +1066,10 @@ async function handleLineEvents(
 
         // 起動後は接頭辞なしの通常メッセージも雑談AIへ渡す。
         if (!hasTrigger && await isLineGroupConversationActive(destinationId)) {
+          if (isLineMarketQuestion(messageText)) {
+            await replyLineMarket(event.replyToken, messageText, channelAccessToken, destinationType, destinationId);
+            return;
+          }
           const chatAnswer = await getLineGroupConversationAnswer(
             destinationId,
             event.source?.type === 'room' ? 'room' : 'group',
@@ -1054,6 +1095,19 @@ async function handleLineEvents(
 
     // グループで「CSAI」の後ろに本文がある場合は従来のCampusSync学校情報AIへ送る。
     // 「CSAI」単独は上の分岐で雑談AIが処理済み。1対1トークは従来どおり学校情報AIを使用する。
+
+    if (isLineMarketQuestion(question)) {
+      await replyLineMarket(
+        event.replyToken,
+        question,
+        channelAccessToken,
+        isGroupOrRoom ? (event.source?.type === 'room' ? 'room' : 'group') : 'user',
+        isGroupOrRoom
+          ? (event.source?.type === 'room' ? event.source?.roomId || null : event.source?.groupId || null)
+          : event.source?.userId || null,
+      );
+      return;
+    }
 
     const answer = await getCampusAiAnswer(question);
     await replyToLine(
