@@ -386,7 +386,7 @@ export async function POST(request: Request) {
       ],
     },
   };
-  const retryKey = retryKeyForWeek(weekStart);
+  const retryKey = manualRequest && !manualTodayRequest ? randomUUID() : retryKeyForWeek(weekStart);
   if (repairAndSendGroups) {
     const { data: registeredChats, error: chatsError } = await supabase
       .from('line_group_chats')
