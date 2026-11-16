@@ -25,7 +25,7 @@ export default function HiAdminPage() {
   const [hiadminPassword2, setHiadminPassword2] = useState('');
   const [hiadminPassword3, setHiadminPassword3] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database' | 'monitor'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database' | 'monitor' | 'security'>('overview');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<Account[]>([]);
   const [page, setPage] = useState(1);
@@ -233,7 +233,7 @@ export default function HiAdminPage() {
 
       {access === 'denied' && <section className="mx-auto max-w-lg rounded-3xl border border-rose-300/20 bg-rose-300/5 p-7 text-center"><LockKeyhole className="mx-auto mb-3 text-rose-300" size={32}/><h2 className="text-lg font-black">アクセスが許可されていません</h2><p className="mt-2 text-sm text-slate-400">このアカウントは最高管理者として登録されていません。</p><button onClick={() => void signOut()} className="mt-5 rounded-xl border border-white/10 px-4 py-2 text-xs">別のアカウントでログイン</button></section>}
 
-      {access === 'misconfigured' && <section className="mx-auto max-w-xl rounded-3xl border border-amber-300/20 bg-amber-300/5 p-7"><h2 className="font-black text-amber-100">最高管理者の初期設定が必要です</h2><p className="mt-2 text-sm leading-6 text-slate-300">Cloudflare WorkersのVariables and Secretsに <code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_EMAILS</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_2</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_3</code>、<code className="rounded bg-black/30 px-1">SUPABASE_SERVICE_ROLE_KEY</code> を設定してください。2つの追加パスワードは異なる16文字以上の秘密文字列にします。値はチャットに貼らず、Vercelだけに登録してください。</p></section>}
+      {access === 'misconfigured' && <section className="mx-auto max-w-xl rounded-3xl border border-amber-300/20 bg-amber-300/5 p-7"><h2 className="font-black text-amber-100">最高管理者の初期設定が必要です</h2><p className="mt-2 text-sm leading-6 text-slate-300">Cloudflare WorkersのVariables and Secretsに <code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_EMAILS</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_2</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_3</code>、<code className="rounded bg-black/30 px-1">SUPABASE_SERVICE_ROLE_KEY</code> を設定してください。2つの追加パスワードは異なる16文字以上の秘密文字列にします。値はチャットに貼らず、Cloudflare WorkersのSecretとしてのみ登録してください。</p></section>}
 
       {access === 'gate' && <section className="mx-auto max-w-md rounded-3xl border border-cyan-300/20 bg-white/[0.04] p-6">
         <div className="mb-5 flex items-center gap-3"><LockKeyhole className="text-cyan-200" size={24}/><div><h2 className="font-black">第2・第3段階：最高管理者専用パスワード</h2><p className="text-xs text-slate-400">{email}</p></div></div>

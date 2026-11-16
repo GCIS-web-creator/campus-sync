@@ -19,7 +19,7 @@ type DashboardData = {
   rotation: { active_bot_slot: number; next_switch_at: string; last_switched_at: string | null } | null;
   botEnvironment: Array<{ slot: number; channelSecretConfigured: boolean; accessTokenConfigured: boolean }>;
   groups: Array<{ chat_id: string; chat_type: string; active: boolean; bot_slot: number | null; last_seen_at: string }>;
-  dataWarnings?: string[]; note?: string; message?: string; dailyDigestAlertRegistered?: boolean;
+  dataWarnings?: string[]; note?: string; message?: string;
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -38,20 +38,9 @@ const jst = (value: string | null | undefined) => {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).format(date);
 };
-const isAiReply = (event: DeliveryEvent) => event.channel === 'reply' && /^campus_ai(?:_|$)/.test(event.kind || '');
-const deliveryClass = (event: DeliveryEvent): 'broadcast' | 'push' | 'ai_reply' | 'reply' | 'other' => {
-  if (event.channel === 'broadcast') return 'broadcast';
-  if (event.channel === 'push') return 'push';
-  if (event.channel === 'reply') return isAiReply(event) ? 'ai_reply' : 'reply';
-  return 'other';
-};
-const channelLabel = (event: DeliveryEvent) => {
-  const category = deliveryClass(event);
-  return category === 'broadcast' ? '公式アカウント一斉配信'
-    : category === 'push' ? (event.destination_type === 'room' ? 'LINEルームPush' : 'LINEグループPush')
-    : category === 'ai_reply' ? 'AI自動回答（Reply）'
-    : category === 'reply' ? '通常の個別返信（Reply）' : 'その他';
-};
+const channelLabel = (channel: string, destination: string) => channel === 'broadcast'
+  ? '公式アカウント一斉配信' : channel === 'reply' ? '個別返信'
+  : destination === 'room' ? 'LINEルーム送信' : 'LINEグループ送信';
 const destinationLabel = (event: DeliveryEvent) => {
   if (event.destination_type === 'official_account') return '公式アカウントの友だち全員';
   if (event.destination_type === 'user') return event.destination_id ? '個別ユーザー ·••' + event.destination_id.slice(-6) : '返信先ユーザー';
@@ -143,9 +132,7 @@ export default function LineDeliveryDashboard() {
   const events = data?.events || [];
   const filteredEvents = useMemo(() => events.filter(event => {
     if (statusFilter !== 'all' && event.status !== statusFilter) return false;
-    if (channelFilter === 'ai_reply' && deliveryClass(event) !== 'ai_reply') return false;
-    if (channelFilter === 'reply' && deliveryClass(event) !== 'reply') return false;
-    if (!['all', 'ai_reply', 'reply'].includes(channelFilter) && channelFilter !== 'all' && event.channel !== channelFilter) return false;
+    if (channelFilter !== 'all' && event.channel !== channelFilter) return false;
     if (botFilter !== 'all' && String(event.bot_slot ?? 'unknown') !== botFilter) return false;
     if (kindFilter !== 'all' && event.kind !== kindFilter) return false;
     const query = search.trim().toLocaleLowerCase();
@@ -164,8 +151,6 @@ export default function LineDeliveryDashboard() {
       total: filteredEvents.length, success, failed,
       broadcasts: filteredEvents.filter(event => event.channel === 'broadcast').length,
       groups: filteredEvents.filter(event => event.channel === 'push').length,
-      aiReplies: filteredEvents.filter(event => deliveryClass(event) === 'ai_reply').length,
-      ordinaryReplies: filteredEvents.filter(event => deliveryClass(event) === 'reply').length,
       replies: filteredEvents.filter(event => event.channel === 'reply').length,
       successRate: filteredEvents.length ? Math.round(success / filteredEvents.length * 100) : 0,
     };
@@ -176,18 +161,9 @@ export default function LineDeliveryDashboard() {
     const keys = Array.from({ length: range }, (_, index) => {
       const date = new Date(); date.setDate(date.getDate() - (range - 1 - index)); return dayKey(date);
     });
-    const counts = keys.map(key => {
-      const dayEvents = filteredEvents.filter(event => dayKey(new Date(event.sent_at)) === key);
-      return {
-        total: dayEvents.length,
-        broadcast: dayEvents.filter(event => deliveryClass(event) === 'broadcast').length,
-        push: dayEvents.filter(event => deliveryClass(event) === 'push').length,
-        ai: dayEvents.filter(event => deliveryClass(event) === 'ai_reply').length,
-        reply: dayEvents.filter(event => deliveryClass(event) === 'reply').length,
-      };
-    });
-    const max = Math.max(1, ...counts.map(item => item.total));
-    return keys.map((key, index) => ({ key, ...counts[index], height: Math.max(3, counts[index].total / max * 100), max }));
+    const counts = keys.map(key => filteredEvents.filter(event => dayKey(new Date(event.sent_at)) === key).length);
+    const max = Math.max(1, ...counts);
+    return keys.map((key, index) => ({ key, count: counts[index], height: Math.max(3, counts[index] / max * 100) }));
   }, [filteredEvents, range]);
 
   const kindCounts = useMemo(() => {
@@ -238,7 +214,7 @@ export default function LineDeliveryDashboard() {
 
   const exportCsv = () => {
     const columns = ['日時(JST)', '送信種類', 'カテゴリ', '内容', '送信先', 'BOT', '結果', 'HTTP', 'LINE Request ID', '本文'];
-    const rows = filteredEvents.map(event => [jst(event.sent_at), channelLabel(event),
+    const rows = filteredEvents.map(event => [jst(event.sent_at), channelLabel(event.channel, event.destination_type),
       KIND_LABELS[event.kind] || event.kind, event.title, destinationLabel(event),
       event.bot_slot === null ? '不明' : 'BOT ' + event.bot_slot, event.status === 'success' ? 'API受付成功' : '失敗',
       event.http_status ?? '', event.line_request_id || '', event.message_text || event.alt_text || '']);
@@ -297,11 +273,6 @@ export default function LineDeliveryDashboard() {
           </button>
         </div>
         {manualDigestMessage && <p role="status" className="mt-3 rounded-xl border border-slate-700 bg-slate-950/80 p-3 text-xs leading-5 text-slate-200">{manualDigestMessage}</p>}
-        <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5">
-          {data?.dailyDigestAlertRegistered
-            ? <p className="text-emerald-300">定期配信の失敗通知先：登録済み。この1対1トークに失敗通知と手動再送ボタンが届きます。</p>
-            : <p className="text-amber-200">定期配信の失敗通知先：未登録。LINE公式アカウントとの1対1トークで <code className="rounded bg-slate-800 px-1.5 py-0.5">CSAI 失敗通知登録</code> と送信してください。登録されると失敗通知・手動再送ボタンがこのトークに届きます。</p>}
-        </div>
       </section>
 
       {data?.dataWarnings?.map(warning => <div key={warning} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">{warning}</div>)}
@@ -310,36 +281,23 @@ export default function LineDeliveryDashboard() {
         {card('送信リクエスト', stats.total, '選択中の期間・絞り込み条件', <Activity size={17}/>)}
         {card('LINE API受付成功', stats.success, '成功率 ' + stats.successRate + '%', <CheckCircle2 size={17}/>)}
         {card('失敗・エラー', stats.failed, 'HTTPエラー・通信失敗', <AlertTriangle size={17}/>)}
-        {card('公式アカウント配信', stats.broadcasts, '友だち全員向けBroadcast', <RadioTower size={17}/>)}
-        {card('グループ・ルームPush', stats.groups, '送信先ごとのPush API', <Users size={17}/>)}
-        {card('AI自動回答', stats.aiReplies, 'campus_ai系のWebhook Reply', <MessageCircle size={17}/>)}
-        {card('通常の個別返信', stats.ordinaryReplies, 'AI以外のWebhook Reply', <MessageCircle size={17}/>)}
+        {card('公式アカウント配信', stats.broadcasts, '友だち全員向けbroadcast', <RadioTower size={17}/>)}
+        {card('グループ・ルーム送信', stats.groups, '送信先ごとのpush', <Users size={17}/>)}
+        {card('AIなど個別返信', stats.replies, 'Webhook reply', <MessageCircle size={17}/>)}
         {card('登録済みグループ', data?.groups?.filter(group => group.active).length || 0, '現在有効なグループ・ルーム', <Smartphone size={17}/>)}
         {card('表示BOT数', new Set(filteredEvents.map(event => event.bot_slot).filter(slot => slot !== null)).size, '履歴から確認できたBOT', <Send size={17}/>)}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
         <section className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-black text-white">日別・送信経路別リクエスト数</h3><span className="text-[11px] text-slate-500">JST・API受付試行数</span></div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px] text-slate-400">
-            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-cyan-500"/>Broadcast</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-sky-500"/>Push</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-violet-500"/>AI回答</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-emerald-500"/>通常返信</span>
-          </div>
-          <div className="mt-4 flex h-40 items-end gap-1.5 sm:gap-2">
+          <div className="flex items-center justify-between gap-3"><h3 className="font-black text-white">日別配信数</h3><span className="text-[11px] text-slate-500">JST・リクエスト件数</span></div>
+          <div className="mt-5 flex h-40 items-end gap-1.5 sm:gap-2">
             {daily.map(day => <div key={day.key} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
-              <span className="text-[10px] tabular-nums text-slate-400">{day.total || ''}</span>
-              <div className="flex h-28 w-full flex-col-reverse justify-start overflow-hidden rounded-t-md bg-slate-900">
-                <div className="w-full bg-cyan-500/85" style={{ height: (day.broadcast / day.max * 100) + '%' }}/>
-                <div className="w-full bg-sky-500/85" style={{ height: (day.push / day.max * 100) + '%' }}/>
-                <div className="w-full bg-violet-500/85" style={{ height: (day.ai / day.max * 100) + '%' }}/>
-                <div className="w-full bg-emerald-500/85" style={{ height: (day.reply / day.max * 100) + '%' }}/>
-              </div>
+              <span className="text-[10px] tabular-nums text-slate-400">{day.count || ''}</span>
+              <div className="flex h-28 w-full items-end overflow-hidden rounded-t-md bg-slate-900"><div className="w-full rounded-t-md bg-cyan-500/80" style={{ height: day.height + '%' }}/></div>
               <span className="text-[9px] text-slate-500">{day.key.slice(5).replace('-', '/')}</span>
             </div>)}
           </div>
-          <p className="mt-2 text-[10px] leading-5 text-slate-500">AI回答はkindがcampus_aiで始まる個別返信です。通常返信はそれ以外のReply APIです。受信した相手の発言数ではなく、送信した返信リクエスト数を集計しています。</p>
         </section>
         <section className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
           <h3 className="font-black text-white">配信カテゴリ別</h3>
@@ -372,7 +330,7 @@ export default function LineDeliveryDashboard() {
           <div><h3 className="font-black text-white">配信履歴・送信内容</h3><p className="mt-1 text-xs text-slate-500">検索・絞り込み後の一覧をCSV保存できます。</p></div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <label className="relative sm:col-span-2 xl:col-span-1"><Search size={14} className="absolute left-3 top-3 text-slate-500"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="内容・送信先・IDを検索" className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-3 text-xs text-white outline-none focus:border-cyan-500"/></label>
-            <select value={channelFilter} onChange={event => setChannelFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">すべての送信経路</option><option value="broadcast">公式アカウント一斉配信</option><option value="push">グループ・ルームPush</option><option value="ai_reply">AI自動回答</option><option value="reply">通常の個別返信</option></select>
+            <select value={channelFilter} onChange={event => setChannelFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">すべての送信先</option><option value="broadcast">公式アカウント</option><option value="push">グループ・ルーム</option><option value="reply">個別返信</option></select>
             <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">成功・失敗すべて</option><option value="success">API受付成功</option><option value="failure">失敗のみ</option></select>
             <select value={botFilter} onChange={event => setBotFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">全BOT</option><option value="0">旧BOT / 単独BOT</option><option value="1">BOT 1</option><option value="2">BOT 2</option><option value="3">BOT 3</option><option value="4">BOT 4</option><option value="5">BOT 5</option><option value="unknown">BOT不明</option></select>
             <select value={kindFilter} onChange={event => setKindFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white"><option value="all">全カテゴリ</option>{kinds.map(kind => <option key={kind} value={kind}>{KIND_LABELS[kind] || kind}</option>)}</select>
@@ -388,7 +346,7 @@ export default function LineDeliveryDashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={'rounded-full px-2 py-1 text-[10px] font-black ' + (ok ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300')}>{ok ? 'API受付成功' : '送信失敗'}</span>
-                      <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-bold text-cyan-200">{channelLabel(event)}</span>
+                      <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-bold text-cyan-200">{channelLabel(event.channel, event.destination_type)}</span>
                       <span className="text-[10px] text-slate-500">{KIND_LABELS[event.kind] || event.kind}</span>
                     </div>
                     <h4 className="mt-2 break-words text-sm font-black text-white">{event.title || event.alt_text || 'LINEメッセージ'}</h4>

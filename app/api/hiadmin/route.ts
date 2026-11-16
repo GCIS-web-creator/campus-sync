@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -254,40 +254,6 @@ export async function GET(request: Request) {
   const view = params.get('view') || 'overview';
 
   try {
-
-    if (view === 'daily-admin-code') {
-      const secret = process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET || process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
-      if (secret.length < 32) return fail('日付コード用Secretが未設定、または32文字未満です。Cloudflare WorkersのSecretを確認してください。', 503);
-
-      const now = new Date();
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
-      }).formatToParts(now);
-      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-      const date = String(values.year) + String(values.month) + String(values.day);
-      const digest = createHmac('sha256', secret).update('campussync-admin-date-code:v1:' + date).digest();
-      const suffix = String(digest.readUInt32BE(0) % 1_000_000).padStart(6, '0');
-      const dailyCode = date + '-' + suffix;
-
-      const { error: auditError } = await auth.admin.from('hiadmin_audit_logs').insert({
-        actor_user_id: auth.user.id,
-        actor_email: auth.user.email || '',
-        action: 'security.daily_admin_code.view',
-        details: { date_jst: date, secret_source: process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET ? 'dedicated_secret' : 'admin_password_fallback' },
-      });
-      if (auditError) {
-        console.error('HiAdmin daily code audit write failed:', auditError.message);
-        return fail('コード表示の監査ログを保存できないため、表示を中止しました。', 503);
-      }
-
-      return NextResponse.json({
-        success: true,
-        date,
-        dailyCode,
-        secretSource: process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET ? '専用Secret' : '従来のAdmin Secret',
-        expiresAtJst: date + ' 23:59:59',
-      }, { headers: { 'Cache-Control': 'no-store, private, max-age=0', 'Pragma': 'no-cache', 'Vary': 'Authorization' } });
-    }
 
     if (view === 'explorer-schema') {
       const schema = await getExplorerSchema(auth.admin);
