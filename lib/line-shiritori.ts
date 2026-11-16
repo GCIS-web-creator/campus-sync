@@ -165,10 +165,14 @@ export function isLineShiritoriStartCommand(input: string): boolean {
 
 export function isLineShiritoriStopCommand(input: string): boolean {
   const normalized = input.normalize('NFKC').replace(/[\s　]/g, '').replace(/[!！。]+$/g, '');
-  return /^(?:しりとり終了|ゲーム終了|やめる|やめよう|stop)$/i.test(normalized);
+  return /^(?:しりとり終了|ゲーム終了|やめる|やめよう)$/i.test(normalized);
 }
 
-export function isLineShiritoriControlCommand(input: string): boolean {\n  return isLineShiritoriStartCommand(input) || isLineShiritoriStopCommand(input);\n}\n\nexport function startLineShiritori(): LineShiritoriTurnResult {
+export function isLineShiritoriControlCommand(input: string): boolean {
+  return isLineShiritoriStartCommand(input) || isLineShiritoriStopCommand(input);
+}
+
+export function startLineShiritori(): LineShiritoriTurnResult {
   const firstWord = 'しりとり';
   return {
     answer: 'しりとり開始！まずは「' + firstWord + '」から。次は「り」ではじまる言葉を送ってね。ひらがな・カタカナで判定するよ（漢字は読みをひらがなにしてね）。',
