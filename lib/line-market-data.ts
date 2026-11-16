@@ -1,3 +1,5 @@
+export type LineMarketChartRange = '1d' | '5d' | '1mo' | '1y';
+
 export type LineMarketSnapshot = {
   assetType: 'forex' | 'stock' | 'index';
   status: 'ok' | 'reference' | 'unavailable';
@@ -14,12 +16,15 @@ export type LineMarketSnapshot = {
   marketState: string | null;
   source: string;
   note: string;
+  chartImageUrl?: string | null;
+  chartRange?: LineMarketChartRange;
 };
 
 type R = Record<string, unknown>;
 type FxTarget = { base: string; quote: string; yahoo: string; label: string };
 type EquityTarget = { symbol: string; label: string; assetType: 'stock' | 'index' };
 const cache = new Map<string, { expires: number; value: LineMarketSnapshot }>();
+const chartImageCache = new Map<string, { expires: number; url: string | null }>();
 
 const asRecord = (v: unknown): R | null => typeof v === 'object' && v !== null && !Array.isArray(v) ? v as R : null;
 const asNumber = (v: unknown): number | null => typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -42,7 +47,7 @@ function unavailable(type: LineMarketSnapshot['assetType'], label: string, symbo
 }
 
 export function isLineMarketQuestion(question: string): boolean {
-  return /為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY|株価|株式|株の値動き|株の動き|個別株|銘柄|日経平均|日経225|TOPIX|NASDAQ|ナスダック|S\s*&\s*P|SP500|ダウ平均|NYダウ|日本株|米国株|アメリカ株/i.test(question.normalize('NFKC'));
+  return /為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY|株価|株式|株の値動き|株の動き|個別株|銘柄|チャート|グラフ|株価推移|日経平均|日経225|TOPIX|NASDAQ|ナスダック|S\s*&\s*P|SP500|ダウ平均|NYダウ|日本株|米国株|アメリカ株/i.test(question.normalize('NFKC'));
 }
 
 const FX: Array<{ re: RegExp; value: FxTarget }> = [
@@ -67,11 +72,11 @@ function fxTargets(question: string): FxTarget[] {
 }
 
 const INDICES: Array<{ re: RegExp; value: EquityTarget }> = [
-  { re: /日経平均|日経225|日経\s*225/i, value: { symbol: '^N225', label: '日経平均株価', assetType: 'index' } },
-  { re: /TOPIX|東証株価指数/i, value: { symbol: '^TOPX', label: 'TOPIX', assetType: 'index' } },
-  { re: /S\s*&\s*P\s*500|SP500|S&P/i, value: { symbol: '^GSPC', label: 'S&P 500', assetType: 'index' } },
-  { re: /NASDAQ|ナスダック/i, value: { symbol: '^IXIC', label: 'NASDAQ総合指数', assetType: 'index' } },
-  { re: /NYダウ|ダウ平均|ダウ工業株/i, value: { symbol: '^DJI', label: 'NYダウ', assetType: 'index' } },
+  { re: /日経平均|日経225|日経\s*225|\^?N225/i, value: { symbol: '^N225', label: '日経平均株価', assetType: 'index' } },
+  { re: /TOPIX|東証株価指数|\^?TOPX/i, value: { symbol: '^TOPX', label: 'TOPIX', assetType: 'index' } },
+  { re: /S\s*&\s*P\s*500|SP500|S&P|\^?GSPC/i, value: { symbol: '^GSPC', label: 'S&P 500', assetType: 'index' } },
+  { re: /NASDAQ|ナスダック|\^?IXIC/i, value: { symbol: '^IXIC', label: 'NASDAQ総合指数', assetType: 'index' } },
+  { re: /NYダウ|ダウ平均|ダウ工業株|\^?DJI/i, value: { symbol: '^DJI', label: 'NYダウ', assetType: 'index' } },
 ];
 const KNOWN: Array<{ re: RegExp; value: EquityTarget }> = [
   { re: /キオクシア|KIOXIA|285A/i, value: { symbol: '285A.T', label: 'キオクシアホールディングス', assetType: 'stock' } },
@@ -142,6 +147,117 @@ async function yahooChart(symbol: string, type: LineMarketSnapshot['assetType'],
   });
 }
 
+
+export function getLineMarketChartRange(question: string): LineMarketChartRange {
+  const q = question.normalize('NFKC').toLowerCase();
+  if (/1日|1d|1day|当日/.test(q)) return '1d';
+  if (/1週間|1週|5日|5d|1week|1w/.test(q)) return '5d';
+  if (/1年|12か月|12ヶ月|1y|1year/.test(q)) return '1y';
+  return '1mo';
+}
+
+const CHART_RANGE_SETTINGS: Record<LineMarketChartRange, { range: string; interval: string; label: string }> = {
+  '1d': { range: '1d', interval: '5m', label: '1日' },
+  '5d': { range: '5d', interval: '30m', label: '1週間' },
+  '1mo': { range: '1mo', interval: '1d', label: '1か月' },
+  '1y': { range: '1y', interval: '1wk', label: '1年' },
+};
+
+async function yahooChartImageUrl(
+  symbol: string,
+  label: string,
+  range: LineMarketChartRange,
+): Promise<string | null> {
+  const cacheKey = symbol + ':' + range;
+  const cachedImage = chartImageCache.get(cacheKey);
+  if (cachedImage && cachedImage.expires > Date.now()) return cachedImage.url;
+
+  const settings = CHART_RANGE_SETTINGS[range];
+  const url = new URL('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol));
+  url.searchParams.set('range', settings.range);
+  url.searchParams.set('interval', settings.interval);
+  url.searchParams.set('includePrePost', 'false');
+  const payload = await yahooJson(url.toString());
+  const resultData = asRecord(payload?.chart);
+  const result = asRecord(Array.isArray(resultData?.result) ? resultData.result[0] : null);
+  const indicators = asRecord(result?.indicators);
+  const quote = asRecord(Array.isArray(indicators?.quote) ? indicators.quote[0] : null);
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const closes = Array.isArray(quote?.close) ? quote.close : [];
+  const rows = timestamps.flatMap((timestamp, index) => {
+    const epoch = asNumber(timestamp);
+    const close = asNumber(closes[index]);
+    return epoch !== null && close !== null ? [{ epoch, close }] : [];
+  });
+  if (rows.length < 2) {
+    chartImageCache.set(cacheKey, { expires: Date.now() + 30_000, url: null });
+    return null;
+  }
+
+  const maxPoints = range === '1d' ? 12 : range === '5d' ? 14 : 16;
+  const count = Math.min(maxPoints, rows.length);
+  const selected = Array.from({ length: count }, (_, index) =>
+    rows[Math.round(index * (rows.length - 1) / Math.max(1, count - 1))]
+  );
+  const dateOptions: Intl.DateTimeFormatOptions = range === '1d'
+    ? { hour: '2-digit', minute: '2-digit' }
+    : range === '1y'
+      ? { year: '2-digit', month: '2-digit' }
+      : { month: '2-digit', day: '2-digit' };
+  const labels = selected.map(row => new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', ...dateOptions,
+  }).format(new Date(row.epoch * 1000)));
+  const values = selected.map(row => Number(row.close.toFixed(4)));
+  const rising = selected[selected.length - 1].close >= selected[0].close;
+  const lineColor = rising ? '#DC2626' : '#2563EB';
+  const chartConfig = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: lineColor,
+        backgroundColor: rising ? 'rgba(220,38,38,0.10)' : 'rgba(37,99,235,0.10)',
+        borderWidth: 3,
+        pointRadius: 0,
+        pointHitRadius: 8,
+        tension: 0.28,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: label.slice(0, 48) + ' ・ ' + settings.label },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0 } },
+        y: { grid: { color: '#E2E8F0' }, ticks: { maxTicksLimit: 5 } },
+      },
+    },
+  };
+  const chartUrl = new URL('https://quickchart.io/chart');
+  chartUrl.searchParams.set('width', '900');
+  chartUrl.searchParams.set('height', '360');
+  chartUrl.searchParams.set('format', 'png');
+  chartUrl.searchParams.set('version', '4');
+  chartUrl.searchParams.set('backgroundColor', 'white');
+  chartUrl.searchParams.set('chart', JSON.stringify(chartConfig));
+  const resultUrl = chartUrl.toString().length <= 2000 ? chartUrl.toString() : null;
+  chartImageCache.set(cacheKey, { expires: Date.now() + 60_000, url: resultUrl });
+  return resultUrl;
+}
+
+async function attachMarketChart(
+  snapshot: LineMarketSnapshot,
+  range: LineMarketChartRange,
+): Promise<LineMarketSnapshot> {
+  if (snapshot.status !== 'ok' || !snapshot.symbol) return snapshot;
+  const chartImageUrl = await yahooChartImageUrl(snapshot.symbol, snapshot.label, range);
+  return { ...snapshot, chartImageUrl, chartRange: range };
+}
+
 async function frankfurter(target: FxTarget): Promise<LineMarketSnapshot> {
   const key = 'frankfurter:' + target.base + ':' + target.quote;
   const found = cached(key); if (found) return found;
@@ -182,7 +298,7 @@ async function fxSnapshot(target: FxTarget): Promise<LineMarketSnapshot> {
 
 function stockSearchText(question: string): string {
   return question.normalize('NFKC')
-    .replace(/今日|きょう|現在|いま|今|最新|直近|の株価|株価|株式|銘柄|株|値動き|動き|教えて|見せて|知りたい|いくら|どうなってる|を|の|は|が|って|お願い|ください|ですか|です|[？?。！!、,]/gi, '')
+    .replace(/今日|きょう|現在|いま|今|最新|直近|の株価|株価|株式|銘柄|株|値動き|動き|チャート|グラフ|株価推移|過去|期間|1週間|1週|5日|1か月|1ヶ月|1年|1日|1week|1day|1year|1w|5d|1mo|1y|1d|教えて|見せて|知りたい|いくら|どうなってる|を|の|は|が|って|お願い|ください|ですか|です|[？?。！!、,]/gi, '')
     .replace(/[\s　]/g, '').trim();
 }
 
@@ -229,19 +345,23 @@ function indexTargets(question: string): EquityTarget[] {
 
 export async function getLineMarketSnapshots(question: string): Promise<LineMarketSnapshot[]> {
   const q = question.normalize('NFKC');
-  if (/為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY/i.test(q)) {
-    return Promise.all(fxTargets(q).map(fxSnapshot));
+  const chartRange = getLineMarketChartRange(q);
+  if (/為替|通貨|forex|\\bfx\\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\\s*\\/?\\s*JPY|EUR\\s*\\/?\\s*(?:JPY|USD)|GBP\\s*\\/?\\s*(?:JPY|USD)|AUD\\s*\\/?\\s*JPY/i.test(q)) {
+    const snapshots = await Promise.all(fxTargets(q).map(fxSnapshot));
+    return Promise.all(snapshots.map(snapshot => attachMarketChart(snapshot, chartRange)));
   }
   const specificIndex = INDICES.some(x => x.re.test(q));
   const stockQuery = stockSearchText(q);
   if (specificIndex || /日本株|米国株|アメリカ株|国内株|株式市場/i.test(q) || !stockQuery) {
-    return Promise.all(indexTargets(q).map(async target =>
+    const snapshots = await Promise.all(indexTargets(q).map(async target =>
       await yahooChart(target.symbol, target.assetType, target.label)
       || unavailable(target.assetType, target.label, target.symbol, '指数データを取得できませんでした。時間をおいてもう一度お試しください。')
     ));
+    return Promise.all(snapshots.map(snapshot => attachMarketChart(snapshot, chartRange)));
   }
   const target = await searchStock(q);
   if (!target) return [unavailable('stock', '銘柄を特定できませんでした', '', '会社名・銘柄コード・指数名を指定してください。例：トヨタ、7203、日経平均、Apple。')];
-  return [await yahooChart(target.symbol, target.assetType, target.label)
-    || unavailable(target.assetType, target.label, target.symbol, 'この銘柄の価格データを取得できませんでした。銘柄名やコードを確認してください。')];
+  const snapshot = await yahooChart(target.symbol, target.assetType, target.label)
+    || unavailable(target.assetType, target.label, target.symbol, 'この銘柄の価格データを取得できませんでした。銘柄名やコードを確認してください。');
+  return [await attachMarketChart(snapshot, chartRange)];
 }
