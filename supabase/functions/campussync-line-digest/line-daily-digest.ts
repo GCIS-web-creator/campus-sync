@@ -882,7 +882,7 @@ export async function POST(request: Request) {
   const inDispatchWindow = isSaturday
     ? currentHour === 12 && currentMinute >= 30 && currentMinute < 40
     : currentHour === 16 && currentMinute < 10;
-  if (!manualRequest && !replayRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
+  if (!manualRequest && !replayRequest && !buttonRetryRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
     return NextResponse.json({ success: true, skipped: true, message: '平日16:00・土曜12:30に配信します。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const todayLabel = Number(nowParts.month)+'月'+Number(nowParts.day)+'日';

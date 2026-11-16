@@ -1150,12 +1150,12 @@ async function handleLineEvents(
     if (event.type !== 'message' || event.message?.type !== 'text') return;
     if (typeof event.replyToken !== 'string' || !event.replyToken) return;
     const messageText = typeof event.message.text === 'string' ? event.message.text.trim() : '';
+    const digestAlertHandled = await handleDailyDigestFailureAlertCommand(event, event.replyToken, messageText, channelAccessToken);
+    if (digestAlertHandled) return;
     const miniTestHandled = await handleLineMiniTestRegistration(event, event.replyToken, messageText, channelAccessToken);
     if (miniTestHandled) return;
     const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
-    const digestAlertHandled = await handleDailyDigestFailureAlertCommand(event, event.replyToken, messageText, channelAccessToken);
-    if (digestAlertHandled) return;
 
     // 1対1トークは従来どおり学校情報AIへ。グループ・ルームはCSAI接頭辞がある発言だけを扱う。
     const trigger = 'CSAI';
