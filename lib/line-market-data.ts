@@ -346,7 +346,7 @@ function indexTargets(question: string): EquityTarget[] {
 export async function getLineMarketSnapshots(question: string): Promise<LineMarketSnapshot[]> {
   const q = question.normalize('NFKC');
   const chartRange = getLineMarketChartRange(q);
-  if (/為替|通貨|forex|\\bfx\\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\\s*\\/?\\s*JPY|EUR\\s*\\/?\\s*(?:JPY|USD)|GBP\\s*\\/?\\s*(?:JPY|USD)|AUD\\s*\\/?\\s*JPY/i.test(q)) {
+  if (/為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY/i.test(q)) {
     const snapshots = await Promise.all(fxTargets(q).map(fxSnapshot));
     return Promise.all(snapshots.map(snapshot => attachMarketChart(snapshot, chartRange)));
   }
