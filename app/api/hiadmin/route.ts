@@ -117,6 +117,8 @@ const EXPLORER_TABLE_INFO: Record<string, { label: string; group: string; descri
   contribution_history: { label: '貢献ポイント履歴', group: '生徒・アカウント', description: 'ポイント増減の理由・増減値・処理後スコアを記録します。' },
   contribution_scores: { label: '貢献ポイント現在値', group: '生徒・アカウント', description: '生徒ごとの現在の貢献ポイントです。' },
   hiadmin_audit_logs: { label: 'HighAdmin操作監査ログ', group: 'システム・認証', description: '最高管理者が実行した操作の証跡です。改ざん防止のため編集できません。' },
+  admin_auth_audit_logs: { label: '管理者ログイン監査ログ', group: 'システム・認証', description: '通常管理者ログインの成功・失敗・ロック・ログアウト履歴です。IPアドレスはハッシュ化して保存します。証跡保全のため編集できません。' },
+  admin_login_attempts: { label: '管理者ログイン失敗・ロック状態', group: 'システム・認証', description: '接続元ごとの連続失敗回数と一時ロック状態です。IPアドレスはハッシュ化して保存します。' },
   hiadmin_gate_attempts: { label: 'HighAdmin認証試行', group: 'システム・認証', description: '追加認証の失敗回数・一時ロック状態です。セキュリティ保護のため編集できません。' },
   jma_earthquake_notifications: { label: '地震通知履歴', group: '気象・防災', description: '地震に関するLINE通知内容・送信結果・再送情報です。' },
   jma_earthquake_reports: { label: '気象庁の地震情報取得履歴', group: '気象・防災', description: '気象庁から取得した地震情報の識別子・発表日時・取得日時です。' },
