@@ -42,7 +42,7 @@ function unavailable(type: LineMarketSnapshot['assetType'], label: string, symbo
 }
 
 export function isLineMarketQuestion(question: string): boolean {
-  return /為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY|株価|株式|銘柄|日経平均|日経225|TOPIX|NASDAQ|ナスダック|S\s*&\s*P|SP500|ダウ平均|NYダウ|日本株|米国株|アメリカ株/i.test(question.normalize('NFKC'));
+  return /為替|通貨|forex|\bfx\b|ドル|ユーロ|ポンド|円安|円高|豪ドル|スイスフラン|カナダドル|NZドル|USD\s*\/?\s*JPY|EUR\s*\/?\s*(?:JPY|USD)|GBP\s*\/?\s*(?:JPY|USD)|AUD\s*\/?\s*JPY|株価|株式|株の値動き|株の動き|個別株|銘柄|日経平均|日経225|TOPIX|NASDAQ|ナスダック|S\s*&\s*P|SP500|ダウ平均|NYダウ|日本株|米国株|アメリカ株/i.test(question.normalize('NFKC'));
 }
 
 const FX: Array<{ re: RegExp; value: FxTarget }> = [
