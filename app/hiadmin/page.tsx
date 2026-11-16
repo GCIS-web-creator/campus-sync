@@ -34,6 +34,11 @@ export default function HiAdminPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [logs, setLogs] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dailyCode, setDailyCode] = useState('');
+  const [dailyCodeDate, setDailyCodeDate] = useState('');
+  const [dailyCodeSource, setDailyCodeSource] = useState('');
+  const [dailyCodeVisible, setDailyCodeVisible] = useState(false);
+  const [dailyCodeLoading, setDailyCodeLoading] = useState(false);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -168,7 +173,22 @@ export default function HiAdminPage() {
     finally { setLoading(false); }
   };
 
-  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database' | 'monitor') => {
+  const revealDailyCode = async () => {
+    setDailyCodeLoading(true); setMessage('');
+    try {
+      const data = await api('view=daily-admin-code');
+      setDailyCode(String(data.dailyCode || ''));
+      setDailyCodeDate(String(data.date || ''));
+      setDailyCodeSource(String(data.secretSource || ''));
+      setDailyCodeVisible(true);
+    } catch (error) {
+      setDailyCode(''); setDailyCodeVisible(false);
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally { setDailyCodeLoading(false); }
+  };
+
+  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database' | 'monitor' | 'security') => {
+    if (next !== 'security') { setDailyCode(''); setDailyCodeVisible(false); }
     setTab(next);
     if (next === 'users') void loadUsers(1, '');
     if (next === 'audit') void loadLogs();
@@ -178,7 +198,7 @@ export default function HiAdminPage() {
   const signOut = async () => {
     await supabase.auth.signOut();
     setToken(''); setAccess('login'); setUsers([]); setDetail(null); setOverview(null);
-    setHiadminPassword2(''); setHiadminPassword3(''); setLoginPassword(''); setMessage('ログアウトしました。');
+    setHiadminPassword2(''); setHiadminPassword3(''); setLoginPassword(''); setDailyCode(''); setDailyCodeVisible(false); setMessage('ログアウトしました。');
   };
 
   const summaryCards = [
@@ -213,7 +233,7 @@ export default function HiAdminPage() {
 
       {access === 'denied' && <section className="mx-auto max-w-lg rounded-3xl border border-rose-300/20 bg-rose-300/5 p-7 text-center"><LockKeyhole className="mx-auto mb-3 text-rose-300" size={32}/><h2 className="text-lg font-black">アクセスが許可されていません</h2><p className="mt-2 text-sm text-slate-400">このアカウントは最高管理者として登録されていません。</p><button onClick={() => void signOut()} className="mt-5 rounded-xl border border-white/10 px-4 py-2 text-xs">別のアカウントでログイン</button></section>}
 
-      {access === 'misconfigured' && <section className="mx-auto max-w-xl rounded-3xl border border-amber-300/20 bg-amber-300/5 p-7"><h2 className="font-black text-amber-100">最高管理者の初期設定が必要です</h2><p className="mt-2 text-sm leading-6 text-slate-300">VercelのProduction環境変数に <code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_EMAILS</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_2</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_3</code>、<code className="rounded bg-black/30 px-1">SUPABASE_SERVICE_ROLE_KEY</code> を設定してください。2つの追加パスワードは異なる16文字以上の秘密文字列にします。値はチャットに貼らず、Vercelだけに登録してください。</p></section>}
+      {access === 'misconfigured' && <section className="mx-auto max-w-xl rounded-3xl border border-amber-300/20 bg-amber-300/5 p-7"><h2 className="font-black text-amber-100">最高管理者の初期設定が必要です</h2><p className="mt-2 text-sm leading-6 text-slate-300">Cloudflare WorkersのVariables and Secretsに <code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_EMAILS</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_2</code>、<code className="rounded bg-black/30 px-1">CAMPUS_SYNC_HIADMIN_PASSWORD_3</code>、<code className="rounded bg-black/30 px-1">SUPABASE_SERVICE_ROLE_KEY</code> を設定してください。2つの追加パスワードは異なる16文字以上の秘密文字列にします。値はチャットに貼らず、Vercelだけに登録してください。</p></section>}
 
       {access === 'gate' && <section className="mx-auto max-w-md rounded-3xl border border-cyan-300/20 bg-white/[0.04] p-6">
         <div className="mb-5 flex items-center gap-3"><LockKeyhole className="text-cyan-200" size={24}/><div><h2 className="font-black">第2・第3段階：最高管理者専用パスワード</h2><p className="text-xs text-slate-400">{email}</p></div></div>
@@ -226,8 +246,25 @@ export default function HiAdminPage() {
       </section>}
 
       {access === 'ready' && <>
-        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'monitor',label:'運用監視'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
+        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'monitor',label:'運用監視'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'},{id:'security',label:'セキュリティ'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
 
+        {tab === 'security' && <section className="max-w-3xl space-y-5">
+          <div><h2 className="text-lg font-black">当日の6桁確認コード</h2><p className="mt-2 text-xs leading-6 text-slate-400">この画面でのみ、最高管理者の3段階認証を再確認してからサーバー側で生成します。コード自体はデータベースやログへ保存しません。表示した操作のみ監査ログに記録します。</p></div>
+          <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-xs font-bold text-amber-100">本日（日本時間）の確認コード</p><p className="mt-1 text-[11px] text-slate-400">毎日 00:00（JST）に切り替わります。画面共有やスクリーンショットに注意してください。</p></div>
+              <button type="button" onClick={() => void revealDailyCode()} disabled={dailyCodeLoading} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">{dailyCodeLoading ? '確認中…' : dailyCode ? '今日のコードを再確認' : '今日のコードを表示'}</button>
+            </div>
+            {dailyCodeVisible && dailyCode && <div className="mt-5 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <p className="text-[10px] font-bold tracking-widest text-slate-500">DATE CODE · {dailyCodeDate}</p>
+              <p className="mt-2 font-mono text-3xl font-black tracking-[0.18em] text-emerald-200">{dailyCode.split('-')[1] || '------'}</p>
+              <p className="mt-3 break-all font-mono text-xs text-slate-400">ログイン入力形式：{dailyCode}</p>
+              <p className="mt-2 text-[10px] text-slate-500">生成元：{dailyCodeSource} ／ 有効期限：日本時間23:59:59</p>
+              <button type="button" onClick={() => setDailyCodeVisible(false)} className="mt-4 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">コードを隠す</button>
+            </div>}
+          </div>
+          <p className="text-[11px] leading-5 text-slate-500">通常Adminのログインセッションだけでは取得できません。Supabaseログイン・許可メール照合・第2/第3パスワードを毎回サーバー側で検証し、監査ログの保存に失敗した場合はコードを表示しません。</p>
+        </section>}
         {tab === 'overview' && <section><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">システムデータ概要</h2><p className="text-xs text-slate-400">個別本文ではなく、管理対象の件数のみ表示します。</p></div><button onClick={() => void checkAccess()} className="rounded-xl border border-white/10 p-2"><RefreshCw size={16}/></button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaryCards.map(([label,value,Icon]) => <article key={label} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5"><div className="flex justify-between text-xs font-bold text-slate-400"><span>{label}</span><Icon size={18} className="text-cyan-300"/></div><p className="mt-3 text-3xl font-black tabular-nums">{value.toLocaleString('ja-JP')}</p></article>)}</div><div className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={17}/><b className="text-sm">保護状態</b></div><p className="mt-2 text-xs leading-5 text-slate-300">学校メール許可リストと3段階の認証をサーバー側で確認しています。パスワード・ハッシュ・チャット本文は画面に出力しません。</p></div></section>}
 
         {tab === 'monitor' && <HiAdminSystemMonitor token={token} password2={hiadminPassword2} password3={hiadminPassword3} />}

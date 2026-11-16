@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       .select('id,delivery_batch_id,kind,chat_id,chat_type,bot_slot,status,http_status,error_message,sent_at')
       .gte('sent_at', since).order('sent_at', { ascending: false }).limit(1000),
     admin.from('line_bot_rotation')
-      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at').eq('id', 1).maybeSingle(),
+      .select('active_bot_slot,next_switch_at,last_switched_at,rotation_hold_until,updated_at,daily_digest_alert_user_id').eq('id', 1).maybeSingle(),
     admin.from('line_group_chats')
       .select('chat_id,chat_type,active,bot_slot,last_seen_at').order('last_seen_at', { ascending: false }).limit(100),
   ]);
@@ -86,6 +86,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     success: true, days, since, events, rotation: rotationResult.data || null,
+    dailyDigestAlertRegistered: Boolean(String(rotationResult.data?.daily_digest_alert_user_id || '').trim()),
     botEnvironment: getLineBotEnvironmentStatus(), groups: chatsResult.data || [],
     dataWarnings: [
       ...(groupResult.error ? ['グループ別の旧配信ログを読み込めませんでした。'] : []),
