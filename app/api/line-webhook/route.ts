@@ -10,6 +10,7 @@ import { buildCampusAiFlexMessage } from '@/lib/line-flex';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
 import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
+import { LINE_GROUP_SHIRITORI_STATE_PREFIX, isLineShiritoriControlCommand, isLineShiritoriStartCommand, startLineShiritori, takeLineShiritoriTurn, type LineShiritoriState } from '@/lib/line-shiritori';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -234,6 +235,51 @@ async function generateLineGroupAiAnswer(ai: WorkersAiBinding | undefined, histo
   return answer.slice(0, 600);
 }
 
+
+function getLineGroupShiritoriState(messages: unknown[]): LineShiritoriState | null {
+  const marker = messages.find(item =>
+    Boolean(item && typeof item === 'object')
+    && (item as Record<string, unknown>).role === 'system'
+    && typeof (item as Record<string, unknown>).content === 'string'
+    && String((item as Record<string, unknown>).content).startsWith(LINE_GROUP_SHIRITORI_STATE_PREFIX)
+  ) as Record<string, unknown> | undefined;
+  if (!marker || typeof marker.content !== 'string') return null;
+  try {
+    const value = JSON.parse(marker.content.slice(LINE_GROUP_SHIRITORI_STATE_PREFIX.length)) as Record<string, unknown>;
+    if (typeof value.lastWord !== 'string' || typeof value.nextKana !== 'string'
+      || !/^[ぁ-ゖ]$/u.test(value.nextKana)
+      || !Array.isArray(value.usedWords)
+      || !value.usedWords.every(word => typeof word === 'string')
+      || typeof value.turns !== 'number' || !Number.isFinite(value.turns)) return null;
+    return {
+      lastWord: value.lastWord.slice(0, 40),
+      nextKana: value.nextKana,
+      usedWords: (value.usedWords as string[]).slice(-200),
+      turns: Math.max(0, Math.floor(value.turns)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function isLineGroupShiritoriActive(chatId: string): Promise<boolean> {
+  const admin = getLineAssignmentAdmin();
+  if (!admin) return false;
+  const { data, error } = await admin
+    .from('line_ai_group_conversations')
+    .select('messages, expires_at')
+    .eq('chat_id', chatId)
+    .maybeSingle();
+  if (error) {
+    console.error('LINE group AI shiritori state lookup failed:', error.message);
+    return false;
+  }
+  const expiresAt = Date.parse(String(data?.expires_at || ''));
+  return Number.isFinite(expiresAt) && expiresAt > Date.now()
+    && Array.isArray(data?.messages)
+    && getLineGroupShiritoriState(data.messages as unknown[]) !== null;
+}
+
 function hasActiveLineGroupConversation(messages: unknown): boolean {
   return Array.isArray(messages) && messages.some(item =>
     Boolean(item && typeof item === 'object')
@@ -316,22 +362,40 @@ async function getLineGroupConversationAnswer(
     }));
 
   let answer: string;
-  try {
-    answer = await generateLineGroupAiAnswer(ai, history, question);
-  } catch (error) {
-    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    console.error('LINE group AI generation failed:', detail.slice(0, 500));
-    if (detail.includes('AI binding is missing')) {
-      return '雑談AIの設定がCloudflare Workerに読み込まれていません。（AI-101）';
+  let handledShiritori = false;
+  let nextShiritoriState = getLineGroupShiritoriState(storedMessages);
+  if (isLineShiritoriStartCommand(question)) {
+    const result = startLineShiritori();
+    answer = result.answer;
+    nextShiritoriState = result.state;
+    handledShiritori = true;
+  } else if (nextShiritoriState) {
+    const result = takeLineShiritoriTurn(question, nextShiritoriState);
+    answer = result.answer;
+    nextShiritoriState = result.state;
+    handledShiritori = true;
+  } else {
+    try {
+      answer = await generateLineGroupAiAnswer(ai, history, question);
+    } catch (error) {
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      console.error('LINE group AI generation failed:', detail.slice(0, 500));
+      if (detail.includes('AI binding is missing')) {
+        return '雑談AIの設定がCloudflare Workerに読み込まれていません。（AI-101）';
+      }
+      if (detail.includes('no supported text field')) {
+        return '雑談AIから応答を受け取りましたが、文章を読み取れませんでした。（AI-103）';
+      }
+      return '雑談AIの生成処理でエラーが発生しました。（AI-102）';
     }
-    if (detail.includes('no supported text field')) {
-      return '雑談AIから応答を受け取りましたが、文章を読み取れませんでした。（AI-103）';
-    }
-    return '雑談AIの生成処理でエラーが発生しました。（AI-102）';
   }
 
   const nextHistory: StoredLineGroupAiMessage[] = [
     ...(chatModeActive ? [{ role: 'system' as const, content: LINE_GROUP_AI_ACTIVE_MARKER }] : []),
+    ...(nextShiritoriState ? [{
+      role: 'system' as const,
+      content: LINE_GROUP_SHIRITORI_STATE_PREFIX + JSON.stringify(nextShiritoriState),
+    }] : []),
     ...[
       ...history,
       { role: 'user' as const, content: question.slice(0, 300) },
@@ -349,7 +413,7 @@ async function getLineGroupConversationAnswer(
     .eq('chat_id', chatId);
   if (saveError) console.error('LINE group AI history save failed:', saveError.message);
 
-  if (history.length === 0) {
+  if (history.length === 0 && !handledShiritori) {
     return answer + '\n\n会話の文脈は直近3往復・最長24時間だけ保存します。個人情報は送らないでください。「CSAI リセット」で履歴を消せます。';
   }
   return answer;
@@ -1011,6 +1075,27 @@ async function handleLineEvents(
       const destinationId = event.source?.type === 'room' ? event.source?.roomId : event.source?.groupId;
       if (hasTrigger && question && isLineMarketQuestion(question)) {
         await replyLineMarket(event.replyToken, question, channelAccessToken, destinationType, destinationId || null);
+        return;
+      }
+      if (destinationId && hasTrigger && question
+        && (isLineShiritoriControlCommand(question) || await isLineGroupShiritoriActive(destinationId))) {
+        const chatAnswer = await getLineGroupConversationAnswer(
+          destinationId,
+          event.source?.type === 'room' ? 'room' : 'group',
+          botSlot,
+          question,
+          ai,
+          true,
+        );
+        await replyPlain(
+          event.replyToken,
+          chatAnswer,
+          channelAccessToken,
+          [],
+          'campus_ai_chat',
+          destinationType,
+          destinationId,
+        );
         return;
       }
       if (destinationId) {
