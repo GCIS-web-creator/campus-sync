@@ -33,10 +33,14 @@ jobs:
         if: github.ref == 'refs/heads/cloudflare-workers-migration'
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - run: npm ci
+      # The LINE webhook imports getCloudflareContext directly, so this package is needed
+      # even for the ordinary Next.js compile step.
+      - name: Install OpenNext runtime used by the LINE webhook
+        run: npm run cloudflare:install
       - run: npm run build
       - name: Build Cloudflare Worker
         if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
-        run: npm run cloudflare:build
+        run: npx opennextjs-cloudflare build
       - name: Validate Worker bundle without deploying
         if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: npx wrangler deploy --dry-run

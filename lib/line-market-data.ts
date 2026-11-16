@@ -232,7 +232,8 @@ export async function getLineMarketSnapshots(question: string): Promise<LineMark
     return Promise.all(fxTargets(q).map(fxSnapshot));
   }
   const specificIndex = INDICES.some(x => x.re.test(q));
-  if (specificIndex || /日本株|米国株|アメリカ株|国内株|株価|株式市場/i.test(q)) {
+  const stockQuery = stockSearchText(q);
+  if (specificIndex || /日本株|米国株|アメリカ株|国内株|株式市場/i.test(q) || !stockQuery) {
     return Promise.all(indexTargets(q).map(async target =>
       await yahooChart(target.symbol, target.assetType, target.label)
       || unavailable(target.assetType, target.label, target.symbol, '指数データを取得できませんでした。時間をおいてもう一度お試しください。')
