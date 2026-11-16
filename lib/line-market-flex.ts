@@ -1,4 +1,4 @@
-import type { LineMarketSnapshot } from '@/lib/line-market-data';
+import { getLineMarketChartRange, type LineMarketSnapshot, type LineMarketChartRange } from '@/lib/line-market-data';
 
 function formatPrice(value: number, currency: string, type: LineMarketSnapshot['assetType']): string {
   if (type === 'index') return new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 }).format(value) + ' pt';
@@ -24,7 +24,14 @@ function timestamp(value: string | null): string {
     timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(date) + '（日本時間）';
 }
-function bubble(item: LineMarketSnapshot): Record<string, unknown> {
+const CHART_PERIODS: Array<{ range: LineMarketChartRange; label: string }> = [
+  { range: '1d', label: '1日' },
+  { range: '5d', label: '1週間' },
+  { range: '1mo', label: '1か月' },
+  { range: '1y', label: '1年' },
+];
+
+function bubble(item: LineMarketSnapshot, question: string): Record<string, unknown> {
   const unavailable = item.status === 'unavailable';
   const reference = item.status === 'reference';
   const positive = item.change !== null && item.change >= 0;
@@ -46,6 +53,24 @@ function bubble(item: LineMarketSnapshot): Record<string, unknown> {
         { type: 'text', text: formatChange(item), size: 'md', color: priceColor, weight: 'bold', wrap: true },
       ] },
     );
+    if (item.chartImageUrl) {
+      const selectedRange = item.chartRange || getLineMarketChartRange(question);
+      const lookup = item.symbol || item.label;
+      body.push(
+        { type: 'text', text: '株価チャート', size: 'sm', color: '#334155', weight: 'bold', margin: 'md' },
+        { type: 'image', url: item.chartImageUrl, size: 'full', aspectRatio: '20:9', aspectMode: 'fit', margin: 'xs' },
+        {
+          type: 'box', layout: 'horizontal', spacing: 'xs', margin: 'sm',
+          contents: CHART_PERIODS.map(period => ({
+            type: 'button',
+            style: selectedRange === period.range ? 'primary' : 'secondary',
+            height: 'sm',
+            flex: 1,
+            action: { type: 'message', label: period.label, text: 'CSAI ' + lookup + ' チャート ' + period.label },
+          })),
+        },
+      );
+    }
     const stats: Record<string, unknown>[] = [];
     if (item.previousClose !== null) stats.push({ type: 'box', layout: 'horizontal', justifyContent: 'space-between', contents: [
       { type: 'text', text: '前日終値', size: 'xs', color: '#64748B', flex: 2 },
@@ -82,12 +107,12 @@ function bubble(item: LineMarketSnapshot): Record<string, unknown> {
 }
 
 export function buildLineMarketFlexMessage(question: string, snapshots: LineMarketSnapshot[]) {
-  const cards = snapshots.slice(0, 5).map(bubble);
+  const cards = snapshots.slice(0, 5).map(item => bubble(item, question));
   const contents = cards.length > 1 ? { type: 'carousel', contents: cards } : cards[0] || bubble({
     assetType: 'stock', status: 'unavailable', label: '市場データ', symbol: '', price: null, currency: '',
     previousClose: null, change: null, changePercent: null, dayHigh: null, dayLow: null,
     marketTime: null, marketState: null, source: '', note: '市場データを取得できませんでした。',
-  });
+  }, question);
   const summary = snapshots.map(x => x.status === 'unavailable' ? x.label + '：取得不可' : x.label + '：' + formatPrice(x.price as number, x.currency, x.assetType)).join(' ／ ');
   return { type: 'flex' as const, altText: ('CampusSync 市場情報｜' + question + '｜' + summary).slice(0, 400), contents };
 }
