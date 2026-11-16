@@ -21,6 +21,10 @@ type AssignmentDigestRow = { id: string; title: string; details: string | null; 
 type ScheduleChangeDigestRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string };
 type SchoolExamRangeSection = { title: string; body: string; note?: string | null };
 type SchoolExamRangeDigestRow = { subject: string; display_subject: string; audience: string; range_sections: SchoolExamRangeSection[]; sort_order: number };
+type SchoolExamSubjectScheduleRow = { exam_id: string; subject: string; exam_date: string; sort_order: number };
+type SchoolTestExamQueryRow = { id: string; target_classes: string[] | null };
+type SchoolExamRangeQueryRow = SchoolExamRangeDigestRow & { exam_id: string };
+const EXAM_SCHEDULE_ANNOUNCEMENT_DATE = '2026-11-16';
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -75,6 +79,13 @@ function daysUntil(today: string, eventDate: string): number {
   const a = today.split('-').map(Number);
   const b = eventDate.split('-').map(Number);
   return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+}
+
+function formatJapaneseExamDate(dateKey: string): string {
+  const date = new Date(dateKey + 'T00:00:00+09:00');
+  const dateLabel = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric' }).format(date);
+  const weekdayLabel = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(date);
+  return dateLabel + '（' + weekdayLabel + '）';
 }
 
 type ClassTimetableDayKey = keyof (typeof CLASS_TIMETABLE_DATA)['7組'];
@@ -562,7 +573,7 @@ function buildSchoolExamRangeBubbles(dateLabel: string, rows: SchoolExamRangeDig
     return buildBoardBubble({
       eyebrow: '2026 2ND TERM FINAL / EXAM RANGE',
       title: '２学期期末考査｜' + row.display_subject,
-      subtitle: dateLabel + ' 公開｜' + row.audience + '｜2026年度 2学期期末考査',
+      subtitle: dateLabel + ' 試験日｜' + row.audience + '｜2026年度 2学期期末考査',
       bodyContents: sections.map(section),
     });
   });
@@ -577,6 +588,45 @@ function buildSchoolExamRangeFlex(dateLabel: string, rows: SchoolExamRangeDigest
     altText: ('【2学期期末考査・試験範囲】' + subjects.join('・') + '。科目別カードを横にスワイプして確認できます。').slice(0, 400),
     contents: { type: 'carousel', contents: bubbles },
   };
+}
+
+function buildExamScheduleAnnouncementBubble(rows: SchoolExamSubjectScheduleRow[]): Record<string, unknown> | null {
+  const sortedRows = [...rows].sort((a, b) => a.exam_date.localeCompare(b.exam_date) || a.sort_order - b.sort_order);
+  if (!sortedRows.length) return null;
+
+  const grouped = new Map<string, string[]>();
+  for (const row of sortedRows) {
+    const subjects = grouped.get(row.exam_date) || [];
+    if (!subjects.includes(row.subject)) subjects.push(row.subject);
+    grouped.set(row.exam_date, subjects);
+  }
+
+  const bodyContents: Record<string, unknown>[] = [...grouped.entries()].map(([date, subjects]) => ({
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: '#F8FAFC',
+    cornerRadius: '12px',
+    paddingAll: '12px',
+    spacing: 'xs',
+    contents: [
+      { type: 'text', text: formatJapaneseExamDate(date), size: 'sm', color: '#0E7490', weight: 'bold' },
+      { type: 'text', text: subjects.join('・'), size: 'sm', color: '#0F172A', weight: 'bold', wrap: true },
+    ],
+  }));
+  bodyContents.push({
+    type: 'text',
+    text: '試験範囲は、各試験日の前日16:00の配信でお知らせします。',
+    size: 'xs',
+    color: '#64748B',
+    wrap: true,
+  });
+
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  EXAM SCHEDULE',
+    title: '教科の試験日が公開されました',
+    subtitle: '2年7組・2年8組｜2026年度 2学期期末考査',
+    bodyContents,
+  });
 }
 
 function buildDailyDigest(input: {
@@ -597,11 +647,12 @@ function buildDailyDigest(input: {
   overdueAssignments: AssignmentDigestRow[];
   changeEvents: ScheduleChangeDigestRow[];
   assignmentError: boolean;
+  examScheduleAnnouncement: Record<string, unknown> | null;
 }) {
   const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
   const weatherBubble = buildWeatherForecastBubble(input.weather);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, overdueAssignments: input.overdueAssignments, changeEvents: input.changeEvents, error: input.assignmentError });
-  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事。横にスワイプして確認できます。';
+  const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + (input.examScheduleAnnouncement ? '・試験日程公開' : '') + '・学校行事。横にスワイプして確認できます。';
 
   return {
     type: 'flex',
@@ -615,6 +666,7 @@ function buildDailyDigest(input: {
           buildClassTimetableBubble({group:'7組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
           buildClassTimetableBubble({group:'8組',dateLabel:input.tomorrowDateLabel,dayKey:input.tomorrowDayKey,timetable:input.timetable}),
         ]:[]),
+        ...(input.examScheduleAnnouncement ? [input.examScheduleAnnouncement] : []),
         buildSchoolEventsBubble({today:input.today,events:input.events,eventError:input.eventError}),
         assignmentBubble,
       ],
@@ -901,7 +953,7 @@ export async function POST(request: Request) {
   }
 
 
-  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult, examRangeResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult, examScheduleResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service,service_day')
       .eq('service_day', isSaturday ? 'saturday' : 'weekday')
@@ -931,10 +983,13 @@ export async function POST(request: Request) {
       .is('digest_sent_at', null)
       .order('created_at', { ascending: true })
       .limit(8),
-    admin.from('school_test_ranges')
-      .select('subject,display_subject,audience,range_sections,sort_order')
-      .eq('broadcast_on', today)
-      .order('sort_order', { ascending: true }),
+    admin.from('school_test_exams')
+      .select('id,target_classes')
+      .eq('school_year', 2026)
+      .eq('term', 2)
+      .eq('exam_type', '期末考査')
+      .gte('start_date', '2026-11-01')
+      .lte('end_date', '2026-12-31'),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
@@ -942,8 +997,47 @@ export async function POST(request: Request) {
   if (classTimetableResult.error) console.error('日次まとめ：時間割取得エラー（初期データへフォールバック）', classTimetableResult.error.message);
   if (assignmentResult.error) console.error('日次まとめ：課題一覧取得エラー', assignmentResult.error.message);
   if (changeResult.error) console.error('日次まとめ：予定変更一覧取得エラー', changeResult.error.message);
-  if (examRangeResult.error) console.error('日次まとめ：試験範囲取得エラー', examRangeResult.error.message);
+  if (examScheduleResult.error) console.error('日次まとめ：定期考査日程取得エラー', examScheduleResult.error.message);
   if (weatherResult.error) console.error('日次まとめ：天気キャッシュ取得エラー', weatherResult.error.message);
+
+  const targetExamRows = ((examScheduleResult.data || []) as SchoolTestExamQueryRow[]).filter(exam =>
+    Array.isArray(exam.target_classes) && exam.target_classes.includes('2-7') && exam.target_classes.includes('2-8')
+  );
+  const targetExamIds = targetExamRows.map(exam => exam.id);
+  let examSubjectRows: SchoolExamSubjectScheduleRow[] = [];
+  let examRangeData: SchoolExamRangeQueryRow[] = [];
+  if (targetExamIds.length) {
+    const [subjectScheduleResult, examRangesResult] = await Promise.all([
+      admin.from('school_test_subjects')
+        .select('exam_id,subject,exam_date,sort_order')
+        .in('exam_id', targetExamIds)
+        .order('exam_date', { ascending: true })
+        .order('sort_order', { ascending: true }),
+      admin.from('school_test_ranges')
+        .select('exam_id,subject,display_subject,audience,range_sections,sort_order')
+        .in('exam_id', targetExamIds)
+        .order('sort_order', { ascending: true }),
+    ]);
+    if (subjectScheduleResult.error) console.error('日次まとめ：考査科目・試験日取得エラー', subjectScheduleResult.error.message);
+    else examSubjectRows = (subjectScheduleResult.data || []) as SchoolExamSubjectScheduleRow[];
+    if (examRangesResult.error) console.error('日次まとめ：考査範囲取得エラー', examRangesResult.error.message);
+    else examRangeData = (examRangesResult.data || []) as SchoolExamRangeQueryRow[];
+  }
+  const tomorrowExamSubjects = examSubjectRows.filter(row => row.exam_date === tomorrow.dateKey);
+  const tomorrowExamRanges = examRangeData
+    .filter(range => tomorrowExamSubjects.some(subject =>
+      subject.exam_id === range.exam_id && (subject.subject === range.subject || subject.subject === range.display_subject)
+    ))
+    .sort((left, right) => {
+      const leftOrder = tomorrowExamSubjects.find(subject => subject.exam_id === left.exam_id && (subject.subject === left.subject || subject.subject === left.display_subject))?.sort_order ?? 999;
+      const rightOrder = tomorrowExamSubjects.find(subject => subject.exam_id === right.exam_id && (subject.subject === right.subject || subject.subject === right.display_subject))?.sort_order ?? 999;
+      return leftOrder - rightOrder || left.sort_order - right.sort_order;
+    });
+  const examScopeRows = tomorrowExamRanges.map(({ exam_id: _examId, ...range }) => range);
+  const examFlex = buildSchoolExamRangeFlex(formatJapaneseExamDate(tomorrow.dateKey), examScopeRows);
+  const examScheduleAnnouncement = today === EXAM_SCHEDULE_ANNOUNCEMENT_DATE
+    ? buildExamScheduleAnnouncementBubble(examSubjectRows)
+    : null;
 
   const weatherCacheRow = weatherResult.data as { forecast?: unknown; fetched_at?: string } | null;
   const weatherCacheAgeMs = weatherCacheRow?.fetched_at
@@ -954,8 +1048,6 @@ export async function POST(request: Request) {
     : null;
   if (!weatherDays) console.warn('日次まとめ：6時間以内の天気キャッシュがないため天気カードのみ取得不可として送信します。');
 
-  const examRangeRows = (examRangeResult.data || []) as SchoolExamRangeDigestRow[];
-  const examFlex = buildSchoolExamRangeFlex(todayLabel, examRangeRows);
   const assignmentRows = (assignmentResult.data || []) as AssignmentDigestRow[];
   const currentAssignments = assignmentRows.filter(row => !row.due_at || new Date(row.due_at).getTime() >= now.getTime()).slice(0, 8);
   const overdueAssignments = assignmentRows.filter(row => Boolean(row.due_at) && new Date(row.due_at as string).getTime() < now.getTime()).slice(0, 8);
@@ -1011,6 +1103,7 @@ export async function POST(request: Request) {
         overdueAssignments,
         changeEvents,
         assignmentError: Boolean(assignmentResult.error),
+        examScheduleAnnouncement,
       }));
   let flexMessages: typeof flex[];
   try {
@@ -1176,7 +1269,7 @@ export async function POST(request: Request) {
       scheduleChanges: changeEvents.length,
       assignmentError: Boolean(assignmentResult.error),
       carouselCards: flexCarouselCards,
-      examRangeSubjects: examRangeRows.length,
+      examRangeSubjects: examScopeRows.length,
       examSeparateFlexMessage: Boolean(examFlex),
       historySaved,
     },
