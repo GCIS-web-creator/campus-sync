@@ -55,7 +55,7 @@ function getTokyoDateKey(now = new Date()): string {
 }
 
 function expectedDailyCode(now = new Date()): string | null {
-  const secret = process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET || '';
+  const secret = process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET || process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
   if (secret.length < 32) return null;
   const date = getTokyoDateKey(now);
   const digest = createHmac('sha256', secret)
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: '監査ログを保存できません。' }, { status: 503 });
     }
     return NextResponse.json(
-      { success: false, message: '日付コード用の秘密鍵が未設定です。Cloudflareに CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET を登録してください。' },
+      { success: false, message: '日付コード用の秘密鍵が未設定です。管理者パスワードまたは CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET を設定してください。' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }

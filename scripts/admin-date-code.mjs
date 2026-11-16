@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { createHmac } from 'node:crypto';
 
-const secret = process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET || '';
+const secret = process.env.CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET || process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
 if (secret.length < 32) {
-  console.error('CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET must contain at least 32 characters.');
+  console.error('Set CAMPUS_SYNC_ADMIN_DATE_CODE_SECRET or CAMPUS_SYNC_ADMIN_PASSWORD (at least 32 characters).');
   process.exit(1);
 }
 
