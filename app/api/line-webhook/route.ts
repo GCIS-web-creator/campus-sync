@@ -102,6 +102,73 @@ async function replyLineMarket(
   }
 }
 
+function buildCampusAiQuickReply(question: string): Array<{ type: 'action'; action: { type: 'message'; label: string; text: string } }> {
+  const q = question.normalize('NFKC').replace(/[\\s　]+/gu, '').toLowerCase();
+  let suggestions: Array<{ label: string; text: string }>;
+
+  // 質問分野ごとに、次に役立つ質問を決定論的に提案する。AI APIへの追加通信は行わない。
+  if (/定期テスト|定期考査|中間|期末|試験範囲|テスト範囲|考査範囲|提出物/.test(q)) {
+    suggestions = [
+      { label: '試験範囲', text: '定期テストの範囲を一覧で見せて' },
+      { label: 'テスト日程', text: '定期テストの日程を教えて' },
+      { label: '提出物', text: '定期テストの提出物を教えて' },
+    ];
+  } else if (/課題|宿題|提出|期限|締切|ワーク|プリント/.test(q)) {
+    suggestions = [
+      { label: '課題一覧', text: '未完了の課題を一覧で見せて' },
+      { label: '期限を確認', text: '今日が期限の課題を教えて' },
+      { label: 'テスト範囲', text: '定期テストの範囲を教えて' },
+    ];
+  } else if (/学食|食堂|メニュー|ランチ|昼食|献立|ごはん|ご飯/.test(q)) {
+    suggestions = [
+      { label: '今日のメニュー', text: '今日の学食メニューを教えて' },
+      { label: '売り切れ', text: '売り切れのメニューを教えて' },
+      { label: '混雑状況', text: '学食の混雑状況を教えて' },
+    ];
+  } else if (/電車|時刻表|国分寺|東村山|本川越|駅/.test(q)) {
+    suggestions = [
+      { label: '国分寺方面', text: '国分寺方面の次の電車は？' },
+      { label: '東村山方面', text: '東村山方面の次の電車は？' },
+      { label: '今日の時刻表', text: '今日の時刻表を教えて' },
+    ];
+  } else if (/蔵書|図書館|図書室|本のタイトル|貸出|貸し出し/.test(q)) {
+    suggestions = [
+      { label: '蔵書を検索', text: '図書館の蔵書を検索したい' },
+      { label: '貸出状況', text: '図書館の貸出状況を教えて' },
+      { label: '学校の予定', text: '今週の学校予定を教えて' },
+    ];
+  } else if (/落とし物|忘れ物/.test(q)) {
+    suggestions = [
+      { label: '落とし物一覧', text: '最近の落とし物を一覧で見せて' },
+      { label: '課題一覧', text: '未完了の課題を一覧で見せて' },
+      { label: 'できること', text: 'CampusSync AIでできること一覧' },
+    ];
+  } else if (/キャリア|自習室|空席|座席|教室|室温|温度/.test(q)) {
+    suggestions = [
+      { label: '自習室の空席', text: '自習室の空席状況を教えて' },
+      { label: '教室の状況', text: '教室の状況を教えて' },
+      { label: '学校の予定', text: '今週の学校予定を教えて' },
+    ];
+  } else if (/部活|部活動|委員会/.test(q)) {
+    suggestions = [
+      { label: '最新の連絡', text: '部活の最新連絡を教えて' },
+      { label: '学校のお知らせ', text: '最近のお知らせを教えて' },
+      { label: '学校の予定', text: '今週の学校予定を教えて' },
+    ];
+  } else {
+    suggestions = [
+      { label: 'できること一覧', text: 'CampusSync AIでできること一覧' },
+      { label: '今日の課題', text: '今日の課題を教えて' },
+      { label: '明日の時間割', text: '明日の時間割を教えて' },
+    ];
+  }
+
+  return suggestions.slice(0, 4).map(item => ({
+    type: 'action' as const,
+    action: { type: 'message' as const, label: item.label.slice(0, 20), text: 'CSAI ' + item.text },
+  }));
+}
+
 async function replyToLine(
   replyToken: string,
   payload: CampusAiResponse,
@@ -139,6 +206,7 @@ async function replyToLine(
       body: JSON.stringify({
         replyToken,
         messages: applyCampusSyncFlexFooters([message]),
+        quickReply: { items: buildCampusAiQuickReply(question) },
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(15000),
