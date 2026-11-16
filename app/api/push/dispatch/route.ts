@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { getLineDeliveryPriorityWindow } from '@/lib/line-delivery-priority';
+import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
+import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
+import { buildCampusAiFlexMessage } from '@/lib/line-flex';
+import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import webpush from 'web-push';
@@ -33,6 +37,149 @@ type PreferenceRow = {
   quiet_hours_start: string;
   quiet_hours_end: string;
 };
+
+
+type ScheduledLineNotification = {
+  id: string;
+  line_user_id: string;
+  bot_slot: 0 | 1 | 2 | 3 | 4 | 5;
+  message: string;
+  scheduled_at: string;
+  attempts: number;
+};
+
+async function dispatchScheduledLineNotifications(admin: any): Promise<{
+  checked: number; sent: number; retrying: number; failed: number;
+}> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const staleSendingBefore = new Date(now.getTime() - 3 * 60 * 1000).toISOString();
+
+  // 3分以上sendingのまま残った行は、前回の実行が中断されたものとして再キューへ戻す。
+  const { error: recoverError } = await admin.from('line_scheduled_notifications')
+    .update({ status: 'pending', updated_at: nowIso })
+    .eq('status', 'sending')
+    .lt('updated_at', staleSendingBefore);
+  if (recoverError) throw new Error('LINEリマインダーの中断状態を復旧できません: ' + recoverError.message);
+
+  const { data, error } = await admin.from('line_scheduled_notifications')
+    .select('id,line_user_id,bot_slot,message,scheduled_at,attempts')
+    .eq('status', 'pending')
+    .lte('scheduled_at', nowIso)
+    .or('next_attempt_at.is.null,next_attempt_at.lte.' + nowIso)
+    .order('scheduled_at', { ascending: true })
+    .limit(10);
+  if (error) throw new Error('期限到来リマインダーを取得できません: ' + error.message);
+
+  const dueRows = (data || []) as ScheduledLineNotification[];
+  if (!dueRows.length) return { checked: 0, sent: 0, retrying: 0, failed: 0 };
+
+  const credentials = getLineWebhookCredentials();
+  let sent = 0;
+  let retrying = 0;
+  let failed = 0;
+
+  await Promise.all(dueRows.map(async row => {
+    const attempt = Math.max(0, Number(row.attempts) || 0) + 1;
+    const claimTime = new Date().toISOString();
+    const { data: claimed, error: claimError } = await admin.from('line_scheduled_notifications')
+      .update({ status: 'sending', attempts: attempt, updated_at: claimTime })
+      .eq('id', row.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+
+    if (claimError) {
+      console.error('LINEリマインダーの送信権取得に失敗:', claimError.message);
+      return;
+    }
+    if (!claimed) return;
+
+    const credential = credentials.find(item => item.slot === row.bot_slot);
+    if (!credential) {
+      await admin.from('line_scheduled_notifications').update({
+        status: 'failed',
+        last_error: '登録時のLINE BOTスロットの認証情報が見つかりません。',
+        updated_at: new Date().toISOString(),
+      }).eq('id', row.id).eq('status', 'sending');
+      failed += 1;
+      return;
+    }
+
+    const flex = buildCampusAiFlexMessage({
+      question: 'リマインダー',
+      answer: '🔔 ' + row.message,
+    });
+    const messages = applyCampusSyncFlexFooters([flex]);
+
+    try {
+      const response = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + credential.accessToken,
+          'Content-Type': 'application/json',
+          'X-Line-Retry-Key': row.id,
+        },
+        body: JSON.stringify({ to: row.line_user_id, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000),
+      });
+      try {
+        await recordLineDeliveryResponse(response, {
+          channel: 'push',
+          destinationType: 'user',
+          destinationId: row.line_user_id,
+          kind: 'campus_ai_scheduled_reminder',
+          accessToken: credential.accessToken,
+          retryKey: row.id,
+          messages,
+        });
+      } catch (auditError) {
+        console.error('リマインダー配信監査ログの記録に失敗:', auditError instanceof Error ? auditError.message : 'unknown error');
+      }
+
+      if (response.ok || response.status === 409) {
+        const { error: finishError } = await admin.from('line_scheduled_notifications').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          next_attempt_at: null,
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', row.id).eq('status', 'sending');
+        if (finishError) console.error('LINEリマインダーの送信済み記録に失敗:', finishError.message);
+        else sent += 1;
+        return;
+      }
+
+      const detail = (await response.text().catch(() => '')).slice(0, 450);
+      const canRetry = (response.status === 429 || response.status >= 500) && attempt < 3;
+      const retryAt = new Date(Date.now() + (attempt === 1 ? 60 : 5 * 60) * 1000).toISOString();
+      await admin.from('line_scheduled_notifications').update({
+        status: canRetry ? 'pending' : 'failed',
+        next_attempt_at: canRetry ? retryAt : null,
+        last_error: 'LINE Push HTTP ' + response.status + ': ' + detail,
+        updated_at: new Date().toISOString(),
+      }).eq('id', row.id).eq('status', 'sending');
+      if (canRetry) retrying += 1;
+      else failed += 1;
+    } catch (sendError) {
+      const detail = sendError instanceof Error ? sendError.message : '不明な送信エラー';
+      const canRetry = attempt < 3;
+      const retryAt = new Date(Date.now() + (attempt === 1 ? 60 : 5 * 60) * 1000).toISOString();
+      await admin.from('line_scheduled_notifications').update({
+        status: canRetry ? 'pending' : 'failed',
+        next_attempt_at: canRetry ? retryAt : null,
+        last_error: detail.slice(0, 500),
+        updated_at: new Date().toISOString(),
+      }).eq('id', row.id).eq('status', 'sending');
+      if (canRetry) retrying += 1;
+      else failed += 1;
+      console.error('LINEリマインダー送信に失敗:', row.id, detail.slice(0, 250));
+    }
+  }));
+
+  return { checked: dueRows.length, sent, retrying, failed };
+}
 
 function authorized(request: Request): boolean {
   const expected = process.env.CRON_SECRET || '';
@@ -135,13 +282,26 @@ export async function POST(request: Request) {
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ success: false, message: 'Supabaseのサーバー設定が不足しています。' }, { status: 503 });
   }
-  if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
-    return NextResponse.json({ success: false, message: 'VAPID設定が不足しています。' }, { status: 503 });
-  }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+
+  // LINEの予約通知はVAPID/Web Push設定に依存させず、既存の30秒Cronから先に処理する。
+  let lineScheduled = { checked: 0, sent: 0, retrying: 0, failed: 0 };
+  try {
+    lineScheduled = await dispatchScheduledLineNotifications(admin);
+  } catch (lineError) {
+    console.error('LINE予約通知のディスパッチに失敗:', lineError instanceof Error ? lineError.message : 'unknown error');
+  }
+
+  if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
+    return NextResponse.json({
+      success: false,
+      message: 'VAPID設定が不足しています。LINE予約通知の処理結果は lineScheduled を確認してください。',
+      lineScheduled,
+    }, { status: 503 });
+  }
 
   try {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -149,7 +309,7 @@ export async function POST(request: Request) {
     if (claimError) throw new Error('通知キューを取得できません: ' + claimError.message);
     const claimed = (claimedRows || []) as OutboxRow[];
     if (!claimed.length) {
-      return NextResponse.json({ success: true, claimed: 0, sent: 0, skipped: 0, failed: 0, checkedAt: new Date().toISOString() });
+      return NextResponse.json({ success: true, claimed: 0, sent: 0, skipped: 0, failed: 0, lineScheduled, checkedAt: new Date().toISOString() });
     }
 
     const userIds = [...new Set(claimed.map(row => row.user_id))];
@@ -288,11 +448,12 @@ export async function POST(request: Request) {
       skipped,
       failed,
       deferred,
+      lineScheduled,
       checkedAt: new Date().toISOString(),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '不明なエラー';
     console.error('CampusSync push dispatch failed:', message);
-    return NextResponse.json({ success: false, message }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ success: false, message, lineScheduled }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }

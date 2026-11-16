@@ -36,7 +36,7 @@ function findTarget(q: string, names: string[], minLen = 3): number {
 }
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
-const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
+const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|明日|あした|あす|翌日|明後日|あさって|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
 const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
 const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
@@ -155,6 +155,10 @@ export async function POST(req: Request) {
   }).formatToParts(nowDate);
   const tokyoDateValues = Object.fromEntries(tokyoDateParts.map(part => [part.type, part.value]));
   const todayDateKey = String(tokyoDateValues.year) + '-' + String(tokyoDateValues.month) + '-' + String(tokyoDateValues.day);
+  const requestedMealOffset = /明後日|あさって/.test(question) ? 2 : /明日|あした|あす|翌日/.test(question) ? 1 : 0;
+  const todayDateParts = todayDateKey.split('-').map(Number);
+  const requestedMealDateKey = new Date(Date.UTC(todayDateParts[0], todayDateParts[1] - 1, todayDateParts[2] + requestedMealOffset)).toISOString().slice(0, 10);
+  const requestedMealDayLabel = requestedMealOffset === 0 ? '今日' : requestedMealOffset === 1 ? '明日' : '明後日';
   // 混雑・教室・自習室の「現在」情報は24時間以内に更新された値だけを扱う。
   const freshSince = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const now = (jstHour < 4 ? jstHour + 24 : jstHour) * 60 + jst.getUTCMinutes();
@@ -444,8 +448,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
-    db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
+  const [requestedMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
+    db.from('cafeteria_daily_menus').select('*').eq('service_date', requestedMealDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'higashimurayama'),
@@ -502,16 +506,16 @@ export async function POST(req: Request) {
   if (wantsSold && soldRes.error) return NextResponse.json({ answer: '売り切れ情報を読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsMenu && menuRes.error && !isDailyMealQuestion(question)) return NextResponse.json({ answer: '学食メニューを読み込めませんでした。少し待ってからもう一度試してください。' });
   if (wantsMenu && isDailyMealQuestion(question) && !wantsCrowd && !wantsReviews && !wantsSold && !wantsQueue) {
-    if (todayMenuRes.error) {
-      console.error('今日の学食メニュー取得エラー:', todayMenuRes.error.message);
-      return NextResponse.json({ answer: '今日の献立データを読み込めませんでした。Adminの月間献立表とSupabaseの設定を確認してください。' });
+    if (requestedMenuRes.error) {
+      console.error(requestedMealDayLabel + 'の学食メニュー取得エラー:', requestedMenuRes.error.message);
+      return NextResponse.json({ answer: requestedMealDayLabel + 'の献立データを読み込めませんでした。少し待ってからもう一度お試しください。' });
     }
-    const daily = todayMenuRes.data as Record<string, unknown> | null;
+    const daily = requestedMenuRes.data as Record<string, unknown> | null;
     if (!daily) {
-      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立は、日別献立表に登録されていません。別の日の献立や過去のサンプルを今日の献立として表示することはありません。' });
+      return NextResponse.json({ answer: requestedMealDayLabel + '（' + requestedMealDateKey + '）は献立が登録されていません。休日もしくは学食がない日です。' });
     }
     if (daily.is_closed === true) {
-      return NextResponse.json({ answer: '今日（' + todayDateKey + '）は学食の営業休止として登録されています。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
+      return NextResponse.json({ answer: requestedMealDayLabel + '（' + requestedMealDateKey + '）は学食の営業休止日です。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
     }
     const categories = [
       { key: 'soka_lunch', label: '創価ランチ', price: 'soka_lunch_price', calorie: 'soka_lunch_calorie', allergy: 'soka_lunch_allergy' },
@@ -530,10 +534,10 @@ export async function POST(req: Request) {
         String(daily[item.allergy] || '').trim() || '未登録',
       ]);
     if (!dailyRows.length) {
-      return NextResponse.json({ answer: '今日（' + todayDateKey + '）の献立レコードはありますが、メニュー名がまだ入力されていません。Adminの月間献立表を確認してください。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
+      return NextResponse.json({ answer: requestedMealDayLabel + '（' + requestedMealDateKey + '）の献立レコードはありますが、メニュー名がまだ入力されていません。Adminの月間献立表を確認してください。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
     }
     return NextResponse.json({
-      answer: '今日（' + todayDateKey + '）のAdmin月間献立表に登録されている実際のメニューです。',
+      answer: requestedMealDayLabel + '（' + requestedMealDateKey + '）のAdmin月間献立表に登録されている実際のメニューです。',
       table: {
         headers: ['カテゴリ', 'メニュー', '価格', 'カロリー', 'アレルギー'],
         rows: dailyRows,
