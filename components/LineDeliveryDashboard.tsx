@@ -47,6 +47,52 @@ const destinationLabel = (event: DeliveryEvent) => {
   return event.destination_id ? (event.destination_type === 'room' ? 'ルーム' : 'グループ') + ' ·••' + event.destination_id.slice(-6) : '送信先不明';
 };
 const formatNumber = (value: number) => value.toLocaleString('ja-JP');
+type ManualDispatchInfo = {
+  weekday: string;
+  dateLabel: string;
+  scheduledTime: string;
+  description: string;
+  endpoint: string;
+  body: { mode: string };
+  isReady: boolean;
+  lockReason: string;
+};
+
+function getManualDispatchInfo(now: Date): ManualDispatchInfo {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const weekday = values.weekday || 'Mon';
+  const isSunday = weekday === 'Sun';
+  const isSaturday = weekday === 'Sat';
+  const isWeekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekday);
+  const scheduledTime = isSunday ? '09:00' : isSaturday ? '12:30' : '16:00';
+  const [scheduledHour, scheduledMinute] = scheduledTime.split(':').map(Number);
+  const nowMinutes = Number(values.hour || 0) * 60 + Number(values.minute || 0);
+  const scheduledMinutes = scheduledHour * 60 + scheduledMinute;
+  const dateLabel = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  }).format(now);
+  const supported = isSunday || isSaturday || isWeekday;
+  return {
+    weekday,
+    dateLabel,
+    scheduledTime,
+    description: isSunday
+      ? '週間学校予定・翌週の時間割・天気など'
+      : isSaturday
+        ? '土曜の時刻表・天気・課題など'
+        : '時刻表・天気・時間割・学校行事・課題など',
+    endpoint: isSunday ? '/api/line-weekly-school-schedule' : '/api/line-daily-digest',
+    body: { mode: isSunday ? 'manual_today' : 'recovery' },
+    isReady: supported && nowMinutes >= scheduledMinutes,
+    lockReason: supported
+      ? '本日の定期配信予定時刻（' + scheduledTime + '）を過ぎると利用できます。'
+      : '本日は手動再送対象の定期配信がありません。',
+  };
+}
+
 
 export default function LineDeliveryDashboard() {
   const [range, setRange] = useState(14);
@@ -59,6 +105,15 @@ export default function LineDeliveryDashboard() {
   const [kindFilter, setKindFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [manualDigestSending, setManualDigestSending] = useState(false);
+  const [manualDigestMessage, setManualDigestMessage] = useState('');
+  const [jstClock, setJstClock] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setJstClock(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const manualDispatchInfo = useMemo(() => getManualDispatchInfo(jstClock), [jstClock]);
+
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -118,6 +173,45 @@ export default function LineDeliveryDashboard() {
   }, [filteredEvents]);
   const kinds = useMemo(() => Array.from(new Set(events.map(event => event.kind).filter(Boolean))).sort(), [events]);
 
+  const sendManualDigest = async () => {
+    const info = getManualDispatchInfo(new Date());
+    setManualDigestMessage('');
+    if (!info.isReady) {
+      setManualDigestMessage(info.lockReason);
+      return;
+    }
+    const description = info.weekday === 'Sun'
+      ? '本日09:00分の週間学校予定'
+      : info.weekday === 'Sat'
+        ? '本日12:30分の土曜時刻表・天気・課題まとめ'
+        : '本日16:00分の学校情報まとめ';
+    if (!window.confirm(
+      info.dateLabel + 'の「' + description + '」を今すぐ手動送信します。公式アカウントの友だち全員と、対象の登録済みLINEグループに届きます。すでに受付済みの配信はRetry Keyで重複送信を抑止します。実行しますか？'
+    )) return;
+
+    setManualDigestSending(true);
+    setManualDigestMessage('本日の定期配信を確認してLINEへ送信しています...');
+    try {
+      const response = await fetch(info.endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(info.body),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || '本日の定期配信を送信できませんでした（HTTP ' + response.status + '）。');
+      }
+      setManualDigestMessage(result.message || '本日の定期配信をLINEへ送信しました。');
+      await load();
+    } catch (caught) {
+      setManualDigestMessage(caught instanceof Error ? caught.message : '本日の定期配信を送信できませんでした。');
+    } finally {
+      setManualDigestSending(false);
+    }
+  };
+
   const exportCsv = () => {
     const columns = ['日時(JST)', '送信種類', 'カテゴリ', '内容', '送信先', 'BOT', '結果', 'HTTP', 'LINE Request ID', '本文'];
     const rows = filteredEvents.map(event => [jst(event.sent_at), channelLabel(event.channel, event.destination_type),
@@ -156,6 +250,31 @@ export default function LineDeliveryDashboard() {
       </div>
 
       {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">{error}</div>}
+      <section className="rounded-2xl border border-amber-800/60 bg-gradient-to-r from-amber-950/50 to-slate-950 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-base font-black text-amber-100"><Send size={17}/>本日の定期LINE配信・手動再送</h3>
+            <p className="mt-1 text-xs leading-5 text-amber-100/80">
+              {manualDispatchInfo.dateLabel} ／ 予定 {manualDispatchInfo.scheduledTime} ・ {manualDispatchInfo.description}
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-slate-400">
+              {manualDispatchInfo.isReady
+                ? '定期配信に失敗した場合に、今日の内容を今すぐ再送できます。'
+                : manualDispatchInfo.lockReason}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void sendManualDigest()}
+            disabled={manualDigestSending || !manualDispatchInfo.isReady}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send size={15}/>{manualDigestSending ? 'LINE送信中...' : '本日の定期配信を手動送信'}
+          </button>
+        </div>
+        {manualDigestMessage && <p role="status" className="mt-3 rounded-xl border border-slate-700 bg-slate-950/80 p-3 text-xs leading-5 text-slate-200">{manualDigestMessage}</p>}
+      </section>
+
       {data?.dataWarnings?.map(warning => <div key={warning} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">{warning}</div>)}
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

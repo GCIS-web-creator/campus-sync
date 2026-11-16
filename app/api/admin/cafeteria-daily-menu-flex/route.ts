@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto';
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
-import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
@@ -39,6 +39,18 @@ function getAdminClient() {
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
 }
+function cafeteriaMenuRetryKey(serviceDate: string, messages: unknown[]): string {
+  const chars = createHash('sha256')
+    .update('campussync-cafeteria-menu:v1:' + serviceDate + ':' + JSON.stringify(messages))
+    .digest('hex')
+    .slice(0, 32)
+    .split('');
+  chars[12] = '4';
+  chars[16] = ((parseInt(chars[16], 16) & 3) | 8).toString(16);
+  const value = chars.join('');
+  return value.slice(0, 8) + '-' + value.slice(8, 12) + '-' + value.slice(12, 16) + '-' + value.slice(16, 20) + '-' + value.slice(20);
+}
+
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return jsonError('不正な管理操作です。', 403);
@@ -81,7 +93,7 @@ export async function POST(request: Request) {
   }).format(new Date(serviceDate + 'T00:00:00+09:00'));
   const flex = buildCafeteriaDailyMenuFlexMessage({ dateLabel, items, note: String(menu.note || '') });
   const messages = applyCampusSyncFlexFooters([flex]);
-  const retryKey = randomUUID();
+  const retryKey = cafeteriaMenuRetryKey(serviceDate, messages);
 
   try {
     const broadcast = await fetch('https://api.line.me/v2/bot/message/broadcast', {

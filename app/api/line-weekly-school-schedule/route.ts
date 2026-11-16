@@ -8,6 +8,7 @@ import { buildWeeklySchoolScheduleFlexMessage } from '@/lib/line-flex';
 import { CLASS_TIMETABLE_DATA, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
 import { fetchSchoolWeatherForecast } from '@/lib/weather';
+import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { buildWeatherForecastBubble } from '@/lib/line-weather-flex';
 
 export const runtime = 'nodejs';
@@ -42,6 +43,13 @@ function getAdminSupabase() {
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
 }
+
+function isSameOriginRequest(request: Request): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return false;
+  try { return new URL(origin).origin === new URL(request.url).origin; } catch { return false; }
+}
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
@@ -253,13 +261,15 @@ function buildFallbackWeekDays(weekStart: string, events: WeeklyEventRow[]) {
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; weekStart?: unknown };
-  const manualRequest = payload.mode === 'manual';
+  const manualTodayRequest = payload.mode === 'manual_today';
+  const manualRequest = payload.mode === 'manual' || manualTodayRequest;
   const repairAndSendGroups = payload.mode === 'group_repair_and_send';
   if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
     const receivedPassword = request.headers.get('x-admin-password') || '';
-    if (!expectedPassword || !receivedPassword || !constantTimeEqual(expectedPassword, receivedPassword)) {
-      return jsonError('学校予定表の手動配信には正しいAdmin用パスワードが必要です。', 401);
+    const sessionAuthorized = isSameOriginRequest(request) && verifyAdminSessionRequest(request);
+    if (!sessionAuthorized && (!expectedPassword || !receivedPassword || !constantTimeEqual(expectedPassword, receivedPassword))) {
+      return jsonError('学校予定表の手動配信にはAdminログインが必要です。', 401);
     }
   } else {
     const expectedSecret = process.env.CRON_SECRET || '';
@@ -280,8 +290,22 @@ export async function POST(request: Request) {
   const supabase = getAdminSupabase();
   if (!supabase) return jsonError('Supabaseのサーバー設定が不足しています。', 503);
 
-  const weekStart = manualRequest || repairAndSendGroups ? String(payload.weekStart || '') : getNextSchoolWeekStart();
+  const weekStart = manualTodayRequest
+    ? getNextSchoolWeekStart()
+    : manualRequest || repairAndSendGroups
+      ? String(payload.weekStart || '')
+      : getNextSchoolWeekStart();
   if (!isDateKey(weekStart) || !isMonday(weekStart)) return jsonError('送信週は月曜日の日付で指定してください。', 400);
+  if (manualTodayRequest) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Tokyo', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    if (values.weekday !== 'Sun') return jsonError('日曜の週次配信は日曜日にのみ再送できます。', 409);
+    if (Number(values.hour || 0) * 60 + Number(values.minute || 0) < 9 * 60) {
+      return jsonError('日曜09:00の定期配信時刻を過ぎてから再送できます。', 409);
+    }
+  }
 
   const today = getTokyoTodayKey();
   const weekEnd = addDays(weekStart, 6);
@@ -319,7 +343,7 @@ export async function POST(request: Request) {
   if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
 
   const schedule = scheduleResult.data;
-  if (!schedule && (manualRequest || repairAndSendGroups)) {
+  if (!schedule && ((manualRequest && !manualTodayRequest) || repairAndSendGroups)) {
     return jsonError('選択した週の予定表がまだ保存されていません。先に予定表を保存してください。', 404);
   }
   const weeklyEvents = (weeklyEventsResult.data || []) as WeeklyEventRow[];
@@ -362,7 +386,7 @@ export async function POST(request: Request) {
       ],
     },
   };
-  const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
+  const retryKey = retryKeyForWeek(weekStart);
   if (repairAndSendGroups) {
     const { data: registeredChats, error: chatsError } = await supabase
       .from('line_group_chats')
@@ -534,6 +558,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       weekStart,
+      alreadyAccepted: response.status === 409,
       groupDelivery,
       content: {
         weeklySchedule: hasSavedSchedule,
@@ -544,8 +569,10 @@ export async function POST(request: Request) {
         countdowns: countdownEvents.length,
         weather: weeklyWeather.length,
       },
-      message: weekStart + '〜' + weekEnd + ' の1週間の予定、月曜日の7組・8組時間割、課題・日程変更、天気、カウントダウンをLINEへ送信しました。' +
-        (!hasSavedSchedule ? ' 詳細な週間予定表は未登録のため、行事情報を使った一覧にしています。' : '') + groupMessage,
+      message: response.status === 409
+        ? weekStart + '週の週間予定はLINE側で受付済みです。重複配信を抑止しました。' + groupMessage
+        : weekStart + '〜' + weekEnd + ' の1週間の予定、月曜日の7組・8組時間割、課題・日程変更、天気、カウントダウンをLINEへ送信しました。' +
+          (!hasSavedSchedule ? ' 詳細な週間予定表は未登録のため、行事情報を使った一覧にしています。' : '') + groupMessage,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学校予定表のLINE配信通信エラー:', error instanceof Error ? error.message : 'unknown error');

@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { CLASS_TIMETABLE_DATA, getTokyoTomorrowTimetableInfo, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from '@/lib/class-timetable';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '@/lib/line-group-chats';
+import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 import { buildTimetableDirectionBox, type TimetableDeparture } from '@/lib/line-flex';
 import { fetchSchoolWeatherForecast, type WeatherDayForecast } from '@/lib/weather';
 import { buildWeatherForecastBubble } from '@/lib/line-weather-flex';
@@ -725,20 +726,33 @@ function splitDailyDigestCarousel<T extends FlexCarouselMessage>(message: T): T[
 function jsonError(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
+function isSameOriginRequest(request: Request): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return false;
+  try { return new URL(origin).origin === new URL(request.url).origin; } catch { return false; }
+}
+
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; excludeTrainTimetable?: unknown };
   const manualRequest = payload.mode === 'manual';
+  // Recovery requests are available only through an authenticated same-origin Admin session.
+  const recoveryRequest = payload.mode === 'recovery';
   // A replay is still protected by CRON_SECRET, but can run after the scheduled window.
   const replayRequest = payload.mode === 'replay';
   // Replay callers may omit the railway departure cards while preserving the rest of the weekday digest.
   const excludeTrainTimetable = replayRequest && payload.excludeTrainTimetable === true;
 
-  if (manualRequest) {
+  if (recoveryRequest) {
+    if (!isSameOriginRequest(request) || !verifyAdminSessionRequest(request)) {
+      return jsonError('Adminログインが必要です。', 401);
+    }
+  } else if (manualRequest) {
     const expectedPassword = process.env.CAMPUS_SYNC_ADMIN_PASSWORD || '';
     const receivedPassword = request.headers.get('x-admin-password') || '';
-    if (!expectedPassword || !receivedPassword || !constantTimeEqual(expectedPassword, receivedPassword)) {
-      return jsonError('日次まとめの手動テストには正しいAdmin用パスワードが必要です。', 401);
+    const sessionAuthorized = isSameOriginRequest(request) && verifyAdminSessionRequest(request);
+    if (!sessionAuthorized && (!expectedPassword || !receivedPassword || !constantTimeEqual(expectedPassword, receivedPassword))) {
+      return jsonError('日次まとめの手動テストにはAdminログインが必要です。', 401);
     }
   } else {
     const expectedSecret = process.env.CRON_SECRET || '';
@@ -769,7 +783,14 @@ export async function POST(request: Request) {
   const inDispatchWindow = isSaturday
     ? currentHour === 12 && currentMinute >= 30 && currentMinute < 40
     : currentHour === 16 && currentMinute < 10;
-  if (!manualRequest && !replayRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
+  if (recoveryRequest) {
+    if (!isWeekday && !isSaturday) return jsonError('日曜の週次学校予定は週次配信APIから再送してください。', 409);
+    const scheduledMinutes = isSaturday ? 12 * 60 + 30 : 16 * 60;
+    if (currentHour * 60 + currentMinute < scheduledMinutes) {
+      return jsonError('本日の定期配信予定時刻を過ぎてから再送できます。', 409);
+    }
+  }
+  if (!manualRequest && !replayRequest && !recoveryRequest && ((!isWeekday && !isSaturday) || !inDispatchWindow)) {
     return NextResponse.json({ success: true, skipped: true, message: '平日16:00・土曜12:30に配信します。' }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const todayLabel = Number(nowParts.month)+'月'+Number(nowParts.day)+'日';
@@ -1040,10 +1061,14 @@ export async function POST(request: Request) {
       groupDelivery: examGroupDelivery,
       historySaved: examHistorySaved,
     } : null,
-    message: excludeTrainTimetable
-      ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-      : (isSaturday
-        ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-        : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery) + (examFlex ? ' 試験範囲7科目は別のFlex Messageで配信処理しました。' : '')),
+    message: response.status === 409
+      ? todayLabel + '分の公式アカウント配信は既にLINE側で受付済みです。重複配信を抑止し、登録グループへの再送処理を行いました。' + summarizeLineGroupDelivery(groupDelivery)
+      : (recoveryRequest
+        ? todayLabel + 'の定期配信を手動送信しました。' + summarizeLineGroupDelivery(groupDelivery) + (examFlex ? ' 試験範囲のFlex Messageも配信処理しました。' : '')
+        : (excludeTrainTimetable
+          ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+          : (isSaturday
+            ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
+            : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery) + (examFlex ? ' 試験範囲7科目は別のFlex Messageで配信処理しました。' : '')))),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
