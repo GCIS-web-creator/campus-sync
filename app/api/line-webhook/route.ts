@@ -205,8 +205,10 @@ async function replyToLine(
       },
       body: JSON.stringify({
         replyToken,
-        messages: applyCampusSyncFlexFooters([message]),
-        quickReply: { items: buildCampusAiQuickReply(question) },
+        messages: applyCampusSyncFlexFooters([{
+          ...message,
+          quickReply: { items: buildCampusAiQuickReply(question) },
+        }]),
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(15000),
