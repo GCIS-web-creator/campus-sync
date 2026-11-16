@@ -1078,6 +1078,8 @@ async function handleLineEvents(
         return;
       }
       if (destinationId && hasTrigger && question
+        && !isLineGroupChatReset(question)
+        && !/^(?:終了|おわり|stop)$/i.test(question.trim())
         && (isLineShiritoriControlCommand(question) || await isLineGroupShiritoriActive(destinationId))) {
         const chatAnswer = await getLineGroupConversationAnswer(
           destinationId,
