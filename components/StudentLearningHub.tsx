@@ -4,9 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
-const SUBJECTS = ['国語演習', '古典探求', '物理', '化学', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
+const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
-type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string };
+type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string; target_classes?: string[] | null };
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
 type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
 type SchoolRangeSection = { title: string; body: string; note?: string | null };
@@ -127,15 +127,20 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       ]);
       const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error;
       if (issue) throw issue;
-      const newExams = (a.data || []) as Exam[];
-      setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions((d.data || []) as Session[]);
+      const newExams = ((a.data || []) as Exam[]).filter(exam => {
+        const targetClasses = Array.isArray(exam.target_classes) ? exam.target_classes : [];
+        return targetClasses.length === 0 || targetClasses.includes(userClass);
+      });
+      const visibleExamIds = new Set(newExams.map(exam => exam.id));
+      const newSubjects = ((b.data || []) as ExamSubject[]).filter(subject => visibleExamIds.has(subject.exam_id));
+      setExams(newExams); setSubjects(newSubjects); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions((d.data || []) as Session[]);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習データを読み込めませんでした。');
     } finally { setLoading(false); }
-  }, [userId]);
+  }, [userId, userClass]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -372,8 +377,8 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
             <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=><span key={item.id} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">{item.sort_order} ・ {item.subject}</span>)}</div></div>)}
             {!examSubjects.length&&<p className={'text-xs '+muted}>実施教科・日ごとの日程は調整中です。確定後にここへ表示されます。</p>}</div>
-            {schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || userClass.startsWith('2-'))).length > 0 && (() => {
-              const visibleRanges = schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || userClass.startsWith('2-')));
+            {schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass))).length > 0 && (() => {
+              const visibleRanges = schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass)));
               const allExpanded = visibleRanges.every(item => expandedSchoolRangeIds.includes(item.id));
               return <section className={'mt-4 rounded-xl border p-3 '+(dark?'border-cyan-900 bg-cyan-950/20':'border-cyan-100 bg-cyan-50/60')}>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

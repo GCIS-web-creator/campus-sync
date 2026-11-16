@@ -4,7 +4,15 @@ import { verifyAdminSessionRequest } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const SUBJECTS = ['国語演習','古典探求','物理','化学','生物','数３','数C','公共','英コミュ','論表','情報','保健'] as const;
+const SUBJECTS = ['国語演習','古典探求','古典探究','物理','化学','生物','数３','数C','数学C','数学Ⅱ','英コミュⅡ','保健（30分）','物理・生物','論理表現Ⅱ（30分）','公共','英コミュ','論表','情報','保健'] as const;
+const MAX_EXAM_SUBJECTS = 11;
+function parseTargetClasses(value:unknown,fallback:string[]=[]):string[]|null{
+  if(value===undefined)return [...fallback].sort();
+  if(!Array.isArray(value)||value.length>24)return null;
+  const classes=value.map(item=>String(item));
+  if(classes.some(item=>!/^[1-3]-[1-8]$/.test(item))||new Set(classes).size!==classes.length)return null;
+  return classes.sort();
+}
 
 function fail(message:string,status:number){return NextResponse.json({success:false,message},{status,headers:{'Cache-Control':'no-store, private'}});}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');try{return Boolean(origin&&new URL(origin).origin===new URL(request.url).origin);}catch{return false;}}
@@ -28,15 +36,17 @@ export async function POST(request:Request){
   if(!sameOrigin(request))return fail('不正な管理操作です。',403);
   const denied=authError(request);if(denied)return denied;
   const admin=getAdmin();if(!admin)return fail('Supabase設定がありません。',503);
-  const payload=await request.json().catch(()=>null) as {school_year?:unknown;term?:unknown;exam_type?:unknown;start_date?:unknown;end_date?:unknown;subjects?:Array<{subject?:unknown;exam_date?:unknown}>}|null;
+  const payload=await request.json().catch(()=>null) as {school_year?:unknown;term?:unknown;exam_type?:unknown;start_date?:unknown;end_date?:unknown;target_classes?:unknown;subjects?:Array<{subject?:unknown;exam_date?:unknown}>}|null;
   if(!payload)return fail('送信データを読み取れません。',400);
   const year=Number(payload.school_year),term=Number(payload.term),type=String(payload.exam_type||''),start=payload.start_date,end=payload.end_date,priority=String((payload as any).priority||'normal');
+  const targetClasses=parseTargetClasses(payload.target_classes);
+  if(!targetClasses)return fail('対象クラスの指定が正しくありません。',400);
   if(!Number.isInteger(year)||year<2020||year>2100)return fail('年度を確認してください。',400);
   if(![1,2,3].includes(term))return fail('学期を確認してください。',400);
   if((term===3&&type!=='学年末考査')||(term!==3&&!['中間考査','期末考査'].includes(type)))return fail('学期と考査種別の組み合わせが正しくありません。',400);
   if(!['normal','important','urgent'].includes(priority))return fail('重要度の指定が正しくありません。',400);
   if(!validDate(start)||!validDate(end)||start>end||![3,4].includes(duration(start,end)))return fail('考査期間は3日間または4日間にしてください。',400);
-  if(!Array.isArray(payload.subjects)||payload.subjects.length>SUBJECTS.length)return fail('実施教科は未定、または最大11件で登録してください。',400);
+  if(!Array.isArray(payload.subjects)||payload.subjects.length>MAX_EXAM_SUBJECTS)return fail('実施教科は未定、または最大11件で登録してください。',400);
   const names=new Set<string>(),counts=new Map<string,number>(),rows:Array<{subject:string;exam_date:string;sort_order:number}>=[];
   for(const row of payload.subjects){
     const subject=String(row.subject||''),date=row.exam_date;
@@ -48,7 +58,7 @@ export async function POST(request:Request){
     if(count>3)return fail('1日最大3教科までです。',400);
     rows.push({subject,exam_date:date,sort_order:count});
   }
-  const {data:exam,error:examError}=await admin.from('school_test_exams').insert({school_year:year,term,exam_type:type,start_date:start,end_date:end,priority}).select('*').single();
+  const {data:exam,error:examError}=await admin.from('school_test_exams').insert({school_year:year,term,exam_type:type,start_date:start,end_date:end,priority,target_classes:targetClasses}).select('*').single();
   if(examError)return fail(examError.code==='23505'?'同じ年度・学期・考査は既に登録されています。':'考査日程を保存できませんでした。',examError.code==='23505'?409:500);
   let examSubjects:any[]=[];
   if(rows.length){
@@ -76,17 +86,19 @@ export async function PATCH(request:Request){
   if(!sameOrigin(request))return fail('不正な管理操作です。',403);
   const denied=authError(request);if(denied)return denied;
   const admin=getAdmin();if(!admin)return fail('Supabase設定がありません。',503);
-  const payload=await request.json().catch(()=>null) as {id?:unknown;subjects?:Array<{subject?:unknown;exam_date?:unknown}>;start_date?:unknown;end_date?:unknown;priority?:unknown;reason?:unknown}|null;
+  const payload=await request.json().catch(()=>null) as {id?:unknown;subjects?:Array<{subject?:unknown;exam_date?:unknown}>;start_date?:unknown;end_date?:unknown;priority?:unknown;target_classes?:unknown;reason?:unknown}|null;
   if(typeof payload?.id!=='string'||!payload.id.trim())return fail('考査IDを確認してください。',400);
-  if(!Array.isArray(payload.subjects)||payload.subjects.length>SUBJECTS.length)return fail('実施教科は未定、または最大11件で登録してください。',400);
+  if(!Array.isArray(payload.subjects)||payload.subjects.length>MAX_EXAM_SUBJECTS)return fail('実施教科は未定、または最大11件で登録してください。',400);
 
-  const examResult=await admin.from('school_test_exams').select('id,school_year,term,exam_type,start_date,end_date,priority').eq('id',payload.id).maybeSingle();
+  const examResult=await admin.from('school_test_exams').select('id,school_year,term,exam_type,start_date,end_date,priority,target_classes').eq('id',payload.id).maybeSingle();
   if(examResult.error)return fail('考査日程を確認できませんでした。',500);
   if(!examResult.data)return fail('対象の考査日程が見つかりません。',404);
   const exam=examResult.data;
   const start=payload.start_date===undefined?exam.start_date:payload.start_date;
   const end=payload.end_date===undefined?exam.end_date:payload.end_date;
   const priority=payload.priority===undefined?(exam.priority||'normal'):String(payload.priority);
+  const targetClasses=parseTargetClasses(payload.target_classes,Array.isArray(exam.target_classes)?exam.target_classes:[]);
+  if(!targetClasses)return fail('対象クラスの指定が正しくありません。',400);
   if(!validDate(start)||!validDate(end)||start>end||![3,4].includes(duration(start,end)))return fail('考査期間は3日間または4日間にしてください。',400);
   if(!['normal','important','urgent'].includes(priority))return fail('重要度の指定が正しくありません。',400);
 
@@ -106,7 +118,7 @@ export async function PATCH(request:Request){
   const oldSubjectsResult=await admin.from('school_test_subjects').select('subject,exam_date,sort_order').eq('exam_id',payload.id).order('exam_date').order('sort_order');
   if(oldSubjectsResult.error)return fail('現在の実施教科を取得できませんでした。',500);
   const oldSubjects=(oldSubjectsResult.data||[]).map((row:any)=>({subject:row.subject,exam_date:row.exam_date,sort_order:row.sort_order}));
-  const parentChanged=start!==exam.start_date||end!==exam.end_date||priority!==(exam.priority||'normal');
+  const parentChanged=start!==exam.start_date||end!==exam.end_date||priority!==(exam.priority||'normal')||JSON.stringify(targetClasses)!==JSON.stringify([...(exam.target_classes||[])].sort());
   const normalizedRows=[...rows].sort((x,y)=>x.exam_date.localeCompare(y.exam_date)||x.sort_order-y.sort_order||x.subject.localeCompare(y.subject));
   const subjectPayloadChanged=JSON.stringify(oldSubjects)!==JSON.stringify(normalizedRows);
 
@@ -117,7 +129,7 @@ export async function PATCH(request:Request){
 
   const eventCreatedAfter=new Date().toISOString();
   const parentUpdate=await admin.from('school_test_exams')
-    .update({start_date:start,end_date:end,priority,updated_at:new Date().toISOString()})
+    .update({start_date:start,end_date:end,priority,target_classes:targetClasses,updated_at:new Date().toISOString()})
     .eq('id',payload.id).select('*').single();
   if(parentUpdate.error){
     const rollback=await admin.rpc('replace_school_test_subjects',{p_exam_id:payload.id,p_rows:oldSubjects});
@@ -130,12 +142,13 @@ export async function PATCH(request:Request){
     if(start!==exam.start_date)changedParts.push('開始日');
     if(end!==exam.end_date)changedParts.push('終了日');
     if(priority!==(exam.priority||'normal'))changedParts.push('重要度');
+    if(JSON.stringify(targetClasses)!==JSON.stringify([...(exam.target_classes||[])].sort()))changedParts.push('対象クラス');
     if(subjectPayloadChanged)changedParts.push('各教科の実施日・割り当て');
     const historyRecord={
       entity_type:'exam',entity_id:payload.id,action:'updated',title:exam.exam_type,priority,
       summary:changedParts.join('・')+'を変更しました。',
-      previous_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:exam.start_date,end_date:exam.end_date,priority:exam.priority||'normal',subjects:oldSubjects},
-      next_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:start,end_date:end,priority,subjects:nextSubjects},
+      previous_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:exam.start_date,end_date:exam.end_date,priority:exam.priority||'normal',target_classes:exam.target_classes||[],subjects:oldSubjects},
+      next_value:{school_year:exam.school_year,term:exam.term,exam_type:exam.exam_type,start_date:start,end_date:end,priority,target_classes:targetClasses,subjects:nextSubjects},
       reason:typeof payload.reason==='string'?payload.reason.trim().slice(0,300):null,
     };
     if(parentChanged){
