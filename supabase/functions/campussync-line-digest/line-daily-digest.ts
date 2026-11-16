@@ -866,7 +866,7 @@ export async function POST(request: Request) {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const activeLineBot = await getActiveLineBot();
   const accessToken = activeLineBot?.accessToken || null;
-  if (!supabaseUrl || !serviceRoleKey || !accessToken) {
+  if (!supabaseUrl || !serviceRoleKey || !accessToken || !activeLineBot) {
     return jsonError('Supabaseのサーバー設定またはLINE_CHANNEL_ACCESS_TOKENが不足しています。', 503);
   }
 
