@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getLineDeliveryPriorityWindow } from '@/lib/line-delivery-priority';
 import webpush from 'web-push';
 
 export const runtime = 'nodejs';
@@ -127,6 +128,17 @@ export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ success: false, message: '許可されていないリクエストです。' }, { status: 401 });
+  }
+
+  const priorityWindow = getLineDeliveryPriorityWindow();
+  if (priorityWindow) {
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      deferred: true,
+      priorityWindow,
+      message: 'LINE配信優先時間帯のため、提出期限リマインダーを次回Cronへ延期しました。',
+    }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   try {

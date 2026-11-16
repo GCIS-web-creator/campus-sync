@@ -2,6 +2,7 @@ import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getLineDeliveryPriorityWindow } from '@/lib/line-delivery-priority';
 import { createHash, randomUUID } from 'node:crypto';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
 import { pushLineMessagesToRegisteredChats } from '@/lib/line-group-chats';
@@ -1028,6 +1029,17 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const mode: 'high' | 'long' = body?.mode === 'long' ? 'long' : 'high';
+  const priorityWindow = mode === 'long' ? getLineDeliveryPriorityWindow() : null;
+  if (priorityWindow) {
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      deferred: true,
+      mode,
+      priorityWindow,
+      message: 'LINE配信優先時間帯のため、通常の地震履歴同期を次回Cronへ延期しました。',
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   let lockToken: string | null = null;
   try {
     lockToken = await acquireLock(admin, mode);

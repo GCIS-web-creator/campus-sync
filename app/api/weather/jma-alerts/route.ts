@@ -2,6 +2,7 @@ import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getLineDeliveryPriorityWindow } from '@/lib/line-delivery-priority';
 import { gunzipSync } from 'node:zlib';
 import { createHash, randomUUID } from 'node:crypto';
 import { getActiveLineBot } from '@/lib/line-bot-rotation';
@@ -786,6 +787,17 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     if (body?.mode === 'long') mode = 'long';
+    const priorityWindow = mode === 'long' ? getLineDeliveryPriorityWindow() : null;
+    if (priorityWindow) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        deferred: true,
+        mode,
+        priorityWindow,
+        message: 'LINE配信優先時間帯のため、通常の気象履歴同期を次回Cronへ延期しました。',
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const lockToken = await acquireSyncLock(admin);
     if (!lockToken) {
       return NextResponse.json({

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getLineDeliveryPriorityWindow } from '@/lib/line-delivery-priority';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import webpush from 'web-push';
@@ -175,8 +176,20 @@ export async function POST(request: Request) {
     let failed = 0;
     let deferred = 0;
 
+    const priorityWindow = getLineDeliveryPriorityWindow();
     for (const row of claimed) {
       try {
+        // 配信優先時間帯は緊急Pushのみ通し、通常・高優先度のPushは終了時刻までキューへ戻す。
+        if (priorityWindow && row.priority !== 'urgent') {
+          const { error: releaseError } = await (admin as any).rpc('push_release_notification', {
+            p_id: row.id,
+            p_available_at: priorityWindow.endsAt,
+          });
+          if (releaseError) throw new Error('通常Pushの延期に失敗しました: ' + releaseError.message);
+          deferred += 1;
+          continue;
+        }
+
         const preference = preferencesByUser.get(row.user_id);
         const settings = preference?.notification_settings || {};
         const enabled = typeof settings[row.category] === 'boolean'
