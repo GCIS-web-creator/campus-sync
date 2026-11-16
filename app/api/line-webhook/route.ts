@@ -164,10 +164,10 @@ async function handleDailyDigestFailureAlertCommand(
 ): Promise<boolean> {
   if (event.source?.type !== 'user' || !event.source.userId) return false;
   const userId = event.source.userId;
-  const normalized = messageText.normalize('NFKC').replace(/[\\s　]/g, '').toUpperCase();
+  const normalized = messageText.normalize('NFKC').replace(/[\s　]+/gu, '').toUpperCase();
   const registerCommand = /^(?:CSAI)?(?:失敗通知登録|配信失敗通知登録)$/.test(normalized);
   const unregisterCommand = /^(?:CSAI)?(?:失敗通知解除|配信失敗通知解除)$/.test(normalized);
-  const retryMatch = normalized.match(/^CSAI16時配信の失敗分を再送(\\d{4}-\\d{2}-\\d{2})$/);
+  const retryMatch = normalized.match(/^CSAI16時配信の失敗分を再送(\d{4}-\d{2}-\d{2})$/);
   if (!registerCommand && !unregisterCommand && !retryMatch) return false;
 
   const admin = getLineAssignmentAdmin();
