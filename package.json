@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify:cslogson": "node scripts/verify-cslogson.mjs"
+    "verify:cslogson": "node scripts/verify-cslogson.mjs",
+    "check:migrations": "node scripts/check-supabase-migrations.mjs",
+    "prebuild": "npm run check:migrations"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
