@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
+import { canStudentViewMaterial, getStudyStudentContext } from '@/lib/study-materials-server';
+import { getWorkspaceMemberRole } from '@/lib/workspaces-server';
 type Direction = '国分寺方面' | '東村山方面' | '両方';
 type Target = 'なし' | '学食' | '課題' | '教室' | '部活' | '蔵書' | 'キャリア' | '落とし物' | '口コミ' | '貢献度' | '通知';
 
@@ -55,6 +57,14 @@ const isClassTimetableQuestion = (q: string) => /時間割|授業|何時間目|�
 const isStudyQuestion = (q: string) => /学習時間|勉強時間|勉強記録|学習記録|集中時間|学習進捗|テスト範囲|試験範囲|定期テスト|中間テスト|期末テスト|学年末|小テスト/.test(q);
 const isAttendanceQuestion = (q: string) => /出欠連絡|欠席連絡|遅刻連絡|早退連絡|出欠の履歴|出欠状況/.test(q);
 const isEarthquakeQuestion = (q: string) => /地震|震度|震源|緊急地震速報|揺れ/.test(q);
+const isNotesQuestion = (q: string) => /メモ|ノート/.test(q) && !/部活|委員会|連絡ノート/.test(q);
+const isMaterialsQuestion = (q: string) => /資料室|配布資料|教材|授業プリント|資料を探|プリント.*(?:ある|探|見せ)|資料.*(?:ある|探|検索)/.test(q);
+const isFacilitiesQuestion = (q: string) => /校内マップ|校内施設|施設案内|施設.*(?:どこ|場所|一覧)|(?:どこ|場所).*(?:にある|行けば|施設)/.test(q);
+const isClassChatQuestion = (q: string) => /クラスチャット|クラスのチャット|クラスの会話|クラス内の連絡/.test(q);
+const isGradeChatQuestion = (q: string) => /学年チャット|学年のチャット|学年の会話|学年内の連絡/.test(q);
+const isSchoolChatQuestion = (q: string) => /全校チャット|学校チャット|学校全体のチャット|全校の会話/.test(q);
+const isWorkspaceQuestion = (q: string) => /共有ワークスペース|ワークスペース|共有グループ|共同作業グループ/.test(q);
+const isWeatherAlertQuestion = (q: string) => /気象警報|気象注意報|警報|注意報/.test(q);
 const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間/.test(q);
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
@@ -149,6 +159,14 @@ export async function POST(req: Request) {
   const wantsStudy = isStudyQuestion(question);
   const wantsAttendance = isAttendanceQuestion(question);
   const wantsEarthquake = isEarthquakeQuestion(question);
+  const wantsNotes = isNotesQuestion(question);
+  const wantsMaterials = isMaterialsQuestion(question);
+  const wantsFacilities = isFacilitiesQuestion(question);
+  const wantsClassChat = isClassChatQuestion(question);
+  const wantsGradeChat = isGradeChatQuestion(question);
+  const wantsSchoolChat = isSchoolChatQuestion(question);
+  const wantsWorkspace = isWorkspaceQuestion(question);
+  const wantsWeatherAlerts = isWeatherAlertQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
   const wantsMenu = isMealQuestion(question) && !wantsCrowd && !wantsReviews;
@@ -184,7 +202,7 @@ export async function POST(req: Request) {
   let profileName = '';
   let profileClass = '';
 
-  if ((wantsRoom || wantsProfile || wantsClassTimetable) && authed && studentId) {
+  if ((wantsRoom || wantsProfile || wantsClassTimetable || wantsClassChat || wantsGradeChat || wantsSchoolChat) && authed && studentId) {
     let profile: { user_class?: unknown; student_name?: unknown } | null = null;
     try {
       const profileResult = await authed
@@ -243,7 +261,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes, earthquakesRes] = await Promise.all([
+  const studyContext = (wantsMaterials || wantsWorkspace) ? await getStudyStudentContext(req).catch(() => null) : null;
+  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes, earthquakesRes, notesRes, noteAttachmentsRes, facilitiesRes, classChatRes, gradeChatRes, schoolChatRes, membershipsRes, materialsRes, weatherAlertsRes] = await Promise.all([
     db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
@@ -274,6 +293,15 @@ export async function POST(req: Request) {
     db.from('mini_test_events').select('subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', todayDateKey).order('test_date').limit(50),
     authed && studentId ? authed.from('attendance_reports').select('report_type,report_date,expected_time,note,status,created_at').eq('student_id', studentId).order('report_date', { ascending: false }).limit(30) : Promise.resolve({ data: null, error: null }),
     db.from('jma_earthquakes').select('event_key,title,headline,event_time,issued_at,hypocenter_name,magnitude,max_intensity,kodaira_intensity,is_eew,is_eew_cancelled,is_distant').order('event_time', { ascending: false, nullsFirst: false }).limit(20),
+    authed && wantsNotes ? authed.from('campus_notes').select('id,owner_id,title,content_text,tags,visibility,updated_at,is_archived,is_pinned,is_favorite,deleted_at').is('deleted_at', null).order('updated_at', { ascending: false }).limit(300) : Promise.resolve({ data: null, error: null }),
+    authed && wantsNotes ? authed.from('campus_note_attachments').select('note_id,file_name').limit(1000) : Promise.resolve({ data: null, error: null }),
+    authed && wantsFacilities ? authed.from('campus_facilities').select('id,name,category,building,floor_label,location_description,description,keywords').eq('is_active', true).order('category').order('name') : Promise.resolve({ data: null, error: null }),
+    authed && wantsClassChat && userClass ? authed.from('class_chat_messages').select('student_name,class_name,body,created_at').eq('class_name', userClass).order('created_at', { ascending: false }).limit(20) : Promise.resolve({ data: null, error: null }),
+    authed && wantsGradeChat && userClass ? authed.from('school_chat_messages').select('student_name,user_class,body,created_at').eq('scope', 'grade').eq('scope_key', userClass.slice(0, 1)).order('created_at', { ascending: false }).limit(20) : Promise.resolve({ data: null, error: null }),
+    authed && wantsSchoolChat ? authed.from('school_chat_messages').select('student_name,user_class,body,created_at').eq('scope', 'school').eq('scope_key', 'all').order('created_at', { ascending: false }).limit(20) : Promise.resolve({ data: null, error: null }),
+    studyContext && wantsWorkspace ? studyContext.admin.from('workspace_members').select('workspace_id,member_role').eq('user_id', studyContext.authUserId).eq('status', 'active') : Promise.resolve({ data: null, error: null }),
+    studyContext && wantsMaterials ? studyContext.admin.from('study_materials').select('id,title,description,subject,material_type,target_scope,target_value,file_name,file_size,published_at,created_at').eq('is_published', true).is('archived_at', null).order('published_at', { ascending: false }).limit(300) : Promise.resolve({ data: null, error: null }),
+    (wantsWeatherAlerts && process.env.SUPABASE_SERVICE_ROLE_KEY) ? (await import('@/lib/study-materials-server')).getStudyMaterialsAdminClient()?.from('jma_weather_alerts').select('area_key,area_name,alert_name,severity,status,details,issued_at,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }) ?? Promise.resolve({ data: null, error: null }) : Promise.resolve({ data: null, error: null }),
   ]);
 
   // 共通課題の完了状態を生徒ごとに読み、完了済みを未完了一覧から除外する。
