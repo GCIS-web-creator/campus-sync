@@ -10,6 +10,7 @@ type FeatureStateProps = {
   onRetry?: () => void;
   retryLabel?: string;
   compact?: boolean;
+  dark?: boolean;
 };
 
 export default function FeatureState({
@@ -19,6 +20,7 @@ export default function FeatureState({
   onRetry,
   retryLabel = 'もう一度読み込む',
   compact = false,
+  dark = false,
 }: FeatureStateProps) {
   const icon = state === 'loading' ? <LoaderCircle className="animate-spin" size={compact ? 18 : 26}/> :
     state === 'empty' ? <Inbox size={compact ? 18 : 26}/> : <AlertTriangle size={compact ? 18 : 26}/>;
@@ -31,10 +33,10 @@ export default function FeatureState({
   return (
     <section role={state === 'error' ? 'alert' : 'status'} aria-live="polite"
       className={'flex flex-col items-center justify-center text-center ' +
-        (compact ? 'gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-5' : 'gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-slate-700 shadow-sm')}>
+        (compact ? 'gap-2 rounded-xl border p-5 ' + (dark ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-700') : 'gap-3 rounded-2xl border p-8 shadow-sm ' + (dark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-700'))}>
       <span className={state === 'error' ? 'text-rose-500' : state === 'empty' ? 'text-slate-400' : 'text-cyan-600'}>{icon}</span>
       <h3 className="text-sm font-black">{title || defaultTitle}</h3>
-      <p className={'max-w-xl text-xs leading-6 ' + (compact ? 'text-slate-400' : 'text-slate-500')}>{description || defaultDescription}</p>
+      <p className={'max-w-xl text-xs leading-6 ' + (dark ? 'text-slate-400' : 'text-slate-500')}>{description || defaultDescription}</p>
       {state === 'error' && onRetry && (
         <button type="button" onClick={onRetry} className="mt-1 inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">
           <RefreshCw size={13}/>{retryLabel}

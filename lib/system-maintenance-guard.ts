@@ -13,28 +13,6 @@ let cachedRows: MaintenanceRow[] = [];
 let cachedAt = 0;
 const CACHE_TTL_MS = 5_000;
 
-async function loadModes(): Promise<MaintenanceRow[] | null> {
-  if (Date.now() - cachedAt < CACHE_TTL_MS) return cachedRows;
-  const admin = getSystemAdminClient();
-  if (!admin) return null;
-  try {
-    const { data, error } = await admin.from('system_maintenance_modes')
-      .select('system_key,label,mode,notice_title,notice_message')
-      .in('system_key', ['global']);
-    if (error) {
-      console.error('[system-maintenance] status read failed:', error.message);
-      return null;
-    }
-    // Query the global row and requested module in one query in the caller.
-    cachedRows = (data || []) as MaintenanceRow[];
-    cachedAt = Date.now();
-    return cachedRows;
-  } catch (error) {
-    console.error('[system-maintenance] unexpected status read failure:', error instanceof Error ? error.message : 'unknown');
-    return null;
-  }
-}
-
 export async function getSystemMaintenanceBlock(systemKey: string): Promise<NextResponse | null> {
   const admin = getSystemAdminClient();
   if (!admin) return null;
