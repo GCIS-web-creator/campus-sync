@@ -181,7 +181,7 @@ export async function POST(req: Request) {
   let profileName = '';
   let profileClass = '';
 
-  if ((wantsRoom || wantsProfile) && authed && studentId) {
+  if ((wantsRoom || wantsProfile || wantsClassTimetable) && authed && studentId) {
     let profile: { user_class?: unknown; student_name?: unknown } | null = null;
     try {
       const profileResult = await authed
