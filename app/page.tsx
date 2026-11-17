@@ -3977,7 +3977,7 @@ Supabaseの設定を確認してください。
 
     window.addEventListener('campus-sync-ai-action', handleAction);
     return () => window.removeEventListener('campus-sync-ai-action', handleAction);
-  }, [rooms, sendTestPushNotification]);
+  }, [rooms, sendTestPushNotification, setActiveTab, notificationSettings, remindersEnabled, allowedNotificationDays, reminderTimes]);
 
   const saveCurrentNotificationPreferences = async (
     enabled: boolean = remindersEnabled,
