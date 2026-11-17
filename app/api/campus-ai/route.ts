@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
-import { canStudentViewMaterial, getStudyStudentContext } from '@/lib/study-materials-server';
-import { getWorkspaceMemberRole } from '@/lib/workspaces-server';
+import { canStudentViewMaterial, getStudyMaterialsAdminClient, getStudyStudentContext } from '@/lib/study-materials-server';
 type Direction = '国分寺方面' | '東村山方面' | '両方';
 type Target = 'なし' | '学食' | '課題' | '教室' | '部活' | '蔵書' | 'キャリア' | '落とし物' | '口コミ' | '貢献度' | '通知';
 
@@ -114,7 +113,7 @@ function evaluateNumericExpression(source: string): number | null {
     return null;
   }
 }
-const isCalculatorQuestion = (q: string) => /計算|いくつ|√|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|ln\s*\(|π|÷|×/.test(q) && /\d|π|pi|e/i.test(q);
+const isCalculatorQuestion = (q: string) => /計算|いくつ|√|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|ln\s*\(|π|÷|×|微分|積分/.test(q) && (/\d\s*[+\-*/^%×÷]\s*\d/.test(q) || /√|sin|cos|tan|log|ln|π|微分|積分/i.test(q));
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
 const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
@@ -138,7 +137,7 @@ const isAttendanceQuestion = (q: string) => /出欠連絡|欠席連絡|遅刻連
 const isEarthquakeQuestion = (q: string) => /地震|震度|震源|緊急地震速報|揺れ/.test(q);
 const isNotesQuestion = (q: string) => /メモ|ノート/.test(q) && !/部活|委員会|連絡ノート/.test(q);
 const isMaterialsQuestion = (q: string) => /資料室|配布資料|教材|授業プリント|資料を探|プリント.*(?:ある|探|見せ)|資料.*(?:ある|探|検索)/.test(q);
-const isFacilitiesQuestion = (q: string) => /校内マップ|校内施設|施設案内|施設.*(?:どこ|場所|一覧)|(?:どこ|場所).*(?:にある|行けば|施設)/.test(q);
+const isFacilitiesQuestion = (q: string) => /校内マップ|校内施設|施設案内|施設.*(?:どこ|場所|一覧)|(?:どこ|場所).*(?:にある|行けば|施設)|(?:図書館|キャリアセンター|体育館|栄冠ホール|グローリーホール|PC教室|Call教室).*(?:どこ|場所)/.test(q);
 const isClassChatQuestion = (q: string) => /クラスチャット|クラスのチャット|クラスの会話|クラス内の連絡/.test(q);
 const isGradeChatQuestion = (q: string) => /学年チャット|学年のチャット|学年の会話|学年内の連絡/.test(q);
 const isSchoolChatQuestion = (q: string) => /全校チャット|学校チャット|学校全体のチャット|全校の会話/.test(q);
@@ -348,6 +347,7 @@ export async function POST(req: Request) {
   }
 
   const studyContext = (wantsMaterials || wantsWorkspace) ? await getStudyStudentContext(req).catch(() => null) : null;
+  const weatherAdmin = wantsWeatherAlerts ? getStudyMaterialsAdminClient() : null;
   const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes, earthquakesRes, notesRes, noteAttachmentsRes, facilitiesRes, classChatRes, gradeChatRes, schoolChatRes, membershipsRes, materialsRes, weatherAlertsRes] = await Promise.all([
     db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
@@ -387,7 +387,7 @@ export async function POST(req: Request) {
     authed && wantsSchoolChat ? authed.from('school_chat_messages').select('student_name,user_class,body,created_at').eq('scope', 'school').eq('scope_key', 'all').order('created_at', { ascending: false }).limit(20) : Promise.resolve({ data: null, error: null }),
     studyContext && wantsWorkspace ? studyContext.admin.from('workspace_members').select('workspace_id,member_role').eq('user_id', studyContext.authUserId).eq('status', 'active') : Promise.resolve({ data: null, error: null }),
     studyContext && wantsMaterials ? studyContext.admin.from('study_materials').select('id,title,description,subject,material_type,target_scope,target_value,file_name,file_size,published_at,created_at').eq('is_published', true).is('archived_at', null).order('published_at', { ascending: false }).limit(300) : Promise.resolve({ data: null, error: null }),
-    (wantsWeatherAlerts && process.env.SUPABASE_SERVICE_ROLE_KEY) ? (await import('@/lib/study-materials-server')).getStudyMaterialsAdminClient()?.from('jma_weather_alerts').select('area_key,area_name,alert_name,severity,status,details,issued_at,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }) ?? Promise.resolve({ data: null, error: null }) : Promise.resolve({ data: null, error: null }),
+    weatherAdmin ? weatherAdmin.from('jma_weather_alerts').select('area_key,area_name,alert_name,severity,status,details,issued_at,updated_at').eq('active', true).order('severity', { ascending: false }).order('issued_at', { ascending: false }) : Promise.resolve({ data: null, error: null }),
   ]);
 
   // 共通課題の完了状態を生徒ごとに読み、完了済みを未完了一覧から除外する。
@@ -417,18 +417,19 @@ export async function POST(req: Request) {
     }
   }
 
-  let workspaceSummary: Array<{ name: string; category: string; posts: string[]; tasks: string[]; events: string[] }> = [];
+  let workspaceSummary: Array<{ name: string; category: string; posts: string[]; tasks: string[]; events: string[]; messages: string[] }> = [];
   if (wantsWorkspace && studyContext) {
     const memberRows = (membershipsRes.data || []) as Array<{ workspace_id: string; member_role: string }>;
     const workspaceIds = memberRows.map(row => row.workspace_id).slice(0, 30);
     if (workspaceIds.length) {
-      const [workspaceRowsRes, postsRowsRes, taskRowsRes, eventRowsRes] = await Promise.all([
+      const [workspaceRowsRes, postsRowsRes, taskRowsRes, eventRowsRes, messageRowsRes] = await Promise.all([
         studyContext.admin.from('workspaces').select('id,name,category').eq('status', 'active').in('id', workspaceIds),
         studyContext.admin.from('workspace_posts').select('workspace_id,title,body,created_at,is_pinned').in('workspace_id', workspaceIds).is('deleted_at', null).order('is_pinned', { ascending: false }).order('created_at', { ascending: false }).limit(60),
         studyContext.admin.from('workspace_tasks').select('workspace_id,title,status,due_at').in('workspace_id', workspaceIds).in('status', ['todo','in_progress','review']).is('deleted_at', null).order('due_at', { ascending: true, nullsFirst: false }).limit(60),
         studyContext.admin.from('workspace_events').select('workspace_id,title,starts_at,location').in('workspace_id', workspaceIds).gte('starts_at', nowDate.toISOString()).is('canceled_at', null).order('starts_at', { ascending: true }).limit(60),
+        studyContext.admin.from('workspace_messages').select('workspace_id,body,created_at').in('workspace_id', workspaceIds).is('deleted_at', null).order('created_at', { ascending: false }).limit(60),
       ]);
-      if (workspaceRowsRes.error || postsRowsRes.error || taskRowsRes.error || eventRowsRes.error) {
+      if (workspaceRowsRes.error || postsRowsRes.error || taskRowsRes.error || eventRowsRes.error || messageRowsRes.error) {
         return NextResponse.json({ answer: '共有ワークスペースの内容を読み込めませんでした。' });
       }
       const workspaceRows = workspaceRowsRes.data || [];
@@ -438,6 +439,7 @@ export async function POST(req: Request) {
         posts: (postsRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 3).map(item => item.title + (item.is_pinned ? '（重要）' : '') + '：' + String(item.body || '').slice(0, 100)),
         tasks: (taskRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 5).map(item => item.title + '（' + item.status + (item.due_at ? '・' + item.due_at : '') + '）'),
         events: (eventRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 4).map(item => item.title + '（' + item.starts_at + (item.location ? '・' + item.location : '') + '）'),
+        messages: (messageRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 3).map(item => String(item.body || '').slice(0, 120)),
       }));
     }
   }
@@ -458,6 +460,7 @@ export async function POST(req: Request) {
   if ((wantsGradeChat || wantsSchoolChat) && (gradeChatRes.error || schoolChatRes.error)) return NextResponse.json({ answer: 'チャット情報を読み込めませんでした。' });
   if (wantsWorkspace && membershipsRes.error) return NextResponse.json({ answer: '共有ワークスペースの所属情報を読み込めませんでした。' });
   if (wantsMaterials && materialsRes.error) return NextResponse.json({ answer: '資料室の情報を読み込めませんでした。' });
+  if (wantsWeatherAlerts && !weatherAdmin) return NextResponse.json({ answer: '気象警報の保存データを読むためのSupabaseサーバー設定が不足しています。' });
   if (wantsWeatherAlerts && weatherAlertsRes.error) return NextResponse.json({ answer: '小平市の気象警報・注意報を読み込めませんでした。' });
   if (wantsTask && !authed) return NextResponse.json({ answer: '課題は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsTask && (taskRes.error || todoRes.error)) return NextResponse.json({ answer: '課題を読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。' });
@@ -1489,8 +1492,8 @@ export async function POST(req: Request) {
 
   if (wantsWorkspace) {
     if (!workspaceSummary.length) return NextResponse.json({ answer: '参加中の共有ワークスペースはありません。' });
-    const rows = workspaceSummary.map(item => [item.name, item.category, item.posts.join(' / ') || '投稿なし', item.tasks.join(' / ') || '未完了タスクなし', item.events.join(' / ') || '今後の予定なし']);
-    return NextResponse.json({ answer: 'あなたが参加している共有ワークスペースの情報です。', table: table(['ワークスペース', '種類', '最近のお知らせ', '進行中タスク', '今後の予定'], rows) });
+    const rows = workspaceSummary.map(item => [item.name, item.category, item.posts.join(' / ') || '投稿なし', item.messages.join(' / ') || '最近のチャットなし', item.tasks.join(' / ') || '未完了タスクなし', item.events.join(' / ') || '今後の予定なし']);
+    return NextResponse.json({ answer: 'あなたが参加している共有ワークスペースの情報です。メンバーとして参加しているグループの内容だけを表示しています。', table: table(['ワークスペース', '種類', '最近のお知らせ', '最近のチャット', '進行中タスク', '今後の予定'], rows) });
   }
 
   if (wantsWeatherAlerts) {
