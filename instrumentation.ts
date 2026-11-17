@@ -2,6 +2,7 @@ import type { Instrumentation } from 'next';
 
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  const normalizedError = error instanceof Error ? error : new Error(String(error ?? 'Unknown request error'));
   try {
     const { recordSystemDiagnostic, resolveSystemKeyFromPath } = await import('./lib/system-observability');
     await recordSystemDiagnostic({
@@ -9,9 +10,9 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
       source: 'next',
       systemKey: resolveSystemKeyFromPath(request.path),
       eventCode: 'NEXT_REQUEST_ERROR',
-      message: error.message || 'サーバーリクエストで予期しないエラーが発生しました。',
+      message: normalizedError.message || 'サーバーリクエストで予期しないエラーが発生しました。',
       routePath: request.path,
-      requestId: (error as Error & { digest?: string }).digest || null,
+      requestId: (normalizedError as Error & { digest?: string }).digest || null,
       details: {
         digest: (error as Error & { digest?: string }).digest || null,
         routerKind: context.routerKind,
