@@ -638,3 +638,23 @@ body {
     max-width: 100%;
   }
 }
+
+/* Global localization behavior: retain predictable layout for Arabic RTL. */
+html[dir="rtl"] {
+  text-align: start;
+}
+html[dir="rtl"] body {
+  direction: rtl;
+}
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  text-align: start;
+}
+html[dir="rtl"] code,
+html[dir="rtl"] pre,
+html[dir="rtl"] .leaflet-container,
+html[dir="rtl"] .recharts-wrapper {
+  direction: ltr;
+  text-align: left;
+}
