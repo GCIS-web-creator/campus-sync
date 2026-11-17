@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import RouteSpecificOverlays from '@/components/RouteSpecificOverlays';
+import { CampusLanguageProvider } from '@/components/CampusLanguageProvider';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
 const geistSans = Geist({
@@ -54,8 +55,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <RouteSpecificOverlays />
+        <CampusLanguageProvider>
+          {children}
+          <RouteSpecificOverlays />
+        </CampusLanguageProvider>
       </body>
     </html>
   );

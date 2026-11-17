@@ -3,6 +3,7 @@
 
 import { ContributionRankWidget } from '@/components/ContributionRanks';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
+import CampusLanguageSwitcher from '@/components/CampusLanguageSwitcher';
 import CampusSyncIntro from '@/components/CampusSyncIntro';
 import ClassChat from '@/components/ClassChat';
 import CampusAIChat from '@/components/CampusAIChat';
@@ -6525,6 +6526,7 @@ Supabaseの設定を確認してください。
         <div className="flex h-full min-h-0 flex-col p-5">
           <div className="mb-5 min-w-0 max-w-full shrink-0">
             <CampusSyncLogo variant="wordmark" height={30} theme="auto" />
+            <CampusLanguageSwitcher className="mt-3" />
           </div>
           <button
             type="button"
@@ -6554,23 +6556,24 @@ Supabaseの設定を確認してください。
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">
-          <div className="min-w-0 max-w-[68%] shrink">
+          <div className="min-w-0 max-w-[38%] shrink">
             <CampusSyncLogo variant="wordmark" height={23} theme="auto" />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div className={`rounded-full px-2.5 py-1.5 text-[10px] font-black ${themeCls.lightBg} ${themeCls.text}`}>
-              ★ {score} pt
+          <div className="flex shrink-0 items-center gap-1">
+            <div className={`rounded-full px-1.5 py-1.5 text-[9px] font-black ${themeCls.lightBg} ${themeCls.text}`}>
+              ★ {score}
             </div>
+            <CampusLanguageSwitcher compact />
             <button
               type="button"
               aria-label={isDarkMode ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
               aria-pressed={isDarkMode}
               onClick={() => setIsDarkMode(current => !current)}
-              className="campus-mode-switch flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition"
+              className="campus-mode-switch flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition"
             >
               {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
-            <button type="button" aria-label="CampusSync全体検索を開く" onClick={() => setShowGlobalSearch(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50">
+            <button type="button" aria-label="CampusSync全体検索を開く" onClick={() => setShowGlobalSearch(true)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50">
               <GlobalSearchIcon size={20} className="h-5 w-5 shrink-0"/>
             </button>
             <button
@@ -6579,7 +6582,7 @@ Supabaseの設定を確認してください。
               aria-expanded={mobileMenuOpen}
               aria-controls="campus-mobile-menu"
               onClick={() => setMobileMenuOpen(true)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 active:scale-95"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 active:scale-95"
             >
               <Menu size={22} className="h-[22px] w-[22px] shrink-0" />
             </button>
@@ -7118,7 +7121,7 @@ function VoteBar({ label, count, type, userVote, percent, color }: { label: stri
 function NavItem({ icon, label, isActive, onClick, themeCls, badge }: { icon: React.ReactNode, label: string, isActive: boolean, onClick: () => void, themeCls: any, badge?: number }) {
   return (
     <button onClick={onClick} className="relative flex flex-col items-center justify-center w-14 pt-1 gap-0.5 flex-shrink-0 [&_svg]:block [&_svg]:shrink-0 [&_img]:block [&_img]:shrink-0">
-      <div className={`relative flex h-5 w-5 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
+      <div className={`relative flex h-6 w-6 shrink-0 items-center justify-center transition-all [&_svg]:block [&_svg]:shrink-0 ${isActive ? `${themeCls.text} transform -translate-y-0.5` : 'text-gray-400'}`}>
         {icon}
         {badge ? <span className="absolute -right-2 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white">{badge > 99 ? '99+' : badge}</span> : null}
       </div>
