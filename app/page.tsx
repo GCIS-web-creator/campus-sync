@@ -21,6 +21,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
+import { STUDENT_TAB_SYSTEM_KEYS } from '@/lib/system-maintenance';
+import { fetchWithRetry } from '@/lib/fetch-with-retry';
 import { CLASS_TIMETABLE_DATA, type ClassTimetableData, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
@@ -893,6 +895,39 @@ export default function CampusSyncApp() {
   const introStartedAtRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState('home');
+  const [systemMaintenanceModes, setSystemMaintenanceModes] = useState<Record<string, { mode: 'normal' | 'notice' | 'maintenance'; label: string; notice_title: string; notice_message: string }>>({});
+  useEffect(() => {
+    let active = true;
+    const loadMaintenance = async () => {
+      try {
+        const response = await fetchWithRetry('/api/system/maintenance', {}, { attempts: 2, baseDelayMs: 300 });
+        if (!response.ok) return;
+        const result = await response.json().catch(() => null);
+        if (!active || !result?.success || !Array.isArray(result.modes)) return;
+        const mapped = Object.fromEntries(result.modes.map((item: any) => [String(item.system_key), {
+          mode: item.mode === 'maintenance' || item.mode === 'notice' ? item.mode : 'normal',
+          label: String(item.label || item.system_key),
+          notice_title: String(item.notice_title || ''),
+          notice_message: String(item.notice_message || ''),
+        }]));
+        setSystemMaintenanceModes(mapped);
+      } catch {
+        // メンテナンス状態を取得できないときは画面を強制停止せず、通常表示を継続する。
+      }
+    };
+    void loadMaintenance();
+    const timer = window.setInterval(() => void loadMaintenance(), 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  const currentMaintenanceKey = STUDENT_TAB_SYSTEM_KEYS[activeTab] || 'dashboard';
+  const globalMaintenance = systemMaintenanceModes.global;
+  const moduleMaintenance = systemMaintenanceModes[currentMaintenanceKey];
+  const activeMaintenance = globalMaintenance?.mode === 'maintenance'
+    ? globalMaintenance
+    : moduleMaintenance?.mode === 'maintenance' ? moduleMaintenance : null;
+  const noticeMaintenance = moduleMaintenance?.mode === 'notice'
+    ? moduleMaintenance
+    : globalMaintenance?.mode === 'notice' ? globalMaintenance : null;
   const [hashScrollTarget, setHashScrollTarget] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -6607,15 +6642,34 @@ Supabaseの設定を確認してください。
 
 
         {/* スクロールコンテンツコンテナ */}
-        <main className={activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes' ? "campus-student-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "campus-student-main flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6"}>
-          <div
-            key={activeTab}
-            className={activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes'
-              ? 'campus-page-transition campus-page-transition--chat flex min-h-0 flex-1 flex-col'
-              : 'campus-page-transition'}
-          >
-            {renderContent()}
-          </div>
+        <main className={'relative ' + (activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes' ? "campus-student-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden pb-3 px-2 pt-2" : "campus-student-main flex-1 min-w-0 overflow-y-scroll pb-6 md:pb-8 px-3 pt-4 md:px-4 md:pt-6")}>
+          {noticeMaintenance && !activeMaintenance && (
+            <div role="status" className="mb-3 flex items-start gap-2 rounded-xl border border-amber-300/30 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0"/>
+              <div><b>{noticeMaintenance.notice_title || 'システムからのお知らせ'}</b><p className="mt-1 leading-5">{noticeMaintenance.notice_message}</p></div>
+            </div>
+          )}
+          {activeMaintenance ? (
+            <section role="alert" className="absolute inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-slate-950/95 px-4 py-8 text-white backdrop-blur-sm">
+              <div className="w-full max-w-xl rounded-3xl border border-amber-300/20 bg-slate-900 p-7 text-center shadow-2xl sm:p-9">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-300/10 text-amber-200"><AlertTriangle size={26}/></div>
+                <p className="mt-5 font-mono text-[10px] font-black tracking-[0.25em] text-amber-200">CAMPUSSYNC / MODULE MAINTENANCE</p>
+                <h1 className="mt-3 text-xl font-black">{activeMaintenance.notice_title || activeMaintenance.label + 'はメンテナンス中です'}</h1>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-300">{activeMaintenance.notice_message || 'この機能は一時的に利用できません。ほかの機能は通常どおり利用できます。'}</p>
+                <p className="mt-5 rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] text-slate-400">停止中の機能：{activeMaintenance.label}</p>
+                <p className="mt-4 text-[10px] text-slate-500">このメンテナンスは対象機能だけに適用されています。</p>
+              </div>
+            </section>
+          ) : (
+            <div
+              key={activeTab}
+              className={activeTab === 'chat' || activeTab === 'ai' || activeTab === 'notes'
+                ? 'campus-page-transition campus-page-transition--chat flex min-h-0 flex-1 flex-col'
+                : 'campus-page-transition'}
+            >
+              {renderContent()}
+            </div>
+          )}
           {contributionToast && (
             <div
               role="status"

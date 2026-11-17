@@ -167,7 +167,7 @@ export default function HiAdminPage() {
     finally { setLoading(false); }
   };
 
-  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database') => {
+  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database' | 'maintenance') => {
     setTab(next);
     if (next === 'users') void loadUsers(1, '');
     if (next === 'audit') void loadLogs();
