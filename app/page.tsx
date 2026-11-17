@@ -3817,6 +3817,7 @@ Supabaseの設定を確認してください。
       type?: string;
       theme?: string;
       room?: string;
+      tab?: string;
     };
     type ActionResult = { success: boolean; message: string };
     type ActionDetail = {
@@ -3901,6 +3902,56 @@ Supabaseの設定を確認してください。
             detail.resolve!({
               success: true,
               message: `お気に入り教室を「${targetRoom.name}」に変更しました。`,
+            });
+            return;
+          }
+
+          if (action.type === 'navigate-tab') {
+            const allowedTabs = new Set([
+              'home','timetable','cafeteria','ai','tasks','bus','chat','campus-map',
+              'notifications','facilities','calculator','notes','attendance','workspaces',
+              'materials','study','student-card','weather','school-schedule','countdowns','club',
+            ]);
+            const tab = String(action.tab || '');
+            if (!allowedTabs.has(tab)) {
+              detail.resolve!({ success: false, message: 'その画面への移動には対応していません。' });
+              return;
+            }
+            setActiveTab(tab);
+            detail.resolve!({ success: true, message: 'CampusSyncの該当画面を開きました。' });
+            return;
+          }
+
+          if (action.type === 'get-notification-settings') {
+            const categoryLabels: Record<string, string> = {
+              todo_reminders: '課題・提出期限',
+              chat_messages: 'クラス・学年・学校チャット',
+              school_announcements: '学校・先生からのお知らせ',
+              transport_alerts: '交通情報',
+              cafeteria_updates: '学食情報',
+              activity_updates: '部活動・校内活動',
+              weather_alerts: '気象警報',
+              disaster_alerts: '地震・防災速報',
+            };
+            const enabled = Object.entries(notificationSettings)
+              .filter(([, value]) => value)
+              .map(([key]) => categoryLabels[key] || key);
+            const timeLabels: Record<string, string> = {
+              twoDaysBefore: '2日前 20:00',
+              dayBefore: '前日 20:00',
+              morningOf: '当日朝 07:00',
+              threeHoursBefore: '期限3時間前',
+            };
+            const days = allowedNotificationDays.map(day => ({ Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日' } as Record<string, string>)[day] || day);
+            detail.resolve!({
+              success: true,
+              message: [
+                '通知設定の現在値です。',
+                '通知全体：' + (remindersEnabled ? '有効' : '無効'),
+                '対象曜日：' + (days.join('・') || '未設定'),
+                'リマインダー時刻：' + (reminderTimes.map(time => timeLabels[time] || time).join('・') || '未設定'),
+                '有効な通知カテゴリ：' + (enabled.join('・') || 'なし'),
+              ].join('\n'),
             });
             return;
           }
