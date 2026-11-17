@@ -37,7 +37,7 @@ function findTarget(q: string, names: string[], minLen = 3): number {
 }
 function evaluateNumericExpression(source: string): number | null {
   const input = source.normalize('NFKC').replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'pi').replace(/\s+/g, '').toLowerCase();
-  const tokenPattern = /(?:\d+(?:\.\d*)?|\.\d+)|(?:sqrt|sin|cos|tan|log|ln|abs|exp|pi|e)|[()+\-*/^%]/gy;
+  const tokenPattern = /(?:\d+(?:\.\d*)?|\.\d+)|(?:sqrt|sin|cos|tan|log|ln|abs|exp|pi|e)|[()+\-*\x2f^%]/gy;
   const tokens: string[] = [];
   let position = 0;
   while (position < input.length) {
@@ -113,7 +113,7 @@ function evaluateNumericExpression(source: string): number | null {
     return null;
   }
 }
-const isCalculatorQuestion = (q: string) => /計算|いくつ|√|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|ln\s*\(|π|÷|×|微分|積分/.test(q) && (/\d\s*[+\-*/^%×÷]\s*\d/.test(q) || /√|sin|cos|tan|log|ln|π|微分|積分/i.test(q));
+const isCalculatorQuestion = (q: string) => /計算|いくつ|√|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|ln\s*\(|π|÷|×|微分|積分/.test(q) && (/\d\s*[+\-*\/^%×÷]\s*\d/.test(q) || /√|sin|cos|tan|log|ln|π|微分|積分/i.test(q));
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
 const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
@@ -1444,7 +1444,7 @@ export async function POST(req: Request) {
     const expression = question.normalize('NFKC')
       .replace(/×/g, '*').replace(/÷/g, '/')
       .replace(/(?:を)?(?:計算して|計算すると|計算|求めて|答えを出して|いくつですか|はいくつ|の値|の近似値)/g, '')
-      .replace(/[^0-9a-zπ()+\-*/^%.]/gi, '')
+      .replace(/[^0-9a-zπ()+\-*\x2f^%.]/gi, '')
       .replace(/^[+*/^%]+|[+*/^%]+$/g, '');
     const result = evaluateNumericExpression(expression);
     if (result === null) return NextResponse.json({ answer: '数値計算として式を読み取れませんでした。例： (2+3)^2、sqrt(16)、sin(pi/2)。関数電卓では記号計算や証明には対応していません。' });
