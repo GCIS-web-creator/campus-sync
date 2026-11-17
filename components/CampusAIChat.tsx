@@ -506,7 +506,7 @@ export default function CampusAIChat({ mode = 'floating' }: { mode?: 'floating' 
               <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3 dark:from-slate-950 dark:to-slate-900 sm:p-6">
                 <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
                   {msgs.map(m => (
-                    <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                    <div key={m.id} data-user-content className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                       <div className={
                         m.role === 'user'
                           ? 'max-w-[92%] rounded-2xl rounded-br-md bg-[#5C9291] px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[82%]'

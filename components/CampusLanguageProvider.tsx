@@ -6,11 +6,13 @@ import {
   lookupCampusTranslation,
   type CampusLanguage,
 } from '@/lib/campus-i18n';
+import { translateCampusMessage, type CampusMessageKey } from '@/lib/campus-i18n-messages';
 
 type CampusLanguageContextValue = {
   language: CampusLanguage;
   setLanguage: (language: CampusLanguage) => void;
   translate: (value: string) => string;
+  t: (key: CampusMessageKey) => string;
 };
 
 type TextRecord = { source: string; output: string };
@@ -22,27 +24,25 @@ type PendingItem = {
 
 const CampusLanguageContext = createContext<CampusLanguageContextValue | null>(null);
 const STORAGE_KEY = 'campussync-language';
-const CACHE_PREFIX = 'campussync-ui-translation-v3:';
-const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'aria-label', 'title', 'alt'] as const;
-const IGNORED_SELECTOR = [
+const CACHE_PREFIX = 'campussync-ui-translation-v4:';
+const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'aria-label', 'title', 'alt', 'data-placeholder'] as const;
+const IGNORED_TEXT_SELECTOR = [
   'input', 'textarea', 'script', 'style', 'code', 'pre', 'svg', 'canvas',
-  '[contenteditable="true"]',
-  '[data-i18n-ignore="true"]',
-  '[data-user-content]',
-  '[data-no-translate="true"]',
-  '.campus-note-editor',
-  '.campus-chat-shell',
-  '.campus-chat-panel',
-  '.campus-chat-messages',
-  '.campus-ai-chat-history',
+  '[contenteditable="true"]', '[data-i18n-ignore="true"]', '[data-user-content]', '[data-no-translate="true"]',
+].join(',');
+const IGNORED_ATTRIBUTE_SELECTOR = [
+  'script', 'style', 'svg', 'canvas', '[data-i18n-ignore="true"]', '[data-user-content]', '[data-no-translate="true"]',
 ].join(',');
 
 const JAPANESE_TEXT = /[ぁ-んァ-ヶ一-龠]/u;
 const BATCH_SIZE = 8;
 const PARALLEL_BATCHES = 3;
 
-function hasIgnoredAncestor(element: Element | null): boolean {
-  return Boolean(element?.closest(IGNORED_SELECTOR));
+function hasIgnoredTextAncestor(element: Element | null): boolean {
+  return Boolean(element?.closest(IGNORED_TEXT_SELECTOR));
+}
+function hasIgnoredAttributeAncestor(element: Element | null): boolean {
+  return Boolean(element?.closest(IGNORED_ATTRIBUTE_SELECTOR));
 }
 
 function preserveWhitespace(original: string, translated: string): string {
@@ -85,6 +85,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
   }, []);
 
   const translate = useCallback((value: string) => lookupCampusTranslation(value, language) ?? value, [language]);
+  const t = useCallback((key: CampusMessageKey) => translateCampusMessage(key, language), [language]);
 
   useEffect(() => {
     try {
@@ -152,13 +153,28 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
             if (!batch.length) return;
 
             try {
-              const response = await fetch('/api/i18n/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ language, items: batch.map(([, item]) => item.source) }),
-              });
-              if (!response.ok) throw new Error('Translation service returned ' + response.status);
-              const result = await response.json() as { translations?: unknown };
+              let result: { translations?: unknown } | null = null;
+              let lastError: unknown = null;
+              for (let attempt = 0; attempt < 3; attempt += 1) {
+                try {
+                  const response = await fetch('/api/i18n/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language, items: batch.map(([, item]) => item.source) }),
+                  });
+                  if (!response.ok) throw new Error('Translation service returned ' + response.status);
+                  const candidate = await response.json() as { translations?: unknown };
+                  if (!Array.isArray(candidate.translations) || candidate.translations.length !== batch.length) {
+                    throw new Error('Translation service returned an incomplete batch.');
+                  }
+                  result = candidate;
+                  break;
+                } catch (error) {
+                  lastError = error;
+                  if (attempt < 2) await new Promise(resolve => window.setTimeout(resolve, 300 * (attempt + 1)));
+                }
+              }
+              if (!result) throw lastError instanceof Error ? lastError : new Error('Translation service is unavailable.');
               const values = Array.isArray(result.translations) ? result.translations : [];
 
               batch.forEach(([, item], index) => {
@@ -226,7 +242,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
 
     const applyText = (node: Text) => {
       const parent = node.parentElement;
-      if (!parent || hasIgnoredAncestor(parent)) return;
+      if (!parent || hasIgnoredTextAncestor(parent)) return;
       const current = node.data;
       if (!current.trim()) return;
 
@@ -252,7 +268,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
     };
 
     const applyAttributes = (element: Element) => {
-      if (hasIgnoredAncestor(element)) return;
+      if (hasIgnoredAttributeAncestor(element)) return;
       let records = attributeRecordsRef.current.get(element);
       if (!records) {
         records = new Map<string, AttributeRecord>();
@@ -294,7 +310,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
       if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
 
       const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : null;
-      if (element && hasIgnoredAncestor(element)) return;
+      if (element && hasIgnoredAttributeAncestor(element)) return;
       if (element) applyAttributes(element);
 
       const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -335,7 +351,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
     };
   }, [language]);
 
-  const value = useMemo(() => ({ language, setLanguage, translate }), [language, setLanguage, translate]);
+  const value = useMemo(() => ({ language, setLanguage, translate, t }), [language, setLanguage, translate, t]);
   return <CampusLanguageContext.Provider value={value}>{children}</CampusLanguageContext.Provider>;
 }
 

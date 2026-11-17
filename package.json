@@ -7,6 +7,7 @@
     "build": "node scripts/generate-weather-icons.mjs && next build",
     "start": "next start",
     "lint": "eslint",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "verify:cslogson": "node scripts/verify-cslogson.mjs",
     "precloudflare:build": "node scripts/generate-weather-icons.mjs",
     "cloudflare:install": "npm install --no-save --package-lock=false @opennextjs/cloudflare@1.20.16 wrangler@4.158.0",
