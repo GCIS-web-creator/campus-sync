@@ -148,7 +148,16 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
         flushTimerRef.current = null;
         void Promise.all(Array.from({ length: PARALLEL_BATCHES }, async () => {
           while (generation === generationRef.current && pendingRef.current.size > 0) {
-            const batch = Array.from(pendingRef.current.entries()).slice(0, BATCH_SIZE);
+            const batch: Array<[string, PendingItem]> = [];
+            let batchCharacters = 0;
+            for (const entry of pendingRef.current.entries()) {
+              const size = entry[1].source.length;
+              if (batch.length >= BATCH_SIZE) break;
+              if (batch.length > 0 && batchCharacters + size > 4800) break;
+              batch.push(entry);
+              batchCharacters += size;
+              if (batchCharacters >= 4800) break;
+            }
             batch.forEach(([key]) => pendingRef.current.delete(key));
             if (!batch.length) return;
 
