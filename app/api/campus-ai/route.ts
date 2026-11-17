@@ -54,6 +54,7 @@ const isCountdownQuestion = (q: string) => /カウントダウン|あと何日|�
 const isClassTimetableQuestion = (q: string) => /時間割|授業|何時間目|何限|今日の教科|明日の教科/.test(q);
 const isStudyQuestion = (q: string) => /学習時間|勉強時間|勉強記録|学習記録|集中時間|学習進捗|テスト範囲|試験範囲|定期テスト|中間テスト|期末テスト|学年末|小テスト/.test(q);
 const isAttendanceQuestion = (q: string) => /出欠連絡|欠席連絡|遅刻連絡|早退連絡|出欠の履歴|出欠状況/.test(q);
+const isEarthquakeQuestion = (q: string) => /地震|震度|震源|緊急地震速報|揺れ/.test(q);
 const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間/.test(q);
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
@@ -111,6 +112,7 @@ export async function POST(req: Request) {
           ['課題・提出期限', '自分の課題と締切を教えて'],
           ['教室・室温', '教室の状況や温度を教えて'],
           ['学校予定表・イベント', '今週の学校予定は？／次の行事まであと何日？'],
+          ['地震情報', '最近の地震や小平の震度を教えて'],
           ['クラス時間割', '今日の時間割は？／明日の授業は？'],
           ['学習記録・試験範囲・小テスト', '今週の学習時間は？／試験範囲は？／小テストは？'],
           ['出欠連絡履歴', '自分の出欠連絡を確認して'],
@@ -146,6 +148,7 @@ export async function POST(req: Request) {
   const wantsClassTimetable = isClassTimetableQuestion(question);
   const wantsStudy = isStudyQuestion(question);
   const wantsAttendance = isAttendanceQuestion(question);
+  const wantsEarthquake = isEarthquakeQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
   const wantsMenu = isMealQuestion(question) && !wantsCrowd && !wantsReviews;
@@ -240,7 +243,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes] = await Promise.all([
+  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes, earthquakesRes] = await Promise.all([
     db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
@@ -270,6 +273,7 @@ export async function POST(req: Request) {
     authed && studentId ? authed.from('student_study_sessions').select('subject_name,task_title,focus_seconds,break_seconds,started_at,finish_kind').eq('user_id', userResult?.data?.user?.id).gte('started_at', new Date(nowDate.getTime() - 90 * 86400000).toISOString()).order('started_at', { ascending: false }).limit(500) : Promise.resolve({ data: null, error: null }),
     db.from('mini_test_events').select('subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', todayDateKey).order('test_date').limit(50),
     authed && studentId ? authed.from('attendance_reports').select('report_type,report_date,expected_time,note,status,created_at').eq('student_id', studentId).order('report_date', { ascending: false }).limit(30) : Promise.resolve({ data: null, error: null }),
+    db.from('jma_earthquakes').select('event_key,title,headline,event_time,issued_at,hypocenter_name,magnitude,max_intensity,kodaira_intensity,is_eew,is_eew_cancelled,is_distant').order('event_time', { ascending: false, nullsFirst: false }).limit(20),
   ]);
 
   // 共通課題の完了状態を生徒ごとに読み、完了済みを未完了一覧から除外する。
@@ -306,6 +310,7 @@ export async function POST(req: Request) {
   if (wantsClassTimetable && classTimetableRes.error) return NextResponse.json({ answer: '時間割を読み込めませんでした。' });
   if (wantsStudy && (examsRes.error || examSubjectsRes.error || testRangesRes.error || studySessionsRes.error || miniTestsRes.error)) return NextResponse.json({ answer: '学習情報を読み込めませんでした。ログイン状態と学習データの設定を確認してください。' });
   if (wantsAttendance && attendanceRes.error) return NextResponse.json({ answer: '出欠連絡の履歴を読み込めませんでした。' });
+  if (wantsEarthquake && earthquakesRes.error) return NextResponse.json({ answer: '地震情報を読み込めませんでした。' });
   if (wantsTask && !authed) return NextResponse.json({ answer: '課題は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsTask && (taskRes.error || todoRes.error)) return NextResponse.json({ answer: '課題を読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。' });
   if (wantsRoom && roomRes.error) return NextResponse.json({ answer: '教室の状況を読み込めませんでした。少し待ってからもう一度試してください。' });
@@ -1282,6 +1287,14 @@ export async function POST(req: Request) {
         ]
       )
     });
+  }
+
+  if (wantsEarthquake) {
+    const events = (earthquakesRes.data || []) as Array<{ title?: string | null; headline?: string | null; event_time?: string | null; issued_at?: string | null; hypocenter_name?: string | null; magnitude?: number | null; max_intensity?: string | null; kodaira_intensity?: string | null; is_eew?: boolean; is_eew_cancelled?: boolean; is_distant?: boolean }>;
+    if (!events.length) return NextResponse.json({ answer: '保存されている地震情報はありません。' });
+    const latest = events[0];
+    const rows = events.map(event => [event.event_time || event.issued_at || '日時不明', event.hypocenter_name || '震源不明', event.magnitude == null ? '—' : String(event.magnitude), event.max_intensity || '—', event.kodaira_intensity || '—', event.is_eew_cancelled ? '取消' : event.is_eew ? '緊急地震速報' : event.is_distant ? '遠地地震' : '観測情報']);
+    return NextResponse.json({ answer: 'CampusSyncに保存されている最新の地震情報です。最新情報は' + (latest.title || latest.headline || '直近の記録') + 'です。小平の震度欄は保存データに記録がある場合のみ表示します。', table: table(['発生時刻', '震央・震源', 'M', '最大震度', '小平', '種別'], rows) });
   }
 
   if (wantsSchedule) {
