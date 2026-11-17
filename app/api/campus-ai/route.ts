@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 import { canStudentViewMaterial, getStudyMaterialsAdminClient, getStudyStudentContext } from '@/lib/study-materials-server';
+import { CLASS_TIMETABLE_DATA } from '@/lib/class-timetable';
 type Direction = '国分寺方面' | '東村山方面' | '両方';
 type Target = 'なし' | '学食' | '課題' | '教室' | '部活' | '蔵書' | 'キャリア' | '落とし物' | '口コミ' | '貢献度' | '通知';
 
@@ -448,7 +449,6 @@ export async function POST(req: Request) {
   if ((wantsTask || wantsStudy || wantsAttendance) && !authed) return NextResponse.json({ answer: 'この情報は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsSchedule && schoolScheduleRes.error) return NextResponse.json({ answer: '学校予定表を読み込めませんでした。' });
   if (wantsCountdown && countdownRes.error) return NextResponse.json({ answer: 'イベント情報を読み込めませんでした。' });
-  if (wantsClassTimetable && classTimetableRes.error) return NextResponse.json({ answer: '時間割を読み込めませんでした。' });
   if (wantsStudy && (examsRes.error || examSubjectsRes.error || testRangesRes.error || studySessionsRes.error || miniTestsRes.error)) return NextResponse.json({ answer: '学習情報を読み込めませんでした。ログイン状態と学習データの設定を確認してください。' });
   if (wantsAttendance && attendanceRes.error) return NextResponse.json({ answer: '出欠連絡の履歴を読み込めませんでした。' });
   if (wantsEarthquake && earthquakesRes.error) return NextResponse.json({ answer: '地震情報を読み込めませんでした。' });
@@ -1530,7 +1530,17 @@ export async function POST(req: Request) {
   }
 
   if (wantsClassTimetable) {
-    const rows = (classTimetableRes.data || []) as Array<{ group_name: string; day_key: string; period: number; subject: string; teacher?: string | null }>;
+    const databaseRows = (classTimetableRes.data || []) as Array<{ group_name: string; day_key: string; period: number; subject: string; teacher?: string | null }>;
+    const fallbackRows = Object.entries(CLASS_TIMETABLE_DATA).flatMap(([groupName, days]) =>
+      Object.entries(days).flatMap(([dayKey, slots]) => slots.map(slot => ({
+        group_name: groupName,
+        day_key: dayKey,
+        period: slot.period,
+        subject: slot.subject,
+        teacher: slot.teacher,
+      })))
+    );
+    const rows = databaseRows.length ? databaseRows : fallbackRows;
     if (!rows.length) return NextResponse.json({ answer: '時間割データが登録されていません。' });
     const dayMap: Record<string, string> = { monday: '月', tuesday: '火', wednesday: '水', thursday: '木', friday: '金', mon: '月', tue: '火', wed: '水', thu: '木', fri: '金' };
     const todayWeekday = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(nowDate).replace('曜日', '');
