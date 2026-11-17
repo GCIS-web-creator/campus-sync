@@ -49,6 +49,11 @@ const isReviewQuestion = (q: string) => /口コミ|レビュー|感想|評価/.t
 const isContributionQuestion = (q: string) => /貢献度|貢献ポイント|累計ポイント|学校貢献|剣ランク|貢献度ランク|ランク|ブロンズ|シルバー|ゴールド|プラチナ|ダイヤモンド/.test(q);
 const isProfileQuestion = (q: string) => /学籍番号|所属クラス|私のクラス|自分のクラス|何年何組|何組ですか|私の名前|自分の名前|名前を教えて/.test(q);
 const isNotificationQuestion = (q: string) => /通知|お知らせ|リマインダー/.test(q);
+const isScheduleQuestion = (q: string) => /学校予定|週間予定|今週の予定|来週の予定|学校行事|行事予定|予定表/.test(q);
+const isCountdownQuestion = (q: string) => /カウントダウン|あと何日|何日後|次の行事|次のイベント|イベントまで/.test(q);
+const isClassTimetableQuestion = (q: string) => /時間割|授業|何時間目|何限|今日の教科|明日の教科/.test(q);
+const isStudyQuestion = (q: string) => /学習時間|勉強時間|勉強記録|学習記録|集中時間|学習進捗|テスト範囲|試験範囲|定期テスト|中間テスト|期末テスト|学年末|小テスト/.test(q);
+const isAttendanceQuestion = (q: string) => /出欠連絡|欠席連絡|遅刻連絡|早退連絡|出欠の履歴|出欠状況/.test(q);
 const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間/.test(q);
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
@@ -105,7 +110,10 @@ export async function POST(req: Request) {
           ['電車の時刻表', '国分寺方面の次の電車は？'],
           ['課題・提出期限', '自分の課題と締切を教えて'],
           ['教室・室温', '教室の状況や温度を教えて'],
-          ['学校イベント・週間予定', '今週の学校予定やカウントダウンは？'],
+          ['学校予定表・イベント', '今週の学校予定は？／次の行事まであと何日？'],
+          ['クラス時間割', '今日の時間割は？／明日の授業は？'],
+          ['学習記録・試験範囲・小テスト', '今週の学習時間は？／試験範囲は？／小テストは？'],
+          ['出欠連絡履歴', '自分の出欠連絡を確認して'],
           ['部活・委員会ノート', '部活の最新連絡を教えて'],
           ['図書館の蔵書', 'この本は図書館にある？'],
           ['落とし物', '届けられた落とし物はある？'],
@@ -133,6 +141,11 @@ export async function POST(req: Request) {
   const wantsContribution = isContributionQuestion(question);
   const wantsProfile = isProfileQuestion(question);
   const wantsNotifications = isNotificationQuestion(question);
+  const wantsSchedule = isScheduleQuestion(question);
+  const wantsCountdown = isCountdownQuestion(question);
+  const wantsClassTimetable = isClassTimetableQuestion(question);
+  const wantsStudy = isStudyQuestion(question);
+  const wantsAttendance = isAttendanceQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
   const wantsMenu = isMealQuestion(question) && !wantsCrowd && !wantsReviews;
@@ -227,7 +240,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes] = await Promise.all([
+  const [todayMenuRes, menuRes, kokubunjiRes, eastRes, roomRes, soldRes, voteRes, taskRes, todoRes, clubRes, booksRes, careerRes, lostRes, reviewsRes, menuVoteRes, notificationsRes, schoolScheduleRes, countdownRes, classTimetableRes, examsRes, examSubjectsRes, testRangesRes, studySessionsRes, miniTestsRes, attendanceRes] = await Promise.all([
     db.from('cafeteria_daily_menus').select('*').eq('service_date', todayDateKey).maybeSingle(),
     db.from('cafeteria_menu').select('id, name, calorie, allergy, is_active').eq('is_active', true).order('id', { ascending: true }),
     db.from('takanodai_timetable').select('departure_time, service').eq('direction', 'kokubunji'),
@@ -248,6 +261,15 @@ export async function POST(req: Request) {
     db.from('cafeteria_reviews').select('menu_id, user_name, rating, comment, created_at').order('created_at', { ascending: false }).limit(200),
     db.from('cafeteria_votes').select('menu_id, scope_key, status, voter_id, created_at').not('menu_id', 'is', null).gte('created_at', freshSince),
     db.from('notifications').select('id, title, created_at').order('created_at', { ascending: false }).limit(100),
+    db.from('school_weekly_schedules').select('week_start,title,days,updated_at').lte('week_start', todayDateKey).order('week_start', { ascending: false }).limit(1).maybeSingle(),
+    db.from('school_event_countdowns').select('id,title,summary,event_date,is_active').eq('is_active', true).gte('event_date', todayDateKey).order('event_date', { ascending: true }).limit(30),
+    db.from('class_timetable_slots').select('group_name,day_key,period,subject,teacher').order('group_name').order('day_key').order('period'),
+    db.from('school_test_exams').select('id,school_year,term,exam_type,start_date,end_date').order('start_date', { ascending: false }).limit(20),
+    db.from('school_test_subjects').select('id,exam_id,subject,exam_date,sort_order').order('exam_date').order('sort_order').limit(200),
+    authed && studentId ? authed.from('student_test_ranges').select('id,subject_id,school_test_subject_id,title,status,created_at').eq('user_id', userResult?.data?.user?.id).order('created_at', { ascending: true }).limit(200) : Promise.resolve({ data: null, error: null }),
+    authed && studentId ? authed.from('student_study_sessions').select('subject_name,task_title,focus_seconds,break_seconds,started_at,finish_kind').eq('user_id', userResult?.data?.user?.id).gte('started_at', new Date(nowDate.getTime() - 90 * 86400000).toISOString()).order('started_at', { ascending: false }).limit(500) : Promise.resolve({ data: null, error: null }),
+    db.from('mini_test_events').select('subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', todayDateKey).order('test_date').limit(50),
+    authed && studentId ? authed.from('attendance_reports').select('report_type,report_date,expected_time,note,status,created_at').eq('student_id', studentId).order('report_date', { ascending: false }).limit(30) : Promise.resolve({ data: null, error: null }),
   ]);
 
   // 共通課題の完了状態を生徒ごとに読み、完了済みを未完了一覧から除外する。
@@ -278,6 +300,12 @@ export async function POST(req: Request) {
   }
 
   // クエリ失敗を「データ0件」と誤認しない。質問された分野の失敗は明示する。
+  if ((wantsTask || wantsStudy || wantsAttendance) && !authed) return NextResponse.json({ answer: 'この情報は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
+  if (wantsSchedule && schoolScheduleRes.error) return NextResponse.json({ answer: '学校予定表を読み込めませんでした。' });
+  if (wantsCountdown && countdownRes.error) return NextResponse.json({ answer: 'イベント情報を読み込めませんでした。' });
+  if (wantsClassTimetable && classTimetableRes.error) return NextResponse.json({ answer: '時間割を読み込めませんでした。' });
+  if (wantsStudy && (examsRes.error || examSubjectsRes.error || testRangesRes.error || studySessionsRes.error || miniTestsRes.error)) return NextResponse.json({ answer: '学習情報を読み込めませんでした。ログイン状態と学習データの設定を確認してください。' });
+  if (wantsAttendance && attendanceRes.error) return NextResponse.json({ answer: '出欠連絡の履歴を読み込めませんでした。' });
   if (wantsTask && !authed) return NextResponse.json({ answer: '課題は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsTask && (taskRes.error || todoRes.error)) return NextResponse.json({ answer: '課題を読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。' });
   if (wantsRoom && roomRes.error) return NextResponse.json({ answer: '教室の状況を読み込めませんでした。少し待ってからもう一度試してください。' });
@@ -1254,6 +1282,63 @@ export async function POST(req: Request) {
         ]
       )
     });
+  }
+
+  if (wantsSchedule) {
+    const schedule = schoolScheduleRes.data as { week_start?: string; title?: string; days?: Array<{ date?: string; dayLabel?: string; isHoliday?: boolean; holidayName?: string; items?: Array<{ time?: string; title?: string; location?: string; details?: string }> }> } | null;
+    if (!schedule?.days?.length) return NextResponse.json({ answer: '学校予定表はまだ登録されていません。' });
+    const requestedDate = /明日/.test(question) ? new Date(new Date(nowDate.getTime() + 86400000).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })) : null;
+    const targetKey = requestedDate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(requestedDate) : '';
+    const selectedDays = targetKey ? schedule.days.filter(day => day.date === targetKey) : schedule.days;
+    return NextResponse.json({ answer: targetKey ? '指定日の学校予定です。' : '登録されている週間学校予定です。', table: table(['日付', '曜日', '予定'], selectedDays.map(day => [String(day.date || ''), String(day.dayLabel || ''), day.isHoliday ? (day.holidayName || '休校') : (day.items || []).map(item => [item.time, item.title, item.location, item.details].filter(Boolean).join(' ')).join(' / ') || '予定なし'])) });
+  }
+
+  if (wantsCountdown) {
+    const events = (countdownRes.data || []) as Array<{ title: string; summary?: string | null; event_date: string }>;
+    if (!events.length) return NextResponse.json({ answer: '現在公開されている今後のイベントはありません。' });
+    const rows = events.map(event => {
+      const days = Math.ceil((new Date(event.event_date + 'T00:00:00+09:00').getTime() - new Date(todayDateKey + 'T00:00:00+09:00').getTime()) / 86400000);
+      return [event.title, event.event_date, days === 0 ? '今日' : days + '日後', event.summary || '—'];
+    });
+    return NextResponse.json({ answer: '公開中のイベント・カウントダウンです。', table: table(['イベント', '開催日', 'あと何日', '概要'], rows.slice(0, 20)) });
+  }
+
+  if (wantsClassTimetable) {
+    const rows = (classTimetableRes.data || []) as Array<{ group_name: string; day_key: string; period: number; subject: string; teacher?: string | null }>;
+    if (!rows.length) return NextResponse.json({ answer: '時間割データが登録されていません。' });
+    const dayMap: Record<string, string> = { monday: '月', tuesday: '火', wednesday: '水', thursday: '木', friday: '金', mon: '月', tue: '火', wed: '水', thu: '木', fri: '金' };
+    const weekday = /月曜/.test(question) ? '月' : /火曜/.test(question) ? '火' : /水曜/.test(question) ? '水' : /木曜/.test(question) ? '木' : /金曜/.test(question) ? '金' : '';
+    const group = /8組/.test(question) ? '8組' : /7組/.test(question) ? '7組' : userClass ? userClass : '';
+    const filtered = rows.filter(row => (!group || row.group_name === group || row.group_name.endsWith(group)) && (!weekday || dayMap[row.day_key.toLowerCase()] === weekday));
+    return NextResponse.json({ answer: (group ? group + 'の' : '') + (weekday ? weekday + '曜日の' : '') + '時間割です。', table: table(['クラス', '曜日', '時限', '教科', '担当'], filtered.map(row => [row.group_name, dayMap[row.day_key.toLowerCase()] || row.day_key, String(row.period), row.subject, row.teacher || '—'])) });
+  }
+
+  if (wantsStudy) {
+    const exams = (examsRes.data || []) as Array<{ id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string }>;
+    const subjects = (examSubjectsRes.data || []) as Array<{ id: string; exam_id: string; subject: string; exam_date: string; sort_order: number }>;
+    const ranges = (testRangesRes.data || []) as Array<{ school_test_subject_id?: string | null; title: string; status: string }>;
+    const sessions = (studySessionsRes.data || []) as Array<{ subject_name: string; task_title: string; focus_seconds: number; started_at: string; finish_kind: string }>;
+    const miniTests = (miniTestsRes.data || []) as Array<{ subject: string; title: string; test_date: string; notes?: string | null; period?: number | null }>;
+    if (/小テスト/.test(question)) return NextResponse.json({ answer: miniTests.length ? '公開中の小テスト予定です。' : '公開中の小テスト予定はありません。', table: table(['日付', '教科', '小テスト', '時限', '備考'], miniTests.map(item => [item.test_date, item.subject, item.title, item.period == null ? '—' : String(item.period), item.notes || '—'])) });
+    if (/範囲|進捗|定期テスト|中間テスト|期末テスト|学年末|試験|テスト/.test(question)) {
+      const upcoming = exams.filter(exam => exam.end_date >= todayDateKey);
+      const selected = upcoming[0] || exams[0];
+      if (!selected) return NextResponse.json({ answer: '定期テストの日程はまだ登録されていません。' });
+      const subjectRows = subjects.filter(subject => subject.exam_id === selected.id);
+      return NextResponse.json({ answer: selected.exam_type + '（' + selected.start_date + '〜' + selected.end_date + '）の登録情報です。自分の範囲の進捗も表示します。', table: table(['教科', '試験日', '登録した範囲', '進捗'], subjectRows.map(subject => { const own = ranges.filter(range => range.school_test_subject_id === subject.id); return [subject.subject, subject.exam_date, own.map(range => range.title).join('、') || '未登録', own.map(range => ({ not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' }[range.status] || range.status)).join(' / ') || '未登録']; })) });
+    }
+    const since = new Date(nowDate.getTime() - 7 * 86400000);
+    const recent = sessions.filter(session => new Date(session.started_at) >= since);
+    const totalSeconds = recent.reduce((sum, session) => sum + Math.max(0, Number(session.focus_seconds) || 0), 0);
+    const bySubject = new Map<string, number>();
+    recent.forEach(session => bySubject.set(session.subject_name, (bySubject.get(session.subject_name) || 0) + Math.max(0, Number(session.focus_seconds) || 0)));
+    return NextResponse.json({ answer: '直近7日間の学習記録です。合計' + Math.floor(totalSeconds / 3600) + '時間' + Math.floor(totalSeconds % 3600 / 60) + '分を記録しています。', table: table(['教科', '学習時間'], [...bySubject.entries()].map(([subject, seconds]) => [subject, Math.floor(seconds / 3600) + '時間' + Math.floor(seconds % 3600 / 60) + '分'])) });
+  }
+
+  if (wantsAttendance) {
+    const reports = (attendanceRes.data || []) as Array<{ report_type: string; report_date: string; expected_time?: string | null; note?: string | null; status: string }>;
+    const labels: Record<string, string> = { absence: '欠席', late: '遅刻', early_leave: '早退' };
+    return NextResponse.json({ answer: reports.length ? '出欠連絡の履歴です。' : '出欠連絡の履歴はありません。', table: table(['日付', '区分', '予定時刻', '受付状態', '連絡事項'], reports.map(row => [row.report_date, labels[row.report_type] || row.report_type, row.expected_time || '—', row.status, row.note || '—'])) });
   }
 
   if (trainQuestion) {
