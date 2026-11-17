@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -28,6 +29,8 @@ function adminClient() {
 }
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('notifications');
+  if (maintenanceBlock) return maintenanceBlock;
   const user = await getUser(request);
   if (!user) return NextResponse.json({ message: '学校アカウントでログインしてください。' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   const admin = adminClient();
@@ -41,6 +44,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('notifications');
+  if (maintenanceBlock) return maintenanceBlock;
   const user = await getUser(request);
   if (!user) return NextResponse.json({ message: '学校アカウントでログインしてください。' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   const admin = adminClient();

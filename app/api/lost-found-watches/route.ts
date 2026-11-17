@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -31,6 +32,8 @@ async function getStudentClient(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('lost-found');
+  if (maintenanceBlock) return maintenanceBlock;
   const student = await getStudentClient(request);
   if (!student) {
     return NextResponse.json({ success: false, message: '学校アカウントでログインしてください。' }, { status: 401 });
@@ -54,6 +57,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('lost-found');
+  if (maintenanceBlock) return maintenanceBlock;
   const student = await getStudentClient(request);
   if (!student) {
     return NextResponse.json({ success: false, message: '学校アカウントでログインしてください。' }, { status: 401 });
@@ -89,6 +94,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('lost-found');
+  if (maintenanceBlock) return maintenanceBlock;
   const student = await getStudentClient(request);
   if (!student) {
     return NextResponse.json({ success: false, message: '学校アカウントでログインしてください。' }, { status: 401 });

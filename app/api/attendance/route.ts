@@ -75,6 +75,8 @@ export async function POST(request: Request) {
   }
 }
 export async function PATCH(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!sameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const context = await getStudyStudentContext(request);
