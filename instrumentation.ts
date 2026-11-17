@@ -18,7 +18,6 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
         routerKind: context.routerKind,
         routeType: context.routeType,
         renderSource: context.renderSource,
-        renderType: context.renderType,
         revalidateReason: context.revalidateReason,
       },
     });
