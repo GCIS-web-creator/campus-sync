@@ -49,7 +49,9 @@ type PageAction =
   | { type: 'set-theme'; theme: string }
   | { type: 'set-favorite-room'; room: string }
   | { type: 'get-favorite-room' }
-  | { type: 'test-push' };
+  | { type: 'test-push' }
+  | { type: 'navigate-tab'; tab: string }
+  | { type: 'get-notification-settings' };
 
 type PageActionResult = { success: boolean; message: string };
 
@@ -129,6 +131,34 @@ function detectPageAction(question: string): PageAction | null {
     if (/緑|グリーン/.test(q)) return { type: 'set-theme', theme: 'emerald' };
     if (/オレンジ/.test(q)) return { type: 'set-theme', theme: 'orange' };
     if (/藍色|インディゴ/.test(q)) return { type: 'set-theme', theme: 'indigo' };
+  }
+
+  if (/通知設定|リマインダー設定/.test(q) && /確認|教えて|表示|見せて/.test(q)) {
+    return { type: 'get-notification-settings' };
+  }
+
+  const wantsOpen = /開いて|開く|表示して|表示してほしい|見せて|移動して|切り替えて|に移動|を開く/.test(q);
+  if (wantsOpen) {
+    const routes: Array<{ pattern: RegExp; tab: string }> = [
+      { pattern: /関数電卓|計算機|電卓/, tab: 'calculator' },
+      { pattern: /メモ|ノート/, tab: 'notes' },
+      { pattern: /学習|勉強|テスト対策|集中モード/, tab: 'study' },
+      { pattern: /デジタル生徒証|生徒証|学生証/, tab: 'student-card' },
+      { pattern: /気象パネル|天気|地震/, tab: 'weather' },
+      { pattern: /校内マップ|校内施設|施設案内/, tab: 'facilities' },
+      { pattern: /時間割/, tab: 'timetable' },
+      { pattern: /学校予定表|週間予定/, tab: 'school-schedule' },
+      { pattern: /カウントダウン|学校行事/, tab: 'countdowns' },
+      { pattern: /クラスチャット|学年チャット|全校チャット|学校チャット/, tab: 'chat' },
+      { pattern: /資料室|教材/, tab: 'materials' },
+      { pattern: /ワークスペース|共同作業/, tab: 'workspaces' },
+      { pattern: /出欠連絡/, tab: 'attendance' },
+      { pattern: /お知らせ|通知/, tab: 'notifications' },
+      { pattern: /学食/, tab: 'cafeteria' },
+      { pattern: /電車|交通/, tab: 'bus' },
+    ];
+    const route = routes.find(item => item.pattern.test(q));
+    if (route) return { type: 'navigate-tab', tab: route.tab };
   }
 
   if (/リマインダー.*テスト通知|テスト通知.*(?:送って|送信|して)|通知.*テストして/.test(q)) {
