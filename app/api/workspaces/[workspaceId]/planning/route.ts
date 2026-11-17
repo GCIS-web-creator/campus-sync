@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { getWorkspaceMemberRole, getWorkspaceStudentContext, isSameOrigin, noStoreHeaders, recordWorkspaceAudit, workspaceIdPattern } from '@/lib/workspaces-server';
 
@@ -30,6 +31,8 @@ const audit = (admin: any, workspaceId: string, userId: string, action: string, 
   recordWorkspaceAudit(admin, { workspaceId, actorUserId: userId, action, targetType: kind, targetId: id });
 
 export async function GET(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const { workspaceId } = await route.params;
     if (!workspaceIdPattern.test(workspaceId)) return fail('グループIDが正しくありません。');
@@ -105,6 +108,8 @@ export async function GET(request: Request, route: { params: Promise<{ workspace
 }
 
 export async function POST(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な送信です。', 403);
   try {
     const { workspaceId } = await route.params;
@@ -225,6 +230,8 @@ export async function POST(request: Request, route: { params: Promise<{ workspac
 }
 
 export async function PATCH(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const { workspaceId } = await route.params;
@@ -305,6 +312,8 @@ export async function PATCH(request: Request, route: { params: Promise<{ workspa
 }
 
 export async function DELETE(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const { workspaceId } = await route.params;

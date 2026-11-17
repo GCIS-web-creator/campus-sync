@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { getWorkspaceMemberRole, getWorkspaceStudentContext, isSameOrigin, noStoreHeaders, recordWorkspaceAudit, workspaceIdPattern } from '@/lib/workspaces-server';
 
@@ -44,6 +45,8 @@ async function loadChat(request:Request,workspaceId:string) {
 }
 
 export async function GET(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const {workspaceId}=await route.params;
     if(!workspaceIdPattern.test(workspaceId)) return fail('グループIDが正しくありません。');
@@ -57,6 +60,8 @@ export async function GET(request:Request,route:{params:Promise<{workspaceId:str
 }
 
 export async function POST(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if(!isSameOrigin(request)) return fail('不正な送信です。',403);
   try {
     const context=await getWorkspaceStudentContext(request);
@@ -126,6 +131,8 @@ export async function POST(request:Request,route:{params:Promise<{workspaceId:st
 }
 
 export async function PATCH(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if(!isSameOrigin(request)) return fail('不正な送信です。',403);
   try {
     const context=await getWorkspaceStudentContext(request);
@@ -154,6 +161,8 @@ export async function PATCH(request:Request,route:{params:Promise<{workspaceId:s
 }
 
 export async function DELETE(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if(!isSameOrigin(request)) return fail('不正な送信です。',403);
   try {
     const context=await getWorkspaceStudentContext(request);
