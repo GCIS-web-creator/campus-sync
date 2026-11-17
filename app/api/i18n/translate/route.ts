@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     });
 
     let translated = typeof response.translated_text === 'string'
-      ? response.translated_text.split(/\s*###\s*/u).map(value => value.trim())
+      ? response.translated_text.split(/\s*#{3,}\s*/u).map(value => value.trim())
       : [];
 
     // If a model drops separators or leaves Japanese text untranslated, retry only
