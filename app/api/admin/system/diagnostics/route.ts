@@ -94,12 +94,12 @@ export async function GET(request: Request) {
     let migrationSourceAvailable = true;
     try {
       localMigrationFiles = readdirSync(join(process.cwd(), 'supabase', 'migrations'))
-        .filter((name) => /^\\d{14}_.+\\.sql$/.test(name));
+        .filter((name) => /^\d{14}_.+\.sql$/.test(name));
     } catch {
       migrationSourceAvailable = false;
     }
     const localMigrations = localMigrationFiles.map((fileName) => {
-      const match = fileName.match(/^(\\d{14})_(.+)\\.sql$/);
+      const match = fileName.match(/^(\d{14})_(.+)\.sql$/);
       return match ? { version: match[1], name: match[2] } : null;
     }).filter((item): item is { version: string; name: string } => item !== null);
     const localByVersion = new Map(localMigrations.map((item) => [item.version, item]));
