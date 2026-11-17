@@ -24,7 +24,7 @@ export default function HiAdminPage() {
   const [hiadminPassword2, setHiadminPassword2] = useState('');
   const [hiadminPassword3, setHiadminPassword3] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database' | 'maintenance'>('overview');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<Account[]>([]);
   const [page, setPage] = useState(1);
