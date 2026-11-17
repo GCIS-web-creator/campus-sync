@@ -122,7 +122,12 @@ export async function POST(req: Request) {
           ['課題・提出期限', '自分の課題と締切を教えて'],
           ['教室・室温', '教室の状況や温度を教えて'],
           ['学校予定表・イベント', '今週の学校予定は？／次の行事まであと何日？'],
-          ['地震情報', '最近の地震や小平の震度を教えて'],
+          ['地震情報・気象警報', '最近の地震や小平の震度は？／小平市に警報は出ている？'],
+          ['メモ・ノート', '物理のまとめメモを探して'],
+          ['資料室', '公開中の物理の資料を探して'],
+          ['校内施設・マップ', '図書館はどこ？／校内施設一覧は？'],
+          ['クラス・学年・全校チャット', 'クラスチャットの最近の投稿は？'],
+          ['共有ワークスペース', '参加中のワークスペースの予定は？'],
           ['クラス時間割', '今日の時間割は？／明日の授業は？'],
           ['学習記録・試験範囲・小テスト', '今週の学習時間は？／試験範囲は？／小テストは？'],
           ['出欠連絡履歴', '自分の出欠連絡を確認して'],
@@ -331,6 +336,31 @@ export async function POST(req: Request) {
     }
   }
 
+  let workspaceSummary: Array<{ name: string; category: string; posts: string[]; tasks: string[]; events: string[] }> = [];
+  if (wantsWorkspace && studyContext) {
+    const memberRows = (membershipsRes.data || []) as Array<{ workspace_id: string; member_role: string }>;
+    const workspaceIds = memberRows.map(row => row.workspace_id).slice(0, 30);
+    if (workspaceIds.length) {
+      const [workspaceRowsRes, postsRowsRes, taskRowsRes, eventRowsRes] = await Promise.all([
+        studyContext.admin.from('workspaces').select('id,name,category').eq('status', 'active').in('id', workspaceIds),
+        studyContext.admin.from('workspace_posts').select('workspace_id,title,body,created_at,is_pinned').in('workspace_id', workspaceIds).is('deleted_at', null).order('is_pinned', { ascending: false }).order('created_at', { ascending: false }).limit(60),
+        studyContext.admin.from('workspace_tasks').select('workspace_id,title,status,due_at').in('workspace_id', workspaceIds).in('status', ['todo','in_progress','review']).is('deleted_at', null).order('due_at', { ascending: true, nullsFirst: false }).limit(60),
+        studyContext.admin.from('workspace_events').select('workspace_id,title,starts_at,location').in('workspace_id', workspaceIds).gte('starts_at', nowDate.toISOString()).is('canceled_at', null).order('starts_at', { ascending: true }).limit(60),
+      ]);
+      if (workspaceRowsRes.error || postsRowsRes.error || taskRowsRes.error || eventRowsRes.error) {
+        return NextResponse.json({ answer: '共有ワークスペースの内容を読み込めませんでした。' });
+      }
+      const workspaceRows = workspaceRowsRes.data || [];
+      workspaceSummary = workspaceRows.map(workspace => ({
+        name: workspace.name,
+        category: workspace.category,
+        posts: (postsRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 3).map(item => item.title + (item.is_pinned ? '（重要）' : '') + '：' + String(item.body || '').slice(0, 100)),
+        tasks: (taskRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 5).map(item => item.title + '（' + item.status + (item.due_at ? '・' + item.due_at : '') + '）'),
+        events: (eventRowsRes.data || []).filter(item => item.workspace_id === workspace.id).slice(0, 4).map(item => item.title + '（' + item.starts_at + (item.location ? '・' + item.location : '') + '）'),
+      }));
+    }
+  }
+
   // クエリ失敗を「データ0件」と誤認しない。質問された分野の失敗は明示する。
   if ((wantsTask || wantsStudy || wantsAttendance) && !authed) return NextResponse.json({ answer: 'この情報は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsSchedule && schoolScheduleRes.error) return NextResponse.json({ answer: '学校予定表を読み込めませんでした。' });
@@ -339,6 +369,15 @@ export async function POST(req: Request) {
   if (wantsStudy && (examsRes.error || examSubjectsRes.error || testRangesRes.error || studySessionsRes.error || miniTestsRes.error)) return NextResponse.json({ answer: '学習情報を読み込めませんでした。ログイン状態と学習データの設定を確認してください。' });
   if (wantsAttendance && attendanceRes.error) return NextResponse.json({ answer: '出欠連絡の履歴を読み込めませんでした。' });
   if (wantsEarthquake && earthquakesRes.error) return NextResponse.json({ answer: '地震情報を読み込めませんでした。' });
+  if ((wantsNotes || wantsFacilities || wantsClassChat || wantsGradeChat || wantsSchoolChat || wantsMaterials || wantsWorkspace) && !authed) return NextResponse.json({ answer: 'この機能の情報を確認するには、学校アカウントでログインしてください。' });
+  if ((wantsMaterials || wantsWorkspace) && !studyContext) return NextResponse.json({ answer: '学校アカウントとプロフィール情報を確認できませんでした。ログイン状態を確認してください。' });
+  if (wantsNotes && (notesRes.error || noteAttachmentsRes.error)) return NextResponse.json({ answer: 'メモの情報を読み込めませんでした。' });
+  if (wantsFacilities && facilitiesRes.error) return NextResponse.json({ answer: '校内施設情報を読み込めませんでした。' });
+  if (wantsClassChat && classChatRes.error) return NextResponse.json({ answer: 'クラスチャットを読み込めませんでした。' });
+  if ((wantsGradeChat || wantsSchoolChat) && (gradeChatRes.error || schoolChatRes.error)) return NextResponse.json({ answer: 'チャット情報を読み込めませんでした。' });
+  if (wantsWorkspace && membershipsRes.error) return NextResponse.json({ answer: '共有ワークスペースの所属情報を読み込めませんでした。' });
+  if (wantsMaterials && materialsRes.error) return NextResponse.json({ answer: '資料室の情報を読み込めませんでした。' });
+  if (wantsWeatherAlerts && weatherAlertsRes.error) return NextResponse.json({ answer: '小平市の気象警報・注意報を読み込めませんでした。' });
   if (wantsTask && !authed) return NextResponse.json({ answer: '課題は学校アカウントでログインすると確認できます。ログインしてからもう一度聞いてください。' });
   if (wantsTask && (taskRes.error || todoRes.error)) return NextResponse.json({ answer: '課題を読み込めませんでした。ログイン状態と課題テーブルの権限を確認してください。' });
   if (wantsRoom && roomRes.error) return NextResponse.json({ answer: '教室の状況を読み込めませんでした。少し待ってからもう一度試してください。' });
@@ -1315,6 +1354,57 @@ export async function POST(req: Request) {
         ]
       )
     });
+  }
+
+  if (wantsNotes) {
+    const notes = (notesRes.data || []) as Array<{ id: string; owner_id: string; title: string; content_text: string; tags: string[] | null; visibility: string; updated_at: string; is_archived: boolean; is_pinned: boolean; is_favorite: boolean }>;
+    const attachmentRows = (noteAttachmentsRes.data || []) as Array<{ note_id: string; file_name: string }>;
+    const attachmentMap = new Map<string, string[]>();
+    for (const item of attachmentRows) attachmentMap.set(item.note_id, [...(attachmentMap.get(item.note_id) || []), item.file_name]);
+    const term = question.normalize('NFKC').replace(/メモ|ノート|自分の|私の|検索|探して|探す|見せて|教えて|一覧|内容|タイトル|ある\??|ですか|ください|を|の|は|が|に|[?？!！。]/g, '').trim();
+    const visible = notes.filter(note => !note.is_archived || /アーカイブ/.test(question)).filter(note => {
+      if (!term) return true;
+      const haystack = normalize([note.title, note.content_text, ...(note.tags || []), ...(attachmentMap.get(note.id) || [])].join(' '));
+      return haystack.includes(normalize(term));
+    }).slice(0, 15);
+    if (!visible.length) return NextResponse.json({ answer: term ? '「' + term + '」に一致するメモは見つかりませんでした。' : '表示できるメモはありません。' });
+    return NextResponse.json({ answer: term ? '検索条件に一致したメモです。' : '最近更新されたメモです。', table: table(['タイトル', '内容の抜粋', 'タグ', '添付', '更新日時'], visible.map(note => [note.title, String(note.content_text || '').slice(0, 180) || '本文なし', (note.tags || []).join('、') || '—', (attachmentMap.get(note.id) || []).join('、') || 'なし', new Date(note.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })])) });
+  }
+
+  if (wantsMaterials) {
+    const materials = ((materialsRes.data || []) as Array<{ id: string; title: string; description: string; subject: string; material_type: string; target_scope: string; target_value: string | null; file_name: string; file_size: number; published_at: string | null }>).filter(item => canStudentViewMaterial(item, studyContext!.userClass));
+    const term = question.normalize('NFKC').replace(/資料室|配布資料|教材|授業プリント|資料|プリント|探して|検索して|検索|見せて|教えて|一覧|ある|は|が|を|の|ですか|[?？!！。]/g, '').trim();
+    const results = materials.filter(item => !term || normalize([item.title, item.description, item.subject, item.material_type, item.file_name].join(' ')).includes(normalize(term))).slice(0, 20);
+    if (!results.length) return NextResponse.json({ answer: term ? '閲覧できる資料の中に「' + term + '」に一致するものはありません。' : '現在公開中で、このクラスから閲覧できる資料はありません。' });
+    return NextResponse.json({ answer: '公開中で、あなたの学年・クラスから閲覧できる資料です。', table: table(['資料名', '教科', '種類', '説明', 'ファイル'], results.map(item => [item.title, item.subject || '未分類', item.material_type, String(item.description || '').slice(0, 120) || '—', item.file_name])) });
+  }
+
+  if (wantsFacilities) {
+    const facilities = (facilitiesRes.data || []) as Array<{ name: string; category: string; building: string; floor_label: string; location_description: string; description: string; keywords: string[] | null }>;
+    const term = question.normalize('NFKC').replace(/校内マップ|校内施設|施設案内|施設|マップ|場所|どこ|にある|ありますか|教えて|一覧|検索|[?？!！。]/g, '').trim();
+    const results = facilities.filter(item => !term || normalize([item.name,item.category,item.building,item.floor_label,item.location_description,item.description,...(item.keywords || [])].join(' ')).includes(normalize(term))).slice(0, 30);
+    if (!results.length) return NextResponse.json({ answer: term ? '登録された施設情報に「' + term + '」は見つかりませんでした。' : '公開されている校内施設情報はありません。' });
+    return NextResponse.json({ answer: term ? '検索に一致した校内施設です。' : '登録されている校内施設一覧です。', table: table(['施設名', '建物', '階', '場所の説明', '詳細'], results.map(item => [item.name,item.building || '—',item.floor_label || '—',item.location_description || '—',item.description || '—'])) });
+  }
+
+  if (wantsClassChat || wantsGradeChat || wantsSchoolChat) {
+    const source = wantsClassChat ? classChatRes.data : wantsGradeChat ? gradeChatRes.data : schoolChatRes.data;
+    const rows = (source || []) as Array<{ student_name: string; class_name?: string; user_class?: string; body: string; created_at: string }>;
+    const label = wantsClassChat ? userClass + 'クラスチャット' : wantsGradeChat ? userClass.slice(0,1) + '年生チャット' : '全校チャット';
+    if (!rows.length) return NextResponse.json({ answer: label + 'にはまだ表示できるメッセージがありません。' });
+    return NextResponse.json({ answer: label + 'の最近のメッセージです（最新20件以内）。', table: table(['投稿者', 'クラス', '内容', '日時'], rows.reverse().slice(-15).map(row => [row.student_name || '生徒', row.class_name || row.user_class || '—', String(row.body || '').slice(0, 300), new Date(row.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })])) });
+  }
+
+  if (wantsWorkspace) {
+    if (!workspaceSummary.length) return NextResponse.json({ answer: '参加中の共有ワークスペースはありません。' });
+    const rows = workspaceSummary.map(item => [item.name, item.category, item.posts.join(' / ') || '投稿なし', item.tasks.join(' / ') || '未完了タスクなし', item.events.join(' / ') || '今後の予定なし']);
+    return NextResponse.json({ answer: 'あなたが参加している共有ワークスペースの情報です。', table: table(['ワークスペース', '種類', '最近のお知らせ', '進行中タスク', '今後の予定'], rows) });
+  }
+
+  if (wantsWeatherAlerts) {
+    const alerts = ((weatherAlertsRes.data || []) as Array<{ area_key: string; area_name: string; alert_name: string; severity: number; status: string; details?: string | null; issued_at?: string | null }>).filter(item => item.area_key === 'kodaira');
+    if (!alerts.length) return NextResponse.json({ answer: '現在、CampusSyncの保存データに小平市の発表中の気象警報・注意報はありません。これは天気予報ではなく、保存済みの警報情報の確認結果です。' });
+    return NextResponse.json({ answer: 'CampusSyncに保存されている小平市の気象警報・注意報です。', table: table(['警報・注意報', '重要度', '状態', '詳細', '発表日時'], alerts.map(item => [item.alert_name, String(item.severity), item.status, item.details || '—', item.issued_at ? new Date(item.issued_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'])) });
   }
 
   if (wantsEarthquake) {
