@@ -27,11 +27,11 @@ const STORAGE_KEY = 'campussync-language';
 const CACHE_PREFIX = 'campussync-ui-translation-v4:';
 const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'aria-label', 'title', 'alt', 'data-placeholder'] as const;
 const IGNORED_TEXT_SELECTOR = [
-  'input', 'textarea', 'script', 'style', 'code', 'pre', 'svg', 'canvas',
+  'input', 'textarea', 'script', 'style', 'code', 'pre', 'canvas',
   '[contenteditable="true"]', '[data-i18n-ignore="true"]', '[data-user-content]', '[data-no-translate="true"]',
 ].join(',');
 const IGNORED_ATTRIBUTE_SELECTOR = [
-  'script', 'style', 'svg', 'canvas', '[data-i18n-ignore="true"]', '[data-user-content]', '[data-no-translate="true"]',
+  'script', 'style', 'canvas', '[data-i18n-ignore="true"]', '[data-user-content]', '[data-no-translate="true"]',
 ].join(',');
 
 const JAPANESE_TEXT = /[ぁ-んァ-ヶ一-龠]/u;
@@ -58,7 +58,7 @@ function normalizedKey(value: string): string {
 function isWorthTranslating(value: string): boolean {
   const normalized = normalizedKey(value);
   return normalized.length > 0
-    && normalized.length <= 600
+    && normalized.length <= 1500
     && JAPANESE_TEXT.test(normalized)
     && !/^https?:\/\//iu.test(normalized);
 }

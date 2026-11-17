@@ -4601,7 +4601,7 @@ Supabaseの設定を確認してください。
                     <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full">
                       {getCohortName(studentId)}
                     </span>
-                    <span data-user-content className="text-xs font-bold text-white/90">{userClass}クラス {studentName} さん</span>
+                    <span className="text-xs font-bold text-white/90"><span data-user-content>{userClass}</span>クラス <span data-user-content>{studentName}</span> さん</span>
                   </div>
                   <h2 className="text-xs font-semibold text-white/80 mb-0.5">本日のリアルタイム学校貢献度</h2>
                   <p className="text-4xl font-black tracking-tight">{score} <span className="text-base font-medium text-white/70">/ 100 pt</span></p>

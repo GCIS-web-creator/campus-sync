@@ -29,7 +29,15 @@ function isAllowedOrigin(request: Request): boolean {
 function normalizeTranslation(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const text = value.trim();
-  return text.length > 0 && text.length <= 600 ? text : null;
+  return text.length > 0 && text.length <= 1500 ? text : null;
+}
+
+function containsTargetScript(value: string, language: string): boolean {
+  if (language === 'en') return /[A-Za-z]/u.test(value);
+  if (language === 'ar') return /[\u0600-\u06FF]/u.test(value);
+  if (language === 'ko') return /[\uAC00-\uD7AF]/u.test(value);
+  if (language === 'zh') return /[\u4E00-\u9FFF]/u.test(value);
+  return false;
 }
 
 export async function POST(request: Request) {
@@ -52,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   const items = body.items.map(normalizeTranslation);
-  if (items.some(item => !item) || items.reduce((sum, item) => sum + (item?.length ?? 0), 0) > 3200) {
+  if (items.some(item => !item) || items.reduce((sum, item) => sum + (item?.length ?? 0), 0) > 4800) {
     return NextResponse.json({ error: 'Invalid or oversized translation batch.' }, { status: 400 });
   }
 
@@ -75,24 +83,33 @@ export async function POST(request: Request) {
       target_lang: language,
     });
 
-    const translated = typeof response.translated_text === 'string'
-      ? response.translated_text.split(/\s*###\s*/u).map(value => value.trim())
+    let translated = typeof response.translated_text === 'string'
+      ? response.translated_text.split(/\\s*###\\s*/u).map(value => value.trim())
       : [];
 
-    if (translated.length === sourceTexts.length && translated.every(value => value.length > 0)) {
-      return NextResponse.json({ translations: translated }, {
-        headers: { 'Cache-Control': 'private, no-store' },
-      });
+    // If a model drops separators or leaves Japanese text untranslated, retry only
+    // affected strings individually so one bad item cannot misalign the whole batch.
+    if (translated.length !== sourceTexts.length) {
+      translated = sourceTexts.map(() => '');
     }
 
-    // Separator loss is rare, but translate each item separately rather than returning misaligned strings.
-    const individual = await Promise.all(sourceTexts.map(item =>
-      ai.run(MODEL, { text: item, source_lang: 'ja', target_lang: language }),
-    ));
-    const translations = individual.map((item, index) =>
-      normalizeTranslation(item.translated_text) ?? sourceTexts[index],
+    const needsRetry = translated.map((value, index) =>
+      !normalizeTranslation(value)
+      || value === sourceTexts[index]
+      || !containsTargetScript(value, language),
     );
-    return NextResponse.json({ translations }, {
+    const retries = await Promise.all(sourceTexts.map(async (item, index) => {
+      if (!needsRetry[index]) return translated[index];
+      const individual = await ai.run(MODEL, {
+        text: item,
+        source_lang: 'ja',
+        target_lang: language,
+      });
+      const candidate = normalizeTranslation(individual.translated_text);
+      return candidate && containsTargetScript(candidate, language) ? candidate : sourceTexts[index];
+    }));
+
+    return NextResponse.json({ translations: retries }, {
       headers: { 'Cache-Control': 'private, no-store' },
     });
   } catch (error) {
