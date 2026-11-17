@@ -164,7 +164,10 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
               batch.forEach(([, item], index) => {
                 const translated = typeof values[index] === 'string' ? values[index].trim() : '';
                 if (generation !== generationRef.current || languageRef.current !== language) return;
-                if (!translated) return;
+                if (!translated || translated === item.source) {
+                  item.callbacks.forEach(callback => callback(item.source));
+                  return;
+                }
                 languageCache[item.source] = translated;
                 item.callbacks.forEach(callback => callback(translated));
               });

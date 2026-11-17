@@ -103,10 +103,10 @@ export default function WeeklySchoolSchedule() {
                     <div key={item.id} className="rounded-xl border border-slate-100 bg-white p-3">
                       <div className="flex items-start gap-2">
                         {item.time ? <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-cyan-50 px-2 py-1 text-[10px] font-black text-cyan-800"><Clock size={11} />{item.time}</span> : null}
-                        <p className="min-w-0 flex-1 text-sm font-black leading-5 text-slate-800">{item.title || '予定'}</p>
+                        <p data-user-content className="min-w-0 flex-1 text-sm font-black leading-5 text-slate-800">{item.title || '予定'}</p>
                       </div>
-                      {item.location ? <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500"><MapPin size={11} />{item.location}</p> : null}
-                      {item.details ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{item.details}</p> : null}
+                      {item.location ? <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500"><MapPin size={11} /><span data-user-content>{item.location}</span></p> : null}
+                      {item.details ? <p data-user-content className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{item.details}</p> : null}
                     </div>
                   )) : <p className="py-2 text-center text-xs text-slate-400">{day?.isHoliday ? '祝日・休校日です。' : (label === '土' || label === '日') && !day?.isWeekendSchool ? '基本休日です。' : '登録された予定はありません。'}</p>}
                 </div>

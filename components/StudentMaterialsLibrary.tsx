@@ -159,12 +159,12 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
                     {item.mime_type === 'application/pdf' ? <FileText size={23} /> : <FileImage size={23} />}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="break-words text-sm font-black">{item.title}</h3>
+                    <h3 data-user-content className="break-words text-sm font-black">{item.title}</h3>
                     <p className={'mt-1 text-[11px] ' + muted}>{item.subject} ・ {TYPE_LABELS[item.material_type] || 'その他'}</p>
                     <p className={'mt-1 text-[10px] ' + muted}>{item.mime_type === 'application/pdf' ? 'PDF' : '画像'} ・ {sizeLabel(item.file_size)}</p>
                   </div>
                 </div>
-                {item.description && <p className={'mt-3 whitespace-pre-wrap text-xs leading-5 ' + muted}>{item.description}</p>}
+                {item.description && <p data-user-content className={'mt-3 whitespace-pre-wrap text-xs leading-5 ' + muted}>{item.description}</p>}
                 <div className="mt-auto flex items-center justify-between gap-2 pt-4">
                   <span className={'text-[10px] ' + muted}>{dateLabel(item.published_at || item.created_at)} 公開</span>
                   <div className="flex gap-2">
@@ -181,7 +181,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-2 sm:p-6" role="dialog" aria-modal="true" aria-label="資料プレビュー">
           <div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-              <div className="min-w-0"><p className="truncate text-sm font-black text-white">{preview.item.title}</p><p className="text-[10px] text-slate-500">{preview.item.file_name}</p></div>
+              <div className="min-w-0"><p data-user-content className="truncate text-sm font-black text-white">{preview.item.title}</p><p data-user-content className="text-[10px] text-slate-500">{preview.item.file_name}</p></div>
               <div className="flex shrink-0 items-center gap-2">
                 <button type="button" onClick={() => void openMaterial(preview.item, true)} className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200"><Download size={13}/> 保存</button>
                 <button type="button" onClick={() => setPreview(null)} aria-label="閉じる" className="rounded-lg p-2 text-slate-300 hover:bg-slate-800"><X size={18}/></button>

@@ -417,7 +417,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
         return <section key={subject.id} className={panel}>
           <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className="rounded-full bg-cyan-50 px-3 py-1 text-xs text-cyan-800">{pct}% 完了</b></div>
           <div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:pct+'%'}}/></div>
-          <div className="mt-3 space-y-2">{list.map(item=><div key={item.id} className={'flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><span className="min-w-0 flex-1 text-sm font-bold">{item.title}</span><select aria-label={item.title+'の進捗'} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700" value={item.status} onChange={e=>void setRangeStatus(item.id,e.target.value as Range['status'])}>{Object.entries(STATUS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>)}{!list.length&&<p className={'text-xs '+muted}>テスト範囲はまだ登録されていません。</p>}</div>
+          <div className="mt-3 space-y-2">{list.map(item=><div key={item.id} className={'flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><span data-user-content className="min-w-0 flex-1 text-sm font-bold">{item.title}</span><select aria-label={item.title+'の進捗'} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700" value={item.status} onChange={e=>void setRangeStatus(item.id,e.target.value as Range['status'])}>{Object.entries(STATUS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>)}{!list.length&&<p className={'text-xs '+muted}>テスト範囲はまだ登録されていません。</p>}</div>
           <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：教科書 P20〜35、問題集 第2章" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>範囲を追加</button></form>
         </section>;
       })}
@@ -433,15 +433,15 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
           <span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-[10px] font-black text-cyan-900">{item.subject}</span>
           <span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold '+(dark?'bg-slate-700 text-slate-200':'bg-slate-100 text-slate-700')}>{item.target_class==='all'?'全生徒':item.target_class}</span>
         </div>
-        <h3 className="mt-2 text-base font-black">{item.title}</h3>
+        <h3 data-user-content className="mt-2 text-base font-black">{item.title}</h3>
         <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-cyan-700">
           <span>{dateLabel(item.test_date)}</span>
           {item.period ? <span>{item.period}限</span> : null}
-          <span>{item.start_note || '開始時刻は授業内で案内'}</span>
+          <span data-user-content>{item.start_note || '開始時刻は授業内で案内'}</span>
           {item.duration_minutes ? <span>{item.duration_minutes}分間</span> : null}
         </p>
-        {item.scope && <div className={'mt-3 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><p className={'mb-1 text-[10px] font-black '+muted}>試験範囲</p><p className="whitespace-pre-wrap text-sm leading-6">{item.scope}</p></div>}
-        {item.notes && <div className="mt-3"><p className={'mb-1 text-[10px] font-black '+muted}>出題内容・形式</p><p className="whitespace-pre-wrap text-sm leading-6">{item.notes}</p></div>}
+        {item.scope && <div className={'mt-3 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><p className={'mb-1 text-[10px] font-black '+muted}>試験範囲</p><p data-user-content className="whitespace-pre-wrap text-sm leading-6">{item.scope}</p></div>}
+        {item.notes && <div className="mt-3"><p className={'mb-1 text-[10px] font-black '+muted}>出題内容・形式</p><p data-user-content className="whitespace-pre-wrap text-sm leading-6">{item.notes}</p></div>}
         {(item.question_count || item.full_score) && <p className={'mt-3 border-t pt-3 text-xs font-bold '+(dark?'border-slate-700 text-slate-300':'border-slate-200 text-slate-600')}>{item.question_count ? item.question_count+'問' : '問題数未定'} ・ {item.full_score ? item.full_score+'点満点' : '配点未定'}</p>}
       </article>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>現在、所属クラスが対象の小テスト予定はありません。</p>}
     </div>}

@@ -4601,7 +4601,7 @@ Supabaseの設定を確認してください。
                     <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full">
                       {getCohortName(studentId)}
                     </span>
-                    <span className="text-xs font-bold text-white/90">{userClass}クラス {studentName} さん</span>
+                    <span data-user-content className="text-xs font-bold text-white/90">{userClass}クラス {studentName} さん</span>
                   </div>
                   <h2 className="text-xs font-semibold text-white/80 mb-0.5">本日のリアルタイム学校貢献度</h2>
                   <p className="text-4xl font-black tracking-tight">{score} <span className="text-base font-medium text-white/70">/ 100 pt</span></p>
@@ -4778,7 +4778,7 @@ Supabaseの設定を確認してください。
                       <room.icon size={18} className={room.color} />
                       <span className={`text-xs font-black ${subTextClass}`}>{room.temp}</span>
                     </div>
-                    <h4 className={`text-xs ${subTextClass} mb-0.5`}>{room.name}</h4>
+                    <h4 data-user-content className={`text-xs ${subTextClass} mb-0.5`}>{room.name}</h4>
                     <p className={`text-xs font-black ${room.color}`}>{room.status}</p>
                   </div>
                 ))}
@@ -4962,7 +4962,7 @@ Supabaseの設定を確認してください。
 
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h4 className="text-sm font-black text-gray-800">{item.name}</h4>
+                          <h4 data-user-content className="text-sm font-black text-gray-800">{item.name}</h4>
                           <p className="text-[10px] text-gray-400 font-bold">
                             {item.price && `価格: ${item.price} ・ `}{item.calorie ? `カロリー: ${item.calorie}` : 'カロリー未登録'} ・ {item.allergy ? `アレルギー: ${item.allergy}` : 'アレルギー情報未登録'}
                           </p>
@@ -5055,9 +5055,9 @@ Supabaseの設定を確認してください。
                         <div className="flex">
                           {[1, 2, 3, 4, 5].map(n => <Star key={n} size={11} fill={n <= rev.rating ? '#FBBF24' : 'none'} stroke={n <= rev.rating ? '#FBBF24' : '#D1D5DB'} />)}
                         </div>
-                        <span className="text-xs font-bold text-gray-600">by {rev.userName}</span>
+                        <span className="text-xs font-bold text-gray-600">by <span data-user-content>{rev.userName}</span></span>
                       </div>
-                      <p className="text-xs text-gray-700 leading-relaxed font-medium">{rev.comment}</p>
+                      <p data-user-content className="text-xs text-gray-700 leading-relaxed font-medium">{rev.comment}</p>
                     </div>
                   ))}
                 </div>
@@ -5466,7 +5466,7 @@ Supabaseの設定を確認してください。
                     <div className="flex min-w-0 items-center gap-2.5">
                       <ClubNoteIcon clubName={note.clubName} size={40} />
                       <div className="min-w-0">
-                        <span className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                        <span data-user-content className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
                           {note.clubName}
                         </span>
                         <h4 data-user-content className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
@@ -5478,7 +5478,7 @@ Supabaseの設定を確認してください。
                     {note.content}
                   </p>
                   <div className="text-right">
-                    <span className="text-[10px] text-gray-400 font-bold">発信者: {note.author}</span>
+                    <span className="text-[10px] text-gray-400 font-bold">発信者: <span data-user-content>{note.author}</span></span>
                   </div>
                 </div>
               ))}
@@ -6944,13 +6944,13 @@ Supabaseの設定を確認してください。
               <div className="p-2.5 bg-white/60 rounded-xl"><selectedTodo.icon size={22} className={selectedTodo.color.split(' ')[1]} /></div>
               <div className="flex-1">
                 <span className="text-[10px] font-black bg-white/80 px-2 py-0.5 rounded-md mb-1 inline-block text-gray-700">{selectedTodo.due_at ? new Date(selectedTodo.due_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : selectedTodo.due}</span>
-                <h3 className="text-xs font-black text-gray-900 leading-normal">{selectedTodo.title}</h3>
+                <h3 data-user-content className="text-xs font-black text-gray-900 leading-normal">{selectedTodo.title}</h3>
               </div>
             </div>
             <div className="p-4 space-y-4">
               <div>
                 <h4 className="text-[10px] font-black text-gray-400 mb-1">タスク詳細及び指示事項</h4>
-                <p className="text-xs text-gray-600 leading-relaxed font-medium">{selectedTodo.details}</p>
+                <p data-user-content className="text-xs text-gray-600 leading-relaxed font-medium">{selectedTodo.details}</p>
               </div>
               {selectedTodo.isAdminAssigned ? (
                 <div className="space-y-1 rounded-xl border border-blue-100 bg-blue-50 p-3">
@@ -7056,7 +7056,7 @@ Supabaseの設定を確認してください。
               </button>
             </div>
             <div className="mt-5 max-h-[55vh] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
-              {selectedNotification.imageUrl && <img src={selectedNotification.imageUrl} alt={selectedNotification.title} className="mb-4 max-h-72 w-full rounded-xl object-contain" />}
+              {selectedNotification.imageUrl && <img data-user-content src={selectedNotification.imageUrl} alt={selectedNotification.title} className="mb-4 max-h-72 w-full rounded-xl object-contain" />}
               <p data-user-content className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
             </div>
             <button type="button" onClick={() => setSelectedNotification(null)} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white transition ${themeCls.bg} ${themeCls.bgHover}`}>

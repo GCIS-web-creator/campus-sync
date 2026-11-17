@@ -115,9 +115,9 @@ export default function CampusFacilityMap({ facilities, loadMessage = '' }: { fa
         <div className="space-y-3">
           {mapGroups.map(group => (
             <section key={group.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <h3 className="mb-2 text-sm font-black text-slate-800">{group.label}</h3>
+              <h3 data-user-content className="mb-2 text-sm font-black text-slate-800">{group.label}</h3>
               <div className="relative overflow-hidden rounded-xl bg-slate-100">
-                <img src={group.image} alt={group.label + 'の校内マップ'} className="block h-auto max-h-[560px] w-full object-contain" />
+                <img data-user-content src={group.image} alt={group.label + 'の校内マップ'} className="block h-auto max-h-[560px] w-full object-contain" />
                 {group.facilities.map(item => (
                   <button
                     key={item.id}
@@ -175,13 +175,13 @@ export default function CampusFacilityMap({ facilities, loadMessage = '' }: { fa
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={selected.name + 'の詳細'} onClick={() => setSelected(null)}>
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
-              <div><p className="text-[10px] font-black tracking-widest text-cyan-700">CAMPUS FACILITY</p><h3 className="mt-1 text-lg font-black text-slate-900">{selected.name}</h3></div>
+              <div><p className="text-[10px] font-black tracking-widest text-cyan-700">CAMPUS FACILITY</p><h3 data-user-content className="mt-1 text-lg font-black text-slate-900">{selected.name}</h3></div>
               <button type="button" onClick={() => setSelected(null)} aria-label="閉じる" className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">閉じる</button>
             </div>
             <dl className="mt-4 space-y-3 text-xs">
               <div><dt className="font-bold text-slate-400">建物・階</dt><dd className="mt-1 font-semibold text-slate-800">{[selected.building, selected.floor_label].filter(Boolean).join(' ・ ') || '未登録'}</dd></div>
               <div><dt className="font-bold text-slate-400">場所の案内</dt><dd className="mt-1 whitespace-pre-wrap leading-5 text-slate-800">{selected.location_description || '詳細位置は学校で確認してください。'}</dd></div>
-              <div><dt className="font-bold text-slate-400">施設情報</dt><dd className="mt-1 whitespace-pre-wrap leading-5 text-slate-700">{selected.description || '説明はまだ登録されていません。'}</dd></div>
+              <div><dt className="font-bold text-slate-400">施設情報</dt><dd data-user-content className="mt-1 whitespace-pre-wrap leading-5 text-slate-700">{selected.description || '説明はまだ登録されていません。'}</dd></div>
             </dl>
           </section>
         </div>
