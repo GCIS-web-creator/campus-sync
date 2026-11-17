@@ -1,9 +1,10 @@
--- CampusSync Web Push delivery pipeline.
--- Applied to project sgvhktudhxufluuaipwt on 2026-11-06.
--- This file is the repeatable source copy of the database objects.
+-- CampusSync notification delivery completion
+-- Private outbox with trigger-based events and service-role-only RPC delivery.
 
 begin;
 
+-- Existing school notification API expects these fields. The production table was
+-- missing them, causing the admin list/publication endpoints to fail.
 alter table public.notifications
   add column if not exists category text not null default 'general',
   add column if not exists priority text not null default 'normal',
@@ -14,6 +15,7 @@ alter table public.notifications
 alter table public.notifications
   drop constraint if exists notifications_category_check,
   drop constraint if exists notifications_priority_check;
+
 alter table public.notifications
   add constraint notifications_category_check
     check (category in ('general', 'school_closure', 'class_change', 'early_dismissal', 'disaster', 'emergency')),
@@ -22,12 +24,17 @@ alter table public.notifications
 
 create index if not exists notifications_target_created_idx
   on public.notifications (target_user_id, created_at desc);
+create index if not exists notifications_active_created_idx
+  on public.notifications (created_at desc)
+  where expires_at is null;
 
+-- Device metadata is optional and does not change existing subscription ownership.
 alter table public.push_subscriptions
   add column if not exists device_name text,
   add column if not exists user_agent text,
   add column if not exists last_seen_at timestamptz;
 
+-- Preserve each user's existing category choices while introducing weather/disaster.
 alter table public.push_reminder_preferences
   alter column notification_settings set default
     '{"todo_reminders":true,"chat_messages":true,"school_announcements":true,"transport_alerts":true,"cafeteria_updates":false,"activity_updates":true,"weather_alerts":true,"disaster_alerts":true}'::jsonb;
@@ -73,6 +80,7 @@ revoke all on campus_private.push_notification_outbox from public, anon, authent
 grant select, insert, update, delete on campus_private.push_notification_outbox to service_role;
 grant usage, select on sequence campus_private.push_notification_outbox_id_seq to service_role;
 
+-- Only active, opted-in browser subscriptions receive queue entries.
 create or replace function campus_private.enqueue_push_for_user(
   p_event_key text,
   p_user_id uuid,
@@ -91,7 +99,9 @@ as $function$
 declare
   category_enabled boolean;
 begin
-  if p_user_id is null or p_event_key is null or p_category is null then return; end if;
+  if p_user_id is null or p_event_key is null or p_category is null then
+    return;
+  end if;
 
   select case
     when p_category = 'cafeteria_updates' then coalesce((notification_settings ->> p_category)::boolean, false)
@@ -101,15 +111,24 @@ begin
   from public.push_reminder_preferences
   where user_id = p_user_id;
 
-  if not found then category_enabled := p_category <> 'cafeteria_updates'; end if;
-  if category_enabled is not true then return; end if;
-  if not exists (select 1 from public.push_subscriptions s where s.user_id = p_user_id) then return; end if;
+  if category_enabled is false then
+    return;
+  end if;
+
+  if not exists (
+    select 1 from public.push_subscriptions s where s.user_id = p_user_id
+  ) then
+    return;
+  end if;
 
   insert into campus_private.push_notification_outbox (
     event_key, user_id, student_id, category, title, body, url, priority, tag
   )
   values (
-    left(p_event_key, 240), p_user_id, coalesce(p_student_id, ''), p_category,
+    left(p_event_key, 240),
+    p_user_id,
+    coalesce(p_student_id, ''),
+    p_category,
     left(coalesce(nullif(btrim(p_title), ''), 'CampusSync'), 120),
     left(coalesce(p_body, ''), 400),
     case when p_url like '/%' then left(p_url, 500) else '/' end,
@@ -125,160 +144,232 @@ revoke all on function campus_private.enqueue_push_for_user(text, uuid, text, te
 grant execute on function campus_private.enqueue_push_for_user(text, uuid, text, text, text, text, text, text)
   to service_role;
 
+-- Class chat: only classmates who have registered at least one device.
 create or replace function campus_private.queue_class_chat_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare recipient record; preview text;
+declare
+  recipient record;
+  preview text;
 begin
   preview := nullif(btrim(new.body), '');
   if preview is null then
     preview := case when new.attachment_name is not null then '添付ファイルが届きました。' else '新しいメッセージがあります。' end;
   end if;
+
   for recipient in
     select distinct p.auth_user_id, p.student_id
     from public.profiles p
-    where p.auth_user_id is not null and p.auth_user_id <> new.user_id and p.user_class = new.class_name
+    where p.auth_user_id is not null
+      and p.auth_user_id <> new.user_id
+      and p.user_class = new.class_name
   loop
     perform campus_private.enqueue_push_for_user(
-      'class-chat:' || new.id::text, recipient.auth_user_id, recipient.student_id::text,
-      'chat_messages', new.class_name || ' の新着メッセージ',
+      'class-chat:' || new.id::text,
+      recipient.auth_user_id,
+      recipient.student_id::text,
+      'chat_messages',
+      new.class_name || ' の新着メッセージ',
       coalesce(nullif(btrim(new.student_name), ''), 'クラスメイト') || '：' || left(preview, 150),
-      '/#chat', 'normal'
+      '/#chat',
+      'normal'
     );
   end loop;
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_class_chat_insert on public.class_chat_messages;
 create trigger campus_push_class_chat_insert
 after insert on public.class_chat_messages
 for each row execute function campus_private.queue_class_chat_push();
 
+-- Grade/school chat: only members of the selected scope; never notify the author.
 create or replace function campus_private.queue_school_chat_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare recipient record; preview text; scope_title text;
+declare
+  recipient record;
+  preview text;
+  scope_title text;
 begin
   preview := nullif(btrim(new.body), '');
   if preview is null then
     preview := case when new.attachment_name is not null then '添付ファイルが届きました。' else '新しいメッセージがあります。' end;
   end if;
   scope_title := case when new.scope = 'grade' then new.scope_key || '年生' else '全校' end;
+
   for recipient in
     select distinct p.auth_user_id, p.student_id
     from public.profiles p
-    where p.auth_user_id is not null and p.auth_user_id <> new.user_id
-      and (new.scope = 'school' or (new.scope = 'grade' and split_part(p.user_class, '-', 1) = new.scope_key))
+    where p.auth_user_id is not null
+      and p.auth_user_id <> new.user_id
+      and (
+        (new.scope = 'school')
+        or (new.scope = 'grade' and split_part(p.user_class, '-', 1) = new.scope_key)
+      )
   loop
     perform campus_private.enqueue_push_for_user(
-      'school-chat:' || new.id::text, recipient.auth_user_id, recipient.student_id::text,
-      'chat_messages', scope_title || 'チャットの新着メッセージ',
+      'school-chat:' || new.id::text,
+      recipient.auth_user_id,
+      recipient.student_id::text,
+      'chat_messages',
+      scope_title || 'チャットの新着メッセージ',
       coalesce(nullif(btrim(new.student_name), ''), '生徒') || '：' || left(preview, 150),
-      '/#chat', 'normal'
+      '/#chat',
+      'normal'
     );
   end loop;
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_school_chat_insert on public.school_chat_messages;
 create trigger campus_push_school_chat_insert
 after insert on public.school_chat_messages
 for each row execute function campus_private.queue_school_chat_push();
 
+-- School notice: every priority is push-capable; category/priority controls urgency.
 create or replace function campus_private.queue_school_notice_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare recipient record; push_category text; push_priority text;
+declare
+  recipient record;
+  push_category text;
+  push_priority text;
 begin
   push_category := case when new.category in ('disaster', 'emergency') then 'disaster_alerts' else 'school_announcements' end;
   push_priority := case when new.priority = 'emergency' then 'urgent' when new.priority = 'important' then 'high' else 'normal' end;
+
   for recipient in
-    select distinct s.user_id, s.student_id from public.push_subscriptions s
+    select distinct s.user_id, s.student_id
+    from public.push_subscriptions s
     where new.target_user_id is null or s.user_id = new.target_user_id
   loop
     perform campus_private.enqueue_push_for_user(
-      'school-notice:' || new.id::text, recipient.user_id, recipient.student_id,
+      'school-notice:' || new.id::text,
+      recipient.user_id,
+      recipient.student_id,
       push_category,
       case when push_priority = 'urgent' then '緊急連絡｜' else '' end || new.title,
-      new.body, '/#notifications', push_priority
+      new.body,
+      '/#notifications',
+      push_priority
     );
   end loop;
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_school_notice_insert on public.notifications;
 create trigger campus_push_school_notice_insert
 after insert on public.notifications
 for each row execute function campus_private.queue_school_notice_push();
 
+-- Transit update: notify only on a meaningful delay/operation-state change.
 create or replace function campus_private.queue_bus_status_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare recipient record; was_alert boolean := false; is_alert boolean := false; event_stamp text; message_text text;
+declare
+  was_alert boolean := false;
+  is_alert boolean := false;
+  event_stamp text;
+  message_text text;
 begin
   if tg_op = 'UPDATE' then
-    was_alert := old.delay_minutes >= 5 or old.congestion_status ~* '(遅延|運休|見合わせ|遅れ|運行停止)';
+    was_alert := old.delay_minutes >= 5
+      or old.congestion_status ~* '(遅延|運休|見合わせ|遅れ|運行停止)';
     if new.delay_minutes is not distinct from old.delay_minutes
-      and new.congestion_status is not distinct from old.congestion_status then return new; end if;
+      and new.congestion_status is not distinct from old.congestion_status then
+      return new;
+    end if;
   end if;
-  is_alert := new.delay_minutes >= 5 or new.congestion_status ~* '(遅延|運休|見合わせ|遅れ|運行停止)';
-  if not is_alert and not was_alert then return new; end if;
+
+  is_alert := new.delay_minutes >= 5
+    or new.congestion_status ~* '(遅延|運休|見合わせ|遅れ|運行停止)';
+  if not is_alert and not was_alert then
+    return new;
+  end if;
+
   event_stamp := coalesce(new.updated_at, now())::text || ':' || new.congestion_status || ':' || new.delay_minutes::text;
   message_text := coalesce(new.station_name, new.station_id) || '：' || coalesce(new.congestion_status, '運行情報更新')
     || case when new.delay_minutes > 0 then '（約' || new.delay_minutes::text || '分）' else '' end;
-  for recipient in select distinct s.user_id, s.student_id from public.push_subscriptions s
-  loop
-    perform campus_private.enqueue_push_for_user(
+
+  perform recipient_enqueue.result
+  from (
+    select campus_private.enqueue_push_for_user(
       'bus-status:' || new.station_id || ':' || md5(event_stamp),
-      recipient.user_id, recipient.student_id, 'transport_alerts',
+      s.user_id,
+      s.student_id,
+      'transport_alerts',
       case when is_alert then '交通・バス運行情報' else '交通情報の更新' end,
-      message_text, '/#bus',
+      message_text,
+      '/#bus',
       case when new.delay_minutes >= 10 or new.congestion_status ~* '(運休|見合わせ|運行停止)' then 'high' else 'normal' end
-    );
-  end loop;
+    ) as result
+    from public.push_subscriptions s
+  ) recipient_enqueue;
+
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_bus_status_change on public.bus_status;
 create trigger campus_push_bus_status_change
 after insert or update on public.bus_status
 for each row execute function campus_private.queue_bus_status_push();
 
+-- Cafeteria sold-out updates: send once for each transition to sold out.
 create or replace function campus_private.queue_cafeteria_sold_out_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare was_sold_out boolean := false;
+declare
+  was_sold_out boolean := false;
 begin
-  if tg_op = 'UPDATE' then was_sold_out := old.is_sold_out; end if;
-  if new.is_sold_out is distinct from true or was_sold_out then return new; end if;
+  if tg_op = 'UPDATE' then
+    was_sold_out := old.is_sold_out;
+  end if;
+  if new.is_sold_out is distinct from true or was_sold_out then
+    return new;
+  end if;
+
   perform campus_private.enqueue_push_for_user(
     'cafeteria-sold-out:' || new.menu_id || ':' || coalesce(new.updated_at, now())::text,
-    s.user_id, s.student_id, 'cafeteria_updates', '学食の売切情報',
-    '本日の学食メニューに売切情報が追加されました。', '/#food', 'normal'
-  ) from public.push_subscriptions s;
+    s.user_id,
+    s.student_id,
+    'cafeteria_updates',
+    '学食の売切情報',
+    '本日の学食メニューに売切情報が追加されました。',
+    '/#food',
+    'normal'
+  )
+  from public.push_subscriptions s;
+
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_cafeteria_sold_out on public.cafeteria_sold_out;
 create trigger campus_push_cafeteria_sold_out
 after insert or update of is_sold_out on public.cafeteria_sold_out
 for each row execute function campus_private.queue_cafeteria_sold_out_push();
 
+-- Cafeteria notice text changes.
 create or replace function campus_private.queue_cafeteria_announcement_push()
 returns trigger
 language plpgsql
@@ -286,55 +377,79 @@ security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
 begin
-  if coalesce(btrim(new.message), '') = '' or not (new.show_banner or new.show_popup) then return new; end if;
-  if tg_op = 'UPDATE' and new.message is not distinct from old.message then return new; end if;
+  if coalesce(btrim(new.message), '') = '' or not (new.show_banner or new.show_popup) then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and new.message is not distinct from old.message then
+    return new;
+  end if;
+
   perform campus_private.enqueue_push_for_user(
-    'cafeteria-announcement:' || new.id::text || ':' || md5(new.message || coalesce(new.updated_at, now())::text),
-    s.user_id, s.student_id, 'cafeteria_updates', '学食からのお知らせ',
-    left(new.message, 300), '/#food', 'normal'
-  ) from public.push_subscriptions s;
+    'cafeteria-announcement:' || new.id::text || ':' || coalesce(new.updated_at, now())::text,
+    s.user_id,
+    s.student_id,
+    'cafeteria_updates',
+    '学食からのお知らせ',
+    left(new.message, 300),
+    '/#food',
+    'normal'
+  )
+  from public.push_subscriptions s;
+
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_cafeteria_announcement on public.cafeteria_announcements;
 create trigger campus_push_cafeteria_announcement
 after insert or update on public.cafeteria_announcements
 for each row execute function campus_private.queue_cafeteria_announcement_push();
 
+-- Club / committee notes.
 create or replace function campus_private.queue_club_note_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare recipient record;
+declare
+  recipient record;
 begin
   for recipient in
-    select distinct s.user_id, s.student_id from public.push_subscriptions s
+    select distinct s.user_id, s.student_id
+    from public.push_subscriptions s
     where new.author_user_id is null or s.user_id <> new.author_user_id
   loop
     perform campus_private.enqueue_push_for_user(
-      'club-note:' || new.id::text, recipient.user_id, recipient.student_id,
-      'activity_updates', coalesce(nullif(btrim(new.club_name), ''), '校内活動') || 'の新着投稿',
+      'club-note:' || new.id::text,
+      recipient.user_id,
+      recipient.student_id,
+      'activity_updates',
+      coalesce(nullif(btrim(new.club_name), ''), '校内活動') || 'の新着投稿',
       left(coalesce(new.title, '') || case when coalesce(new.content, '') <> '' then '：' || new.content else '' end, 300),
-      '/#club', 'normal'
+      '/#club',
+      'normal'
     );
   end loop;
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_club_note_insert on public.club_notes;
 create trigger campus_push_club_note_insert
 after insert on public.club_notes
 for each row execute function campus_private.queue_club_note_push();
 
+-- JMA earthquake alerts. Urgent alerts bypass quiet hours in the dispatcher.
 create or replace function campus_private.queue_earthquake_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare push_title text; push_body text;
+declare
+  push_title text;
+  push_body text;
 begin
   push_title := case
     when new.notification_kind = 'major_earthquake' then '全国で大きな地震を観測'
@@ -342,53 +457,97 @@ begin
     else '小平市周辺の地震情報'
   end;
   push_body := coalesce(nullif(new.payload->>'hypocenterName', ''), new.payload->>'headline', '気象庁から新しい地震情報が発表されました。');
-  if new.payload->>'maxIntensity' is not null then push_body := push_body || ' 最大震度：' || new.payload->>'maxIntensity'; end if;
-  if new.payload->>'kodairaIntensity' is not null then push_body := push_body || ' 小平市：' || new.payload->>'kodairaIntensity'; end if;
+  if new.payload->>'maxIntensity' is not null then
+    push_body := push_body || ' 最大震度：' || new.payload->>'maxIntensity';
+  end if;
+  if new.payload->>'kodairaIntensity' is not null then
+    push_body := push_body || ' 小平市：' || new.payload->>'kodairaIntensity';
+  end if;
+
   perform campus_private.enqueue_push_for_user(
     'earthquake:' || new.event_key || ':' || new.notification_kind,
-    s.user_id, s.student_id, 'disaster_alerts', push_title, push_body, '/#weather', 'urgent'
-  ) from public.push_subscriptions s;
+    s.user_id,
+    s.student_id,
+    'disaster_alerts',
+    push_title,
+    push_body,
+    '/#weather',
+    'urgent'
+  )
+  from public.push_subscriptions s;
+
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_earthquake_insert on public.jma_earthquake_notifications;
 create trigger campus_push_earthquake_insert
 after insert on public.jma_earthquake_notifications
 for each row execute function campus_private.queue_earthquake_push();
 
+-- JMA warning notifications only carry a non-null payload for newly announced warnings.
 create or replace function campus_private.queue_weather_alert_push()
 returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public, campus_private
 as $function$
-declare push_title text; push_body text; severity_value integer;
+declare
+  push_title text;
+  push_body text;
+  severity_value integer;
 begin
-  if new.notification_payload is null then return new; end if;
-  if tg_op = 'UPDATE' and new.notification_payload is not distinct from old.notification_payload then return new; end if;
+  if new.notification_payload is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and new.notification_payload is not distinct from old.notification_payload then
+    return new;
+  end if;
+
   severity_value := coalesce((new.notification_payload->>'severity')::integer, 3);
-  if severity_value < 3 then return new; end if;
+  if severity_value < 3 then
+    return new;
+  end if;
   push_title := coalesce(new.notification_payload->>'areaName', '小平市') || 'に気象警報';
-  select string_agg(coalesce(alert->>'name', '警報'), '・') into push_body
+  select string_agg(coalesce(alert->>'name', '警報'), '・')
+    into push_body
   from jsonb_array_elements(coalesce(new.notification_payload->'alerts', '[]'::jsonb)) as alert;
   push_body := coalesce(nullif(push_body, ''), '気象庁から警報が発表されました。');
+
   perform campus_private.enqueue_push_for_user(
     'weather-alert:' || new.source_id,
-    s.user_id, s.student_id, 'weather_alerts', push_title, push_body, '/#weather',
+    s.user_id,
+    s.student_id,
+    'weather_alerts',
+    push_title,
+    push_body,
+    '/#weather',
     case when severity_value >= 5 then 'urgent' else 'high' end
-  ) from public.push_subscriptions s;
+  )
+  from public.push_subscriptions s;
+
   return new;
 end;
 $function$;
+
 drop trigger if exists campus_push_weather_alert_insert on public.jma_weather_alert_events;
 create trigger campus_push_weather_alert_insert
 after insert or update of notification_payload on public.jma_weather_alert_events
 for each row execute function campus_private.queue_weather_alert_push();
 
+-- RPC endpoint for service-role delivery; the outbox itself stays in a private schema.
 create or replace function public.push_claim_notifications(p_limit integer default 50)
 returns table (
-  id bigint, user_id uuid, student_id text, category text, title text,
-  body text, url text, priority text, tag text, attempts integer
+  id bigint,
+  user_id uuid,
+  student_id text,
+  category text,
+  title text,
+  body text,
+  url text,
+  priority text,
+  tag text,
+  attempts integer
 )
 language sql
 security invoker
@@ -400,14 +559,19 @@ as $function$
     where (
       o.status = 'pending'
       or (o.status = 'processing' and o.locked_at < now() - interval '5 minutes')
-    ) and o.available_at <= now()
-    order by case o.priority when 'urgent' then 0 when 'high' then 1 else 2 end, o.created_at asc
+    )
+      and o.available_at <= now()
+    order by
+      case o.priority when 'urgent' then 0 when 'high' then 1 else 2 end,
+      o.created_at asc
     for update skip locked
     limit greatest(1, least(coalesce(p_limit, 50), 200))
   ),
   claimed as (
     update campus_private.push_notification_outbox o
-    set status = 'processing', locked_at = now(), attempts = o.attempts + 1
+    set status = 'processing',
+        locked_at = now(),
+        attempts = o.attempts + 1
     from candidates c
     where o.id = c.id
     returning o.id, o.user_id, o.student_id, o.category, o.title, o.body, o.url, o.priority, o.tag, o.attempts
@@ -415,7 +579,11 @@ as $function$
   select * from claimed;
 $function$;
 
-create or replace function public.push_finish_notification(p_id bigint, p_outcome text, p_error text default null)
+create or replace function public.push_finish_notification(
+  p_id bigint,
+  p_outcome text,
+  p_error text default null
+)
 returns void
 language sql
 security invoker
@@ -432,8 +600,11 @@ as $function$
       last_error = case when p_outcome in ('sent', 'skipped') then null else left(coalesce(p_error, 'Push delivery failed'), 1000) end,
       available_at = case
         when p_outcome in ('sent', 'skipped') then o.available_at
-        else now() + case when o.attempts <= 1 then interval '1 minute'
-          when o.attempts = 2 then interval '5 minutes' else interval '20 minutes' end
+        else now() + case
+          when o.attempts <= 1 then interval '1 minute'
+          when o.attempts = 2 then interval '5 minutes'
+          else interval '20 minutes'
+        end
       end,
       locked_at = null
   where o.id = p_id;
@@ -459,6 +630,8 @@ revoke all on function public.push_release_notification(bigint, timestamptz) fro
 grant execute on function public.push_claim_notifications(integer) to service_role;
 grant execute on function public.push_finish_notification(bigint, text, text) to service_role;
 grant execute on function public.push_release_notification(bigint, timestamptz) to service_role;
+
 grant usage on schema campus_private to service_role;
 
 commit;
+;

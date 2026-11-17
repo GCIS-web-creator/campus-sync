@@ -1,4 +1,3 @@
--- LINE配信ダッシュボード用の詳細監査ログ。再実行可能です。
 create table if not exists public.line_delivery_events (
   id uuid primary key default gen_random_uuid(),
   delivery_batch_id uuid,
@@ -21,15 +20,33 @@ create table if not exists public.line_delivery_events (
   sent_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
-create index if not exists line_delivery_events_sent_at_idx on public.line_delivery_events (sent_at desc);
-create index if not exists line_delivery_events_batch_idx on public.line_delivery_events (delivery_batch_id, sent_at desc);
-create index if not exists line_delivery_events_kind_idx on public.line_delivery_events (kind, sent_at desc);
-create index if not exists line_delivery_events_status_idx on public.line_delivery_events (status, sent_at desc);
-create index if not exists line_delivery_events_channel_idx on public.line_delivery_events (channel, sent_at desc);
+
+create index if not exists line_delivery_events_sent_at_idx
+  on public.line_delivery_events (sent_at desc);
+create index if not exists line_delivery_events_batch_idx
+  on public.line_delivery_events (delivery_batch_id, sent_at desc);
+create index if not exists line_delivery_events_kind_idx
+  on public.line_delivery_events (kind, sent_at desc);
+create index if not exists line_delivery_events_status_idx
+  on public.line_delivery_events (status, sent_at desc);
+create index if not exists line_delivery_events_channel_idx
+  on public.line_delivery_events (channel, sent_at desc);
+
 alter table public.line_delivery_events enable row level security;
 revoke all on table public.line_delivery_events from anon, authenticated;
 grant select, insert, update, delete on table public.line_delivery_events to service_role;
+
 create extension if not exists pg_cron with schema pg_catalog;
-select cron.unschedule(jobid) from cron.job where jobname = 'campussync-line-delivery-events-retention-14d';
-select cron.schedule('campussync-line-delivery-events-retention-14d', '0 18 * * *',
-  $cron$ delete from public.line_delivery_events where sent_at < now() - interval '14 days'; $cron$);
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'campussync-line-delivery-events-retention-14d';
+
+select cron.schedule(
+  'campussync-line-delivery-events-retention-14d',
+  '0 18 * * *',
+  $cron$
+    delete from public.line_delivery_events
+    where sent_at < now() - interval '14 days';
+  $cron$
+);
+;
