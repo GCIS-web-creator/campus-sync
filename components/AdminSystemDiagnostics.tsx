@@ -21,6 +21,15 @@ type DiagnosticLog = {
 };
 type Diagnostics = {
   checkedAt: string;
+  deployment?: { environment: string; branch: string | null; commitSha: string | null; url: string | null };
+  migrations?: {
+    sourceAvailable: boolean;
+    localCount: number;
+    appliedCount: number;
+    pendingCount: number;
+    missingSourceCount: number;
+    items: Array<{ version: string; name: string; status: 'applied' | 'pending' | 'source_missing' }>;
+  };
   environment: Array<{ key: string; configured: boolean }>;
   summary: {
     logs24h: number; errors24h: number; fatal24h: number; warnings24h: number;
@@ -105,6 +114,8 @@ export default function AdminSystemDiagnostics() {
           {loading && !data ? <p className="text-slate-400">[RUNNING] collecting diagnostics…</p> : error ? <p className="text-rose-300">[ERROR] {error}</p> : <>
             <p className="text-emerald-100">[OK] database: {data?.summary.database}</p>
             <p className="text-emerald-100">[OK] environment: {data?.summary.environmentConfigured}/{data?.summary.environmentTotal} keys configured (presence only)</p>
+            <p className="text-emerald-100">[DEPLOY] {data?.deployment?.environment || 'unknown'} / {data?.deployment?.branch || 'branch unknown'} / {data?.deployment?.commitSha?.slice(0, 12) || 'SHA unavailable'}</p>
+            <p className={data?.migrations?.pendingCount || data?.migrations?.missingSourceCount ? 'text-amber-200' : 'text-emerald-100'}>[DB MIGRATIONS] applied: {data?.migrations?.appliedCount ?? '—'} / local: {data?.migrations?.localCount ?? '—'} / pending: {data?.migrations?.pendingCount ?? '—'} / source missing: {data?.migrations?.missingSourceCount ?? '—'}</p>
             <p className={data?.summary.errors24h ? 'text-rose-300' : 'text-emerald-100'}>[{data?.summary.errors24h ? 'WARN' : 'OK'}] errors / 24h: {data?.summary.errors24h}</p>
             <p className={data?.summary.fatal24h ? 'text-rose-300' : 'text-emerald-100'}>[{data?.summary.fatal24h ? 'WARN' : 'OK'}] fatal / 24h: {data?.summary.fatal24h}</p>
             <p className="text-emerald-100">[INFO] maintenance modules: {data?.summary.maintenanceEnabled} blocked, {data?.summary.noticesEnabled} notice</p>
@@ -126,6 +137,8 @@ export default function AdminSystemDiagnostics() {
               ['警告', data.summary.warnings24h, AlertTriangle],
               ['致命的エラー', data.summary.fatal24h, ShieldAlert],
               ['設定済み環境変数', data.summary.environmentConfigured + '/' + data.summary.environmentTotal, CheckCircle2],
+              ['未適用マイグレーション', data.migrations?.pendingCount ?? '—', Clock3],
+              ['適用済み・ソース欠損', data.migrations?.missingSourceCount ?? '—', AlertTriangle],
             ].map(([label, value, Icon]) => {
               const Graphic = Icon as typeof Activity;
               return <article key={String(label)} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
@@ -146,7 +159,43 @@ export default function AdminSystemDiagnostics() {
                 </span>
               </div>)}
             </div>
-            <p className="mt-3 text-[10px] text-slate-500">※キーの有効性・接続可否をすべて証明するものではありません。DB接続は別途チェックしています。</p>
+
+          </div>            <p className="mt-3 text-[10px] text-slate-500">※値は取得していません。この一覧は実行中のVercel環境に渡されたキーの有無であり、Vercelの全環境設定や認証情報の有効性までは判定しません。</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black">DBマイグレーション台帳</h3>
+                <p className="mt-1 text-[10px] text-slate-500">リポジトリ内のSQLファイルとSupabase本番DBの適用履歴を照合します。</p>
+              </div>
+              <span className="rounded-lg border border-white/10 px-3 py-2 font-mono text-[10px] text-slate-400">SOURCE: GIT / REMOTE: SUPABASE</span>
+            </div>
+            {data.migrations ? <>
+              <div className="mb-4 grid gap-2 sm:grid-cols-4">
+                {[
+                  ['ローカルSQL', data.migrations.localCount],
+                  ['DB適用済み', data.migrations.appliedCount],
+                  ['未適用', data.migrations.pendingCount],
+                  ['SQLソース欠損', data.migrations.missingSourceCount],
+                ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
+                  <p className="text-[10px] text-slate-500">{String(label)}</p>
+                  <p className="mt-1 text-xl font-black tabular-nums">{String(value)}</p>
+                </div>)}
+              </div>
+              {!data.migrations.sourceAvailable && <p className="mb-3 rounded-lg border border-amber-300/20 bg-amber-300/5 p-3 text-[10px] text-amber-100">このデプロイにはSQLファイル一覧を読み込めませんでした。Gitのファイル同梱設定を確認してください。</p>}
+              <div className="max-h-[440px] space-y-1 overflow-y-auto">
+                {data.migrations.items.map((item) => <div key={item.version} className="flex flex-wrap items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <code className="w-28 shrink-0 text-[10px] text-slate-400">{item.version}</code>
+                  <span className="min-w-0 flex-1 break-all text-[10px] text-slate-200">{item.name}</span>
+                  <span className={'shrink-0 rounded-md border px-2 py-1 text-[9px] font-black ' + (item.status === 'applied' ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : item.status === 'pending' ? 'border-amber-300/20 bg-amber-300/10 text-amber-200' : 'border-rose-300/20 bg-rose-300/10 text-rose-200')}>
+                    {item.status === 'applied' ? 'APPLIED' : item.status === 'pending' ? 'PENDING' : 'SOURCE MISSING'}
+                  </span>
+                </div>)}
+                {!data.migrations.items.length && <FeatureState state="empty" compact title="マイグレーションはありません"/>}
+              </div>
+            </> : <FeatureState state="error" compact title="マイグレーション台帳を取得できません" description="診断APIを更新したデプロイで再取得してください。"/>}
+            <p className="mt-3 text-[10px] leading-5 text-slate-500">照合はマイグレーションのバージョン番号とファイルの有無で行います。SQL本文のハッシュやスキーマの完全一致を保証するものではありません。</p>
           </div>
 
           <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5">
