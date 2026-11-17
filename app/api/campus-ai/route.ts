@@ -36,6 +36,85 @@ function findTarget(q: string, names: string[], minLen = 3): number {
   });
   return bestIndex;
 }
+function evaluateNumericExpression(source: string): number | null {
+  const input = source.normalize('NFKC').replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'pi').replace(/\s+/g, '').toLowerCase();
+  const tokenPattern = /(?:\d+(?:\.\d*)?|\.\d+)|(?:sqrt|sin|cos|tan|log|ln|abs|exp|pi|e)|[()+\-*/^%]/gy;
+  const tokens: string[] = [];
+  let position = 0;
+  while (position < input.length) {
+    tokenPattern.lastIndex = position;
+    const match = tokenPattern.exec(input);
+    if (!match || match.index !== position) return null;
+    tokens.push(match[0]);
+    position = tokenPattern.lastIndex;
+  }
+  if (!tokens.length) return null;
+  let cursor = 0;
+  const peek = () => tokens[cursor];
+  const take = () => tokens[cursor++];
+  const parseExpression = (): number => {
+    let value = parseTerm();
+    while (peek() === '+' || peek() === '-') {
+      const op = take();
+      const right = parseTerm();
+      value = op === '+' ? value + right : value - right;
+    }
+    return value;
+  };
+  const parseTerm = (): number => {
+    let value = parseUnary();
+    while (peek() === '*' || peek() === '/' || peek() === '%') {
+      const op = take();
+      const right = parseUnary();
+      if ((op === '/' || op === '%') && right === 0) throw new Error('division_by_zero');
+      value = op === '*' ? value * right : op === '/' ? value / right : value % right;
+    }
+    return value;
+  };
+  const parseUnary = (): number => {
+    if (peek() === '+') { take(); return parseUnary(); }
+    if (peek() === '-') { take(); return -parseUnary(); }
+    return parsePower();
+  };
+  const parsePower = (): number => {
+    const base = parsePrimary();
+    if (peek() === '^') { take(); return Math.pow(base, parseUnary()); }
+    return base;
+  };
+  const parsePrimary = (): number => {
+    const token = take();
+    if (token === '(') {
+      const value = parseExpression();
+      if (take() !== ')') throw new Error('missing_parenthesis');
+      return value;
+    }
+    if (token === 'pi') return Math.PI;
+    if (token === 'e') return Math.E;
+    if (/^(sqrt|sin|cos|tan|log|ln|abs|exp)$/.test(token || '')) {
+      if (take() !== '(') throw new Error('missing_function_parenthesis');
+      const argument = parseExpression();
+      if (take() !== ')') throw new Error('missing_function_parenthesis');
+      if (token === 'sqrt') return Math.sqrt(argument);
+      if (token === 'sin') return Math.sin(argument);
+      if (token === 'cos') return Math.cos(argument);
+      if (token === 'tan') return Math.tan(argument);
+      if (token === 'log') return Math.log10(argument);
+      if (token === 'ln') return Math.log(argument);
+      if (token === 'abs') return Math.abs(argument);
+      return Math.exp(argument);
+    }
+    if (token && /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)) return Number(token);
+    throw new Error('invalid_expression');
+  };
+  try {
+    const result = parseExpression();
+    if (cursor !== tokens.length || !Number.isFinite(result)) return null;
+    return result;
+  } catch {
+    return null;
+  }
+}
+const isCalculatorQuestion = (q: string) => /計算|いくつ|√|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|ln\s*\(|π|÷|×/.test(q) && /\d|π|pi|e/i.test(q);
 const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混ん|空いて|空き具合|投票|混み具合/.test(q);
 const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
 const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
@@ -128,6 +207,7 @@ export async function POST(req: Request) {
           ['校内施設・マップ', '図書館はどこ？／校内施設一覧は？'],
           ['クラス・学年・全校チャット', 'クラスチャットの最近の投稿は？'],
           ['共有ワークスペース', '参加中のワークスペースの予定は？'],
+          ['数値計算', '（2+3）^2 を計算して／sqrt(16) は？'],
           ['クラス時間割', '今日の時間割は？／明日の授業は？'],
           ['学習記録・試験範囲・小テスト', '今週の学習時間は？／試験範囲は？／小テストは？'],
           ['出欠連絡履歴', '自分の出欠連絡を確認して'],
@@ -172,6 +252,7 @@ export async function POST(req: Request) {
   const wantsSchoolChat = isSchoolChatQuestion(question);
   const wantsWorkspace = isWorkspaceQuestion(question);
   const wantsWeatherAlerts = isWeatherAlertQuestion(question);
+  const wantsCalculator = isCalculatorQuestion(question);
   const wantsQueue = isQueueQuestion(question) || (!!pendingQueuePrompt && /^(?:長いよ|長い|普通|まあまあ|並んでない|並びなし|行列大|混んでる|空いてる|空いている)[!！。?？]*$/.test(question.replace(/[\s　]/g, '')));
   const wantsRoom = isRoomQuestion(question) && !wantsCrowd && !wantsLibrary && !wantsCareer;
   const wantsMenu = isMealQuestion(question) && !wantsCrowd && !wantsReviews;
@@ -1354,6 +1435,17 @@ export async function POST(req: Request) {
         ]
       )
     });
+  }
+
+  if (wantsCalculator) {
+    const expression = question.normalize('NFKC')
+      .replace(/×/g, '*').replace(/÷/g, '/')
+      .replace(/(?:を)?(?:計算して|計算すると|計算|求めて|答えを出して|いくつですか|はいくつ|の値|の近似値)/g, '')
+      .replace(/[^0-9a-zπ()+\-*/^%.]/gi, '')
+      .replace(/^[+*/^%]+|[+*/^%]+$/g, '');
+    const result = evaluateNumericExpression(expression);
+    if (result === null) return NextResponse.json({ answer: '数値計算として式を読み取れませんでした。例： (2+3)^2、sqrt(16)、sin(pi/2)。関数電卓では記号計算や証明には対応していません。' });
+    return NextResponse.json({ answer: expression + ' = ' + Number(result.toPrecision(12)).toString() + ' です。\n※三角関数はラジアンです。記号計算・微積分の厳密な式変形はCampusSyncの関数電卓を使用してください。' });
   }
 
   if (wantsNotes) {
