@@ -159,8 +159,7 @@ export default function AdminSystemDiagnostics() {
                 </span>
               </div>)}
             </div>
-
-          </div>            <p className="mt-3 text-[10px] text-slate-500">※値は取得していません。この一覧は実行中のVercel環境に渡されたキーの有無であり、Vercelの全環境設定や認証情報の有効性までは判定しません。</p>
+            <p className="mt-3 text-[10px] text-slate-500">※値は取得していません。この一覧は実行中のVercel環境に渡されたキーの有無であり、Vercelの全環境設定や認証情報の有効性までは判定しません。</p>
           </div>
 
           <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5">
