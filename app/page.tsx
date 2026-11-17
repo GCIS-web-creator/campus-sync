@@ -852,7 +852,7 @@ function GuestPreviewApp({ onExit }: { onExit: () => void }) {
       case 'calculator':
         return <CampusCalculator />;
       case 'chat':
-        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">クラスチャット</h3><p className={mutedClass}>デモ用の架空メッセージのみ表示しています。</p></div>{sampleTag}</div><div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">ゲストモードでは実際のクラス・学年・全校チャットに接続しません。投稿、返信、リアクション、通報、添付ファイルも利用できません。</div><div className="space-y-3">{GUEST_PREVIEW_MESSAGES.map((message,i)=><div key={message.name+message.time} className={'flex gap-2 ' +(i===1?'flex-row-reverse':'')}><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-black text-cyan-900">{message.name.slice(0,1)}</div><div className={'max-w-[85%] rounded-2xl p-3 '+(i===1?'bg-cyan-50':'bg-slate-100')}><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-black text-slate-700">{message.name}</span><span className="text-[10px] text-slate-400">{message.className} ・ {message.time}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.body}</p></div></div>)}</div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-4"><input disabled value="" placeholder="ゲストはメッセージを送信できません" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-xs text-slate-400" /><button type="button" disabled className="rounded-xl bg-slate-200 px-4 text-xs font-black text-slate-400">送信</button></div></section>;
+        return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><div><h3 className="text-lg font-black text-slate-900">クラスチャット</h3><p className={mutedClass}>デモ用の架空メッセージのみ表示しています。</p></div>{sampleTag}</div><div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">ゲストモードでは実際のクラス・学年・全校チャットに接続しません。投稿、返信、リアクション、通報、添付ファイルも利用できません。</div><div className="space-y-3">{GUEST_PREVIEW_MESSAGES.map((message,i)=><div key={message.name+message.time} className={'flex gap-2 ' +(i===1?'flex-row-reverse':'')}><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-black text-cyan-900">{message.name.slice(0,1)}</div><div className={'max-w-[85%] rounded-2xl p-3 '+(i===1?'bg-cyan-50':'bg-slate-100')}><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-black text-slate-700">{message.name}</span><span className="text-[10px] text-slate-400">{message.className} ・ {message.time}</span></div><p data-user-content className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.body}</p></div></div>)}</div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-4"><input disabled value="" placeholder="ゲストはメッセージを送信できません" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-xs text-slate-400" /><button type="button" disabled className="rounded-xl bg-slate-200 px-4 text-xs font-black text-slate-400">送信</button></div></section>;
       case 'club':
         return <section className={cardClass}><div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-lg font-black text-slate-900">部活動・委員会ノート</h3>{sampleTag}</div><p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">表示できる投稿はありません。これはゲスト用プレビューのため、実際の投稿データは表示しません。</p></section>;
       case 'notifications':
@@ -4564,8 +4564,8 @@ Supabaseの設定を確認してください。
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white"><AlertTriangle size={21}/></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[10px] font-black tracking-widest text-rose-700">緊急連絡 / EMERGENCY</span>
-                  <span className="mt-1 block break-words text-sm font-black text-rose-950">{note.title}</span>
-                  <span className="mt-1 block line-clamp-2 text-xs leading-5 text-rose-800">{note.body}</span>
+                  <span data-user-content className="mt-1 block break-words text-sm font-black text-rose-950">{note.title}</span>
+                  <span data-user-content className="mt-1 block line-clamp-2 text-xs leading-5 text-rose-800">{note.body}</span>
                   <span className="mt-2 block text-[10px] font-bold text-rose-700">{note.time} ・ 詳細を確認する</span>
                 </span>
                 <ChevronRight size={18} className="mt-1 shrink-0 text-rose-500"/>
@@ -5469,12 +5469,12 @@ Supabaseの設定を確認してください。
                         <span className="text-[10px] font-black bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-full inline-block mb-1">
                           {note.clubName}
                         </span>
-                        <h4 className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
+                        <h4 data-user-content className="text-sm font-black text-gray-800 leading-tight">{note.title}</h4>
                       </div>
                     </div>
                     <span className={`text-[10px] ${subTextClass}`}>{note.date}</span>
                   </div>
-                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2.5 rounded-xl border border-gray-100 font-medium whitespace-pre-wrap break-words">
+                  <p data-user-content className="text-xs text-gray-600 leading-relaxed bg-gray-50/50 p-2.5 rounded-xl border border-gray-100 font-medium whitespace-pre-wrap break-words">
                     {note.content}
                   </p>
                   <div className="text-right">
@@ -7046,7 +7046,7 @@ Supabaseの設定を確認してください。
                 <p className={`text-[10px] font-black tracking-widest ${selectedNotification.priority === 'emergency' ? 'text-rose-700' : selectedNotification.priority === 'important' ? 'text-amber-700' : themeCls.text}`}>{selectedNotification.priority === 'emergency' ? 'CAMPUSSYNC / EMERGENCY' : 'CAMPUSSYNC / SCHOOL NOTICE'}</p>
                 {selectedNotification.priority === 'emergency' && <span className="mt-1 inline-block rounded-full bg-rose-600 px-2 py-1 text-[9px] font-black text-white">緊急連絡</span>}
                 {selectedNotification.priority === 'important' && <span className="mt-1 inline-block rounded-full bg-amber-500 px-2 py-1 text-[9px] font-black text-white">重要なお知らせ</span>}
-                <h2 id="school-notification-detail-title" className="mt-1 break-words text-base font-black leading-6 text-gray-900">
+                <h2 data-user-content id="school-notification-detail-title" className="mt-1 break-words text-base font-black leading-6 text-gray-900">
                   {selectedNotification.title}
                 </h2>
                 <p className="mt-2 text-[10px] font-medium text-gray-400">{selectedNotification.time}</p>
@@ -7057,7 +7057,7 @@ Supabaseの設定を確認してください。
             </div>
             <div className="mt-5 max-h-[55vh] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
               {selectedNotification.imageUrl && <img src={selectedNotification.imageUrl} alt={selectedNotification.title} className="mb-4 max-h-72 w-full rounded-xl object-contain" />}
-              <p className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
+              <p data-user-content className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
             </div>
             <button type="button" onClick={() => setSelectedNotification(null)} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white transition ${themeCls.bg} ${themeCls.bgHover}`}>
               閉じる

@@ -47,8 +47,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unsupported language.' }, { status: 400 });
   }
 
-  if (!Array.isArray(body?.items) || body.items.length < 1 || body.items.length > 12) {
-    return NextResponse.json({ error: 'A batch must contain between 1 and 12 strings.' }, { status: 400 });
+  if (!Array.isArray(body?.items) || body.items.length < 1 || body.items.length > 8) {
+    return NextResponse.json({ error: 'A batch must contain between 1 and 8 strings.' }, { status: 400 });
   }
 
   const items = body.items.map(normalizeTranslation);

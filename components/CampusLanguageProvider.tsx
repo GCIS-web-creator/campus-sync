@@ -31,12 +31,14 @@ const IGNORED_SELECTOR = [
   '[data-user-content]',
   '[data-no-translate="true"]',
   '.campus-note-editor',
+  '.campus-chat-shell',
+  '.campus-chat-panel',
   '.campus-chat-messages',
   '.campus-ai-chat-history',
 ].join(',');
 
 const JAPANESE_TEXT = /[ぁ-んァ-ヶ一-龠]/u;
-const BATCH_SIZE = 12;
+const BATCH_SIZE = 8;
 const PARALLEL_BATCHES = 3;
 
 function hasIgnoredAncestor(element: Element | null): boolean {
@@ -71,8 +73,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
   const cacheRef = useRef<Record<string, Record<string, string>>>({});
   const pendingRef = useRef<Map<string, PendingItem>>(new Map());
   const generationRef = useRef(0);
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const processingRef = useRef(false);
+  const flushTimerRef = useRef<number | null>(null);
 
   const setLanguage = useCallback((next: CampusLanguage) => {
     setLanguageState(next);
@@ -141,7 +142,7 @@ export function CampusLanguageProvider({ children }: { children: React.ReactNode
     };
 
     const scheduleFlush = () => {
-      if (flushTimerRef.current || processingRef.current) return;
+      if (flushTimerRef.current) return;
       flushTimerRef.current = window.setTimeout(() => {
         flushTimerRef.current = null;
         void Promise.all(Array.from({ length: PARALLEL_BATCHES }, async () => {
