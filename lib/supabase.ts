@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '@/lib/fetch-with-retry';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -19,4 +20,5 @@ if (typeof window !== 'undefined' && (!configuredUrl || !configuredPublishableKe
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  global: { fetch: (input, init) => fetchWithRetry(input, init, { attempts: 2, baseDelayMs: 300, timeoutMs: 12_000 }) },
 });
