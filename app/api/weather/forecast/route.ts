@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { fetchSchoolWeatherBundle } from '@/lib/weather';
 
@@ -7,6 +8,8 @@ export const revalidate = 1800;
 export const maxDuration = 30;
 
 export async function GET() {
+  const maintenanceBlock = await getSystemMaintenanceBlock('weather');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const data = await fetchSchoolWeatherBundle(16);
     return NextResponse.json(data, {

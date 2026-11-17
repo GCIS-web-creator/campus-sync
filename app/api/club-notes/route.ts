@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { createClient } from '@supabase/supabase-js';
 import { createHmac } from 'node:crypto';
 import { broadcastClubNoteToLine } from '@/lib/club-note-line';
@@ -40,6 +41,8 @@ async function getAuthenticatedSchoolUser(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('club-notes');
+  if (maintenanceBlock) return maintenanceBlock;
   const context = await getAuthenticatedSchoolUser(request);
   if ('response' in context) return context.response;
   const { data: profile, error: profileError } = await context.admin.from('profiles')
@@ -70,6 +73,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('club-notes');
+  if (maintenanceBlock) return maintenanceBlock;
   const context = await getAuthenticatedSchoolUser(request);
   if ('response' in context) return context.response;
   const { user, studentId, admin } = context;

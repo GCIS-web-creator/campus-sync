@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
@@ -835,6 +836,8 @@ async function syncFeed(admin: SupabaseClient, mode: 'high' | 'long') {
 }
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('earthquakes');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const admin = getAdmin();
     const requestUrl = new URL(request.url);
