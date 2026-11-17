@@ -8,12 +8,12 @@ export const dynamic = 'force-dynamic';
 const ENVIRONMENT_KEYS = [
   'NEXT_PUBLIC_SUPABASE_URL',
   'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-  'SUPABASE_SECRET_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_SERVER_KEY',
   'CRON_SECRET',
   'LINE_CHANNEL_SECRET',
   'LINE_CHANNEL_ACCESS_TOKEN',
   'VAPID_PUBLIC_KEY',
+  'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
   'VAPID_PRIVATE_KEY',
   'VAPID_SUBJECT',
   'CAMPUS_SYNC_ADMIN_PASSWORD',
@@ -62,8 +62,12 @@ export async function GET(request: Request) {
     }
 
     const environment = ENVIRONMENT_KEYS.map((key) => ({
-      key,
-      configured: Boolean(process.env[key] || (key === 'SUPABASE_SECRET_KEY' && process.env.SUPABASE_SERVICE_ROLE_KEY) || (key === 'SUPABASE_SERVICE_ROLE_KEY' && process.env.SUPABASE_SECRET_KEY)),
+      key: key === 'SUPABASE_SERVER_KEY' ? 'SUPABASE_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY' : key,
+      configured: key === 'SUPABASE_SERVER_KEY'
+        ? Boolean(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+        : key === 'VAPID_PUBLIC_KEY'
+          ? Boolean(process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+          : Boolean(process.env[key]),
     }));
     const configuredCount = environment.filter((item) => item.configured).length;
     const modes = maintenanceResult.data || [];
