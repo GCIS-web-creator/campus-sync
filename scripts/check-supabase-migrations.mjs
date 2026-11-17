@@ -8,7 +8,7 @@ const errors = [];
 const seenVersions = new Map();
 
 for (const fileName of sqlFiles) {
-  const match = fileName.match(/^(\\d{14})_([a-z0-9][a-z0-9_-]*)\\.sql$/i);
+  const match = fileName.match(/^(\d{14})_([a-z0-9][a-z0-9_-]*)\.sql$/i);
   if (!match) {
     errors.push(`Invalid migration filename: ${fileName}`);
     continue;
