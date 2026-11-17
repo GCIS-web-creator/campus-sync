@@ -4778,7 +4778,7 @@ Supabaseの設定を確認してください。
                       <room.icon size={18} className={room.color} />
                       <span className={`text-xs font-black ${subTextClass}`}>{room.temp}</span>
                     </div>
-                    <h4 data-user-content className={`text-xs ${subTextClass} mb-0.5`}>{room.name}</h4>
+                    <h4 className={`text-xs ${subTextClass} mb-0.5`}>{room.name}</h4>
                     <p className={`text-xs font-black ${room.color}`}>{room.status}</p>
                   </div>
                 ))}
@@ -7057,7 +7057,7 @@ Supabaseの設定を確認してください。
             </div>
             <div className="mt-5 max-h-[55vh] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
               {selectedNotification.imageUrl && <img data-user-content src={selectedNotification.imageUrl} alt={selectedNotification.title} className="mb-4 max-h-72 w-full rounded-xl object-contain" />}
-              <p data-user-content className="whitespace-pre-wrap break-words">{selectedNotification.body || 'この通知には詳細本文が登録されていません。'}</p>
+              {selectedNotification.body ? <p data-user-content className="whitespace-pre-wrap break-words">{selectedNotification.body}</p> : <p>この通知には詳細本文が登録されていません。</p>}
             </div>
             <button type="button" onClick={() => setSelectedNotification(null)} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white transition ${themeCls.bg} ${themeCls.bgHover}`}>
               閉じる
