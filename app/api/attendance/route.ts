@@ -1,4 +1,6 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { getStudyStudentContext } from '@/lib/study-materials-server';
 
 export const runtime = 'nodejs';
@@ -21,6 +23,8 @@ function dateInRange(value: unknown): value is string {
   return diff >= -7 && diff <= 30;
 }
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getStudyStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);
@@ -30,11 +34,22 @@ export async function GET(request: Request) {
     if (error) throw error;
     return NextResponse.json({ success: true, reports: data || [] }, { headers: noStore });
   } catch (error) {
-    console.error('Attendance student list failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'attendance',
+    eventCode: 'ATTENDANCE_LIST_FAILED',
+    message: error instanceof Error ? error.message : 'Attendance history read failed',
+    routePath: '/api/attendance/route.ts',
+    statusCode: 500,
+  });
+  console.error('Attendance student list failed:', error);
     return fail('出欠連絡の履歴を取得できませんでした。', 500);
   }
 }
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!sameOrigin(request)) return fail('不正な送信です。', 403);
   try {
     const context = await getStudyStudentContext(request);
@@ -65,11 +80,22 @@ export async function POST(request: Request) {
     if (error) throw error;
     return NextResponse.json({ success: true, report: data }, { status: 201, headers: noStore });
   } catch (error) {
-    console.error('Attendance report create failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'attendance',
+    eventCode: 'ATTENDANCE_CREATE_FAILED',
+    message: error instanceof Error ? error.message : 'Attendance report create failed',
+    routePath: '/api/attendance/route.ts',
+    statusCode: 500,
+  });
+  console.error('Attendance report create failed:', error);
     return fail('出欠連絡を登録できませんでした。', 500);
   }
 }
 export async function PATCH(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!sameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const context = await getStudyStudentContext(request);
@@ -84,7 +110,16 @@ export async function PATCH(request: Request) {
     if (!data) return fail('受付後の連絡は取り消せません。学校窓口へ連絡してください。', 409);
     return NextResponse.json({ success: true }, { headers: noStore });
   } catch (error) {
-    console.error('Attendance report cancel failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'attendance',
+    eventCode: 'ATTENDANCE_CANCEL_FAILED',
+    message: error instanceof Error ? error.message : 'Attendance report cancel failed',
+    routePath: '/api/attendance/route.ts',
+    statusCode: 500,
+  });
+  console.error('Attendance report cancel failed:', error);
     return fail('連絡を取り消せませんでした。', 500);
   }
 }

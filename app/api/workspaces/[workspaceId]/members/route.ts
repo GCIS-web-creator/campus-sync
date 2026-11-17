@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import {
   createWorkspaceInviteCode,
@@ -17,6 +18,8 @@ const fail = (message: string, status = 400) =>
 const managerRoles = ['owner','admin'];
 
 export async function GET(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getWorkspaceStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);
@@ -55,6 +58,8 @@ export async function GET(request: Request, route: { params: Promise<{ workspace
 }
 
 export async function POST(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const context = await getWorkspaceStudentContext(request);
@@ -98,6 +103,8 @@ export async function POST(request: Request, route: { params: Promise<{ workspac
 }
 
 export async function PATCH(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な操作です。', 403);
   try {
     const context = await getWorkspaceStudentContext(request);

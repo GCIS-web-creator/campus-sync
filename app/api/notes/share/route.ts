@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,8 @@ async function getContext(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('notes');
+  if (maintenanceBlock) return maintenanceBlock;
   const context = await getContext(request);
   if ('response' in context) return context.response;
 

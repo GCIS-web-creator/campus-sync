@@ -1,3 +1,4 @@
+
 create index if not exists student_test_subjects_exam_owner_idx
   on public.student_test_subjects(exam_id, user_id);
 create index if not exists student_test_ranges_subject_owner_idx

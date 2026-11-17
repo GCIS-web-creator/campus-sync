@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X } from 'lucide-react';
+import FeatureState from '@/components/FeatureState';
+import { fetchWithRetry } from '@/lib/fetch-with-retry';
 
 type StudyMaterial = {
   id: string;
@@ -42,6 +44,7 @@ function dateLabel(value: string | null) {
 export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDarkMode?: boolean }) {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
   const [subject, setSubject] = useState('all');
@@ -51,6 +54,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
 
   const loadMaterials = async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
@@ -60,7 +64,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
         setMessage('学校アカウントでログインすると資料を閲覧できます。');
         return;
       }
-      const response = await fetch('/api/materials', {
+      const response = await fetchWithRetry('/api/materials', {
         headers: { Authorization: 'Bearer ' + token },
         cache: 'no-store',
       });
@@ -70,6 +74,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       setMessage('');
     } catch (error) {
       setMaterials([]);
+      setLoadFailed(true);
       setMessage(error instanceof Error ? error.message : '資料一覧を取得できませんでした。');
     } finally {
       setLoading(false);
@@ -84,7 +89,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) throw new Error('ログイン状態を確認できませんでした。');
-      const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id) + (download ? '&download=1' : ''), {
+      const response = await fetchWithRetry('/api/materials/file?id=' + encodeURIComponent(item.id) + (download ? '&download=1' : ''), {
         headers: { Authorization: 'Bearer ' + token },
         cache: 'no-store',
       });
@@ -143,13 +148,10 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
 
       {message && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">{message}</p>}
 
-      {loading ? <div className={'rounded-2xl border p-10 text-center text-sm ' + panel}>資料を読み込み中...</div>
+      {loading ? <FeatureState state="loading" title="資料を読み込んでいます" description="公開範囲を確認しています。" dark={isDarkMode}/>
+        : loadFailed ? <FeatureState state="error" title="資料を読み込めませんでした" description={message} onRetry={() => void loadMaterials()} dark={isDarkMode}/>
         : filteredMaterials.length === 0 ? (
-          <div className={'rounded-2xl border border-dashed p-10 text-center ' + panel}>
-            <BookOpen size={30} className={'mx-auto ' + muted} />
-            <p className="mt-3 text-sm font-bold">表示できる資料はありません</p>
-            <p className={'mt-1 text-xs ' + muted}>条件を変更するか、管理者による資料公開をお待ちください。</p>
-          </div>
+          <FeatureState state="empty" title="表示できる資料はありません" description="検索条件を変更するか、管理者による資料公開をお待ちください。" dark={isDarkMode}/>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filteredMaterials.map(item => (

@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { getStudyStudentContext, canStudentViewMaterial, STUDY_MATERIAL_BUCKET } from '@/lib/study-materials-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('materials');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getStudyStudentContext(request);
     if (!context) return NextResponse.json({ success: false, message: '学校アカウントでログインしてください。' }, { status: 401 });

@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { getWorkspaceMemberRole, getWorkspaceStudentContext, noStoreHeaders, workspaceIdPattern } from '@/lib/workspaces-server';
 
@@ -8,6 +9,8 @@ const fail = (message: string, status = 400) =>
   NextResponse.json({ success: false, message }, { status, headers: noStoreHeaders });
 
 export async function GET(request: Request, route: { params: Promise<{ workspaceId: string }> }) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getWorkspaceStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);

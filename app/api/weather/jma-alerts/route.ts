@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { NextResponse } from 'next/server';
@@ -717,6 +718,8 @@ async function recordFailure(admin: SupabaseClient, error: unknown): Promise<voi
 
 
 export async function GET() {
+  const maintenanceBlock = await getSystemMaintenanceBlock('weather');
+  if (maintenanceBlock) return maintenanceBlock;
   let admin: SupabaseClient;
   try {
     admin = getSupabaseAdmin();

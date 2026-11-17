@@ -1,3 +1,4 @@
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import {
@@ -27,6 +28,8 @@ const safeFileName=(value:unknown)=>typeof value==='string'?value.trim().replace
 const safeFolder=(value:unknown)=>typeof value==='string'?value.trim().split('/').map((part)=>part.trim()).filter((part)=>part&&part!=='.'&&part!=='..').join('/').slice(0,500):'';
 
 export async function GET(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context=await getWorkspaceStudentContext(request);
     if(!context) return fail('学校アカウントでログインしてください。',401);
@@ -67,6 +70,8 @@ export async function GET(request:Request,route:{params:Promise<{workspaceId:str
 }
 
 export async function POST(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if(!isSameOrigin(request)) return fail('不正な送信です。',403);
   try {
     const context=await getWorkspaceStudentContext(request);
@@ -147,6 +152,8 @@ export async function POST(request:Request,route:{params:Promise<{workspaceId:st
 }
 
 export async function DELETE(request:Request,route:{params:Promise<{workspaceId:string}>}) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if(!isSameOrigin(request)) return fail('不正な送信です。',403);
   try {
     const context=await getWorkspaceStudentContext(request);

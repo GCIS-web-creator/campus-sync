@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchWithRetry } from '@/lib/fetch-with-retry';
 import WorkspacePlanning from './WorkspacePlanning';
 import {
   Users, Plus, Search, RefreshCw, Check, X, Copy, ShieldCheck, Crown, UserPlus,
@@ -183,12 +184,12 @@ export default function GroupWorkspaces({ isDarkMode=false }: { isDarkMode?:bool
     const token=data.session?.access_token;
     if(!token) throw new Error('学校アカウントでログインしてください。');
     const isForm=typeof FormData!=='undefined'&&body instanceof FormData;
-    const response=await fetch(path,{
+    const response=await fetchWithRetry(path,{
       method,
       headers:{Authorization:'Bearer '+token,...(body&&!isForm?{'Content-Type':'application/json'}:{})},
       body:body?(isForm?body:JSON.stringify(body)):undefined,
       cache:'no-store',
-    });
+    },{attempts:2,baseDelayMs:300,timeoutMs:15_000});
     const result=await response.json().catch(()=>null);
     if(!response.ok||!result?.success) throw new Error(result?.message||'処理に失敗しました。');
     return result;

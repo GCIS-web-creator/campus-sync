@@ -1,4 +1,6 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { randomBytes } from 'node:crypto';
 import {
   getWorkspaceStudentContext,
@@ -16,6 +18,8 @@ const categories = ['club','committee','event','project','study','research','vol
 const joins = ['invite_only','approval','open'] as const;
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getWorkspaceStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);
@@ -76,12 +80,23 @@ export async function GET(request: Request) {
     }));
     return NextResponse.json({ success: true, workspaces }, { headers: noStoreHeaders });
   } catch (error) {
-    console.error('Workspace list failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_LIST_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace list failed',
+    routePath: '/api/workspaces/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace list failed:', error);
     return fail('共有ワークスペース一覧を取得できませんでした。', 500);
   }
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な送信です。', 403);
   try {
     const context = await getWorkspaceStudentContext(request);
@@ -147,7 +162,16 @@ export async function POST(request: Request) {
       headers: noStoreHeaders,
     });
   } catch (error) {
-    console.error('Workspace create failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CREATE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace create failed',
+    routePath: '/api/workspaces/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace create failed:', error);
     return fail('グループを作成できませんでした。入力内容とアカウント状態を確認してください。', 500);
   }
 }

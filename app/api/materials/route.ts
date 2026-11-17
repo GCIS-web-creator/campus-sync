@@ -1,10 +1,14 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { getStudyStudentContext, canStudentViewMaterial } from '@/lib/study-materials-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('materials');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getStudyStudentContext(request);
     if (!context) return NextResponse.json({ success: false, message: '学校アカウントでログインしてください。' }, { status: 401 });
@@ -17,13 +21,31 @@ export async function GET(request: Request) {
       .limit(300);
 
     if (error) {
-      console.error('Student study material list failed:', error.message);
+      await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'materials',
+    eventCode: 'MATERIALS_QUERY_FAILED',
+    message: error instanceof Error ? error.message : 'Student study material list query failed',
+    routePath: '/api/materials/route.ts',
+    statusCode: 500,
+  });
+  console.error('Student study material list failed:', error.message);
       return NextResponse.json({ success: false, message: '資料一覧を取得できませんでした。' }, { status: 500 });
     }
     const materials = (data || []).filter(material => canStudentViewMaterial(material, context.userClass));
     return NextResponse.json({ success: true, materials }, { headers: { 'Cache-Control': 'no-store, private' } });
   } catch (error) {
-    console.error('Student study material request failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'materials',
+    eventCode: 'MATERIALS_LIST_FAILED',
+    message: error instanceof Error ? error.message : 'Student study material request failed',
+    routePath: '/api/materials/route.ts',
+    statusCode: 500,
+  });
+  console.error('Student study material request failed:', error);
     return NextResponse.json({ success: false, message: '資料一覧を取得できませんでした。' }, { status: 500 });
   }
 }

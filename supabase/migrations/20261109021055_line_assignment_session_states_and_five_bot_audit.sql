@@ -20,8 +20,8 @@ alter table public.line_assignment_sessions
     'submitting'
   ]::text[]));
 
--- BOT rotation supports five official accounts (0 is the legacy marker
--- used by the shared delivery audit helper).
+-- BOT rotation now supports five official accounts (0 remains the legacy
+-- single-account marker used by the shared delivery audit helper).
 alter table public.line_delivery_events
   drop constraint if exists line_delivery_events_bot_slot_check;
 

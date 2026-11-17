@@ -1,8 +1,8 @@
--- Admin-selected JMA earthquakes can be pushed to registered LINE groups only.
 create table if not exists public.jma_earthquake_admin_group_notices (
   id bigint generated always as identity primary key,
   event_key text not null unique references public.jma_earthquakes(event_key) on delete cascade,
-  status text not null default 'sending' check (status in ('sending', 'sent', 'failed')),
+  status text not null default 'sending'
+    check (status in ('sending', 'sent', 'failed')),
   payload jsonb not null default '{}'::jsonb,
   groups_sent_at timestamptz,
   groups_result jsonb,

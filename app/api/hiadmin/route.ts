@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SYSTEM_MAINTENANCE_MODULES, type SystemMaintenanceMode } from '@/lib/system-maintenance';
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +21,7 @@ function publicClient() {
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   return url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 }
 
@@ -253,6 +255,14 @@ export async function GET(request: Request) {
 
   try {
 
+    if (view === 'maintenance-modes') {
+      const { data, error } = await auth.admin.from('system_maintenance_modes')
+        .select('system_key,label,mode,notice_title,notice_message,updated_by,updated_at')
+        .order('system_key');
+      if (error) throw new Error('メンテナンス設定を取得できませんでした。');
+      return NextResponse.json({ modes: data || [] }, { headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' } });
+    }
+
     if (view === 'explorer-schema') {
       const schema = await getExplorerSchema(auth.admin);
       const tables = schema.map((table) => explorerTableMeta(table.name, schema)).filter(Boolean);
@@ -453,8 +463,54 @@ export async function POST(request: Request) {
   if ('response' in context) return context.response;
   const { auth } = context;
   try {
-    const body = await request.json().catch(() => null) as { table?: unknown; values?: unknown } | null;
-    if (!body || typeof body.table !== 'string') return fail('保存リクエストが正しくありません。', 400);
+    const body = await request.json().catch(() => null) as {
+      action?: unknown; systemKey?: unknown; mode?: unknown; title?: unknown; message?: unknown;
+      table?: unknown; values?: unknown;
+    } | null;
+    if (!body) return fail('保存リクエストが正しくありません。', 400);
+
+    if (body.action === 'maintenance-update') {
+      const systemKey = typeof body.systemKey === 'string' ? body.systemKey : '';
+      const module = SYSTEM_MAINTENANCE_MODULES.find((item) => item.key === systemKey);
+      const mode = body.mode;
+      if (!module) return fail('指定されたシステムは管理対象にありません。', 400);
+      if (mode !== 'normal' && mode !== 'notice' && mode !== 'maintenance') return fail('メンテナンスモードの値が正しくありません。', 400);
+      const title = typeof body.title === 'string' ? body.title.trim().slice(0, 100) : '';
+      const message = typeof body.message === 'string' ? body.message.trim().slice(0, 500) : '';
+      if (mode !== 'normal' && !message) return fail('利用者に表示する説明を入力してください。', 400);
+
+      const { data, error } = await auth.admin.from('system_maintenance_modes').upsert({
+        system_key: systemKey,
+        label: module.label,
+        mode: mode as SystemMaintenanceMode,
+        notice_title: title || (mode === 'notice' ? 'お知らせ' : 'メンテナンス中です'),
+        notice_message: mode === 'normal' ? '' : message,
+        updated_by: auth.user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'system_key' })
+        .select('system_key,label,mode,notice_title,notice_message,updated_by,updated_at')
+        .single();
+      if (error || !data) throw new Error('メンテナンス設定を保存できませんでした。');
+
+      const audit = await auth.admin.from('hiadmin_audit_logs').insert({
+        actor_user_id: auth.user.id,
+        actor_email: auth.user.email || '',
+        action: 'system.maintenance_mode_updated',
+        details: { system_key: systemKey, mode, title: data.notice_title },
+      });
+      if (audit.error) console.error('HiAdmin maintenance audit failed:', audit.error.message);
+      await recordSystemDiagnostic({
+        severity: 'info',
+        source: 'admin',
+        systemKey,
+        eventCode: 'MAINTENANCE_MODE_UPDATED',
+        message: module.label + 'のモードを' + mode + 'に変更しました。',
+        routePath: '/api/hiadmin',
+      });
+      return NextResponse.json({ success: true, mode: data }, { headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' } });
+    }
+
+    if (typeof body.table !== 'string') return fail('保存リクエストが正しくありません。', 400);
     const valid = await validateExplorerMutation(auth.admin, body.table, body.values, undefined);
     if ('error' in valid) return fail(valid.error || '入力値が正しくありません。', valid.status || 400);
     const { data, error } = await auth.admin.from(body.table).insert(valid.values).select('*').single();
