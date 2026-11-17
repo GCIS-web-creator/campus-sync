@@ -1,6 +1,5 @@
--- CampusSync Admin login lockout and audit support.
--- Existing tables are reused; no plaintext IP address or credential is stored.
-
+-- CampusSync Admin login lockout counter.
+-- The IP address itself is never stored; the application stores an HMAC fingerprint.
 create or replace function public.record_admin_login_attempt(
   p_ip_hash text,
   p_succeeded boolean,
@@ -74,3 +73,4 @@ grant execute on function public.record_admin_login_attempt(text, boolean, integ
 
 create index if not exists admin_auth_audit_logs_created_at_idx
   on public.admin_auth_audit_logs (created_at desc);
+;
