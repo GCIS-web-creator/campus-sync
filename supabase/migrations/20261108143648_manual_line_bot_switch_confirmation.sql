@@ -240,3 +240,4 @@ revoke all on function public.campussync_refresh_line_bot_rotation() from public
 grant execute on function public.campussync_refresh_line_bot_rotation() to service_role;
 
 commit;
+;

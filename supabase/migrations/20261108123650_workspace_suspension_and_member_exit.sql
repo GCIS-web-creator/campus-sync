@@ -68,3 +68,4 @@ $$;
 
 revoke all on function public.redeem_workspace_invite(uuid,text,uuid,text,text,text) from public, anon, authenticated;
 grant execute on function public.redeem_workspace_invite(uuid,text,uuid,text,text,text) to service_role;
+;
