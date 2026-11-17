@@ -1,4 +1,3 @@
--- Recovered from the source change that added LINE delivery state to JMA warning events.
 alter table public.jma_weather_alert_events
   add column if not exists notification_payload jsonb,
   add column if not exists official_sent_at timestamptz,
@@ -19,3 +18,4 @@ comment on column public.jma_weather_alert_events.official_sent_at is
   'LINE公式アカウントへの警報通知を受理した時刻。';
 comment on column public.jma_weather_alert_events.groups_sent_at is
   '登録済みLINEグループへの警報通知を完了した時刻。';
+;

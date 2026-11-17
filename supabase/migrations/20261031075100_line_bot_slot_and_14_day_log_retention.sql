@@ -1,6 +1,4 @@
--- LINE webhook BOT slot tracking, group delivery logs and 14-day operational-log retention.
--- This is idempotent and safe to re-run after the migration is applied.
-
+-- Track which LINE BOT generated each webhook/group record and retain only operational logs for 14 days.
 alter table public.line_group_chats
   add column if not exists bot_slot smallint;
 
@@ -50,7 +48,7 @@ alter table public.line_group_delivery_logs enable row level security;
 revoke all on table public.line_group_delivery_logs from anon, authenticated;
 grant select, insert, update, delete on table public.line_group_delivery_logs to service_role;
 
--- Daily at 03:00 JST. Keep technical cron and group-delivery logs for 14 days.
+-- Replace the retention job safely. Keep technical Cron runs and per-group delivery logs for 14 days.
 select cron.unschedule(jobid)
 from cron.job
 where jobname = 'campussync-log-retention-14d';
@@ -67,6 +65,7 @@ select cron.schedule(
       DELETE FROM public.line_group_delivery_logs
       WHERE sent_at < now() - interval '14 days';
     END;
-    $job$
+    $job$;
   $cron$
 );
+;
