@@ -64,11 +64,16 @@ create table if not exists public.student_study_sessions (
   constraint student_study_sessions_time_check check (ended_at >= started_at)
 );
 
-create index if not exists student_test_exams_user_dates_idx on public.student_test_exams(user_id, start_date desc);
-create index if not exists student_test_subjects_exam_date_idx on public.student_test_subjects(user_id, exam_id, exam_date, sort_order);
-create index if not exists student_test_ranges_subject_idx on public.student_test_ranges(user_id, subject_id, sort_order);
-create index if not exists student_study_sessions_user_started_idx on public.student_study_sessions(user_id, started_at desc);
-create index if not exists student_study_sessions_subject_idx on public.student_study_sessions(user_id, subject_name, started_at desc);
+create index if not exists student_test_exams_user_dates_idx
+  on public.student_test_exams(user_id, start_date desc);
+create index if not exists student_test_subjects_exam_date_idx
+  on public.student_test_subjects(user_id, exam_id, exam_date, sort_order);
+create index if not exists student_test_ranges_subject_idx
+  on public.student_test_ranges(user_id, subject_id, sort_order);
+create index if not exists student_study_sessions_user_started_idx
+  on public.student_study_sessions(user_id, started_at desc);
+create index if not exists student_study_sessions_subject_idx
+  on public.student_study_sessions(user_id, subject_name, started_at desc);
 
 alter table public.student_test_exams enable row level security;
 alter table public.student_test_subjects enable row level security;
@@ -81,17 +86,26 @@ grant select, insert, update, delete on public.student_test_ranges to authentica
 grant select, insert, update, delete on public.student_study_sessions to authenticated;
 
 drop policy if exists student_test_exams_owner_all on public.student_test_exams;
-create policy student_test_exams_owner_all on public.student_test_exams for all to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy student_test_exams_owner_all
+  on public.student_test_exams for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 drop policy if exists student_test_subjects_owner_all on public.student_test_subjects;
-create policy student_test_subjects_owner_all on public.student_test_subjects for all to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy student_test_subjects_owner_all
+  on public.student_test_subjects for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 drop policy if exists student_test_ranges_owner_all on public.student_test_ranges;
-create policy student_test_ranges_owner_all on public.student_test_ranges for all to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy student_test_ranges_owner_all
+  on public.student_test_ranges for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 drop policy if exists student_study_sessions_owner_all on public.student_study_sessions;
-create policy student_study_sessions_owner_all on public.student_study_sessions for all to authenticated
-  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy student_study_sessions_owner_all
+  on public.student_study_sessions for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+;
