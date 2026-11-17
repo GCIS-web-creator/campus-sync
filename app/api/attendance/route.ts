@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { getStudyStudentContext } from '@/lib/study-materials-server';
 
 export const runtime = 'nodejs';
@@ -21,6 +22,8 @@ function dateInRange(value: unknown): value is string {
   return diff >= -7 && diff <= 30;
 }
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getStudyStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);
@@ -35,6 +38,8 @@ export async function GET(request: Request) {
   }
 }
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('attendance');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!sameOrigin(request)) return fail('不正な送信です。', 403);
   try {
     const context = await getStudyStudentContext(request);

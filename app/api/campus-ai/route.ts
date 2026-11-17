@@ -1,5 +1,6 @@
 // CampusSync AI v3: TypeScript上で推論し、回答スロットには画面と同じSupabaseデータを埋め込む。
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
@@ -164,6 +165,8 @@ const DEFAULT_ROOMS = [
 
 
 export async function POST(req: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('campus-ai');
+  if (maintenanceBlock) return maintenanceBlock;
   const body = await req.json().catch(() => null) as {
     question?: unknown;
     voterId?: unknown;

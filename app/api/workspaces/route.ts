@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { randomBytes } from 'node:crypto';
 import {
   getWorkspaceStudentContext,
@@ -16,6 +17,8 @@ const categories = ['club','committee','event','project','study','research','vol
 const joins = ['invite_only','approval','open'] as const;
 
 export async function GET(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   try {
     const context = await getWorkspaceStudentContext(request);
     if (!context) return fail('学校アカウントでログインしてください。', 401);
@@ -82,6 +85,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const maintenanceBlock = await getSystemMaintenanceBlock('workspaces');
+  if (maintenanceBlock) return maintenanceBlock;
   if (!isSameOrigin(request)) return fail('不正な送信です。', 403);
   try {
     const context = await getWorkspaceStudentContext(request);
