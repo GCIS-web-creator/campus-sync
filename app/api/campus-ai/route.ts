@@ -1307,7 +1307,9 @@ export async function POST(req: Request) {
     const rows = (classTimetableRes.data || []) as Array<{ group_name: string; day_key: string; period: number; subject: string; teacher?: string | null }>;
     if (!rows.length) return NextResponse.json({ answer: '時間割データが登録されていません。' });
     const dayMap: Record<string, string> = { monday: '月', tuesday: '火', wednesday: '水', thursday: '木', friday: '金', mon: '月', tue: '火', wed: '水', thu: '木', fri: '金' };
-    const weekday = /月曜/.test(question) ? '月' : /火曜/.test(question) ? '火' : /水曜/.test(question) ? '水' : /木曜/.test(question) ? '木' : /金曜/.test(question) ? '金' : '';
+    const todayWeekday = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(nowDate).replace('曜日', '');
+    const tomorrowWeekday = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(new Date(nowDate.getTime() + 86400000)).replace('曜日', '');
+    const weekday = /月曜/.test(question) ? '月' : /火曜/.test(question) ? '火' : /水曜/.test(question) ? '水' : /木曜/.test(question) ? '木' : /金曜/.test(question) ? '金' : /明日/.test(question) ? tomorrowWeekday : /今日|本日/.test(question) || !/(月曜|火曜|水曜|木曜|金曜)/.test(question) ? todayWeekday : '';
     const group = /8組/.test(question) ? '8組' : /7組/.test(question) ? '7組' : userClass ? userClass : '';
     const filtered = rows.filter(row => (!group || row.group_name === group || row.group_name.endsWith(group)) && (!weekday || dayMap[row.day_key.toLowerCase()] === weekday));
     return NextResponse.json({ answer: (group ? group + 'の' : '') + (weekday ? weekday + '曜日の' : '') + '時間割です。', table: table(['クラス', '曜日', '時限', '教科', '担当'], filtered.map(row => [row.group_name, dayMap[row.day_key.toLowerCase()] || row.day_key, String(row.period), row.subject, row.teacher || '—'])) });
@@ -1325,7 +1327,7 @@ export async function POST(req: Request) {
       const selected = upcoming[0] || exams[0];
       if (!selected) return NextResponse.json({ answer: '定期テストの日程はまだ登録されていません。' });
       const subjectRows = subjects.filter(subject => subject.exam_id === selected.id);
-      return NextResponse.json({ answer: selected.exam_type + '（' + selected.start_date + '〜' + selected.end_date + '）の登録情報です。自分の範囲の進捗も表示します。', table: table(['教科', '試験日', '登録した範囲', '進捗'], subjectRows.map(subject => { const own = ranges.filter(range => range.school_test_subject_id === subject.id); return [subject.subject, subject.exam_date, own.map(range => range.title).join('、') || '未登録', own.map(range => ({ not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' }[range.status] || range.status)).join(' / ') || '未登録']; })) });
+      return NextResponse.json({ answer: selected.exam_type + '（' + selected.start_date + '〜' + selected.end_date + '）の登録情報です。自分の範囲の進捗も表示します。', table: table(['教科', '試験日', '登録した範囲', '進捗'], subjectRows.map(subject => { const own = ranges.filter(range => range.school_test_subject_id === subject.id); return [subject.subject, subject.exam_date, own.map(range => range.title).join('、') || '未登録', own.map(range => (({ not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' } as Record<string, string>)[range.status] || range.status)).join(' / ') || '未登録']; })) });
     }
     const since = new Date(nowDate.getTime() - 7 * 86400000);
     const recent = sessions.filter(session => new Date(session.started_at) >= since);
