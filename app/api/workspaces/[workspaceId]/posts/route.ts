@@ -1,3 +1,4 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { getWorkspaceMemberRole, getWorkspaceStudentContext, isSameOrigin, noStoreHeaders, recordWorkspaceAudit, workspaceIdPattern } from '@/lib/workspaces-server';
@@ -36,7 +37,16 @@ export async function GET(request: Request, route: { params: Promise<{ workspace
     const names = await loadPostAuthorNames(context.admin,workspaceId,[...new Set((data||[]).map((item)=>item.author_user_id))]);
     return NextResponse.json({success:true,role,posts:(data||[]).map((item)=>({...item,author_name:names.get(item.author_user_id)||'メンバー',is_mine:item.author_user_id===context.userId}))},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace posts read failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_POSTS_READ_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace posts read failed',
+    routePath: '/api/workspaces/[workspaceId]/posts/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace posts read failed:',error);
     return fail('投稿を取得できませんでした。',500);
   }
 }
@@ -64,7 +74,16 @@ export async function POST(request: Request, route: { params: Promise<{ workspac
     await recordWorkspaceAudit(context.admin,{workspaceId,actorUserId:context.userId,action:'post_created',targetType:'post',targetId:data.id});
     return NextResponse.json({success:true,post:{...data,author_name:context.displayName,is_mine:true}},{status:201,headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace post create failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_POST_CREATE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace post create failed',
+    routePath: '/api/workspaces/[workspaceId]/posts/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace post create failed:',error);
     return fail('お知らせを投稿できませんでした。',500);
   }
 }
@@ -110,7 +129,16 @@ export async function PATCH(request: Request, route: { params: Promise<{ workspa
     await recordWorkspaceAudit(context.admin,{workspaceId,actorUserId:context.userId,action:'post_edited',targetType:'post',targetId:post.id});
     return NextResponse.json({success:true},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace post update failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_POST_UPDATE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace post update failed',
+    routePath: '/api/workspaces/[workspaceId]/posts/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace post update failed:',error);
     return fail('投稿を更新できませんでした。',500);
   }
 }
@@ -139,7 +167,16 @@ export async function DELETE(request: Request, route: { params: Promise<{ worksp
     await recordWorkspaceAudit(context.admin,{workspaceId,actorUserId:context.userId,action:'post_deleted',targetType:'post',targetId:post.id});
     return NextResponse.json({success:true},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace post delete failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_POST_DELETE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace post delete failed',
+    routePath: '/api/workspaces/[workspaceId]/posts/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace post delete failed:',error);
     return fail('投稿を削除できませんでした。',500);
   }
 }

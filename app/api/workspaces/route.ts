@@ -1,3 +1,4 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { NextResponse } from 'next/server';
 import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { randomBytes } from 'node:crypto';
@@ -79,7 +80,16 @@ export async function GET(request: Request) {
     }));
     return NextResponse.json({ success: true, workspaces }, { headers: noStoreHeaders });
   } catch (error) {
-    console.error('Workspace list failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_LIST_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace list failed',
+    routePath: '/api/workspaces/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace list failed:', error);
     return fail('共有ワークスペース一覧を取得できませんでした。', 500);
   }
 }
@@ -152,7 +162,16 @@ export async function POST(request: Request) {
       headers: noStoreHeaders,
     });
   } catch (error) {
-    console.error('Workspace create failed:', error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CREATE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace create failed',
+    routePath: '/api/workspaces/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace create failed:', error);
     return fail('グループを作成できませんでした。入力内容とアカウント状態を確認してください。', 500);
   }
 }

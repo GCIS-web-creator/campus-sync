@@ -1,3 +1,4 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { getWorkspaceMemberRole, getWorkspaceStudentContext, isSameOrigin, noStoreHeaders, recordWorkspaceAudit, workspaceIdPattern } from '@/lib/workspaces-server';
@@ -54,7 +55,16 @@ export async function GET(request:Request,route:{params:Promise<{workspaceId:str
     if('response' in loaded) return loaded.response;
     return NextResponse.json({success:true,role:loaded.role,messages:loaded.messages},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace chat read failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CHAT_READ_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace chat read failed',
+    routePath: '/api/workspaces/[workspaceId]/chat/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace chat read failed:',error);
     return fail('チャットを取得できませんでした。',500);
   }
 }
@@ -125,7 +135,16 @@ export async function POST(request:Request,route:{params:Promise<{workspaceId:st
     }
     return NextResponse.json({success:true,message:{...data,sender_name:context.displayName,sender_class:context.userClass,is_mine:true,reactions:[]}},{status:201,headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace chat send failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CHAT_SEND_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace chat send failed',
+    routePath: '/api/workspaces/[workspaceId]/chat/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace chat send failed:',error);
     return fail('メッセージを送信できませんでした。',500);
   }
 }
@@ -155,7 +174,16 @@ export async function PATCH(request:Request,route:{params:Promise<{workspaceId:s
     await recordWorkspaceAudit(context.admin,{workspaceId,actorUserId:context.userId,action:'chat_message_edited',targetType:'message',targetId:id});
     return NextResponse.json({success:true},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace chat edit failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CHAT_EDIT_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace chat edit failed',
+    routePath: '/api/workspaces/[workspaceId]/chat/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace chat edit failed:',error);
     return fail('メッセージを編集できませんでした。',500);
   }
 }
@@ -184,7 +212,16 @@ export async function DELETE(request:Request,route:{params:Promise<{workspaceId:
     if(moderated) await recordWorkspaceAudit(context.admin,{workspaceId,actorUserId:context.userId,action:'chat_message_moderated_delete',targetType:'message',targetId:id});
     return NextResponse.json({success:true},{headers:noStoreHeaders});
   } catch(error) {
-    console.error('Workspace chat delete failed:',error);
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'workspaces',
+    eventCode: 'WORKSPACE_CHAT_DELETE_FAILED',
+    message: error instanceof Error ? error.message : 'Workspace chat delete failed',
+    routePath: '/api/workspaces/[workspaceId]/chat/route.ts',
+    statusCode: 500,
+  });
+  console.error('Workspace chat delete failed:',error);
     return fail('メッセージを削除できませんでした。',500);
   }
 }

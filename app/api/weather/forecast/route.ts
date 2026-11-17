@@ -1,3 +1,4 @@
+import { recordSystemDiagnostic } from '@/lib/system-observability';
 import { getSystemMaintenanceBlock } from '@/lib/system-maintenance-guard';
 import { NextResponse } from 'next/server';
 import { fetchSchoolWeatherBundle } from '@/lib/weather';
@@ -16,7 +17,16 @@ export async function GET() {
       headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600' },
     });
   } catch (error) {
-    console.error('School weather forecast failed:', error instanceof Error ? error.message : 'unknown');
+    await recordSystemDiagnostic({
+    severity: 'error',
+    source: 'api',
+    systemKey: 'weather',
+    eventCode: 'WEATHER_FORECAST_FAILED',
+    message: error instanceof Error ? error.message : 'School weather forecast failed',
+    routePath: '/api/weather/forecast/route.ts',
+    statusCode: 500,
+  });
+  console.error('School weather forecast failed:', error instanceof Error ? error.message : 'unknown');
     return NextResponse.json(
       { message: '天気予報を取得できませんでした。時間をおいて再度お試しください。' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
