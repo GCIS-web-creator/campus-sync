@@ -52,7 +52,7 @@ export default function AdminSystemDiagnostics() {
   const [error, setError] = useState('');
   const [severity, setSeverity] = useState('all');
   const [system, setSystem] = useState('all');
-  const [expanded, setExpanded] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,10 +74,16 @@ export default function AdminSystemDiagnostics() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const systems = useMemo(() => Array.from(new Set((data?.logs || []).map((row) => row.system_key))).sort(), [data]);
-  const terminalLines = useMemo(() => (data?.logs || []).slice(0, 10).map((row) =>
+  const systems = useMemo(() => (data?.maintenanceModes || []).map((row) => row.system_key).sort(), [data]);
+  const filteredLogs = useMemo(() => (data?.logs || []).filter((row) => {
+    const term = searchTerm.trim().toLocaleLowerCase();
+    if (!term) return true;
+    return [row.event_code, row.message, row.route_path || '', row.request_id || '', row.system_key, row.source]
+      .join(' ').toLocaleLowerCase().includes(term);
+  }), [data, searchTerm]);
+  const terminalLines = useMemo(() => filteredLogs.slice(0, 10).map((row) =>
     '[' + dateText(row.created_at) + '] [' + severityLabel[row.severity] + '] [' + row.system_key + '] ' + row.event_code + ' — ' + row.message
-  ), [data]);
+  ), [filteredLogs]);
 
   return (
     <section className="space-y-5 text-slate-100">
@@ -113,10 +119,11 @@ export default function AdminSystemDiagnostics() {
 
       {data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
               ['直近24時間のログ', data.summary.logs24h, Activity],
               ['エラー', data.summary.errors24h, AlertTriangle],
+              ['警告', data.summary.warnings24h, AlertTriangle],
               ['致命的エラー', data.summary.fatal24h, ShieldAlert],
               ['設定済み環境変数', data.summary.environmentConfigured + '/' + data.summary.environmentTotal, CheckCircle2],
             ].map(([label, value, Icon]) => {
@@ -144,8 +151,9 @@ export default function AdminSystemDiagnostics() {
 
           <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div><h3 className="font-black">実行ログ</h3><p className="mt-1 text-[10px] text-slate-500">最大150件。詳細は行を開いて確認できます。</p></div>
+              <div><h3 className="font-black">実行ログ</h3><p className="mt-1 text-[10px] text-slate-500">最大150件。{filteredLogs.length}件表示中。イベント・本文・ルート・識別番号を検索できます。</p></div>
               <div className="flex flex-wrap gap-2">
+                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="イベント・内容・ルートを検索" className="min-w-[180px] rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 outline-none"/>
                 <label className="flex items-center gap-2 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] text-slate-400"><Search size={13}/>
                   <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="bg-transparent text-xs text-slate-200 outline-none">
                     <option value="all">全レベル</option><option value="fatal">FATAL</option><option value="error">ERROR</option><option value="warning">WARN</option><option value="info">INFO</option><option value="debug">DEBUG</option>
@@ -160,9 +168,9 @@ export default function AdminSystemDiagnostics() {
 
             {loading && !data ? <FeatureState state="loading" compact title="ログを読み込んでいます"/> :
               error ? <FeatureState state="error" compact title="診断ログを読み込めません" description={error} onRetry={() => void load()}/> :
-              !data.logs.length ? <FeatureState state="empty" compact title="該当するログはありません" description="この条件に一致する診断イベントは記録されていません。"/> :
+              !filteredLogs.length ? <FeatureState state="empty" compact title="該当するログはありません" description="この条件に一致する診断イベントは記録されていません。"/> :
               <div className="space-y-2">
-                {data.logs.map((row) => <details key={row.id} className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
+                {filteredLogs.map((row) => <details key={row.id} className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-3 hover:bg-white/[0.035]">
                     <span className={'rounded-md border px-2 py-1 font-mono text-[9px] font-black ' + (severityColor[row.severity] || severityColor.info)}>{severityLabel[row.severity] || row.severity}</span>
                     <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-emerald-200">{row.event_code}</span>
