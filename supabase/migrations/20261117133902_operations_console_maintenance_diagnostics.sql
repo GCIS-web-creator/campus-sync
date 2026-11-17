@@ -1,3 +1,4 @@
+
 create table if not exists public.system_diagnostic_logs (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -14,7 +15,6 @@ create table if not exists public.system_diagnostic_logs (
   duration_ms integer,
   details jsonb not null default '{}'::jsonb
 );
-
 create index if not exists system_diagnostic_logs_created_at_idx
   on public.system_diagnostic_logs (created_at desc);
 create index if not exists system_diagnostic_logs_system_created_idx
@@ -33,13 +33,11 @@ create table if not exists public.system_maintenance_modes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists system_maintenance_modes_updated_at_idx
   on public.system_maintenance_modes (updated_at desc);
 
 alter table public.system_diagnostic_logs enable row level security;
 alter table public.system_maintenance_modes enable row level security;
-
 revoke all privileges on table public.system_diagnostic_logs from public, anon, authenticated;
 revoke all privileges on table public.system_maintenance_modes from public, anon, authenticated;
 grant select, insert, update, delete on table public.system_diagnostic_logs to service_role;

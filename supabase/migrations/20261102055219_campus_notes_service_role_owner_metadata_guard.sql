@@ -1,4 +1,5 @@
-create or replace function public.enforce_campus_note_editor_metadata()
+
+    create or replace function public.enforce_campus_note_editor_metadata()
     returns trigger
     language plpgsql
     set search_path = public
@@ -21,4 +22,4 @@ create or replace function public.enforce_campus_note_editor_metadata()
       return new;
     end;
     $$;
-  ;
+  

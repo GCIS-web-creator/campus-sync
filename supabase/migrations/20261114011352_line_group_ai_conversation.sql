@@ -1,5 +1,4 @@
--- Store short-lived conversational context for LINE group AI.
--- Only service_role can access this table or consume the per-group daily budget.
+
 create table if not exists public.line_ai_group_conversations (
   chat_id text primary key check (length(chat_id) between 1 and 200),
   chat_type text not null check (chat_type in ('group', 'room')),

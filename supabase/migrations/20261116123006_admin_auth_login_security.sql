@@ -73,4 +73,3 @@ grant execute on function public.record_admin_login_attempt(text, boolean, integ
 
 create index if not exists admin_auth_audit_logs_created_at_idx
   on public.admin_auth_audit_logs (created_at desc);
-;

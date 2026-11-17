@@ -1,3 +1,4 @@
+
 create or replace function campus_private.enqueue_push_for_user(
   p_event_key text,
   p_user_id uuid,
@@ -112,4 +113,3 @@ revoke all on function campus_private.enqueue_push_for_user(text, uuid, text, te
   from public, anon, authenticated;
 revoke all on function campus_private.queue_bus_status_push()
   from public, anon, authenticated;
-;

@@ -1,8 +1,9 @@
--- Run after app/api/push/dispatch/route.ts is deployed.
--- Reuses the same CRON_SECRET already stored in Vault for the reminder endpoint.
+
 do $$
 begin
-  if not exists (select 1 from vault.decrypted_secrets where name = 'campussync_push_dispatch_url') then
+  if not exists (
+    select 1 from vault.decrypted_secrets where name = 'campussync_push_dispatch_url'
+  ) then
     perform vault.create_secret(
       'https://campus-sync-mocha.vercel.app/api/push/dispatch',
       'campussync_push_dispatch_url'

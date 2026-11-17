@@ -1,6 +1,3 @@
--- Extend the mini-test schedule table for lesson periods, timing, duration and score details.
--- Restrict student reads to published school-wide records; all writes stay server-side.
-
 begin;
 
 alter table public.mini_test_events

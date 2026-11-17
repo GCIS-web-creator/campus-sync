@@ -1,3 +1,4 @@
+
 create table if not exists public.workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(trim(name)) between 2 and 60),
@@ -354,4 +355,3 @@ revoke all on function public.redeem_workspace_invite(uuid,text,uuid,text,text,t
 grant execute on function public.redeem_workspace_invite(uuid,text,uuid,text,text,text) to service_role;
 revoke all on function public.transfer_workspace_owner(uuid,uuid,uuid) from public, anon, authenticated;
 grant execute on function public.transfer_workspace_owner(uuid,uuid,uuid) to service_role;
-;

@@ -66,4 +66,4 @@ end;
 $$;
 
 revoke all on function public.record_admin_login_failure(text, timestamptz) from public, anon, authenticated;
-grant execute on function public.record_admin_login_failure(text, timestamptz) to service_role;;
+grant execute on function public.record_admin_login_failure(text, timestamptz) to service_role;

@@ -1,3 +1,4 @@
+
 begin;
 
 alter table public.notifications enable row level security;
@@ -20,4 +21,3 @@ revoke insert, update, delete on public.notifications from public, anon, authent
 grant insert, update, delete on public.notifications to service_role;
 
 commit;
-;

@@ -1,3 +1,4 @@
+
 create table if not exists public.student_test_exams (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -108,4 +109,3 @@ create policy student_study_sessions_owner_all
   on public.student_study_sessions for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
-;

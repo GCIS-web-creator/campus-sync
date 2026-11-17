@@ -1,6 +1,3 @@
--- Applied to Supabase project sgvhktudhxufluuaipwt on 2026-11-07.
--- Allows Admin-only API updates to official exam subject/date assignments.
--- Existing student study-range rows are kept and remain linked to unchanged subjects.
 
 ALTER TABLE public.school_test_subjects
   DROP CONSTRAINT IF EXISTS school_test_subject_day_order_unique;

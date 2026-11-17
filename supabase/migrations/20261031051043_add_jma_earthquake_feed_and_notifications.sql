@@ -87,4 +87,4 @@ create policy "Public earthquake information is readable" on public.jma_earthqua
 
 comment on table public.jma_earthquakes is '気象庁の地震情報。一般利用者は読み取りのみ、同期・更新はサーバーservice_role限定。';
 comment on table public.jma_earthquake_reports is '気象庁地震XMLの電文ID記録。重複取込防止用の内部テーブル。';
-comment on table public.jma_earthquake_notifications is '小平市向け緊急地震速報・震度2以上・EEW取消のLINE配信outbox。';;
+comment on table public.jma_earthquake_notifications is '小平市向け緊急地震速報・震度2以上・EEW取消のLINE配信outbox。';

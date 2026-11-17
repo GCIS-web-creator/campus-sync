@@ -22,4 +22,4 @@ create index if not exists attendance_reports_status_date_idx
   on public.attendance_reports (status, report_date desc);
 alter table public.attendance_reports enable row level security;
 revoke all on public.attendance_reports from anon, authenticated;
-grant all on public.attendance_reports to service_role;;
+grant all on public.attendance_reports to service_role;

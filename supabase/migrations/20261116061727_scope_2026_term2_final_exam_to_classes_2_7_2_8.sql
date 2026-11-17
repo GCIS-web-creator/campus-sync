@@ -1,3 +1,4 @@
+
 ALTER TABLE public.school_test_exams
   ADD COLUMN IF NOT EXISTS target_classes text[] NOT NULL DEFAULT '{}'::text[];
 
@@ -90,4 +91,3 @@ BEGIN
     exam_date = EXCLUDED.exam_date,
     sort_order = EXCLUDED.sort_order;
 END $$;
-;

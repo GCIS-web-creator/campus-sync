@@ -1,4 +1,5 @@
-create or replace function public.enforce_campus_note_folder_owner()
+
+    create or replace function public.enforce_campus_note_folder_owner()
     returns trigger
     language plpgsql
     set search_path = public
@@ -81,4 +82,4 @@ create or replace function public.enforce_campus_note_folder_owner()
           'application/octet-stream'
         ]
     where id = 'campus-notes';
-  ;
+  

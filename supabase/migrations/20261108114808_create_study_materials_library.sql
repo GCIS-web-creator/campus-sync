@@ -42,4 +42,4 @@ revoke all on table public.study_materials from anon, authenticated;
 grant all on table public.study_materials to service_role;
 
 comment on table public.study_materials is
-  'CampusSync shared PDFs and printable image materials. Access is mediated by server APIs that verify admin sessions or student class membership.';;
+  'CampusSync shared PDFs and printable image materials. Access is mediated by server APIs that verify admin sessions or student class membership.';

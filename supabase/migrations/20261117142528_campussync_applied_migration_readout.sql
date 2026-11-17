@@ -1,5 +1,3 @@
--- Read-only inventory of applied Supabase migrations for the authenticated Admin diagnostics API.
--- This function exposes only migration version/name metadata and is executable by service_role only.
 create or replace function public.campussync_list_applied_migrations()
 returns table (version text, name text)
 language sql

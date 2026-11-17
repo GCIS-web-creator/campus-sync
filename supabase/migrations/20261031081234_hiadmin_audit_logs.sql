@@ -11,4 +11,4 @@ create index if not exists hiadmin_audit_logs_created_at_idx on public.hiadmin_a
 create index if not exists hiadmin_audit_logs_target_user_idx on public.hiadmin_audit_logs (target_user_id, created_at desc);
 alter table public.hiadmin_audit_logs enable row level security;
 revoke all privileges on table public.hiadmin_audit_logs from public, anon, authenticated;
-grant all privileges on table public.hiadmin_audit_logs to service_role;;
+grant all privileges on table public.hiadmin_audit_logs to service_role;

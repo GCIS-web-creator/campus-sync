@@ -1,3 +1,4 @@
+
 CREATE OR REPLACE FUNCTION public.hiadmin_database_explorer_schema()
 RETURNS jsonb
 LANGUAGE sql
@@ -51,4 +52,3 @@ $function$;
 REVOKE ALL ON FUNCTION public.hiadmin_database_explorer_schema() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.hiadmin_database_explorer_schema() FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.hiadmin_database_explorer_schema() TO service_role;
-;

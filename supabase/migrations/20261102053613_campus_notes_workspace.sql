@@ -1,3 +1,4 @@
+
 create table if not exists public.campus_note_folders (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -430,4 +431,3 @@ begin
     alter publication supabase_realtime add table public.campus_note_comments;
   end if;
 end $$;
-;

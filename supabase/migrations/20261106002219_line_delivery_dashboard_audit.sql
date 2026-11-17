@@ -1,3 +1,4 @@
+
 create table if not exists public.line_delivery_events (
   id uuid primary key default gen_random_uuid(),
   delivery_batch_id uuid,
@@ -49,4 +50,3 @@ select cron.schedule(
     where sent_at < now() - interval '14 days';
   $cron$
 );
-;

@@ -272,4 +272,3 @@ revoke all on function public.campussync_manual_line_bot_switch(smallint, smalli
   from public, anon, authenticated;
 grant execute on function public.campussync_manual_line_bot_switch(smallint, smallint, timestamptz, text, timestamptz)
   to service_role;
-;

@@ -1,3 +1,4 @@
+
 -- CampusSync notification delivery completion
 -- Private outbox with trigger-based events and service-role-only RPC delivery.
 
@@ -634,4 +635,3 @@ grant execute on function public.push_release_notification(bigint, timestamptz) 
 grant usage on schema campus_private to service_role;
 
 commit;
-;

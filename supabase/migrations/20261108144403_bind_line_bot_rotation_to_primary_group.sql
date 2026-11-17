@@ -170,4 +170,3 @@ grant execute on function public.campussync_manual_line_bot_switch(smallint, sma
   to service_role;
 
 commit;
-;

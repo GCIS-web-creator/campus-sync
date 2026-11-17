@@ -8,4 +8,4 @@ alter table public.jma_earthquake_notifications
     'kodaira_intensity2',
     'eew_cancelled',
     'major_earthquake'
-  ));;
+  ));

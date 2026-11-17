@@ -68,4 +68,3 @@ select cron.schedule(
     $job$;
   $cron$
 );
-;

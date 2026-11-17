@@ -14,4 +14,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 -- Library cover uploads and deletions are restricted to signed-in users (admin server calls remain unaffected).
 ALTER POLICY "public_upload_library_covers" ON storage.objects TO authenticated;
 ALTER POLICY "public_delete_library_covers" ON storage.objects TO authenticated;
-REVOKE INSERT, UPDATE, DELETE ON TABLE storage.objects FROM anon;;
+REVOKE INSERT, UPDATE, DELETE ON TABLE storage.objects FROM anon;

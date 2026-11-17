@@ -1,3 +1,4 @@
+
 -- Expand CampusSync LINE BOT rotation from 3 to 5 accounts.
 -- Periods are balanced across the actual number of days in each JST month.
 -- Examples: 30 days => 6 days each; 31 days => 6,6,6,6,7 days.
@@ -135,4 +136,3 @@ select cron.schedule(
     select public.campussync_refresh_line_bot_rotation();
   $cron$
 );
-;
