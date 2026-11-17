@@ -14,7 +14,7 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
       routePath: request.path,
       requestId: (normalizedError as Error & { digest?: string }).digest || null,
       details: {
-        digest: (error as Error & { digest?: string }).digest || null,
+        digest: (normalizedError as Error & { digest?: string }).digest || null,
         routerKind: context.routerKind,
         routeType: context.routeType,
         renderSource: context.renderSource,
