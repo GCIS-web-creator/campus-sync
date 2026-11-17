@@ -227,7 +227,7 @@ export async function POST(req: Request) {
 
   const wantsCrowd = isCrowdQuestion(question);
   const wantsSold = isSoldQuestion(question);
-  const wantsTask = isTaskQuestion(question);
+  const wantsTask = isTaskQuestion(question) && !isMaterialsQuestion(question);
   const trainQuestion = isTrainQuestion(question);
   const wantsClub = isClubQuestion(question);
   const wantsLibrary = isLibraryQuestion(question);
@@ -1513,8 +1513,8 @@ export async function POST(req: Request) {
   if (wantsSchedule) {
     const schedule = schoolScheduleRes.data as { week_start?: string; title?: string; days?: Array<{ date?: string; dayLabel?: string; isHoliday?: boolean; holidayName?: string; items?: Array<{ time?: string; title?: string; location?: string; details?: string }> }> } | null;
     if (!schedule?.days?.length) return NextResponse.json({ answer: '学校予定表はまだ登録されていません。' });
-    const requestedDate = /明日/.test(question) ? new Date(new Date(nowDate.getTime() + 86400000).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })) : null;
-    const targetKey = requestedDate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(requestedDate) : '';
+    const requestedDate = /明日/.test(question) ? new Date(nowDate.getTime() + 86400000) : null;
+    const targetKey = requestedDate ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(requestedDate) : '';
     const selectedDays = targetKey ? schedule.days.filter(day => day.date === targetKey) : schedule.days;
     return NextResponse.json({ answer: targetKey ? '指定日の学校予定です。' : '登録されている週間学校予定です。', table: table(['日付', '曜日', '予定'], selectedDays.map(day => [String(day.date || ''), String(day.dayLabel || ''), day.isHoliday ? (day.holidayName || '休校') : (day.items || []).map(item => [item.time, item.title, item.location, item.details].filter(Boolean).join(' ')).join(' / ') || '予定なし'])) });
   }
@@ -1536,8 +1536,13 @@ export async function POST(req: Request) {
     const todayWeekday = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(nowDate).replace('曜日', '');
     const tomorrowWeekday = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(new Date(nowDate.getTime() + 86400000)).replace('曜日', '');
     const weekday = /月曜/.test(question) ? '月' : /火曜/.test(question) ? '火' : /水曜/.test(question) ? '水' : /木曜/.test(question) ? '木' : /金曜/.test(question) ? '金' : /明日/.test(question) ? tomorrowWeekday : /今日|本日/.test(question) || !/(月曜|火曜|水曜|木曜|金曜)/.test(question) ? todayWeekday : '';
-    const group = /8組/.test(question) ? '8組' : /7組/.test(question) ? '7組' : userClass ? userClass : '';
-    const filtered = rows.filter(row => (!group || row.group_name === group || row.group_name.endsWith(group)) && (!weekday || dayMap[row.day_key.toLowerCase()] === weekday));
+    const profileGroup = /-8$/.test(userClass) ? '8組' : /-7$/.test(userClass) ? '7組' : userClass;
+    const group = /8組/.test(question) ? '8組' : /7組/.test(question) ? '7組' : profileGroup;
+    const filtered = rows.filter(row => {
+      const rowGroup = String(row.group_name || '').normalize('NFKC');
+      const groupMatches = !group || rowGroup === group || rowGroup.endsWith(group) || (group === '7組' && /7$/.test(rowGroup)) || (group === '8組' && /8$/.test(rowGroup));
+      return groupMatches && (!weekday || dayMap[row.day_key.toLowerCase()] === weekday);
+    });
     return NextResponse.json({ answer: (group ? group + 'の' : '') + (weekday ? weekday + '曜日の' : '') + '時間割です。', table: table(['クラス', '曜日', '時限', '教科', '担当'], filtered.map(row => [row.group_name, dayMap[row.day_key.toLowerCase()] || row.day_key, String(row.period), row.subject, row.teacher || '—'])) });
   }
 
