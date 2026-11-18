@@ -1168,7 +1168,7 @@ async function handleLineMiniTestRegistration(
 ): Promise<boolean> {
   if (event.source?.type !== 'user' || !event.source.userId) return false;
   const normalized = messageText.normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
-  const isStartCommand = normalized.startsWith('csai') && /(小テスト.{0,4}(追加|登録)|(追加|登録).*小テスト)/.test(normalized);
+  const isStartCommand = normalized.includes('csai') && /(小テスト.{0,4}(追加|登録)|(追加|登録).*小テスト)/.test(normalized);
   const isCancelCommand = /^(中止|キャンセル|やめる)$/.test(normalized);
   const admin = getLineAssignmentAdmin();
   if (!admin) {
@@ -1332,7 +1332,7 @@ async function handleLineAssignmentContribution(
 ): Promise<boolean> {
   if (event.source?.type !== 'user' || !event.source.userId) return false;
   const normalized = messageText.normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
-  const isStartCommand = normalized.startsWith('csai') && /(課題.{0,4}(追加|登録)|(追加|登録).*課題)/.test(normalized);
+  const isStartCommand = normalized.includes('csai') && /(課題.{0,4}(追加|登録)|(追加|登録).*課題)/.test(normalized);
   const isCancelCommand = /^(中止|キャンセル|やめる)$/.test(normalized);
   const admin = getLineAssignmentAdmin();
   if (!admin) {
@@ -1503,15 +1503,16 @@ async function handleLineEvents(
     const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
 
-    // 1対1トークは従来どおり学校情報AIへ。グループ・ルームはCSAI接頭辞がある発言だけを扱う。
+    // 「CSAI」を文中のどこに含んでいても学校情報AIへ。含まないグループ投稿は会話AIへ。
+    const normalizedMessage = messageText.normalize('NFKC');
     const trigger = 'CSAI';
-    const hasTrigger = messageText.toUpperCase().startsWith(trigger);
+    const hasTrigger = normalizedMessage.toUpperCase().includes(trigger);
     const isDirectChat = event.source?.type === 'user';
     const isGroupOrRoom = event.source?.type === 'group' || event.source?.type === 'room';
-    if (!hasTrigger && !isDirectChat && !isGroupOrRoom) return;
+    if (!isDirectChat && !isGroupOrRoom) return;
 
     const question = hasTrigger
-      ? messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim()
+      ? normalizedMessage.replace(/CSAI/giu, '').replace(/^[\sへ:：,、-]+/u, '').replace(/[\s,、:：-]+$/u, '').trim()
       : messageText;
 
     if (hasTrigger && question) {
@@ -1625,18 +1626,16 @@ async function handleLineEvents(
           return;
         }
 
-        // 起動後は接頭辞なしの通常メッセージも雑談AIへ渡す。
-        if (!hasTrigger && await isLineGroupConversationActive(destinationId)) {
-          if (isLineMarketQuestion(messageText)) {
-            await replyLineMarket(event.replyToken, messageText, channelAccessToken, destinationType, destinationId);
-            return;
-          }
+        // CSAIを含まないグループ投稿は、会話モードの事前起動なしで毎回会話AIへ送る。
+        // 受信した投稿を会話モードの継続として保存し、直近の文脈を引き継ぐ。
+        if (!hasTrigger) {
           const chatAnswer = await getLineGroupConversationAnswer(
             destinationId,
             event.source?.type === 'room' ? 'room' : 'group',
             botSlot,
             messageText,
             ai,
+            true,
           );
           await replyPlain(
             event.replyToken,
@@ -1650,8 +1649,7 @@ async function handleLineEvents(
           return;
         }
       }
-      // 会話モードが有効でないグループの通常発言はAIへ送らず、そのまま無視する。
-      if (!hasTrigger) return;
+      // CSAIを含む投稿だけを下の学校情報AIへ渡す。
     }
 
     // グループで「CSAI」の後ろに本文がある場合は従来のCampusSync学校情報AIへ送る。
