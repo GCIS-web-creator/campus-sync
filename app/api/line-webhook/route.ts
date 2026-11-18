@@ -936,9 +936,10 @@ async function notifyLineAiGroupIncident(
   chatType: 'group' | 'room',
   accessToken: string,
   failureCode: string,
-): Promise<void> {
+  replyToken?: string,
+): Promise<boolean> {
   const admin = getLineAssignmentAdmin();
-  if (!admin || !chatId) return;
+  if (!admin || !chatId) return false;
 
   const credential = getLineWebhookCredentials().find(item => item.accessToken === accessToken);
   const botSlot = credential?.slot ?? 0;
@@ -953,11 +954,11 @@ async function notifyLineAiGroupIncident(
   const incident = Array.isArray(data) ? data[0] : data;
   if (error || !incident || typeof incident.incident_id !== 'string') {
     console.error('LINE AI incident registration failed:', error?.message || 'empty incident result');
-    return;
+    return false;
   }
   // One Flex notification per continuous incident. Further failures are recorded
   // against the same open incident and stay quiet until a successful reply closes it.
-  if (incident.should_notify !== true) return;
+  if (incident.should_notify !== true) return false;
 
   const message = buildNoticeFlexMessage(
     'AI回答の送信について',
@@ -966,35 +967,45 @@ async function notifyLineAiGroupIncident(
   const messages = applyCampusSyncFlexFooters([message]);
   let notificationStatus: 'sent' | 'failed' = 'failed';
   let notificationSentAt: string | null = null;
+  let delivered = false;
+  const useReply = Boolean(replyToken);
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + accessToken,
-        'Content-Type': 'application/json',
-        'X-Line-Retry-Key': incident.incident_id,
+    const response = await fetch(
+      useReply
+        ? 'https://api.line.me/v2/bot/message/reply'
+        : 'https://api.line.me/v2/bot/message/push',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + accessToken,
+          'Content-Type': 'application/json',
+          ...(!useReply ? { 'X-Line-Retry-Key': incident.incident_id } : {}),
+        },
+        body: JSON.stringify(useReply
+          ? { replyToken, messages }
+          : { to: chatId, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
       },
-      body: JSON.stringify({ to: chatId, messages }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
-    });
+    );
+    delivered = response.ok || response.status === 409;
     await recordLineDeliveryResponse(response, {
-      channel: 'push',
+      channel: useReply ? 'reply' : 'push',
       destinationType: chatType,
       destinationId: chatId,
       kind: 'campus_ai_failure_notice',
       botSlot,
       deliveryBatchId: incident.incident_id,
-      retryKey: incident.incident_id,
+      retryKey: useReply ? null : incident.incident_id,
       accessToken,
       messages,
     });
-    if (response.ok || response.status === 409) {
+    if (delivered) {
       notificationStatus = 'sent';
       notificationSentAt = new Date().toISOString();
     } else {
       const detail = await response.text().catch(() => '');
-      console.error('LINE AI incident notice push failed:', response.status, detail.slice(0, 300));
+      console.error('LINE AI incident notice failed:', response.status, detail.slice(0, 300));
     }
   } catch (error) {
     console.error('LINE AI incident notice request failed:', error instanceof Error ? error.name : 'unknown');
@@ -1006,6 +1017,7 @@ async function notifyLineAiGroupIncident(
     last_seen_at: new Date().toISOString(),
   }).eq('incident_id', incident.incident_id);
   if (updateError) console.error('LINE AI incident notification result save failed:', updateError.message);
+  return delivered;
 }
 
 async function resolveLineAiGroupIncident(chatId: string): Promise<void> {
@@ -1033,8 +1045,10 @@ async function replyLineGroupAiAnswer(
       ? answer.slice(separator + 1).trim()
       : '雑談AIの回答を送信できませんでした。お手数ですが、質問をもう一度送信してください。';
     const failureCode = metadata.split('|')[0].slice(0, 40) || 'AI-UNKNOWN';
-    await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, failureCode);
-    await replyPlain(replyToken, fallbackText, accessToken, [], 'campus_ai_chat', destinationType, destinationId);
+    const noticeSent = await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, failureCode, replyToken);
+    if (!noticeSent) {
+      await replyPlain(replyToken, fallbackText, accessToken, [], 'campus_ai_chat', destinationType, destinationId);
+    }
     return;
   }
 
