@@ -1512,7 +1512,7 @@ async function handleLineEvents(
     if (!isDirectChat && !isGroupOrRoom) return;
 
     const question = hasTrigger
-      ? normalizedMessage.replace(/CSAI/giu, '').replace(/^[\\sへ:：,、-]+/u, '').replace(/[\\s,、:：-]+$/u, '').trim()
+      ? normalizedMessage.replace(/CSAI/giu, '').replace(/^[\sへ:：,、-]+/u, '').replace(/[\s,、:：-]+$/u, '').trim()
       : messageText;
 
     if (hasTrigger && question) {
