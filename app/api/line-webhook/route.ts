@@ -1706,12 +1706,12 @@ async function handleLineEvents(
             true,
           );
           await replyLineGroupAiAnswer(
-          event.replyToken,
-          chatAnswer,
-          channelAccessToken,
-          destinationType,
-          destinationId,
-        );
+            event.replyToken,
+            chatAnswer,
+            channelAccessToken,
+            destinationType,
+            destinationId,
+          );
           return;
         }
 
@@ -1755,12 +1755,12 @@ async function handleLineEvents(
             true,
           );
           await replyLineGroupAiAnswer(
-          event.replyToken,
-          chatAnswer,
-          channelAccessToken,
-          destinationType,
-          destinationId,
-        );
+            event.replyToken,
+            chatAnswer,
+            channelAccessToken,
+            destinationType,
+            destinationId,
+          );
           return;
         }
       }
