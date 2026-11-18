@@ -29,7 +29,7 @@ grant all on public.line_ai_group_delivery_incidents to service_role;
 create or replace function public.begin_line_ai_group_delivery_incident(
   p_chat_id text,
   p_chat_type text,
-  p_bot_slot smallint,
+  p_bot_slot integer,
   p_incident_type text,
   p_failure_code text,
   p_failure_detail text default null
@@ -78,7 +78,7 @@ begin
     notification_status, notification_attempted_at
   )
   values (
-    p_chat_id, p_chat_type, p_bot_slot, p_incident_type,
+    p_chat_id, p_chat_type, p_bot_slot::smallint, p_incident_type,
     left(p_failure_code, 40), left(p_failure_detail, 240),
     'pending', now()
   )
@@ -88,8 +88,8 @@ begin
 end;
 $$;
 
-revoke all on function public.begin_line_ai_group_delivery_incident(text, text, smallint, text, text, text) from public, anon, authenticated;
-grant execute on function public.begin_line_ai_group_delivery_incident(text, text, smallint, text, text, text) to service_role;
+revoke all on function public.begin_line_ai_group_delivery_incident(text, text, integer, text, text, text) from public, anon, authenticated;
+grant execute on function public.begin_line_ai_group_delivery_incident(text, text, integer, text, text, text) to service_role;
 
 comment on table public.line_ai_group_delivery_incidents is
   'Tracks active LINE group conversation-AI delivery incidents; one notification is sent per continuous incident and the incident closes after a successful reply.';
