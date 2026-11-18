@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
-import { buildCampusAiFlexMessage } from '@/lib/line-flex';
+import { buildCampusAiFlexMessage, buildNoticeFlexMessage } from '@/lib/line-flex';
 import { buildLineGoogleSearchFlexMessage, type LineGoogleSearchResult } from '@/lib/line-google-search-flex';
 import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
@@ -346,6 +346,7 @@ function getLineAssignmentAdmin() {
 type LineGroupAiMessage = { role: 'user' | 'assistant'; content: string };
 type StoredLineGroupAiMessage = LineGroupAiMessage | { role: 'system'; content: string };
 const LINE_GROUP_AI_ACTIVE_MARKER = '__CAMPUSSYNC_LINE_AI_CHAT_ACTIVE__';
+const LINE_GROUP_AI_FAILURE_PREFIX = '__CAMPUSSYNC_LINE_AI_FAILURE__:';
 type WorkersAiOutput = {
   response?: unknown;
   choices?: Array<{ message?: { content?: unknown } }>;
@@ -768,7 +769,7 @@ async function getLineGroupConversationAnswer(
   const usage = Array.isArray(usageData) ? usageData[0] : usageData;
   if (usageError || !usage || typeof usage !== 'object') {
     console.error('LINE group AI usage check failed:', usageError?.message || 'empty usage result');
-    return '雑談AIの利用状況を確認できませんでした。少し待ってからもう一度お試しください。';
+    return LINE_GROUP_AI_FAILURE_PREFIX + 'AI-USAGE\n雑談AIの利用状況を確認できませんでした。少し待ってからもう一度お試しください。';
   }
   const usageResult = usage as { allowed?: boolean; daily_requests?: number; reason?: string };
   if (usageResult.allowed !== true) {
@@ -784,7 +785,7 @@ async function getLineGroupConversationAnswer(
     .maybeSingle();
   if (conversationError) {
     console.error('LINE group AI history lookup failed:', conversationError.message);
-    return '会話履歴を読み込めませんでした。少し待ってからもう一度お試しください。';
+    return LINE_GROUP_AI_FAILURE_PREFIX + 'AI-HISTORY\n会話履歴を読み込めませんでした。少し待ってからもう一度お試しください。';
   }
 
   const storedMessages = Array.isArray(conversation?.messages)
@@ -822,12 +823,12 @@ async function getLineGroupConversationAnswer(
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       console.error('LINE group AI generation failed:', detail.slice(0, 500));
       if (detail.includes('AI binding is missing')) {
-        return '雑談AIの設定がCloudflare Workerに読み込まれていません。（AI-101）';
+        return LINE_GROUP_AI_FAILURE_PREFIX + 'AI-101\n雑談AIの設定を読み込めませんでした。お手数ですが、質問をもう一度送信してください。';
       }
       if (detail.includes('no supported text field')) {
-        return '雑談AIから応答を受け取りましたが、文章を読み取れませんでした。（AI-103）';
+        return LINE_GROUP_AI_FAILURE_PREFIX + 'AI-103\n雑談AIから回答を読み取れませんでした。お手数ですが、質問をもう一度送信してください。';
       }
-      return '雑談AIの生成処理でエラーが発生しました。（AI-102）';
+      return LINE_GROUP_AI_FAILURE_PREFIX + 'AI-102\n雑談AIの回答生成に失敗しました。お手数ですが、質問をもう一度送信してください。';
     }
   }
 
@@ -887,6 +888,7 @@ async function replyPlain(
   deliveryKind = 'assignment_contribution',
   destinationType: 'user' | 'group' | 'room' = 'user',
   destinationId: string | null = null,
+  resolveAiIncidentOnSuccess = false,
 ): Promise<void> {
   try {
     const message: Record<string, unknown> = { type: 'text', text: text.slice(0, 4500) };
@@ -914,10 +916,143 @@ async function replyPlain(
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       console.error('LINE plain-text reply failed:', response.status, detail.slice(0, 300));
+      if (deliveryKind === 'campus_ai_chat' && destinationId && (destinationType === 'group' || destinationType === 'room')) {
+        await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, 'LINE-REPLY');
+      }
+    } else if (deliveryKind === 'campus_ai_chat' && resolveAiIncidentOnSuccess
+      && destinationId && (destinationType === 'group' || destinationType === 'room')) {
+      await resolveLineAiGroupIncident(destinationId);
     }
   } catch (error) {
     console.error('LINE plain-text reply request failed:', error instanceof Error ? error.name : 'unknown');
+    if (deliveryKind === 'campus_ai_chat' && destinationId && (destinationType === 'group' || destinationType === 'room')) {
+      await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, 'LINE-REPLY');
+    }
   }
+}
+
+async function notifyLineAiGroupIncident(
+  chatId: string,
+  chatType: 'group' | 'room',
+  accessToken: string,
+  failureCode: string,
+  replyToken?: string,
+): Promise<boolean> {
+  const admin = getLineAssignmentAdmin();
+  if (!admin || !chatId) return false;
+
+  const credential = getLineWebhookCredentials().find(item => item.accessToken === accessToken);
+  const botSlot = credential?.slot ?? 0;
+  const { data, error } = await admin.rpc('begin_line_ai_group_delivery_incident', {
+    p_chat_id: chatId,
+    p_chat_type: chatType,
+    p_bot_slot: botSlot >= 1 && botSlot <= 5 ? botSlot : null,
+    p_incident_type: 'conversation_ai',
+    p_failure_code: failureCode,
+    p_failure_detail: 'LINE group conversation AI delivery failure',
+  });
+  const incident = Array.isArray(data) ? data[0] : data;
+  if (error || !incident || typeof incident.incident_id !== 'string') {
+    console.error('LINE AI incident registration failed:', error?.message || 'empty incident result');
+    return false;
+  }
+  // One Flex notification per continuous incident. Further failures are recorded
+  // against the same open incident and stay quiet until a successful reply closes it.
+  if (incident.should_notify !== true) return false;
+
+  const message = buildNoticeFlexMessage(
+    'AI回答の送信について',
+    'CampusSyncの会話AIで、回答を正常に送信できない事象を検知しました。お手数ですが、該当の質問をもう一度送信してください。',
+  );
+  const messages = applyCampusSyncFlexFooters([message]);
+  let notificationStatus: 'sent' | 'failed' = 'failed';
+  let notificationSentAt: string | null = null;
+  let delivered = false;
+  const useReply = Boolean(replyToken);
+  try {
+    const response = await fetch(
+      useReply
+        ? 'https://api.line.me/v2/bot/message/reply'
+        : 'https://api.line.me/v2/bot/message/push',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + accessToken,
+          'Content-Type': 'application/json',
+          ...(!useReply ? { 'X-Line-Retry-Key': incident.incident_id } : {}),
+        },
+        body: JSON.stringify(useReply
+          ? { replyToken, messages }
+          : { to: chatId, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    delivered = response.ok || response.status === 409;
+    await recordLineDeliveryResponse(response, {
+      channel: useReply ? 'reply' : 'push',
+      destinationType: chatType,
+      destinationId: chatId,
+      kind: 'campus_ai_failure_notice',
+      botSlot,
+      deliveryBatchId: incident.incident_id,
+      retryKey: useReply ? null : incident.incident_id,
+      accessToken,
+      messages,
+    });
+    if (delivered) {
+      notificationStatus = 'sent';
+      notificationSentAt = new Date().toISOString();
+    } else {
+      const detail = await response.text().catch(() => '');
+      console.error('LINE AI incident notice failed:', response.status, detail.slice(0, 300));
+    }
+  } catch (error) {
+    console.error('LINE AI incident notice request failed:', error instanceof Error ? error.name : 'unknown');
+  }
+
+  const { error: updateError } = await admin.from('line_ai_group_delivery_incidents').update({
+    notification_status: notificationStatus,
+    notification_sent_at: notificationSentAt,
+    last_seen_at: new Date().toISOString(),
+  }).eq('incident_id', incident.incident_id);
+  if (updateError) console.error('LINE AI incident notification result save failed:', updateError.message);
+  return delivered;
+}
+
+async function resolveLineAiGroupIncident(chatId: string): Promise<void> {
+  const admin = getLineAssignmentAdmin();
+  if (!admin || !chatId) return;
+  const { error } = await admin.from('line_ai_group_delivery_incidents').update({
+    status: 'resolved',
+    resolved_at: new Date().toISOString(),
+    last_seen_at: new Date().toISOString(),
+  }).eq('chat_id', chatId).eq('incident_type', 'conversation_ai').eq('status', 'open');
+  if (error) console.error('LINE AI incident recovery record failed:', error.message);
+}
+
+async function replyLineGroupAiAnswer(
+  replyToken: string,
+  answer: string,
+  accessToken: string,
+  destinationType: 'group' | 'room',
+  destinationId: string,
+): Promise<void> {
+  if (answer.startsWith(LINE_GROUP_AI_FAILURE_PREFIX)) {
+    const separator = answer.indexOf('\n');
+    const metadata = answer.slice(LINE_GROUP_AI_FAILURE_PREFIX.length, separator > -1 ? separator : undefined);
+    const fallbackText = separator > -1
+      ? answer.slice(separator + 1).trim()
+      : '雑談AIの回答を送信できませんでした。お手数ですが、質問をもう一度送信してください。';
+    const failureCode = metadata.split('|')[0].slice(0, 40) || 'AI-UNKNOWN';
+    const noticeSent = await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, failureCode, replyToken);
+    if (!noticeSent) {
+      await replyPlain(replyToken, fallbackText, accessToken, [], 'campus_ai_chat', destinationType, destinationId);
+    }
+    return;
+  }
+
+  await replyPlain(replyToken, answer, accessToken, [], 'campus_ai_chat', destinationType, destinationId, true);
 }
 
 function getLineAssignmentOptionChoices(draft: LineAssignmentDraft): string[] {
@@ -1564,12 +1699,10 @@ async function handleLineEvents(
           ai,
           true,
         );
-        await replyPlain(
+        await replyLineGroupAiAnswer(
           event.replyToken,
           chatAnswer,
           channelAccessToken,
-          [],
-          'campus_ai_chat',
           destinationType,
           destinationId,
         );
@@ -1586,12 +1719,10 @@ async function handleLineEvents(
             ai,
             true,
           );
-          await replyPlain(
+          await replyLineGroupAiAnswer(
             event.replyToken,
             chatAnswer,
             channelAccessToken,
-            [],
-            'campus_ai_chat',
             destinationType,
             destinationId,
           );
@@ -1637,12 +1768,10 @@ async function handleLineEvents(
             ai,
             true,
           );
-          await replyPlain(
+          await replyLineGroupAiAnswer(
             event.replyToken,
             chatAnswer,
             channelAccessToken,
-            [],
-            'campus_ai_chat',
             destinationType,
             destinationId,
           );
