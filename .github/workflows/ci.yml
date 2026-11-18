@@ -45,6 +45,16 @@ jobs:
       - name: Validate Worker bundle without deploying
         if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: npx wrangler deploy --dry-run
+      - name: Upload validated Cloudflare Worker bundle
+        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        uses: actions/upload-artifact@v4
+        with:
+          name: campus-sync-cloudflare-worker-${{ github.sha }}
+          path: |
+            .open-next/worker.js
+            .open-next/worker.js.map
+          if-no-files-found: error
+          retention-days: 1
       - name: Save regenerated lockfile to migration branch
         if: github.ref == 'refs/heads/cloudflare-workers-migration' && success()
         run: |
