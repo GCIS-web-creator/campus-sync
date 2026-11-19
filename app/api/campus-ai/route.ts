@@ -858,7 +858,15 @@ export async function POST(req: Request) {
   const isQueueReport = !!queueStatusFromText(question) && !explicitQueueQuestion;
   const pendingQueueId = typeof pendingQueuePrompt?.queueMenuId === 'string' ? pendingQueuePrompt.queueMenuId : '';
   if (wantsQueue && !targetMenu && pendingQueueId && queueStatusFromText(question)) {
-    targetMenu = allMenus.find(m => String(m.id) === pendingQueueId);
+    const pendingDailyQueueMenu = dailyQueueMenus.find(item => item.voteId === pendingQueueId);
+    targetMenu = allMenus.find(m => String(m.id) === pendingQueueId)
+      ?? (pendingDailyQueueMenu ? {
+        id: pendingDailyQueueMenu.voteId,
+        name: pendingDailyQueueMenu.name,
+        calorie: null,
+        allergy: null,
+        is_active: true,
+      } : undefined);
   }
   if (wantsQueue && targetMenu && menuVoteRes.error) {
     return NextResponse.json({ answer: 'そのメニューの列の投票状況を読み込めませんでした。少し待ってからもう一度試してください。' });
