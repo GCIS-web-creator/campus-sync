@@ -173,7 +173,7 @@ export function isLineShiritoriControlCommand(input: string): boolean {
 }
 
 export function isLineSoloShiritoriCommand(input: string): boolean {
-  const normalized = input.normalize('NFKC').replace(/[\\s　]+/g, '').replace(/[!！?？。]+$/g, '');
+  const normalized = input.normalize('NFKC').replace(/[\s　]+/g, '').replace(/[!！?？。]+$/g, '');
   return /^(?:(?:1人|一人|ひとり)(?:で|の)?しりとり(?:を)?(?:して|やって|しよう|開始|スタート)?|しりとり(?:を)?(?:1人で|一人で|ひとりで)(?:して|やって)?|自分(?:自身)?としりとり(?:を)?(?:して|やって|しよう)?|AI同士でしりとり(?:を)?(?:して|やって|しよう)?)$/u.test(normalized);
 }
 
@@ -193,7 +193,7 @@ export function playLineSoloShiritori(maxTurns = 12): string {
       const winner = side === '先攻AI' ? '後攻AI' : '先攻AI';
       lines.push(side + '： 「' + nextKana + '」から始まる言葉が見つからず負け！');
       lines.push(winner + 'の勝ち！');
-      return lines.join('\\n');
+      return lines.join('\n');
     }
 
     lines.push(side + '：「' + word + '」');
@@ -202,13 +202,13 @@ export function playLineSoloShiritori(maxTurns = 12): string {
     if (!ending || ending === 'ん') {
       lines.push(side + 'が「ん」で終わる言葉を出したため負け！');
       lines.push((side === '先攻AI' ? '後攻AI' : '先攻AI') + 'の勝ち！');
-      return lines.join('\\n');
+      return lines.join('\n');
     }
     nextKana = ending;
   }
 
   lines.push('今回は' + Math.max(1, Math.min(Math.floor(maxTurns) || 12, 20)) + '手続いたので引き分け！');
-  return lines.join('\\n');
+  return lines.join('\n');
 }
 
 export function startLineShiritori(): LineShiritoriTurnResult {
