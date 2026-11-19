@@ -12,7 +12,7 @@ import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
 import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
-import { LINE_GROUP_SHIRITORI_STATE_PREFIX, isLineShiritoriControlCommand, isLineShiritoriStartCommand, startLineShiritori, takeLineShiritoriTurn, type LineShiritoriState } from '@/lib/line-shiritori';
+import { LINE_GROUP_SHIRITORI_STATE_PREFIX, isLineShiritoriControlCommand, isLineShiritoriStartCommand, isLineSoloShiritoriCommand, playLineSoloShiritori, startLineShiritori, takeLineShiritoriTurn, type LineShiritoriState } from '@/lib/line-shiritori';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -750,7 +750,7 @@ async function isLineGroupConversationActive(chatId: string): Promise<boolean> {
 
 async function getLineGroupConversationAnswer(
   chatId: string,
-  chatType: 'group' | 'room',
+  chatType: 'group' | 'room' | 'user',
   botSlot: 0 | 1 | 2 | 3 | 4 | 5,
   question: string,
   ai: WorkersAiBinding | undefined,
@@ -806,7 +806,11 @@ async function getLineGroupConversationAnswer(
   let answer: string;
   let handledShiritori = false;
   let nextShiritoriState = getLineGroupShiritoriState(storedMessages);
-  if (isLineShiritoriStartCommand(question)) {
+  if (isLineSoloShiritoriCommand(question)) {
+    answer = playLineSoloShiritori();
+    nextShiritoriState = null;
+    handledShiritori = true;
+  } else if (isLineShiritoriStartCommand(question)) {
     const result = startLineShiritori();
     answer = result.answer;
     nextShiritoriState = result.state;
@@ -1035,7 +1039,7 @@ async function replyLineGroupAiAnswer(
   replyToken: string,
   answer: string,
   accessToken: string,
-  destinationType: 'group' | 'room',
+  destinationType: 'user' | 'group' | 'room',
   destinationId: string,
 ): Promise<void> {
   if (answer.startsWith(LINE_GROUP_AI_FAILURE_PREFIX)) {
@@ -1045,6 +1049,10 @@ async function replyLineGroupAiAnswer(
       ? answer.slice(separator + 1).trim()
       : '雑談AIの回答を送信できませんでした。お手数ですが、質問をもう一度送信してください。';
     const failureCode = metadata.split('|')[0].slice(0, 40) || 'AI-UNKNOWN';
+    if (destinationType === 'user') {
+      await replyPlain(replyToken, fallbackText, accessToken, [], 'campus_ai_chat', destinationType, destinationId);
+      return;
+    }
     const noticeSent = await notifyLineAiGroupIncident(destinationId, destinationType, accessToken, failureCode, replyToken);
     if (!noticeSent) {
       await replyPlain(replyToken, fallbackText, accessToken, [], 'campus_ai_chat', destinationType, destinationId);
@@ -1655,6 +1663,56 @@ async function handleLineEvents(
       if (reminderHandled) return;
     }
 
+    // 1対1トークでも「CSAI」単独で会話モードを開始し、その後の通常メッセージを会話AIへ渡す。
+    // 会話履歴はLINEユーザーIDごとに分離し、グループ履歴と混在させない。
+    if (isDirectChat && event.source?.userId) {
+      const directChatId = event.source.userId;
+
+      if (hasTrigger && !question) {
+        const chatAnswer = await getLineGroupConversationAnswer(
+          directChatId, 'user', botSlot, 'こんにちは！何か気軽に話そう。', ai, true,
+        );
+        await replyLineGroupAiAnswer(event.replyToken, chatAnswer, channelAccessToken, 'user', directChatId);
+        return;
+      }
+
+      if (hasTrigger && isLineGroupChatReset(question)) {
+        const reset = await resetLineGroupConversation(directChatId, true);
+        await replyPlain(
+          event.replyToken,
+          reset ? '雑談履歴をリセットしました。会話モードは続いているよ。' : '履歴をリセットできませんでした。少し待ってからもう一度お試しください。',
+          channelAccessToken, [], 'campus_ai_chat', 'user', directChatId,
+        );
+        return;
+      }
+
+      if (hasTrigger && /^(?:終了|おわり|stop)$/i.test(question.trim())) {
+        const stopped = await resetLineGroupConversation(directChatId, false);
+        await replyPlain(
+          event.replyToken,
+          stopped ? '雑談AIを終了しました。また「CSAI」で話しかけてね。' : '終了処理に失敗しました。もう一度お試しください。',
+          channelAccessToken, [], 'campus_ai_chat', 'user', directChatId,
+        );
+        return;
+      }
+
+      if (hasTrigger && question && (isLineSoloShiritoriCommand(question) || isLineShiritoriControlCommand(question))) {
+        const chatAnswer = await getLineGroupConversationAnswer(
+          directChatId, 'user', botSlot, question, ai, true,
+        );
+        await replyLineGroupAiAnswer(event.replyToken, chatAnswer, channelAccessToken, 'user', directChatId);
+        return;
+      }
+
+      if (!hasTrigger && await isLineGroupConversationActive(directChatId)) {
+        const chatAnswer = await getLineGroupConversationAnswer(
+          directChatId, 'user', botSlot, messageText, ai,
+        );
+        await replyLineGroupAiAnswer(event.replyToken, chatAnswer, channelAccessToken, 'user', directChatId);
+        return;
+      }
+    }
+
     if ((hasTrigger || isDirectChat) && question) {
       const destinationType = event.source?.type === 'room' ? 'room' : event.source?.type === 'group' ? 'group' : 'user';
       const destinationId = event.source?.type === 'room'
@@ -1690,7 +1748,7 @@ async function handleLineEvents(
       if (destinationId && hasTrigger && question
         && !isLineGroupChatReset(question)
         && !/^(?:終了|おわり|stop)$/i.test(question.trim())
-        && (isLineShiritoriControlCommand(question) || await isLineGroupShiritoriActive(destinationId))) {
+        && (isLineSoloShiritoriCommand(question) || isLineShiritoriControlCommand(question) || await isLineGroupShiritoriActive(destinationId))) {
         const chatAnswer = await getLineGroupConversationAnswer(
           destinationId,
           event.source?.type === 'room' ? 'room' : 'group',
