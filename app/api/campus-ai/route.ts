@@ -49,7 +49,17 @@ const isReviewQuestion = (q: string) => /口コミ|レビュー|感想|評価/.t
 const isContributionQuestion = (q: string) => /貢献度|貢献ポイント|累計ポイント|学校貢献|剣ランク|貢献度ランク|ランク|ブロンズ|シルバー|ゴールド|プラチナ|ダイヤモンド/.test(q);
 const isProfileQuestion = (q: string) => /学籍番号|所属クラス|私のクラス|自分のクラス|何年何組|何組ですか|私の名前|自分の名前|名前を教えて/.test(q);
 const isNotificationQuestion = (q: string) => /通知|お知らせ|リマインダー/.test(q);
-const isQueueQuestion = (q: string) => /並び|行列|列|並んで|待ち時間/.test(q);
+const isQueueQuestion = (q: string) => /行列|並び|並んで|待ち時間|列(?:の|は|が|状況|具合|長さ|を)/.test(q);
+
+// 現在の献立5区分と、cafeteria_votesに保存する既存の区分コードを対応させる。
+// cafeteria_menuマスタが空でも、日別献立からメニュー別の行列を検索できる。
+const DAILY_QUEUE_CATEGORIES = [
+  { field: 'soka_lunch', voteId: 'soka', label: '創価ランチ', aliases: /創価ランチ|創価/ },
+  { field: 'healthy_lunch', voteId: 'healthy', label: 'ヘルシーランチ', aliases: /ヘルシーランチ|ヘルシー/ },
+  { field: 'snack_lunch', voteId: 'snack', label: 'スナックランチ', aliases: /スナックランチ|スナック/ },
+  { field: 'curry', voteId: 'curry', label: 'カレー', aliases: /カレー/ },
+  { field: 'noodles', voteId: 'noodles', label: '麺類', aliases: /麺類|ラーメン|うどん|そば|パスタ|スパゲティ|焼きそば|ちゃんぽん|担々麺|つけ麺|麺メニュー|麺の|麺は/ },
+] as const;
 const isRoomQuestion = (q: string) => /教室|温度|気温|暑い|寒い|栄冠ホール|化学実験室|生物実験室|グローリーホール|ミーティングルーム|グローバルステーション|PC教室|パソコン教室|コンピューター室|家庭科室|図書館|図書室|Call|自習室|体育館|視聴覚室|多目的室|職員室/.test(q);
 
 const DEFAULT_ROOMS = [
@@ -368,9 +378,16 @@ export async function POST(req: Request) {
 
   type Menu = { id: string | number; name: string; calorie: string | number | null; allergy: string | null; is_active?: boolean | null };
   const liveMenus = ((menuRes.data ?? []) as Menu[]).filter(m => m.is_active !== false);
-  // AIでは有効状態のマスターメニューだけを使用する。日別献立は上の別テーブルを正とする。
+  // メニュー一覧などの従来機能はマスターテーブルを使う。行列検索は日別献立5区分も参照する。
   const allMenus: Menu[] = liveMenus;
   const menuDataIsLive = !menuRes.error && liveMenus.length > 0;
+  const todayDailyMenuRow = (todayMenuRes.data ?? null) as Record<string, unknown> | null;
+  const dailyQueueMenus = todayDailyMenuRow && todayDailyMenuRow.is_closed !== true
+    ? DAILY_QUEUE_CATEGORIES.flatMap(category => {
+        const name = String(todayDailyMenuRow[category.field] ?? '').trim();
+        return name ? [{ ...category, name }] : [];
+      })
+    : [];
   const menuForList = allMenus.slice(0, 5);
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
@@ -676,7 +693,32 @@ export async function POST(req: Request) {
   let targetRoom: (typeof rooms)[number] | undefined;
 
   const menuIndex = findTarget(question, allMenus.map(m => m.name), 3);
-  if (menuIndex >= 0 && (wantsSold || wantsQueue || wantsMenu)) {
+  const normalizedQueueQuestion = normalize(question);
+  const dailyQueueMenuByName = wantsQueue
+    ? [...dailyQueueMenus]
+        .sort((a, b) => normalize(b.name).length - normalize(a.name).length)
+        .find(item => normalizedQueueQuestion.includes(normalize(item.name)))
+    : undefined;
+  const requestedDailyQueueCategory = wantsQueue
+    ? DAILY_QUEUE_CATEGORIES.find(category => category.aliases.test(question))
+    : undefined;
+  const dailyQueueMenu = dailyQueueMenuByName
+    ?? (requestedDailyQueueCategory
+      ? dailyQueueMenus.find(item => item.voteId === requestedDailyQueueCategory.voteId)
+      : undefined);
+
+  if (wantsQueue && dailyQueueMenu) {
+    // 既存投票のmenu_id/scope_key（soka, healthy, snack, curry, noodles）をそのまま使う。
+    targetMenu = {
+      id: dailyQueueMenu.voteId,
+      name: dailyQueueMenu.name,
+      calorie: null,
+      allergy: null,
+      is_active: true,
+    };
+    target = '学食';
+    slots.TN = dailyQueueMenu.name;
+  } else if (menuIndex >= 0 && (wantsSold || wantsQueue || wantsMenu)) {
     targetMenu = allMenus[menuIndex]; target = '学食';
     slots.TN = str(targetMenu.name); slots.TK = str(targetMenu.calorie); slots.TA = str(targetMenu.allergy);
     const match = commonSub(question, targetMenu.name);
@@ -806,7 +848,7 @@ export async function POST(req: Request) {
   }
 
   // 行列について「今どうかを尋ねる」のと「長いと報告する」を区別する。
-  const explicitQueueQuestion = /どれくらい|どのくらい|今どんな感じ|今.*(?:列|並び)|並んでる[?？]|待ち時間/.test(question);
+  const explicitQueueQuestion = /どれくらい|どのくらい|長さ|今どんな感じ|今.*(?:行列|列|並び)|並んでる[?？]|待ち時間/.test(question);
   const queueStatusFromText = (text: string): 'empty' | 'normal' | 'crowded' | null => {
     if (/並んでない|列なし|並びなし|待ちなし|空いてる|空いている/.test(text)) return 'empty';
     if (/普通|まあまあ|少し並|ちょっと並/.test(text)) return 'normal';
@@ -815,7 +857,6 @@ export async function POST(req: Request) {
   };
   const isQueueReport = !!queueStatusFromText(question) && !explicitQueueQuestion;
   const pendingQueueId = typeof pendingQueuePrompt?.queueMenuId === 'string' ? pendingQueuePrompt.queueMenuId : '';
-  if (wantsQueue && !menuDataIsLive) return NextResponse.json({ answer: '学食メニューが登録されていないため、メニュー別の行列状況を確認できません。' });
   if (wantsQueue && !targetMenu && pendingQueueId && queueStatusFromText(question)) {
     targetMenu = allMenus.find(m => String(m.id) === pendingQueueId);
   }
@@ -841,10 +882,69 @@ export async function POST(req: Request) {
       return NextResponse.json({ answer: `情報提供ありがとう！${targetMenu.name}の列を「${label}」として投票しました。` });
     }
     return NextResponse.json({
-      answer: relevantVotes.length ? `${targetMenu.name}の現在の列は「${queueLabel}」です（投票${relevantVotes.length}件）。状況を更新する場合は選んでください。` : `${targetMenu.name}の列について、まだ投票データがありません。状況を報告する場合は選んでください。`,
+      answer: relevantVotes.length
+        ? `${targetMenu.name}の現在の列は「${queueLabel}」です（投票${relevantVotes.length}件）。※人数や待ち時間の実測値ではなく、利用者の3段階投票による目安です。状況を更新する場合は選んでください。`
+        : `${targetMenu.name}の列について、まだ投票データがありません。※人数や待ち時間の実測値ではありません。状況を報告する場合は選んでください。`,
       queueMenuId: String(targetMenu.id),
       quickReplies: [ { label: '並びなし', status: 'empty' }, { label: '普通', status: 'normal' }, { label: '行列大', status: 'crowded' } ],
       table: table(['状況', '投票数'], [['並びなし', String(queueCounts.empty)], ['普通', String(queueCounts.normal)], ['行列大', String(queueCounts.crowded)]]),
+    });
+  }
+
+  // メニュー名・カテゴリを指定していない場合は、今日の献立を使って区分別の状況を返す。
+  if (wantsQueue && !targetMenu) {
+    if (requestedDailyQueueCategory && !dailyQueueMenus.some(item => item.voteId === requestedDailyQueueCategory.voteId)) {
+      if (todayMenuRes.error) {
+        return NextResponse.json({ answer: '今日の献立情報を読み込めませんでした。少し待ってからもう一度試してください。' });
+      }
+      if (!todayDailyMenuRow) {
+        return NextResponse.json({ answer: `今日（${todayDateKey}）の献立が登録されていないため、${requestedDailyQueueCategory.label}の行列状況を確認できません。` });
+      }
+      if (todayDailyMenuRow.is_closed === true) {
+        return NextResponse.json({ answer: '今日は学食の営業休止として登録されています。' });
+      }
+      return NextResponse.json({ answer: `今日の${requestedDailyQueueCategory.label}メニューは登録されていません。` });
+    }
+
+    const queueCandidates = dailyQueueMenus.length
+      ? dailyQueueMenus.map(item => ({ id: item.voteId, label: item.label, name: item.name }))
+      : allMenus.map(item => ({ id: String(item.id), label: 'メニュー', name: item.name }));
+
+    if (!queueCandidates.length) {
+      if (todayMenuRes.error && !menuDataIsLive) {
+        return NextResponse.json({ answer: '今日の献立情報を読み込めませんでした。少し待ってからもう一度試してください。' });
+      }
+      if (todayDailyMenuRow?.is_closed === true) {
+        return NextResponse.json({ answer: '今日は学食の営業休止として登録されています。' });
+      }
+      return NextResponse.json({
+        answer: !todayDailyMenuRow && !menuDataIsLive
+          ? `今日（${todayDateKey}）の献立が登録されていないため、行列状況を確認できません。`
+          : '行列状況を確認できるメニューがありません。Adminの献立登録を確認してください。',
+      });
+    }
+
+    const queueSummaryRows = queueCandidates.map(item => {
+      const votes = menuVoteRows.filter(row => String(row.menu_id ?? row.scope_key) === item.id);
+      const counts = votes.reduce((acc, row) => {
+        if (row.status === 'empty') acc.empty++;
+        if (row.status === 'normal') acc.normal++;
+        if (row.status === 'crowded') acc.crowded++;
+        return acc;
+      }, { empty: 0, normal: 0, crowded: 0 });
+      const status = !votes.length
+        ? '未集計'
+        : counts.crowded > counts.normal && counts.crowded >= counts.empty
+          ? '行列大'
+          : counts.empty > counts.normal && counts.empty > counts.crowded
+            ? '並びなし'
+            : '普通';
+      return [item.label, item.name, status, String(votes.length)];
+    });
+
+    return NextResponse.json({
+      answer: 'メニュー別の現在の行列状況です。※人数や待ち時間の実測値ではなく、利用者の3段階投票による目安です。',
+      table: table(['区分', 'メニュー', '行列状況', '投票数'], queueSummaryRows),
     });
   }
 
