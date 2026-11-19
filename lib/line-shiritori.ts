@@ -172,6 +172,45 @@ export function isLineShiritoriControlCommand(input: string): boolean {
   return isLineShiritoriStartCommand(input) || isLineShiritoriStopCommand(input);
 }
 
+export function isLineSoloShiritoriCommand(input: string): boolean {
+  const normalized = input.normalize('NFKC').replace(/[\\s　]+/g, '').replace(/[!！?？。]+$/g, '');
+  return /^(?:(?:1人|一人|ひとり)(?:で|の)?しりとり(?:を)?(?:して|やって|しよう|開始|スタート)?|しりとり(?:を)?(?:1人で|一人で|ひとりで)(?:して|やって)?|自分(?:自身)?としりとり(?:を)?(?:して|やって|しよう)?|AI同士でしりとり(?:を)?(?:して|やって|しよう)?)$/u.test(normalized);
+}
+
+export function playLineSoloShiritori(maxTurns = 12): string {
+  const firstWord = 'しりとり';
+  const usedWords = new Set<string>([normalizeLineShiritoriWord(firstWord)!]);
+  let nextKana = getLineShiritoriEndingKana(normalizeLineShiritoriWord(firstWord) || firstWord) || 'り';
+  const lines = [
+    '1人しりとり開始！今回は先攻AIと後攻AIが自分同士で対決します。',
+    '開始語：「' + firstWord + '」',
+  ];
+
+  for (let turn = 0; turn < Math.max(1, Math.min(Math.floor(maxTurns) || 12, 20)); turn += 1) {
+    const side = turn % 2 === 0 ? '先攻AI' : '後攻AI';
+    const word = chooseBotWord(nextKana, usedWords, turn);
+    if (!word) {
+      const winner = side === '先攻AI' ? '後攻AI' : '先攻AI';
+      lines.push(side + '： 「' + nextKana + '」から始まる言葉が見つからず負け！');
+      lines.push(winner + 'の勝ち！');
+      return lines.join('\\n');
+    }
+
+    lines.push(side + '：「' + word + '」');
+    usedWords.add(normalizeLineShiritoriWord(word) || word);
+    const ending = getLineShiritoriEndingKana(normalizeLineShiritoriWord(word) || word);
+    if (!ending || ending === 'ん') {
+      lines.push(side + 'が「ん」で終わる言葉を出したため負け！');
+      lines.push((side === '先攻AI' ? '後攻AI' : '先攻AI') + 'の勝ち！');
+      return lines.join('\\n');
+    }
+    nextKana = ending;
+  }
+
+  lines.push('今回は' + Math.max(1, Math.min(Math.floor(maxTurns) || 12, 20)) + '手続いたので引き分け！');
+  return lines.join('\\n');
+}
+
 export function startLineShiritori(): LineShiritoriTurnResult {
   const firstWord = 'しりとり';
   return {
