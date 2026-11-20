@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, ExternalLink, Globe2, Link2, LockKeyhole, Plug, RefreshCw, ShieldCheck, Unlink, Youtube } from 'lucide-react';
+import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, Globe2, Link2, LockKeyhole, Plug, RefreshCw, ShieldCheck, Unlink, Youtube } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
 
@@ -270,10 +270,10 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {SCOPE_OPTIONS.map((item) => {
-          const checked = scopes.includes(item.id);
           const unavailable = item.id === 'contribution:sync';
+          const checked = !unavailable && scopes.includes(item.id);
           return <label key={item.id} className={'flex cursor-pointer gap-3 rounded-xl border p-4 ' + (checked ? 'border-cyan-400 bg-cyan-50/70 text-slate-950' : dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white')}>
-            <input type="checkbox" className="mt-1 h-4 w-4 accent-cyan-600" checked={checked} onChange={(event) => setScopes(current => event.target.checked ? [...current, item.id] : current.filter(scope => scope !== item.id))}/>
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-cyan-600" checked={checked} disabled={unavailable} onChange={(event) => setScopes(current => event.target.checked ? [...current, item.id] : current.filter(scope => scope !== item.id))}/>
             <span className="min-w-0 flex-1"><span className="flex items-center gap-2 text-sm font-black">{item.title}{unavailable && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] text-amber-800">準備中</span>}</span><span className="mt-1 block text-xs leading-5 opacity-75">{item.description}</span></span>
           </label>;
         })}
