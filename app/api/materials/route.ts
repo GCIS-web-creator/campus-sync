@@ -26,7 +26,10 @@ export async function GET(request: Request) {
       console.error('Student study material list failed:', error?.message || folderError?.message);
       return NextResponse.json({ success: false, message: '資料・フォルダー一覧を取得できませんでした。' }, { status: 500 });
     }
-    const materials = (data || []).filter(material => canStudentViewMaterial(material, context.userClass));
+    const materials = (data || []).filter(material =>
+      material.target_scope === 'all'
+      || (context.verifiedClass !== null && canStudentViewMaterial(material, context.verifiedClass)),
+    );
     const folderMap = new Map((allFolders || []).map(folder => [folder.id, folder]));
     const visibleFolderIds = new Set<string>();
     for (const material of materials) {
@@ -39,7 +42,12 @@ export async function GET(request: Request) {
       }
     }
     const folders = (allFolders || []).filter(folder => visibleFolderIds.has(folder.id));
-    return NextResponse.json({ success: true, materials, folders }, { headers: { 'Cache-Control': 'no-store, private' } });
+    return NextResponse.json({
+      success: true,
+      materials,
+      folders,
+      verifiedClass: context.verifiedClass,
+    }, { headers: { 'Cache-Control': 'no-store, private' } });
   } catch (error) {
     console.error('Student study material request failed:', error);
     return NextResponse.json({ success: false, message: '資料一覧を取得できませんでした。' }, { status: 500 });

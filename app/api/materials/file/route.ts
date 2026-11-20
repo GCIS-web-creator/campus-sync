@@ -19,7 +19,11 @@ export async function GET(request: Request) {
       .eq('is_published', true)
       .is('archived_at', null)
       .maybeSingle();
-    if (error || !material || !canStudentViewMaterial(material, context.userClass)) {
+    const canView = material && (
+      material.target_scope === 'all'
+      || (context.verifiedClass !== null && canStudentViewMaterial(material, context.verifiedClass))
+    );
+    if (error || !material || !canView) {
       return NextResponse.json({ success: false, message: 'この資料を閲覧する権限がありません。' }, { status: 404 });
     }
 

@@ -51,6 +51,7 @@ export type StudyStudentContext = {
   admin: NonNullable<ReturnType<typeof getStudyMaterialsAdminClient>>;
   studentId: string;
   userClass: string;
+  verifiedClass: string | null;
   studentName: string;
   authUserId: string;
 };
@@ -85,14 +86,14 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
 
   let profileResult = await admin
     .from('profiles')
-    .select('student_id,student_name,user_class,auth_user_id')
+    .select('student_id,student_name,user_class,verified_class,auth_user_id')
     .eq('auth_user_id', user.id)
     .maybeSingle();
 
   if (!profileResult.data && !profileResult.error) {
     profileResult = await admin
       .from('profiles')
-      .select('student_id,student_name,user_class,auth_user_id')
+      .select('student_id,student_name,user_class,verified_class,auth_user_id')
       .eq('student_id', studentId)
       .maybeSingle();
   }
@@ -101,8 +102,10 @@ export async function getStudyStudentContext(request: Request): Promise<StudyStu
   if (profileResult.error || !profile || profile.student_id !== studentId) return null;
   const userClass = String(profile.user_class || '');
   if (!/^[1-3]-[1-8]$/.test(userClass)) return null;
+  const rawVerifiedClass = typeof profile.verified_class === 'string' ? profile.verified_class : '';
+  const verifiedClass = /^[1-3]-[1-8]$/.test(rawVerifiedClass) ? rawVerifiedClass : null;
 
-  return { admin, studentId, userClass, studentName: String(profile.student_name || ''), authUserId: String(user.id) };
+  return { admin, studentId, userClass, verifiedClass, studentName: String(profile.student_name || ''), authUserId: String(user.id) };
 }
 
 export function canStudentViewMaterial(

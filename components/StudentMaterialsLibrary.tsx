@@ -61,6 +61,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
   const [materialType, setMaterialType] = useState('all');
   const [preview, setPreview] = useState<{ item: StudyMaterial; url: string } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [verifiedClass, setVerifiedClass] = useState<string | null>(null);
 
   const rootFolder = folders.find(folder => folder.parent_id === null && folder.name === '学校資料') || null;
   const activeFolderId = currentFolderId || rootFolder?.id || null;
@@ -86,6 +87,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       if (!response.ok || !result?.success) throw new Error(result?.message || '資料一覧を取得できませんでした。');
       setMaterials((result.materials || []) as StudyMaterial[]);
       setFolders((result.folders || []) as MaterialFolder[]);
+      setVerifiedClass(typeof result.verifiedClass === 'string' ? result.verifiedClass : null);
       setMessage('');
     } catch (error) {
       setMaterials([]);
@@ -195,6 +197,11 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       </div>
 
       {message && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">{message}</p>}
+      {verifiedClass === null && !message && (
+        <p className={'rounded-xl border px-4 py-3 text-xs leading-5 ' + (isDarkMode ? 'border-amber-800 bg-amber-950/40 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900')}>
+          現在は全校公開資料を表示しています。学年・クラス限定資料は、管理者が所属クラスを確認すると表示されます。
+        </p>
+      )}
 
       <div className={'rounded-2xl border p-3 sm:p-4 ' + panel}>
         <div className="flex flex-wrap items-center gap-2 text-xs">
