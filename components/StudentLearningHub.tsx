@@ -292,6 +292,13 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       }
     };
     void loadPlanetubeScopes();
+    const handleScopeChange = (event: Event) => {
+      const approvedScopes = (event as CustomEvent<{ approvedScopes?: unknown }>).detail?.approvedScopes;
+      if (Array.isArray(approvedScopes)) {
+        setPlanetubeScopes(approvedScopes.filter((scope): scope is string => typeof scope === 'string'));
+      }
+    };
+    window.addEventListener('campussync:planetube-scopes-changed', handleScopeChange);
     const unsubscribe = subscribePlanetubeExtension((event) => {
       if (event.type === 'READY') {
         setPlanetubeExtensionReady(true);
@@ -317,13 +324,19 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       }
     });
     postPlanetubePing();
-    return () => { alive = false; unsubscribe(); };
+    return () => {
+      alive = false;
+      window.removeEventListener('campussync:planetube-scopes-changed', handleScopeChange);
+      unsubscribe();
+    };
   }, [userId, reportPlanetubeEvent]);
 
   // Timer state transitions are mirrored to the extension only after the student has granted that scope.
   useEffect(() => {
     if (!timerReady || !planetubeScopesReady) return;
     const previous = previousTimerState.current;
+    // 記録フォーム表示中は、保存または再開を選ぶまでセッションを終了しない。
+    if (timerState === 'idle' && showRecord) return;
     if (timerState === previous) return;
     let sessionId = planetubeSessionId.current;
     if (timerState === 'running') {
@@ -350,7 +363,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       planetubeSessionId.current = null;
     }
     previousTimerState.current = timerState;
-  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, planetubeScopes, reportPlanetubeEvent]);
+  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, showRecord, planetubeScopes, reportPlanetubeEvent]);
 
   // 拡張機能がタイマー開始後に接続・再接続した場合も、現在の状態を再同期する。
   // sessionId を固定キーとして送るため、拡張機能側では同一セッションの再送を冪等に処理できる。
