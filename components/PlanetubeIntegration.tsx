@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, Globe2, Link2, LockKeyhole, Plug, PlayCircle, RefreshCw, ShieldCheck, Unlink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
@@ -39,6 +39,7 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
   const [restrictionEnabled, setRestrictionEnabled] = useState<boolean | null>(null);
   const [extensionResponse, setExtensionResponse] = useState('');
   const [extensionError, setExtensionError] = useState('');
+  const lastExtensionHandshake = useRef('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -119,11 +120,18 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
         setExtensionStatus('ready');
         setExtensionVersion(event.extensionVersion || '');
         setExtensionError('');
-        void sendExtensionEvent('extension_ready', event.extensionVersion);
+        const handshake = 'ready:' + (event.extensionVersion || 'unknown');
+        if (lastExtensionHandshake.current !== handshake) {
+          lastExtensionHandshake.current = handshake;
+          void sendExtensionEvent('extension_ready', event.extensionVersion);
+        }
       } else if (event.type === 'DISCONNECTED') {
         setExtensionStatus('disconnected');
         setRestrictionEnabled(null);
-        void sendExtensionEvent('extension_disconnected');
+        if (lastExtensionHandshake.current !== 'disconnected') {
+          lastExtensionHandshake.current = 'disconnected';
+          void sendExtensionEvent('extension_disconnected');
+        }
       } else if (event.type === 'ACK') {
         setExtensionResponse(event.command ? `${event.command} の応答を受信しました。` : '拡張機能から応答を受信しました。');
         setExtensionError('');
@@ -138,7 +146,16 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
       }
     });
     pingExtension();
-    return unsubscribe;
+    const retryTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') postPlanetubePing();
+    }, 30_000);
+    const onFocus = () => postPlanetubePing();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(retryTimer);
+      window.removeEventListener('focus', onFocus);
+      unsubscribe();
+    };
   }, [pingExtension, sendExtensionEvent]);
 
   const issueCode = async () => {
@@ -225,8 +242,8 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
       </div>
       <div className="mt-5 grid gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[10px] text-violet-200">ACCOUNT</p><p className="mt-1 text-sm font-black">{statusText}</p></div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[10px] text-violet-200">EXTENSION</p><p className="mt-1 text-sm font-black">{extensionStatus === 'ready' ? '検出済み' : extensionStatus === 'checking' ? '確認中' : '未検出'}</p></div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[10px] text-violet-200">PERMISSIONS</p><p className="mt-1 text-sm font-black">{activeScopeCount} / 4 許可</p></div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[10px] text-violet-200">EXTENSION</p><p className="mt-1 text-sm font-black">{extensionStatus === 'ready' ? '検出済み' : extensionStatus === 'checking' ? '確認中' : extensionStatus === 'disconnected' ? '切断' : '未検出'}</p></div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[10px] text-violet-200">PERMISSIONS</p><p className="mt-1 text-sm font-black">{activeScopeCount} / 3 許可</p></div>
       </div>
     </header>
 
@@ -273,7 +290,7 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-black">{extensionStatus === 'ready' ? 'Planetube拡張機能を検出' : extensionStatus === 'checking' ? '拡張機能を確認中' : '拡張機能を検出できません'}</p>
-            <p className={'mt-1 text-xs ' + muted}>{extensionStatus === 'ready' ? 'ブラウザ拡張機能とのメッセージ接続ができています。' : '拡張機能のID・配布URLが届いたら接続テストを行います。'}</p>
+            <p className={'mt-1 text-xs ' + muted}>{extensionStatus === 'ready' ? 'ブラウザ拡張機能とのメッセージ接続ができています。' : extensionStatus === 'disconnected' ? '一度接続した拡張機能から切断通知を受信しました。' : extensionStatus === 'missing' ? '現在のページから拡張機能の応答を受信できていません。' : '拡張機能からの応答を確認しています。'}</p>
             {extensionVersion && <p className={'mt-1 text-[10px] ' + muted}>バージョン {extensionVersion}</p>}
             {restrictionEnabled !== null && <p className={'mt-1 text-xs font-bold ' + (restrictionEnabled ? 'text-emerald-600' : muted)}>YouTube制限：{restrictionEnabled ? '有効' : '無効'}</p>}
             {extensionResponse && <p className={'mt-1 text-[10px] ' + muted}>{extensionResponse}</p>}
