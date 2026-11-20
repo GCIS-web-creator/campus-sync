@@ -862,3 +862,246 @@ export function buildEmergencyNoticeFlexMessage(
     },
   };
 }
+
+
+export type ExamScopeFlexSection = {
+  title?: string;
+  body?: string;
+  note?: string;
+};
+
+export type ExamScopeFlexInput = {
+  schoolYear: number | string;
+  startDate: string;
+  endDate: string;
+  targetClasses: string[];
+  subjects: Array<{
+    subject: string;
+    displaySubject: string;
+    audience: string;
+    sections: ExamScopeFlexSection[];
+  }>;
+};
+
+function splitExamFlexText(value: string, maxLength = 1500): string[] {
+  const parts: string[] = [];
+  let current = '';
+  for (const line of value.split('\\n')) {
+    const candidate = current ? current + '\\n' + line : line;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+    if (current) parts.push(current);
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+    const characters = Array.from(line);
+    for (let offset = 0; offset < characters.length; offset += maxLength) {
+      parts.push(characters.slice(offset, offset + maxLength).join(''));
+    }
+    current = '';
+  }
+  if (current) parts.push(current);
+  return parts.length ? parts : ['記載はありません。'];
+}
+
+function formatExamFlexDate(value: string): string {
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  if (!match) return value;
+  const date = new Date(value + 'T00:00:00+09:00');
+  const shortDate = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(date);
+  const weekday = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    weekday: 'short',
+  }).format(date);
+  return shortDate + '(' + weekday + ')';
+}
+
+function buildExamScopeSubjectBubble(input: {
+  exam: ExamScopeFlexInput;
+  subject: ExamScopeFlexInput['subjects'][number];
+  index: number;
+  total: number;
+}): Record<string, unknown> {
+  const { exam, subject, index, total } = input;
+  const start = formatExamFlexDate(exam.startDate);
+  const end = formatExamFlexDate(exam.endDate);
+  const sections = subject.sections.slice(0, 24);
+  const sectionContents: Record<string, unknown>[] = [];
+
+  for (const section of sections) {
+    const title = String(section.title || '').trim();
+    const body = String(section.body || '').trim();
+    const note = String(section.note || '').trim();
+    const contents: Record<string, unknown>[] = [];
+
+    if (title) {
+      contents.push({
+        type: 'text',
+        text: title.slice(0, 120),
+        size: 'sm',
+        weight: 'bold',
+        color: '#334155',
+        wrap: true,
+      });
+    }
+    if (body) {
+      for (const part of splitExamFlexText(body)) {
+        contents.push({
+          type: 'text',
+          text: part,
+          size: 'sm',
+          color: '#1E293B',
+          wrap: true,
+        });
+      }
+    }
+    if (note) {
+      contents.push({
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#FFFBEB',
+        cornerRadius: '8px',
+        paddingAll: '10px',
+        margin: 'xs',
+        contents: [
+          { type: 'text', text: '補足・注意', size: 'xs', weight: 'bold', color: '#92400E' },
+          ...splitExamFlexText(note, 1000).map(text => ({
+            type: 'text',
+            text,
+            size: 'xs',
+            color: '#78350F',
+            wrap: true,
+          })),
+        ],
+      });
+    }
+
+    if (!contents.length) continue;
+    sectionContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F8FAFC',
+      cornerRadius: '10px',
+      paddingAll: '12px',
+      spacing: 'sm',
+      contents,
+    });
+  }
+
+  const targetLabel = exam.targetClasses.length
+    ? exam.targetClasses.join('・')
+    : subject.audience || '対象区分未設定';
+
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: NAVY,
+      paddingAll: '18px',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC  /  EXAM GUIDE', color: '#67E8F9', size: 'xs', weight: 'bold' },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          alignItems: 'center',
+          spacing: 'sm',
+          contents: [
+            { type: 'text', text: subject.displaySubject || subject.subject || '科目', color: '#FFFFFF', size: 'xl', weight: 'bold', wrap: true, flex: 1 },
+            { type: 'text', text: String(index + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0'), color: '#A5F3FC', size: 'xs', weight: 'bold', align: 'end' },
+          ],
+        },
+        { type: 'text', text: String(exam.schoolYear) + '年度  2学期期末考査', color: '#CBD5E1', size: 'xs', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      spacing: 'md',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'sm',
+          contents: [
+            {
+              type: 'box',
+              layout: 'vertical',
+              flex: 1,
+              backgroundColor: '#EFF6FF',
+              cornerRadius: '9px',
+              paddingAll: '9px',
+              spacing: 'xs',
+              contents: [
+                { type: 'text', text: '試験期間', size: 'xxs', color: '#64748B', weight: 'bold' },
+                { type: 'text', text: start + '〜' + end, size: 'sm', color: '#1D4ED8', weight: 'bold', wrap: true },
+              ],
+            },
+            {
+              type: 'box',
+              layout: 'vertical',
+              flex: 1,
+              backgroundColor: '#F0FDFA',
+              cornerRadius: '9px',
+              paddingAll: '9px',
+              spacing: 'xs',
+              contents: [
+                { type: 'text', text: '対象', size: 'xxs', color: '#64748B', weight: 'bold' },
+                { type: 'text', text: targetLabel, size: 'sm', color: '#0F766E', weight: 'bold', wrap: true },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'text',
+          text: 'この科目の登録済み範囲',
+          size: 'xs',
+          color: '#64748B',
+          weight: 'bold',
+          margin: 'xs',
+        },
+        ...(sectionContents.length
+          ? sectionContents
+          : [{ type: 'text', text: 'この科目の詳細範囲は未登録です。', size: 'sm', color: '#64748B', wrap: true }]),
+        { type: 'text', text: 'カードを左右にスワイプすると、ほかの科目を確認できます。', size: 'xs', color: '#64748B', wrap: true, margin: 'sm' },
+      ],
+    },
+  };
+}
+
+/** 科目ごとに区切った、横スワイプ式の試験範囲カルーセル。LINEの上限に合わせて12科目ずつ分割する。 */
+export function buildExamScopeFlexMessages(input: ExamScopeFlexInput): FlexMessage[] {
+  const subjects = input.subjects.slice(0, 60);
+  const groups: typeof subjects[] = [];
+  for (let offset = 0; offset < subjects.length; offset += 12) {
+    groups.push(subjects.slice(offset, offset + 12));
+  }
+
+  return groups.map((group, groupIndex) => ({
+    type: 'flex',
+    altText: (
+      'CampusSync｜' + input.schoolYear + '年度2学期期末試験範囲｜' +
+      group.map(subject => subject.displaySubject || subject.subject).join('・') +
+      '｜カードを左右にスワイプして確認できます。'
+    ).slice(0, 400),
+    contents: {
+      type: 'carousel',
+      contents: group.map((subject, index) => buildExamScopeSubjectBubble({
+        exam: input,
+        subject,
+        index: groupIndex * 12 + index,
+        total: subjects.length,
+      })),
+    },
+  }));
+}

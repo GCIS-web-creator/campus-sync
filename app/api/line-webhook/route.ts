@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
-import { buildCampusAiFlexMessage, buildNoticeFlexMessage } from '@/lib/line-flex';
+import { buildCampusAiFlexMessage, buildNoticeFlexMessage, buildExamScopeFlexMessages, type ExamScopeFlexInput } from '@/lib/line-flex';
 import { buildLineGoogleSearchFlexMessage, type LineGoogleSearchResult } from '@/lib/line-google-search-flex';
 import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
@@ -42,6 +42,7 @@ type CampusAiResponse = {
   answer?: unknown;
   error?: unknown;
   plainText?: unknown;
+  examScope?: ExamScopeFlexInput;
   table?: AiTable;
 };
 
@@ -206,6 +207,41 @@ async function replyToLine(
   destinationId: string | null = null,
   deliveryKind = 'campus_ai',
 ): Promise<void> {
+  if (payload.examScope && Array.isArray(payload.examScope.subjects) && payload.examScope.subjects.length) {
+    const flexMessages = applyCampusSyncFlexFooters(buildExamScopeFlexMessages(payload.examScope));
+    const messages = flexMessages.map((message, index) => ({
+      ...(message as Record<string, unknown>),
+      ...(index === 0 ? { quickReply: { items: buildCampusAiQuickReply(question) } } : {}),
+    }));
+    try {
+      const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + channelAccessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ replyToken, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
+      });
+      await recordLineDeliveryResponse(response, {
+        channel: 'reply',
+        destinationType,
+        destinationId,
+        kind: deliveryKind + '_exam_scope_flex',
+        accessToken: channelAccessToken,
+        messages,
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        console.error('LINE exam scope Flex reply API returned HTTP', response.status, detail.slice(0, 500));
+      }
+    } catch (error) {
+      console.error('LINE exam scope Flex reply request failed:', error instanceof Error ? error.name : 'unknown');
+    }
+    return;
+  }
+
   const plainText = typeof payload.plainText === 'string' ? payload.plainText.trim() : '';
   if (plainText) {
     const messages = splitLinePlainText(plainText).map(text => ({ type: 'text' as const, text }));

@@ -196,9 +196,33 @@ export async function POST(req: Request) {
     lines.push('', '※未登録の項目は推測で補わず、登録済みの内容のみ表示しています。');
 
     const plainText = lines.join('\n');
+    const subjects = ranges.map((range) => {
+      const sections = Array.isArray(range.range_sections)
+        ? range.range_sections.filter((section): section is Record<string, unknown> =>
+            typeof section === 'object' && section !== null && !Array.isArray(section))
+          .map((section) => ({
+            title: typeof section.title === 'string' ? section.title : '',
+            body: typeof section.body === 'string' ? section.body : '',
+            note: typeof section.note === 'string' ? section.note : '',
+          }))
+        : [];
+      return {
+        subject: String(range.subject || ''),
+        displaySubject: String(range.display_subject || range.subject || '科目'),
+        audience: String(range.audience || '対象区分未設定'),
+        sections,
+      };
+    });
     return NextResponse.json({
       answer: exam.school_year + '年度2学期期末試験の登録済み範囲を表示します。',
       plainText,
+      examScope: {
+        schoolYear: Number(exam.school_year),
+        startDate: String(exam.start_date),
+        endDate: String(exam.end_date),
+        targetClasses,
+        subjects,
+      },
     });
   }
   if (/(あなたができること|何ができる|何を聞ける|何ができるの|何を手伝える|機能一覧|できること一覧)/.test(question)) {
