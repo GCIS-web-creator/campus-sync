@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
+import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2 } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
@@ -62,8 +63,8 @@ const duration = (seconds: number) => {
 };
 const dateLabel = (value: string) => new Date(value + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
 
-export default function StudentLearningHub({ userId, userClass = '', isDarkMode = false }: { userId: string; userClass?: string; isDarkMode?: boolean }) {
-  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history'>('overview');
+export default function StudentLearningHub({ userId, userEmail = '', userClass = '', isDarkMode = false }: { userId: string; userEmail?: string; userClass?: string; isDarkMode?: boolean }) {
+  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history' | 'planetube'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
@@ -354,11 +355,13 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC LEARNING</p><h1 className={'mt-1 text-2xl font-black ' + (dark ? 'text-white' : 'text-slate-900')}>学習・テスト対策</h1><p className={'mt-1 text-xs ' + muted}>考査の予定、集中時間、勉強の記録をまとめて管理。</p></div><div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-cyan-950"><p className="text-[9px] font-bold">今週の勉強時間</p><p className="text-sm font-black">{duration(weekSeconds)}</p></div></header>
-    <nav className={'grid grid-cols-6 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
-      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
+    <nav className={'grid grid-cols-7 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History},{id:'planetube',label:'Planetube',icon:Globe2}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
+
+    {tab === 'planetube' && <PlanetubeDashboard campusEmail={userEmail} isDarkMode={dark} />}
 
     {tab === 'overview' && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
