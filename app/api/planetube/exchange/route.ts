@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const code = typeof body?.pairingCode === 'string'
     ? body.pairingCode.toUpperCase().replace(/[^A-F0-9]/g, '')
     : '';
-  if (!/^[A-F0-9]{20}$/.test(code) || !isUuid(body?.planetubeUserId)) {
+  if (!body || !/^[A-F0-9]{20}$/.test(code) || !isUuid(body.planetubeUserId)) {
     return planetubeFail('連携コードまたはPlanetubeユーザーIDが正しくありません。', 400);
   }
 
