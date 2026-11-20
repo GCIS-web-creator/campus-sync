@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { createPlanetubeSessionId, postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
@@ -31,6 +32,7 @@ type TimerSnapshot = {
   reflection: string;
   nextAction: string;
   finishKind: 'completed' | 'stopped';
+  planetubeSessionId?: string | null;
 };
 function readTimerSnapshot(userId: string): TimerSnapshot | null {
   if (typeof window === 'undefined') return null;
@@ -94,10 +96,59 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [nextAction, setNextAction] = useState('');
   const [finishKind, setFinishKind] = useState<'completed' | 'stopped'>('completed');
   const [timerReady, setTimerReady] = useState(false);
+  const [planetubeScopes, setPlanetubeScopes] = useState<string[]>([]);
+  const [planetubeScopesReady, setPlanetubeScopesReady] = useState(false);
+  const [planetubeExtensionReady, setPlanetubeExtensionReady] = useState(false);
+  const [planetubeExtensionVersion, setPlanetubeExtensionVersion] = useState('');
+  const [planetubeExtensionRestrictionEnabled, setPlanetubeExtensionRestrictionEnabled] = useState<boolean | null>(null);
+  const [planetubeExtensionLastAck, setPlanetubeExtensionLastAck] = useState('');
+  const [planetubeExtensionError, setPlanetubeExtensionError] = useState('');
+  const planetubeSessionId = useRef<string | null>(null);
+  const planetubeScopesRef = useRef<string[]>([]);
+  const planetubeExtensionHandshake = useRef('');
+  const previousTimerState = useRef<'idle' | 'running' | 'paused'>('idle');
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
   const remainingRef = useRef(1500);
   const setTimerRemaining = (value: number) => { remainingRef.current = value; setRemaining(value); };
+
+  const reportPlanetubeEvent = useCallback(async (
+    eventType: string,
+    sessionId: string | null,
+    details: Record<string, unknown> = {},
+    extensionVersion?: string,
+  ) => {
+    const isHandshakeEvent = eventType === 'extension_ready' || eventType === 'extension_disconnected';
+    const isFocusSyncEvent = ['focus_started', 'focus_paused', 'focus_resumed', 'break_started', 'focus_resumed_from_break', 'session_ended'].includes(eventType);
+    const requiredScope = isFocusSyncEvent ? 'focus:sync' : 'extension:control';
+    if (!isHandshakeEvent && !planetubeScopesRef.current.includes(requiredScope)) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      await fetch('/api/planetube/extension', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventType, timerSessionId: sessionId, details, extensionVersion: extensionVersion || null }),
+        cache: 'no-store',
+      });
+    } catch {
+      // Planetube連携が使えない場合でもCampusSyncの学習タイマーを止めない。
+    }
+  }, []);
+
+  useEffect(() => {
+    planetubeScopesRef.current = planetubeScopes;
+  }, [planetubeScopes]);
+
+  const notifyPlanetubePhase = useCallback((nextPhase: 'focus' | 'break') => {
+    const sessionId = planetubeSessionId.current;
+    if (planetubeScopes.includes('extension:control')) {
+      postPlanetubeCommand('PHASE_CHANGED', { sessionId, phase: nextPhase });
+    }
+    if (nextPhase === 'break') void reportPlanetubeEvent('break_started', sessionId, { phase: 'break' });
+    else void reportPlanetubeEvent('focus_resumed_from_break', sessionId, { phase: 'focus' });
+  }, [planetubeScopes, reportPlanetubeEvent]);
 
   const dark = isDarkMode;
   const panel = 'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
@@ -157,6 +208,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     setNextAction(snapshot.nextAction || '');
     setFinishKind(snapshot.finishKind || 'completed');
     startedAt.current = snapshot.startedAt;
+    planetubeSessionId.current = snapshot.planetubeSessionId || null;
 
     let restoredPhase = snapshot.phase;
     let restoredRemaining = Math.max(0, Math.floor(snapshot.remaining));
@@ -218,9 +270,136 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       reflection,
       nextAction,
       finishKind,
+      planetubeSessionId: planetubeSessionId.current,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
   }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind]);
+
+  useEffect(() => {
+    let alive = true;
+    setPlanetubeScopesReady(false);
+    setPlanetubeScopes([]);
+    planetubeScopesRef.current = [];
+    const loadPlanetubeScopes = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/planetube/link', {
+          headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store' },
+          cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (alive && response.ok) setPlanetubeScopes(payload.connection?.status === 'linked' ? (payload.connection?.approved_scopes || []) : []);
+      } catch {} finally {
+        if (alive) setPlanetubeScopesReady(true);
+      }
+    };
+    void loadPlanetubeScopes();
+    const handleScopeChange = (event: Event) => {
+      const approvedScopes = (event as CustomEvent<{ approvedScopes?: unknown }>).detail?.approvedScopes;
+      if (Array.isArray(approvedScopes)) {
+        setPlanetubeScopes(approvedScopes.filter((scope): scope is string => typeof scope === 'string'));
+      }
+    };
+    window.addEventListener('campussync:planetube-scopes-changed', handleScopeChange);
+    const unsubscribe = subscribePlanetubeExtension((event) => {
+      if (event.type === 'READY') {
+        setPlanetubeExtensionReady(true);
+        setPlanetubeExtensionVersion(event.extensionVersion || '');
+        setPlanetubeExtensionError('');
+        const handshake = 'ready:' + (event.extensionVersion || 'unknown');
+        if (planetubeExtensionHandshake.current !== handshake) {
+          planetubeExtensionHandshake.current = handshake;
+          void reportPlanetubeEvent('extension_ready', planetubeSessionId.current, {}, event.extensionVersion);
+        }
+      } else if (event.type === 'DISCONNECTED') {
+        setPlanetubeExtensionReady(false);
+        setPlanetubeExtensionVersion('');
+        setPlanetubeExtensionRestrictionEnabled(null);
+        if (planetubeExtensionHandshake.current !== 'disconnected') {
+          planetubeExtensionHandshake.current = 'disconnected';
+          void reportPlanetubeEvent('extension_disconnected', planetubeSessionId.current);
+        }
+      } else if (event.type === 'ACK') {
+        setPlanetubeExtensionLastAck(event.command ? `${event.command} の応答を受信` : '拡張機能から応答を受信');
+        setPlanetubeExtensionError('');
+      } else if (event.type === 'ERROR') {
+        const code = event.errorCode || 'unknown_error';
+        setPlanetubeExtensionError(`拡張機能エラー: ${code}`);
+        void reportPlanetubeEvent('extension_error', planetubeSessionId.current, { errorCode: code }, event.extensionVersion);
+      } else if (event.type === 'RESTRICTION_STATUS') {
+        setPlanetubeExtensionReady(true);
+        setPlanetubeExtensionRestrictionEnabled(event.enabled ?? null);
+        void reportPlanetubeEvent('restriction_status', planetubeSessionId.current, { enabled: event.enabled }, event.extensionVersion);
+      }
+    });
+    const refreshOnFocus = () => {
+      void loadPlanetubeScopes();
+      postPlanetubePing();
+    };
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') refreshOnFocus();
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisible);
+    postPlanetubePing();
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
+      window.removeEventListener('campussync:planetube-scopes-changed', handleScopeChange);
+      unsubscribe();
+    };
+  }, [userId, reportPlanetubeEvent]);
+
+  // Timer state transitions are mirrored to the extension only after the student has granted that scope.
+  useEffect(() => {
+    if (!timerReady || !planetubeScopesReady) return;
+    const previous = previousTimerState.current;
+    if (timerState === previous) return;
+    let sessionId = planetubeSessionId.current;
+    if (timerState === 'running') {
+      const canResumeExistingSession = previous === 'paused' && Boolean(sessionId);
+      if (!sessionId) {
+        sessionId = createPlanetubeSessionId();
+        planetubeSessionId.current = sessionId;
+      }
+      const command = canResumeExistingSession ? 'FOCUS_RESUME' : 'FOCUS_START';
+      if (planetubeScopes.includes('extension:control')) {
+        postPlanetubeCommand(command, { sessionId, durationSeconds: Math.max(0, remaining), phase });
+      }
+      void reportPlanetubeEvent(canResumeExistingSession ? 'focus_resumed' : 'focus_started', sessionId, {
+        phase,
+        durationSeconds: Math.max(0, remaining),
+      });
+    } else if (timerState === 'paused' && previous === 'running') {
+      if (planetubeScopes.includes('extension:control')) postPlanetubeCommand('FOCUS_PAUSE', { sessionId });
+      void reportPlanetubeEvent('focus_paused', sessionId, { phase });
+    } else if (timerState === 'idle' && previous !== 'idle' && sessionId) {
+      if (planetubeScopes.includes('extension:control')) {
+        postPlanetubeCommand('SESSION_END', { sessionId, releaseRestrictions: true });
+      }
+      void reportPlanetubeEvent('session_ended', sessionId, { phase });
+      planetubeSessionId.current = null;
+    }
+    previousTimerState.current = timerState;
+  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, planetubeScopes, reportPlanetubeEvent]);
+
+  // 拡張機能がタイマー開始後に接続・再接続した場合も、現在の状態を再同期する。
+  // sessionId を固定キーとして送るため、拡張機能側では同一セッションの再送を冪等に処理できる。
+  useEffect(() => {
+    if (!planetubeExtensionReady || !planetubeScopes.includes('extension:control')) return;
+    const sessionId = planetubeSessionId.current;
+    if (!sessionId) return;
+    const payload = { sessionId, durationSeconds: Math.max(0, remaining), phase, reconnect: true };
+    if (timerState === 'running') {
+      postPlanetubeCommand('FOCUS_START', payload);
+    } else if (timerState === 'paused') {
+      postPlanetubeCommand('FOCUS_START', payload);
+      postPlanetubeCommand('FOCUS_PAUSE', { sessionId, reconnect: true });
+    }
+  }, [planetubeExtensionReady, planetubeScopes, timerState, phase]);
 
   useEffect(() => {
     if (timerState !== 'running') return;
@@ -241,11 +420,11 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   useEffect(() => {
     if (timerState !== 'running' || remaining > 0) return;
     if (phase === 'focus') {
-      setPhase('break'); setTimerRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
+      setPhase('break'); setTimerRemaining(breakMinutes * 60); notifyPlanetubePhase('break'); setMessage('集中時間が終了しました。休憩に切り替わりました。');
     } else {
-      setPhase('focus'); setTimerRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
+      setPhase('focus'); setTimerRemaining(focusMinutes * 60); notifyPlanetubePhase('focus'); setMessage('休憩が終了しました。次の集中セットを始められます。');
     }
-  }, [timerState, remaining, phase, breakMinutes, focusMinutes]);
+  }, [timerState, remaining, phase, breakMinutes, focusMinutes, notifyPlanetubePhase]);
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
@@ -289,7 +468,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
     setError(''); setMessage('');
     if (timerState === 'idle') {
-      startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
+      startedAt.current = new Date().toISOString(); planetubeSessionId.current = createPlanetubeSessionId(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
   };
@@ -427,11 +606,18 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     </div>}
 
     {tab === 'focus' && <div className="space-y-4">
+      <section className={panel + ' flex flex-wrap items-center justify-between gap-3'}>
+        <div className="flex items-center gap-3">
+          <div className={'flex h-10 w-10 items-center justify-center rounded-xl ' + (planetubeExtensionReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}><span className="text-lg">🪐</span></div>
+          <div><p className="text-sm font-black">Planetube連携</p><p className={'mt-1 text-xs ' + muted}>{planetubeExtensionReady ? '拡張機能を検出しました' : '拡張機能は未検出です'}{planetubeExtensionVersion ? ' ・ v' + planetubeExtensionVersion : ''}</p>{planetubeExtensionRestrictionEnabled !== null && <p className={'mt-1 text-[11px] font-bold ' + (planetubeExtensionRestrictionEnabled ? 'text-emerald-600' : muted)}>YouTube制限：{planetubeExtensionRestrictionEnabled ? '有効' : '無効'}</p>}{planetubeExtensionLastAck && <p className={'mt-1 text-[10px] ' + muted}>{planetubeExtensionLastAck}</p>}{planetubeExtensionError && <p role="alert" className="mt-1 text-[10px] font-bold text-rose-600">{planetubeExtensionError}</p>}</div>
+        </div>
+        <a href="/#planetube" className={secondary}>連携設定を開く</a>
+      </section>
       <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
       <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">FOCUS SESSION</p><h2 className="mt-1 text-lg font-black">今日の自習</h2></div><span className={'rounded-full px-3 py-1.5 text-[10px] font-black '+(phase==='focus'?'bg-cyan-100 text-cyan-900':'bg-amber-100 text-amber-900')}>{phase==='focus'?'集中時間':'休憩時間'}</span></div>
         <div className="mb-5 flex flex-col items-center rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 px-4 py-7 text-white"><p className="text-[10px] font-bold tracking-[.2em] text-cyan-200">{phase==='focus'?'FOCUS':'BREAK'}</p><p className="my-2 font-mono text-6xl font-black tabular-nums sm:text-7xl">{timeText}</p><p className="text-xs text-white/70">勉強 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={()=>setTimerState('paused')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={()=>setTimerState('running')} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button><button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button></>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">途中終了</button>}</div>
-          {timerState==='running'&&<button type="button" onClick={()=>{setPhase(phase==='focus'?'break':'focus');setTimerRemaining((phase==='focus'?breakMinutes:focusMinutes)*60)}} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
+          {timerState==='running'&&<button type="button" onClick={()=>{const nextPhase=phase==='focus'?'break':'focus';setPhase(nextPhase);setTimerRemaining((nextPhase==='break'?breakMinutes:focusMinutes)*60);notifyPlanetubePhase(nextPhase)}} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
       </section>

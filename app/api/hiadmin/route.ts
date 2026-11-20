@@ -137,6 +137,8 @@ const EXPLORER_TABLE_INFO: Record<string, { label: string; group: string; descri
   nkn: { label: 'システム記録（NKN）', group: 'システム・認証', description: '古い機能との互換性のために残されている小規模なシステム記録です。' },
   notification_reads: { label: 'お知らせの既読状態', group: 'お知らせ・LINE', description: 'ユーザーがお知らせを読んだ日時を保存します。' },
   notifications: { label: '全校お知らせ', group: 'お知らせ・LINE', description: '生徒用サイトに表示するお知らせ本文・画像・LINE送信状態です。' },
+  planetube_connections: { label: 'Planetubeアカウント連携', group: '外部サービス連携', description: 'Planetubeとの紐付け状態と本人が許可したデータ範囲です。' },
+  planetube_extension_events: { label: 'Planetube拡張機能イベント', group: '外部サービス連携', description: 'タイマー連動と拡張機能の接続状態の監査イベントです。' },
   profiles: { label: '生徒プロフィール', group: '生徒・アカウント', description: '学籍番号・氏名・クラス・学校メール・アカウント連携情報です。個人情報を含みます。' },
   push_reminder_deliveries: { label: 'プッシュ通知の送信記録', group: '通知・端末', description: '課題リマインダーの送信対象・種類・送信日時です。' },
   push_reminder_preferences: { label: '通知の個人設定', group: '通知・端末', description: '通知ON/OFF、通知時刻、対象曜日、通知カテゴリ、サイレント時間です。' },
@@ -166,9 +168,10 @@ const EXPLORER_READ_ONLY = new Set([
   'line_bot_rotation', 'line_bot_rotation_events', 'line_broadcast_history', 'line_delivery_events',
   'line_group_delivery_logs', 'line_train_timetable_sends', 'nkn', 'push_reminder_deliveries',
   'push_subscriptions', 'student_login_handoffs', 'teacher_access_codes', 'teacher_access_sessions',
+  'planetube_connections', 'planetube_extension_events',
 ]);
 const EXPLORER_REDACTED_COLUMNS = new Set([
-  'card_token', 'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash',
+  'card_token', 'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash', 'pairing_code_hash', 'planetube_user_id',
   'subscription', 'endpoint', 'lock_token', 'high_lock_token', 'long_lock_token', 'sync_lock_token',
   'handoff_group_chat_id',
 ]);
@@ -306,6 +309,47 @@ export async function GET(request: Request) {
       return NextResponse.json({ summary: { profiles, todos, assignments, classMessages, schoolMessages, lostItems } }, {
         headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' },
       });
+    }
+
+    if (view === 'planetube') {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [
+        totalConnections, linkedConnections, pendingConnections, revokedConnections,
+        activeExtensions, recentEventCount, extensionErrors, restrictionEvents, connectionsResult, eventsResult,
+      ] = await Promise.all([
+        auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }),
+        auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).eq('status', 'linked'),
+        auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).eq('status', 'revoked'),
+        auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).gte('last_extension_seen_at', since),
+        auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).gte('created_at', since),
+        auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).eq('event_type', 'extension_error').gte('created_at', since),
+        auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).eq('event_type', 'restriction_status').gte('created_at', since),
+        auth.admin.from('planetube_connections')
+          .select('id,campus_user_id,status,approved_scopes,planet_level,planet_growth_points,planet_synced_at,last_extension_seen_at,updated_at')
+          .order('updated_at', { ascending: false }).limit(50),
+        auth.admin.from('planetube_extension_events')
+          .select('id,campus_user_id,event_type,extension_version,details,created_at')
+          .order('created_at', { ascending: false }).limit(50),
+      ]);
+      const firstError = totalConnections.error || linkedConnections.error || pendingConnections.error ||
+        revokedConnections.error || activeExtensions.error || recentEventCount.error || extensionErrors.error ||
+        restrictionEvents.error || connectionsResult.error || eventsResult.error;
+      if (firstError) throw new Error('Planetube連携監視データを取得できませんでした。');
+      return NextResponse.json({
+        summary: {
+          total: totalConnections.count || 0,
+          linked: linkedConnections.count || 0,
+          pending: pendingConnections.count || 0,
+          revoked: revokedConnections.count || 0,
+          extensionsSeen24h: activeExtensions.count || 0,
+          events24h: recentEventCount.count || 0,
+          errors24h: extensionErrors.count || 0,
+          restrictionEvents24h: restrictionEvents.count || 0,
+        },
+        connections: connectionsResult.data || [],
+        events: eventsResult.data || [],
+      }, { headers: { 'Cache-Control': 'no-store, private', 'Vary': 'Authorization' } });
     }
 
     if (view === 'users') {
