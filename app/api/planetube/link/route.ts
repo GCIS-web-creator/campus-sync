@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SAFE_CONNECTION_COLUMNS =
-  'id,status,planetube_user_id,approved_scopes,planet_level,planet_growth_points,planet_synced_at,last_extension_seen_at,created_at,updated_at,linked_at,revoked_at';
+  'id,status,approved_scopes,planet_level,planet_growth_points,planet_synced_at,last_extension_seen_at,created_at,updated_at,linked_at,revoked_at';
 
 export async function GET(request: Request) {
   const auth = await authorizePlanetubeUser(request);
