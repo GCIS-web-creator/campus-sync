@@ -105,6 +105,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [planetubeExtensionError, setPlanetubeExtensionError] = useState('');
   const planetubeSessionId = useRef<string | null>(null);
   const planetubeScopesRef = useRef<string[]>([]);
+  const planetubeExtensionHandshake = useRef('');
   const previousTimerState = useRef<'idle' | 'running' | 'paused'>('idle');
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
@@ -276,6 +277,9 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
 
   useEffect(() => {
     let alive = true;
+    setPlanetubeScopesReady(false);
+    setPlanetubeScopes([]);
+    planetubeScopesRef.current = [];
     const loadPlanetubeScopes = async () => {
       try {
         const { data } = await supabase.auth.getSession();
@@ -304,12 +308,19 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
         setPlanetubeExtensionReady(true);
         setPlanetubeExtensionVersion(event.extensionVersion || '');
         setPlanetubeExtensionError('');
-        void reportPlanetubeEvent('extension_ready', planetubeSessionId.current, {}, event.extensionVersion);
+        const handshake = 'ready:' + (event.extensionVersion || 'unknown');
+        if (planetubeExtensionHandshake.current !== handshake) {
+          planetubeExtensionHandshake.current = handshake;
+          void reportPlanetubeEvent('extension_ready', planetubeSessionId.current, {}, event.extensionVersion);
+        }
       } else if (event.type === 'DISCONNECTED') {
         setPlanetubeExtensionReady(false);
         setPlanetubeExtensionVersion('');
         setPlanetubeExtensionRestrictionEnabled(null);
-        void reportPlanetubeEvent('extension_disconnected', planetubeSessionId.current);
+        if (planetubeExtensionHandshake.current !== 'disconnected') {
+          planetubeExtensionHandshake.current = 'disconnected';
+          void reportPlanetubeEvent('extension_disconnected', planetubeSessionId.current);
+        }
       } else if (event.type === 'ACK') {
         setPlanetubeExtensionLastAck(event.command ? `${event.command} の応答を受信` : '拡張機能から応答を受信');
         setPlanetubeExtensionError('');
@@ -323,9 +334,20 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
         void reportPlanetubeEvent('restriction_status', planetubeSessionId.current, { enabled: event.enabled }, event.extensionVersion);
       }
     });
+    const refreshOnFocus = () => {
+      void loadPlanetubeScopes();
+      postPlanetubePing();
+    };
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') refreshOnFocus();
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisible);
     postPlanetubePing();
     return () => {
       alive = false;
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
       window.removeEventListener('campussync:planetube-scopes-changed', handleScopeChange);
       unsubscribe();
     };
