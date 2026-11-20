@@ -104,6 +104,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [planetubeExtensionLastAck, setPlanetubeExtensionLastAck] = useState('');
   const [planetubeExtensionError, setPlanetubeExtensionError] = useState('');
   const planetubeSessionId = useRef<string | null>(null);
+  const planetubeScopesRef = useRef<string[]>([]);
   const previousTimerState = useRef<'idle' | 'running' | 'paused'>('idle');
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
@@ -119,7 +120,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     const isHandshakeEvent = eventType === 'extension_ready' || eventType === 'extension_disconnected';
     const isFocusSyncEvent = ['focus_started', 'focus_paused', 'focus_resumed', 'break_started', 'focus_resumed_from_break', 'session_ended'].includes(eventType);
     const requiredScope = isFocusSyncEvent ? 'focus:sync' : 'extension:control';
-    if (!isHandshakeEvent && !planetubeScopes.includes(requiredScope)) return;
+    if (!isHandshakeEvent && !planetubeScopesRef.current.includes(requiredScope)) return;
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
@@ -133,6 +134,10 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     } catch {
       // Planetube連携が使えない場合でもCampusSyncの学習タイマーを止めない。
     }
+  }, []);
+
+  useEffect(() => {
+    planetubeScopesRef.current = planetubeScopes;
   }, [planetubeScopes]);
 
   const notifyPlanetubePhase = useCallback((nextPhase: 'focus' | 'break') => {
