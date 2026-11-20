@@ -9,6 +9,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
+import PlanetubeIntegration from '@/components/PlanetubeIntegration';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
@@ -24,7 +25,7 @@ import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-uti
 import { CLASS_TIMETABLE_DATA, type ClassTimetableData, type ClassTimetableDayKey, type ClassTimetableGroup } from '@/lib/class-timetable';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
-  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator, FolderOpen,
+  Home, CheckCircle, Clock, Monitor, Wind, MessageCircle, Calculator, FolderOpen, Globe2,
   ThermometerSun, Info, Users, Check, X,
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
@@ -449,6 +450,7 @@ type StudentNavigationGroup = {
 const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'tools'] as const;
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
+  planetube: 'learning',
   materials: 'learning',
   timetable: 'learning',
   'school-schedule': 'learning',
@@ -1026,6 +1028,7 @@ export default function CampusSyncApp() {
       notices: { tab: 'notifications' },
       notes: { tab: 'notes' },
       study: { tab: 'study' },
+      planetube: { tab: 'planetube' },
       card: { tab: 'student-card' },
       'student-card': { tab: 'student-card' },
       calculator: { tab: 'calculator' },
@@ -1067,6 +1070,7 @@ export default function CampusSyncApp() {
       ai: 'ai',
       notes: 'notes',
       study: 'study',
+      planetube: 'planetube',
       'student-card': 'student-card',
       calculator: 'calculator',
       bus: 'transit',
@@ -4492,6 +4496,11 @@ Supabaseの設定を確認してください。
           ? <StudentLearningHub userId={String(authUser.id)} userClass={userClass} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習機能はログイン後に利用できます</h2></div>;
 
+      case 'planetube':
+        return authUser?.id && !isGuestMode
+          ? <PlanetubeIntegration isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Globe2 size={30} className="mx-auto text-violet-600" /><h2 className="mt-3 font-black text-slate-900">Planetube連携はログイン後に利用できます</h2></div>;
+
       case 'student-card':
         return authUser?.id && !isGuestMode
           ? <DigitalStudentCard studentName={studentName} studentId={studentId} userClass={userClass} isDarkMode={isDarkMode} onOpen={() => { void handleActivateStudentCard(); }} />
@@ -6159,6 +6168,10 @@ Supabaseの設定を確認してください。
           key: 'materials', label: 'プリント・資料室', icon: <FolderOpen size={17} />,
           isActive: activeTab === 'materials', keywords: ['教材', '配布資料', 'プリント'],
           onSelect: () => setActiveTab('materials'),
+        }, {
+          key: 'planetube', label: 'Planetube連携', icon: <Globe2 size={17} />,
+          isActive: activeTab === 'planetube', keywords: ['惑星', 'YouTube制限', '集中タイマー', '拡張機能'],
+          onSelect: () => setActiveTab('planetube'),
         }] : []),
       ],
     },
