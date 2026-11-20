@@ -64,12 +64,22 @@ export function subscribePlanetubeExtension(
     if (!data || data.source !== EXTENSION_SOURCE || data.protocol !== PROTOCOL_VERSION) return;
     const allowed = ['READY', 'DISCONNECTED', 'ACK', 'ERROR', 'RESTRICTION_STATUS'];
     if (typeof data.type !== 'string' || !allowed.includes(data.type)) return;
+    const extensionVersion = typeof data.extensionVersion === 'string' && /^[A-Za-z0-9._+-]{1,32}$/.test(data.extensionVersion)
+      ? data.extensionVersion
+      : undefined;
+    const allowedCommands = ['FOCUS_START', 'FOCUS_PAUSE', 'FOCUS_RESUME', 'PHASE_CHANGED', 'SESSION_END', 'PING'];
+    const command = typeof data.command === 'string' && allowedCommands.includes(data.command)
+      ? data.command
+      : undefined;
+    const errorCode = typeof data.errorCode === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(data.errorCode)
+      ? data.errorCode
+      : undefined;
     callback({
       type: data.type as PlanetubeExtensionMessage['type'],
-      extensionVersion: typeof data.extensionVersion === 'string' ? data.extensionVersion.slice(0, 32) : undefined,
-      command: typeof data.command === 'string' ? data.command.slice(0, 40) : undefined,
+      extensionVersion,
+      command,
       enabled: typeof data.enabled === 'boolean' ? data.enabled : undefined,
-      errorCode: typeof data.errorCode === 'string' ? data.errorCode.slice(0, 64) : undefined,
+      errorCode,
     });
   };
   window.addEventListener('message', handler);
