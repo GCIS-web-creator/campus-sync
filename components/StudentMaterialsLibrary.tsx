@@ -225,7 +225,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500"><Folder size={23} /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-sm font-black">{folder.name}</span>
-                      <span class={'block mt-1 text-[10px] ' + muted}>フォルダーを開く</span>
+                      <span className={'block mt-1 text-[10px] ' + muted}>フォルダーを開く</span>
                     </span>
                     <ChevronRight size={17} className={muted} />
                   </button>
