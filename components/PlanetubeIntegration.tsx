@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, Globe2, Link2, LockKeyhole, Plug, RefreshCw, ShieldCheck, Unlink, Youtube } from 'lucide-react';
+import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, Globe2, Link2, LockKeyhole, Plug, PlayCircle, RefreshCw, ShieldCheck, Unlink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
 
@@ -255,7 +255,7 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
         </div>
         <button type="button" className={secondary + ' mt-3'} onClick={pingExtension}><RefreshCw size={15}/>拡張機能を再確認</button>
         <div className={'mt-4 rounded-xl border p-3 ' + (dark ? 'border-slate-700' : 'border-slate-200')}>
-          <div className="flex items-center gap-2"><Youtube size={18} className="text-red-500"/><p className="text-sm font-black">ポモドーロ連動の動作予定</p></div>
+          <div className="flex items-center gap-2"><PlayCircle size={18} className="text-red-500"/><p className="text-sm font-black">ポモドーロ連動の動作予定</p></div>
           <ol className={'mt-2 space-y-1.5 pl-5 text-xs leading-5 ' + muted}>
             <li>CampusSyncの集中タイマーを開始</li>
             <li>拡張機能へ制限開始コマンドを通知</li>
