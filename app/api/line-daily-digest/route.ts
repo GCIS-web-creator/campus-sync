@@ -66,7 +66,7 @@ async function fetchDigestWeatherForecast(
           cache_key: 'kodaira-5day-v1',
           forecast: freshForecast,
           fetched_at: new Date().toISOString(),
-        }, { onConflict: 'cache_key' });
+        } as never, { onConflict: 'cache_key' });
 
       if (cacheWriteError) {
         console.error('日次まとめ：天気予報キャッシュの更新に失敗:', cacheWriteError.message);
