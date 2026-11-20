@@ -7,7 +7,9 @@ const CLASS_OPTIONS = Array.from({length:24},(_,index)=>`${Math.floor(index/8)+1
 type Subject = typeof SUBJECTS[number];
 type Draft = { subject: Subject; exam_date: string };
 type ExamSubject = Draft & { id: string; sort_order: number };
-type Exam = { id:string; school_year:number; term:number; exam_type:string; start_date:string; end_date:string; priority?: 'normal'|'important'|'urgent'; target_classes?: string[] | null; subjects:ExamSubject[] };
+type ScopeSection = { section_id: string; kind: 'range' | 'notice'; title: string; body: string; note: string };
+type ExamRange = { id: string; exam_id: string; subject: string; display_subject: string; audience: string; range_sections: ScopeSection[]; sort_order: number };
+type Exam = { id:string; school_year:number; term:number; exam_type:string; start_date:string; end_date:string; priority?: 'normal'|'important'|'urgent'; target_classes?: string[] | null; subjects:ExamSubject[]; ranges?:ExamRange[] };
 
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500';
 const secondaryClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50';
@@ -37,6 +39,11 @@ export default function ExamScheduleAdmin() {
   const [editingEndDate,setEditingEndDate]=useState('');
   const [editingPriority,setEditingPriority]=useState<'normal'|'important'|'urgent'>('normal');
   const [editingReason,setEditingReason]=useState('');
+  const [editingScopeKey,setEditingScopeKey]=useState('');
+  const [scopeAudience,setScopeAudience]=useState<'2年理系'|'全生徒'>('2年理系');
+  const [scopeDisplaySubject,setScopeDisplaySubject]=useState('');
+  const [scopeSections,setScopeSections]=useState<ScopeSection[]>([]);
+  const [scopeSaving,setScopeSaving]=useState(false);
   const [loading,setLoading]=useState(false);
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState('');
@@ -128,6 +135,47 @@ export default function ExamScheduleAdmin() {
     }catch(error){setMessage(error instanceof Error?error.message:'削除できませんでした。');}
   };
 
+  const scopeKey=(examId:string,subjectId:string)=>examId+'::'+subjectId;
+  const normalizeScopeSections=(sections:ScopeSection[]|undefined)=> (sections||[]).map(section=>({
+    section_id:section.section_id||crypto.randomUUID(),
+    kind:section.kind==='notice'?'notice' as const:'range' as const,
+    title:section.title||'',
+    body:section.body||'',
+    note:section.note||'',
+  }));
+  const startScopeEdit=(exam:Exam,subject:ExamSubject)=>{
+    const existing=(exam.ranges||[]).find(row=>row.subject===subject.subject&&row.audience==='2年理系');
+    setEditingScopeKey(scopeKey(exam.id,subject.id));
+    setScopeAudience((existing?.audience as '2年理系'|'全生徒')||'2年理系');
+    setScopeDisplaySubject(existing?.display_subject||(subject.subject==='数C'?'数学C':subject.subject));
+    setScopeSections(normalizeScopeSections(existing?.range_sections));
+    setMessage('');
+  };
+  const changeScopeAudience=(exam:Exam,subject:ExamSubject,audience:'2年理系'|'全生徒')=>{
+    setScopeAudience(audience);
+    const existing=(exam.ranges||[]).find(row=>row.subject===subject.subject&&row.audience===audience);
+    setScopeDisplaySubject(existing?.display_subject||(subject.subject==='数C'?'数学C':subject.subject));
+    setScopeSections(normalizeScopeSections(existing?.range_sections));
+  };
+  const addScopeSection=()=>setScopeSections(rows=>[...rows,{section_id:crypto.randomUUID(),kind:'range',title:'',body:'',note:''}]);
+  const updateScopeSection=(index:number,changes:Partial<ScopeSection>)=>setScopeSections(rows=>rows.map((row,i)=>i===index?{...row,...changes}:row));
+  const saveScope=async(exam:Exam,subject:ExamSubject)=>{
+    setScopeSaving(true);setMessage('');
+    try{
+      const response=await fetch('/api/admin/exams/ranges',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({exam_id:exam.id,subject:subject.subject,display_subject:scopeDisplaySubject,audience:scopeAudience,range_sections:scopeSections}),
+      });
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok||!result?.success)throw new Error(result?.message||'試験範囲を保存できませんでした。');
+      setMessage(subject.subject+'の範囲・お知らせを保存しました。');
+      setEditingScopeKey('');
+      await load();
+    }catch(error){setMessage(error instanceof Error?error.message:'試験範囲を保存できませんでした。');}
+    finally{setScopeSaving(false);}
+  };
+
   return <div className="max-w-5xl space-y-6">
     <header><h2 className="flex items-center gap-2 text-2xl font-black"><CalendarDays className="text-blue-400"/>考査日程管理</h2><p className="mt-2 text-sm text-slate-400">対象クラスを指定できます。クラス未選択の考査は全生徒に表示されます。生徒側から考査予定を追加・変更することはできません。</p></header>
     <form onSubmit={save} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
@@ -175,6 +223,39 @@ export default function ExamScheduleAdmin() {
         <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-300">{exam.school_year}年度・{exam.term}学期</p><h4 className="text-lg font-black">{exam.exam_type}</h4><p className="mt-1 text-xs text-slate-400">{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p><span className="mt-2 mr-1 inline-flex rounded-full bg-cyan-950 px-2 py-1 text-[10px] font-bold text-cyan-200">{exam.target_classes?.length ? '対象：'+exam.target_classes.map(cls=>cls+'組').join('・') : '対象：全生徒'}</span><span className={'mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold '+((exam.priority||'normal')==='urgent'?'bg-rose-950 text-rose-200':(exam.priority||'normal')==='important'?'bg-amber-950 text-amber-200':'bg-slate-800 text-slate-300')}>{(exam.priority||'normal')==='urgent'?'緊急':(exam.priority||'normal')==='important'?'重要':'通常'}</span></div><button type="button" onClick={()=>void remove(exam.id)} className="inline-flex items-center gap-1 rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300"><Trash2 size={14}/>削除</button></div>
         <div className="mt-3 space-y-2">{exam.subjects.length?Array.from(new Set(exam.subjects.map(x=>x.exam_date))).sort().map(date=><div key={date}><p className="mb-1 text-xs font-bold text-slate-400">{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{exam.subjects.filter(x=>x.exam_date===date).sort((a,b)=>a.sort_order-b.sort_order).map(x=><span key={x.id} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200">{x.sort_order} ・ {x.subject}</span>)}</div></div>):<p className="rounded-lg border border-dashed border-amber-800 bg-amber-950/30 p-3 text-xs font-bold text-amber-200">教科・日ごとの日程は未定です。考査期間のみ登録されています。</p>}</div>
         <div className="mt-3 flex flex-wrap justify-end"><button type="button" onClick={()=>editingExamId===exam.id?setEditingExamId(''):beginEdit(exam)} className={secondaryClass}>{editingExamId===exam.id?'編集を閉じる':'教科・日程を設定'}</button></div>
+        {exam.subjects.length>0&&<section className="mt-4 space-y-2 rounded-xl border border-emerald-900/60 bg-slate-950/70 p-3">
+          <div><h5 className="text-xs font-black text-emerald-200">教科別の出題範囲・お知らせ</h5><p className="mt-1 text-[10px] text-slate-400">各項目を「出題範囲」または「お知らせ」に分類します。お知らせは生徒側の履修チェック対象外です。</p></div>
+          {exam.subjects.slice().sort((a,b)=>a.exam_date.localeCompare(b.exam_date)||a.sort_order-b.sort_order).map(subject=>{
+            const current=(exam.ranges||[]).filter(row=>row.subject===subject.subject);
+            const rangeCount=current.reduce((sum,row)=>sum+(row.range_sections||[]).filter(section=>section.kind!=='notice').length,0);
+            const noticeCount=current.reduce((sum,row)=>sum+(row.range_sections||[]).filter(section=>section.kind==='notice').length,0);
+            const open=editingScopeKey===scopeKey(exam.id,subject.id);
+            return <div key={subject.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><p className="text-xs font-black text-slate-100">{subject.subject}</p><p className="mt-1 text-[10px] text-slate-400">出題範囲 {rangeCount}件 ・ お知らせ {noticeCount}件</p></div>
+                <button type="button" onClick={()=>open?setEditingScopeKey(''):startScopeEdit(exam,subject)} className={secondaryClass}>{open?'編集を閉じる':'範囲・お知らせを編集'}</button>
+              </div>
+              {open&&<div className="mt-3 space-y-3 border-t border-slate-800 pt-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="space-y-1 text-[11px] font-bold text-slate-300">表示する教科名<input className={inputClass} maxLength={80} value={scopeDisplaySubject} onChange={e=>setScopeDisplaySubject(e.target.value)}/></label>
+                  <label className="space-y-1 text-[11px] font-bold text-slate-300">対象<select className={inputClass} value={scopeAudience} onChange={e=>changeScopeAudience(exam,subject,e.target.value as '2年理系'|'全生徒')}><option value="2年理系">2年理系</option><option value="全生徒">全生徒</option></select></label>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><h6 className="text-xs font-black text-slate-200">項目一覧</h6><button type="button" onClick={addScopeSection} className={secondaryClass}><Plus size={13}/>項目を追加</button></div>
+                {scopeSections.map((section,index)=><article key={section.section_id} className="space-y-2 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex-1 space-y-1 text-[11px] font-bold text-slate-300">分類<select className={inputClass} value={section.kind} onChange={e=>updateScopeSection(index,{kind:e.target.value as 'range'|'notice'})}><option value="range">出題範囲（履修チェック対象）</option><option value="notice">お知らせ（履修チェック対象外）</option></select></label>
+                    <button type="button" onClick={()=>setScopeSections(rows=>rows.filter((_,i)=>i!==index))} className="mt-4 rounded-lg border border-rose-900 px-3 py-2 text-xs font-bold text-rose-300"><Trash2 size={13}/>削除</button>
+                  </div>
+                  <label className="block space-y-1 text-[11px] font-bold text-slate-300">項目名<input className={inputClass} maxLength={200} value={section.title} onChange={e=>updateScopeSection(index,{title:e.target.value})} placeholder="例：教科書 P20〜35 / 再テストのお知らせ"/></label>
+                  <label className="block space-y-1 text-[11px] font-bold text-slate-300">内容<textarea className={inputClass} rows={3} maxLength={5000} value={section.body} onChange={e=>updateScopeSection(index,{body:e.target.value})} placeholder="範囲やお知らせの内容を入力"/></label>
+                  <label className="block space-y-1 text-[11px] font-bold text-slate-300">補足（任意）<textarea className={inputClass} rows={2} maxLength={1000} value={section.note} onChange={e=>updateScopeSection(index,{note:e.target.value})} placeholder="除外範囲・注意事項など"/></label>
+                </article>)}
+                {!scopeSections.length&&<p className="rounded-lg border border-dashed border-slate-700 p-3 text-xs text-slate-500">項目はまだありません。「項目を追加」から登録できます。</p>}
+                <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={()=>setEditingScopeKey('')} className={secondaryClass}>キャンセル</button><button type="button" onClick={()=>void saveScope(exam,subject)} disabled={scopeSaving} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><Save size={13}/>{scopeSaving?'保存中…':'範囲・お知らせを保存'}</button></div>
+              </div>}
+            </div>;
+          })}
+        </section>}
         {editingExamId===exam.id&&<form onSubmit={event=>void saveSchedule(event,exam)} className="mt-3 space-y-3 rounded-xl border border-cyan-900 bg-slate-950 p-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="space-y-1 text-xs font-bold text-slate-300">変更後の開始日<input className={inputClass} type="date" value={editingStartDate} onChange={e=>setEditingStartDate(e.target.value)} required/></label>
