@@ -6,7 +6,6 @@ export const PLANETUBE_ALLOWED_SCOPES = [
   'planet:read',
   'focus:sync',
   'extension:control',
-  'contribution:sync',
 ] as const;
 
 export type PlanetubeScope = (typeof PLANETUBE_ALLOWED_SCOPES)[number];
