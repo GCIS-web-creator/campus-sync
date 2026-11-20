@@ -333,14 +333,6 @@ function normalizeThemeColorInput(input: string): string | null {
 
 // --- 📋 初期モックデータ群の超拡充 ---
 
-const INITIAL_TODOS = [
-  { id: '1', title: '数学演習プリント P20-21', source: '紙プリント', type: 'paper', due: '本日中', color: 'bg-red-100 text-red-700', icon: FileText, details: '授業で配布されたプリントのP20〜21です。途中式も必ず書くこと。明日の朝のSHRで回収します。', completed: false, due_at: null },
-  { id: '2', title: '英語エッセイ ドラフト提出', source: 'Classroom', type: 'classroom', due: '明日まで', color: 'bg-orange-100 text-orange-700', icon: Monitor, details: 'テーマ「My Future Goal」についてのドラフト（下書き）をGoogle Docsで作成し、Classroomの課題から提出してください。最低300語。', completed: false, due_at: null },
-  { id: '3', title: '文化祭 参加希望アンケート', source: '生徒会', type: 'other', due: '金曜まで', color: 'bg-blue-100 text-blue-700', icon: Info, details: '文化祭の有志発表（バンド、ダンス等）に参加を希望する団体は、代表者がこのアンケートに回答してください。', completed: false, due_at: null },
-  { id: '4', title: '現代文 短歌創作課題', source: '授業内指示', type: 'paper', due: '来週月曜', color: 'bg-purple-100 text-purple-700', icon: FileText, details: 'テーマは「青春」または「日常の発見」。原稿用紙1枚に短歌3首とそれぞれの解説文を記述。', completed: false, due_at: null },
-  { id: '5', title: '物理基礎 実験レポート', source: 'Classroom', type: 'classroom', due: '金曜まで', color: 'bg-amber-100 text-amber-700', icon: Monitor, details: '先週行った「自由落下運動」の実験結果をスプレッドシートにまとめ、グラフを添付して提出。', completed: false, due_at: null },
-];
-
 const getTodoPresentation = (type: string) => {
   switch (type) {
     case 'paper':
@@ -2860,47 +2852,7 @@ useEffect(() => {
       return;
     }
 
-    if (todoRows && todoRows.length > 0) {
-      setTodos(todoRows.map(row => ({
-        id: row.id,
-        title: row.title,
-        source: row.source,
-        type: row.type,
-        due: row.due,
-        due_at: row.due_at || null,
-        details: row.details,
-        completed: row.completed,
-        ...getTodoPresentation(row.type),
-      })));
-      return;
-    }
-
-    // 新しい生徒には現在のデモ課題を個人用として登録する。
-    const initialRows = INITIAL_TODOS.map(todo => ({
-      student_id: currentStudentId,
-      title: todo.title,
-      source: todo.source,
-      type: todo.type,
-      due: todo.due,
-      due_at: todo.due_at || null,
-      details: todo.details,
-      completed: false,
-    }));
-
-    const { data: createdTodos, error: createTodoError } = await supabase
-      .from('todos')
-      .insert(initialRows)
-      .select();
-
-    if (cancelled) return;
-
-    if (createTodoError) {
-      console.error('初期課題の登録に失敗:', createTodoError);
-      setTodos([]);
-      return;
-    }
-
-    setTodos((createdTodos || []).map(row => ({
+    setTodos((todoRows || []).map(row => ({
       id: row.id,
       title: row.title,
       source: row.source,
