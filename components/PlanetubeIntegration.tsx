@@ -37,6 +37,9 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
   const [pairingExpiresAt, setPairingExpiresAt] = useState('');
   const [extensionStatus, setExtensionStatus] = useState<'checking' | 'ready' | 'missing' | 'disconnected'>('checking');
   const [extensionVersion, setExtensionVersion] = useState('');
+  const [restrictionEnabled, setRestrictionEnabled] = useState<boolean | null>(null);
+  const [extensionResponse, setExtensionResponse] = useState('');
+  const [extensionError, setExtensionError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -87,12 +90,16 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
 
   useEffect(() => { void load(); }, [load]);
 
-  const sendExtensionHandshakeEvent = useCallback(async (eventType: 'extension_ready' | 'extension_disconnected', version?: string) => {
+  const sendExtensionEvent = useCallback(async (
+    eventType: 'extension_ready' | 'extension_disconnected' | 'extension_error' | 'restriction_status',
+    version?: string,
+    details: Record<string, unknown> = {},
+  ) => {
     try {
       await requestApi('/api/planetube/extension', 'POST', {
         eventType,
         extensionVersion: version || null,
-        details: {},
+        details,
       });
     } catch {
       // 拡張機能が未連携・未許可の状態でも、ページ自体の操作を妨げない。
@@ -112,15 +119,28 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
       if (event.type === 'READY') {
         setExtensionStatus('ready');
         setExtensionVersion(event.extensionVersion || '');
-        void sendExtensionHandshakeEvent('extension_ready', event.extensionVersion);
+        setExtensionError('');
+        void sendExtensionEvent('extension_ready', event.extensionVersion);
       } else if (event.type === 'DISCONNECTED') {
         setExtensionStatus('disconnected');
-        void sendExtensionHandshakeEvent('extension_disconnected');
+        setRestrictionEnabled(null);
+        void sendExtensionEvent('extension_disconnected');
+      } else if (event.type === 'ACK') {
+        setExtensionResponse(event.command ? `${event.command} の応答を受信しました。` : '拡張機能から応答を受信しました。');
+        setExtensionError('');
+      } else if (event.type === 'ERROR') {
+        const code = event.errorCode || 'unknown_error';
+        setExtensionError(`拡張機能エラー：${code}`);
+        void sendExtensionEvent('extension_error', event.extensionVersion, { errorCode: code });
+      } else if (event.type === 'RESTRICTION_STATUS') {
+        setExtensionStatus('ready');
+        setRestrictionEnabled(event.enabled ?? null);
+        void sendExtensionEvent('restriction_status', event.extensionVersion, { enabled: event.enabled });
       }
     });
     pingExtension();
     return unsubscribe;
-  }, [pingExtension, sendExtensionHandshakeEvent]);
+  }, [pingExtension, sendExtensionEvent]);
 
   const issueCode = async () => {
     setSaving(true); setError(''); setMessage(''); setPairingCode('');
@@ -257,11 +277,14 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
             <p className="font-black">{extensionStatus === 'ready' ? 'Planetube拡張機能を検出' : extensionStatus === 'checking' ? '拡張機能を確認中' : '拡張機能を検出できません'}</p>
             <p className={'mt-1 text-xs ' + muted}>{extensionStatus === 'ready' ? 'ブラウザ拡張機能とのメッセージ接続ができています。' : '拡張機能のID・配布URLが届いたら接続テストを行います。'}</p>
             {extensionVersion && <p className={'mt-1 text-[10px] ' + muted}>バージョン {extensionVersion}</p>}
+            {restrictionEnabled !== null && <p className={'mt-1 text-xs font-bold ' + (restrictionEnabled ? 'text-emerald-600' : muted)}>YouTube制限：{restrictionEnabled ? '有効' : '無効'}</p>}
+            {extensionResponse && <p className={'mt-1 text-[10px] ' + muted}>{extensionResponse}</p>}
+            {extensionError && <p role="alert" className="mt-1 text-xs font-bold text-rose-600">{extensionError}</p>}
           </div>
         </div>
         <button type="button" className={secondary + ' mt-3'} onClick={pingExtension}><RefreshCw size={15}/>拡張機能を再確認</button>
         <div className={'mt-4 rounded-xl border p-3 ' + (dark ? 'border-slate-700' : 'border-slate-200')}>
-          <div className="flex items-center gap-2"><PlayCircle size={18} className="text-red-500"/><p className="text-sm font-black">ポモドーロ連動の動作予定</p></div>
+          <div className="flex items-center gap-2"><PlayCircle size={18} className="text-red-500"/><p className="text-sm font-black">ポモドーロ連動の状態確認</p></div>
           <ol className={'mt-2 space-y-1.5 pl-5 text-xs leading-5 ' + muted}>
             <li>CampusSyncの集中タイマーを開始</li>
             <li>拡張機能へ制限開始コマンドを通知</li>
