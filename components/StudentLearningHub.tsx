@@ -579,6 +579,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           })}
         </div>}
       </section>
+    </div>}
 
     {tab === 'mini-tests' && <div className="space-y-4">
       <section className={panel}>
