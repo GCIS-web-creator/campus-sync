@@ -41,6 +41,7 @@ type AiTable = {
 type CampusAiResponse = {
   answer?: unknown;
   error?: unknown;
+  plainText?: unknown;
   table?: AiTable;
 };
 
@@ -72,6 +73,30 @@ async function getCampusAiAnswer(question: string): Promise<CampusAiResponse> {
     console.error('CampusSync AI request failed:', error instanceof Error ? error.name : 'unknown error');
     return { answer: 'CampusSync AIに接続できませんでした。しばらくしてからもう一度お試しください。' };
   }
+}
+
+
+function splitLinePlainText(value: string, maxLength = 4500): string[] {
+  const chunks: string[] = [];
+  let current = '';
+  for (const line of value.split('\n')) {
+    const candidate = current ? current + '\n' + line : line;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+    if (current) chunks.push(current);
+    if (line.length <= maxLength) {
+      current = line;
+    } else {
+      for (let offset = 0; offset < line.length; offset += maxLength) {
+        chunks.push(line.slice(offset, offset + maxLength));
+      }
+      current = '';
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 5);
 }
 
 
@@ -181,6 +206,33 @@ async function replyToLine(
   destinationId: string | null = null,
   deliveryKind = 'campus_ai',
 ): Promise<void> {
+  const plainText = typeof payload.plainText === 'string' ? payload.plainText.trim() : '';
+  if (plainText) {
+    const messages = splitLinePlainText(plainText).map(text => ({ type: 'text' as const, text }));
+    try {
+      const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + channelAccessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ replyToken, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
+      });
+      await recordLineDeliveryResponse(response, {
+        channel: 'reply', destinationType, destinationId, kind: deliveryKind,
+        accessToken: channelAccessToken, messages,
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        console.error('LINE exam scope text reply API returned HTTP', response.status, detail.slice(0, 500));
+      }
+    } catch (error) {
+      console.error('LINE exam scope text reply request failed:', error instanceof Error ? error.name : 'unknown');
+    }
+    return;
+  }
   const answer = typeof payload.answer === 'string'
     ? payload.answer.trim()
     : typeof payload.error === 'string'
