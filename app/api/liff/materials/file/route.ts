@@ -38,6 +38,31 @@ export async function GET(request: Request) {
     }
 
     const download = requestUrl.searchParams.get('download') === '1';
+
+    // LINE内ブラウザはiframe内のPDF表示に対応しない場合があるため、
+    // プレビュー用PDFは認証済みの同一オリジンAPIからバイナリで返す。
+    if (!download && material.mime_type === 'application/pdf') {
+      const { data: fileData, error: downloadError } = await access.admin.storage
+        .from(STUDY_MATERIAL_BUCKET)
+        .download(material.storage_path);
+
+      if (downloadError || !fileData) {
+        console.error('LIFF PDF download failed:', downloadError?.message || 'empty file');
+        return NextResponse.json({ success: false, message: 'PDFファイルを取得できませんでした。' }, { status: 500 });
+      }
+
+      return new NextResponse(fileData, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Length': String(fileData.size),
+          'Content-Disposition': 'inline',
+          'Cache-Control': 'no-store, private',
+          'Referrer-Policy': 'no-referrer',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
+
     const { data, error: signedError } = await access.admin.storage.from(STUDY_MATERIAL_BUCKET)
       .createSignedUrl(material.storage_path, 300, { download: download ? material.file_name : false });
 
