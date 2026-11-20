@@ -3,15 +3,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2 } from 'lucide-react';
+import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2 } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
 type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string; target_classes?: string[] | null };
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
 type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
-type SchoolRangeSection = { title: string; body: string; note?: string | null };
+type SchoolRangeSection = { section_id: string; kind: 'range' | 'notice'; title: string; body: string; note?: string | null };
 type SchoolExamRange = { id: string; exam_id: string; subject: string; display_subject: string; audience: string; range_sections: SchoolRangeSection[]; sort_order: number };
+type PublishedRangeProgress = { school_test_range_id: string; section_id: string; completed: boolean };
+type PersonalTask = { id: string; title: string; details: string; subject: string; source: string; type: string; due: string; due_at: string | null; completed: boolean; created_at: string };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
@@ -70,6 +72,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [ranges, setRanges] = useState<Range[]>([]);
   const [schoolRanges, setSchoolRanges] = useState<SchoolExamRange[]>([]);
   const [expandedSchoolRangeIds, setExpandedSchoolRangeIds] = useState<string[]>([]);
+  const [publishedRangeProgress, setPublishedRangeProgress] = useState<PublishedRangeProgress[]>([]);
+  const [showRangeManager, setShowRangeManager] = useState(false);
+  const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
+  const [personalTaskTitle, setPersonalTaskTitle] = useState('');
+  const [personalTaskDetails, setPersonalTaskDetails] = useState('');
+  const [personalTaskSubject, setPersonalTaskSubject] = useState<Subject>('その他');
+  const [personalTaskType, setPersonalTaskType] = useState<'paper' | 'classroom' | 'other'>('paper');
+  const [personalTaskDueAt, setPersonalTaskDueAt] = useState('');
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -105,6 +115,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const remainingRef = useRef(1500);
   const setTimerRemaining = (value: number) => { remainingRef.current = value; setRemaining(value); };
 
+  const studentIdentifier = (userEmail || '').trim().toLowerCase().split('@')[0];
   const dark = isDarkMode;
   const panel = 'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
   const muted = dark ? 'text-slate-400' : 'text-slate-500';
@@ -117,7 +128,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setLoading(true); setError('');
     try {
       const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e, f, g] = await Promise.all([
+      const [a, b, c, d, e, f, g, h, i] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
@@ -125,8 +136,10 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
         supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
         supabase.from('school_test_ranges').select('id,exam_id,subject,display_subject,audience,range_sections,sort_order').order('sort_order', { ascending: true }),
+        supabase.from('student_school_range_progress').select('school_test_range_id,section_id,completed').eq('user_id', userId),
+        supabase.from('todos').select('id,title,details,subject,source,type,due,due_at,completed,created_at').eq('student_id', studentIdentifier).order('created_at', { ascending: false }),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error;
+      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error || h.error || i.error;
       if (issue) throw issue;
       const newExams = ((a.data || []) as Exam[]).filter(exam => {
         const targetClasses = Array.isArray(exam.target_classes) ? exam.target_classes : [];
@@ -137,11 +150,13 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setExams(newExams); setSubjects(newSubjects); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions((d.data || []) as Session[]);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
+      setPublishedRangeProgress((h.data || []) as PublishedRangeProgress[]);
+      setPersonalTasks((i.data || []) as PersonalTask[]);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習データを読み込めませんでした。');
     } finally { setLoading(false); }
-  }, [userId, userClass]);
+  }, [userId, userClass, studentIdentifier]);
 
   useEffect(() => { void load(); }, [load]);
 
