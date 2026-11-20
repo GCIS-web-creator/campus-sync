@@ -31,12 +31,12 @@ declare global {
 let pdfJsLoading: Promise<PdfJsHandle> | null = null;
 
 function loadPdfJs(): Promise<PdfJsHandle> {
-  if (window.csPdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (window.csPdfjsLib) return Promise.resolve(window.csPdfjsLib);
   if (!pdfJsLoading) {
     pdfJsLoading = new Promise<PdfJsHandle>((resolve, reject) => {
       let script = document.querySelector<HTMLScriptElement>('script[data-cs-pdfjs]');
       const onLoad = () => {
-        if (window.pdfjsLib) resolve(window.pdfjsLib);
+        if (window.csPdfjsLib) resolve(window.csPdfjsLib);
         else reject(new Error('PDFビューアーを初期化できませんでした。'));
       };
       const onError = () => reject(new Error('PDFビューアーを読み込めませんでした。通信環境を確認してください。'));
