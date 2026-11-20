@@ -44,7 +44,7 @@
 - `civilization_stage smallint not null default 0`（派生キャッシュ）
 - `created_at / updated_at timestamptz`
 - `unique(user_id)` — 1ユーザー1惑星
-- `unique(id, user_id)` — 所有者整合性を複合外部キーで保証するため
+- `unique(id, user_id)` — 関連テーブルの所有者整合性を複合外部キーで保証するため
 
 `civilization_stage` は直接編集しない。正本台帳を再集計した値からサーバー処理だけが更新する。公開機能は初期版OFF固定で、他人向けSELECTポリシーはこのフェーズで作らない。
 
@@ -66,15 +66,18 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 - `credited_seconds integer not null default 0`: 学習XP用。同日の日次上限と端数計算の根拠
 - `reason text not null`
 - `rule_version integer not null default 1`
-- `reverses_entry_id uuid null`: 取消時の参照先
+- `reverses_entry_id uuid null references campus_xp_ledger(id)`: 取消時の参照先
 - `created_at timestamptz`
-- 一意制約: `unique(user_id, xp_type, source_type, source_id)`（同じ発生元・XP種別は一回だけ）
-- 取消の一意制約: `unique(reverses_entry_id)`（1つの元台帳行を二重取消ししない）
+- 所有者整合性: `foreign key (planet_id, user_id) references campus_planets(id, user_id)`
+- awardの一意制約: `unique(user_id, xp_type, source_type, source_id) where entry_kind = 'award'` の部分一意インデックス。同じ活動・XP種別の通常付与は一回だけ。
+- 訂正行の冪等性: `unique(user_id, source_type, source_id)`。訂正・取消には元活動IDを再利用せず、サーバーが発行した一意な訂正リクエストIDを `source_id` に使う。
+- 取消の一意制約: `unique(reverses_entry_id) where reverses_entry_id is not null`（1つの元awardを二重取消ししない）
 
 制約・計算:
 
 - award行は `amount >= 0`。ただしPomodoroの端数秒を同日内で繰り越すため、`amount = 0` でも `credited_seconds > 0` の行を許可する。
 - reversal/adjustment行は正の `amount` と `entry_kind` / `adjustment_direction` の組み合わせで増減方向を表現し、サーバー関数のみが作成できる。既存の `amount >= 0` 制約を維持できる。
+- 部分一意インデックスを採用するため、現行プロトタイプの `campus_xp_ledger_source_unique` 制約は追加マイグレーションで安全に置き換える。既に適用済みのマイグレーションファイル自体は書き換えない。
 - 学習XPの累計はawardを加算し、reversalおよび `adjustment_direction='decrease'` を減算、`adjustment_direction='increase'` を加算して再計算する。学習XPの `credited_seconds` はaward行のみを日次上限計算に使い、取消時は元行を直接変更せず、相殺行と再計算結果を残す。
 - 知識XPの `source_id` は、再挑戦で変わる回答IDではなく、ユーザーごとに一度だけ付与したい安定した問題IDを使う。問題改訂を別問題と扱う場合は明示的に別IDにする。
 - `source_type` はサーバー側で許可リスト管理し、クライアントから自由入力させない。
@@ -112,6 +115,7 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 - `rule_version integer not null`
 - `source_snapshot jsonb not null default '{}'`（解放時点の条件値。個人学習内容は入れない）
 - `unique(planet_id, unlock_key)`
+- `foreign key (planet_id, user_id) references campus_planets(id, user_id)`
 
 解放条件はコード内のバージョン管理された定義データとする。生徒クライアントから解放行を挿入・更新できない。再計算では定義データと成長キャッシュから不足分を追加し、通常動作で解放済み行を削除しない。
 
@@ -119,11 +123,13 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 
 - `id uuid primary key`
 - `planet_id uuid not null`
+- `user_id uuid not null`
 - `event_key text not null`（例: `stage:3:rule-v1`）
 - `event_type text not null`: `civilization_stage_up` / `unlock` / `milestone`
 - `payload jsonb not null default '{}'`
 - `occurred_at timestamptz not null`
 - `unique(planet_id, event_key)`
+- `foreign key (planet_id, user_id) references campus_planets(id, user_id)`
 
 イベントは通知・履歴表示向けの追記型記録。XP累計の正本として利用しない。payloadに学習内容・教科・答案・学校メール等の個人情報を格納しない。
 
@@ -137,11 +143,12 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 - `trigger_session_id uuid not null`（しきい値到達の根拠になった保存済みPomodoro ID）
 - `rule_version integer not null default 1`
 - `created_at timestamptz not null`
+- 所有者整合性: `foreign key (planet_id, user_id) references campus_planets(id, user_id)`
 - 一意制約: `unique(user_id, activity_date)`
 
 1日1行だけ作成する。自然成長値の累計はこの行数（取消が必要な場合は明示的な取消記録を追加する将来設計）から再計算する。学習セッションの本文・教科・振り返り内容は複製しない。
 
-**所有者整合性:** 成長・XP台帳・解放・イベント・自然成長台帳は、`(planet_id, user_id)` の複合外部キー等で惑星所有者とユーザーIDが一致することをDB側で保証する。IDを差し替えて他人の惑星に行を紐付けられない構造にする。
+**所有者整合性:** 成長・XP台帳・解放・イベント・自然成長台帳すべてに `user_id` を持たせ、`(planet_id, user_id)` の複合外部キーで `campus_planets(id, user_id)` を参照する。IDを差し替えて他人の惑星に行を紐付けられないようDB制約で保証する。成長テーブルは既存の `id` 主キーを維持し、`planet_id` と `user_id` の一意制約も維持する。
 
 ## 3. サーバー処理とトランザクション
 
@@ -155,7 +162,7 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 4. 惑星行を `FOR UPDATE` でロックし、同じユーザーの日次同時付与を直列化する。
 5. `started_at` をAsia/Tokyoへ変換し、日次のcredited_secondsを集計する。
 6. 10,800秒までをXP対象にし、60秒単位でXPを付与。端数秒は同日内で繰り越す。
-7. 一意制約により同じsession IDを二度付与しない。
+7. award部分一意インデックスにより同じsession IDを二度付与しない。訂正・取消は別の訂正リクエストIDで記録し、元awardとの参照は `reverses_entry_id` で行う。
 8. XP台帳追加・集計キャッシュ再計算・文明段階更新・解放行追加・イベント追加を一つのDBトランザクションで完了する。
 
 ### 3.2 自然成長日の付与
@@ -189,7 +196,7 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 | service_role | サーバー処理に必要な範囲 | 検証済み関数を通じた処理 |
 
 - 公開スキーマの全テーブルでRLSを有効にする。
-- SELECTは `TO authenticated USING ((select auth.uid()) = user_id)` 相当の所有者条件を使う。
+- SELECTは各テーブルに `user_id` を保持したうえで、`TO authenticated USING ((select auth.uid()) = user_id)` 相当の所有者条件を使う。
 - 生徒へのINSERT / UPDATE / DELETE権限・ポリシーを付けない。
 - Adminと生徒のロール判定はサーバー側の信頼できる権限情報から検証する。クライアント入力・localStorage・編集可能なuser_metadataを権限根拠にしない。
 - Adminに惑星テーブル全件の自由な更新権限を与えない。学校貢献申請の承認・却下など必要な操作に絞る。
