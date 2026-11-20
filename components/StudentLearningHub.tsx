@@ -286,7 +286,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
           cache: 'no-store',
         });
         const payload = await response.json().catch(() => ({}));
-        if (alive && response.ok) setPlanetubeScopes(payload.connection?.approved_scopes || []);
+        if (alive && response.ok) setPlanetubeScopes(payload.connection?.status === 'linked' ? (payload.connection?.approved_scopes || []) : []);
       } catch {} finally {
         if (alive) setPlanetubeScopesReady(true);
       }
