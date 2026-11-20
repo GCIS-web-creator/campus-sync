@@ -416,18 +416,40 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     if (focusSeconds < 1) { setError('勉強時間が記録されていません。'); return; }
     setSaving(true); setError('');
     try {
-      const { error: insertError } = await supabase.from('student_study_sessions').insert({
+      const { data: savedSession, error: insertError } = await supabase.from('student_study_sessions').insert({
         user_id: userId, test_subject_id: null,
         subject_name: focusSubject, task_title: task.trim(),
         test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
         started_at: startedAt.current || new Date().toISOString(), ended_at: new Date().toISOString(),
         reflection: reflection.trim(), next_action: nextAction.trim(), finish_kind: finishKind,
-      });
+      }).select('id').single();
       if (insertError) throw insertError;
+
+      let xpNotice = '学習XPの反映は保留されています。あとで惑星画面を再読み込みしてください。';
+      if (savedSession?.id) {
+        try {
+          const { data: authData, error: authError } = await supabase.auth.getSession();
+          const accessToken = authData.session?.access_token;
+          if (authError || !accessToken) throw new Error('ログイン状態を確認できません。');
+          const xpResponse = await fetch('/api/planet-civilization', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+            body: JSON.stringify({ action: 'award-learning-xp', session_id: savedSession.id }),
+          });
+          const xpPayload = await xpResponse.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number; credited_seconds?: number; daily_limit_reached?: boolean; already_processed?: boolean } };
+          if (!xpResponse.ok || !xpPayload.success) throw new Error(xpPayload.message || '学習XPを反映できませんでした。');
+          const awarded = Math.max(0, Number(xpPayload.result?.awarded_xp || 0));
+          if (awarded > 0) xpNotice = '学習XP +' + awarded.toLocaleString('ja-JP') + ' を獲得しました。';
+          else if (xpPayload.result?.daily_limit_reached) xpNotice = '本日の学習XP上限に達しています。学習記録は保存されています。';
+          else xpNotice = '学習時間を記録しました。XPは次の加算に繰り越されます。';
+        } catch (xpCause) {
+          console.error('惑星の学習XP反映に失敗しました（学習記録は保存済み）:', xpCause);
+        }
+      }
       setShowRecord(false); setTimerState('idle'); setFocusSeconds(0); setBreakSeconds(0); setTimerRemaining(focusMinutes * 60);
       startedAt.current = null; setTask(''); setRangeId(''); setReflection(''); setNextAction('');
-      setMessage('学習記録を保存しました。'); await load();
+      setMessage('学習記録を保存しました。' + xpNotice); await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '学習記録を保存できませんでした。'); }
     finally { setSaving(false); }
   };
