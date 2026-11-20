@@ -12,6 +12,7 @@ import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
 import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
+import { ensureStudyMaterialsBucket, STUDY_MATERIAL_BUCKET } from '@/lib/study-materials-server';
 import { LINE_GROUP_SHIRITORI_STATE_PREFIX, isLineShiritoriControlCommand, isLineShiritoriStartCommand, isLineSoloShiritoriCommand, playLineSoloShiritori, startLineShiritori, takeLineShiritoriTurn, type LineShiritoriState } from '@/lib/line-shiritori';
 
 export const runtime = 'nodejs';
@@ -935,6 +936,306 @@ async function replyPlain(
   }
 }
 
+
+type LineSchoolMaterialsCommand = { folderId: string | null; page: number };
+
+function parseLineSchoolMaterialsCommand(input: string): LineSchoolMaterialsCommand | null {
+  const normalized = input.normalize('NFKC').trim();
+  if (/^(?:学校資料エクスプローラー(?:を)?(?:開いて|開く|見せて)?|学校資料(?:を)?(?:開いて|見せて)|資料エクスプローラー(?:を)?(?:開いて|開く)?)$/u.test(normalized)) {
+    return { folderId: null, page: 0 };
+  }
+  if (/^学校資料\s+ルート$/u.test(normalized)) return { folderId: null, page: 0 };
+
+  const pageMatch = /^学校資料\s+ページ\s+(root|[0-9a-f-]{36})\s+(\d{1,3})$/iu.exec(normalized);
+  if (pageMatch) {
+    const page = Number(pageMatch[2]);
+    if (!Number.isSafeInteger(page) || page < 0 || page > 100) return null;
+    return { folderId: pageMatch[1].toLowerCase() === 'root' ? null : pageMatch[1], page };
+  }
+
+  const folderMatch = /^学校資料\s+フォルダー\s+([0-9a-f-]{36})(?:\s+(\d{1,3}))?$/iu.exec(normalized);
+  if (folderMatch) {
+    const page = Number(folderMatch[2] || 0);
+    if (!Number.isSafeInteger(page) || page < 0 || page > 100) return null;
+    return { folderId: folderMatch[1], page };
+  }
+  return null;
+}
+
+type LineSchoolMaterialFolder = { id: string; name: string; parent_id: string | null; sort_order: number };
+type LineSchoolMaterial = {
+  id: string;
+  title: string;
+  subject: string;
+  material_type: string;
+  folder_id: string | null;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  storage_path: string;
+};
+
+function lineMaterialSizeLabel(bytes: number): string {
+  return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+async function replyLineSchoolMaterialsExplorer(
+  replyToken: string,
+  command: LineSchoolMaterialsCommand,
+  accessToken: string,
+  destinationType: 'user' | 'group' | 'room',
+  destinationId: string | null,
+): Promise<void> {
+  const fallback = '学校資料エクスプローラーを開けませんでした。少し待ってからもう一度お試しください。';
+  const admin = getLineAssignmentAdmin();
+  if (!admin) {
+    await replyPlain(replyToken, '学校資料サービスに接続できません。管理者に連絡してください。', accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+    return;
+  }
+
+  try {
+    const [{ data: folderRows, error: folderError }, { data: materialRows, error: materialError }] = await Promise.all([
+      admin.from('study_material_folders')
+        .select('id,name,parent_id,sort_order')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true }),
+      admin.from('study_materials')
+        .select('id,title,subject,material_type,folder_id,file_name,mime_type,file_size,storage_path')
+        .eq('is_published', true)
+        .eq('target_scope', 'all')
+        .is('archived_at', null)
+        .order('published_at', { ascending: false })
+        .limit(300),
+    ]);
+    if (folderError || materialError) {
+      console.error('LINE school materials lookup failed:', folderError?.message || materialError?.message);
+      await replyPlain(replyToken, fallback, accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+      return;
+    }
+
+    const folders = (folderRows || []) as LineSchoolMaterialFolder[];
+    const materials = (materialRows || []) as LineSchoolMaterial[];
+    const rootFolder = folders.find(folder => folder.parent_id === null && folder.name === '学校資料') || null;
+    const currentFolderId = command.folderId || rootFolder?.id || null;
+    const folderMap = new Map(folders.map(folder => [folder.id, folder]));
+    if (command.folderId && !folderMap.has(command.folderId)) {
+      await replyPlain(replyToken, '指定されたフォルダーが見つかりませんでした。最初のフォルダーから開き直してください。', accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+      return;
+    }
+
+    // LINE has no verified school-account link yet. Only published all-school documents are listed here.
+    const visibleFolderIds = new Set<string>();
+    for (const material of materials) {
+      let cursorId = material.folder_id;
+      const visited = new Set<string>();
+      while (cursorId && !visited.has(cursorId)) {
+        visited.add(cursorId);
+        visibleFolderIds.add(cursorId);
+        cursorId = folderMap.get(cursorId)?.parent_id || null;
+      }
+    }
+    const childFolders = folders
+      .filter(folder => folder.parent_id === currentFolderId && visibleFolderIds.has(folder.id))
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ja'));
+    const currentMaterials = materials.filter(material => material.folder_id === currentFolderId);
+    const items: Array<{ kind: 'folder'; folder: LineSchoolMaterialFolder } | { kind: 'material'; material: LineSchoolMaterial }> = [
+      ...childFolders.map(folder => ({ kind: 'folder' as const, folder })),
+      ...currentMaterials.map(material => ({ kind: 'material' as const, material })),
+    ];
+
+    const pageSize = 6;
+    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+    const page = Math.min(command.page, pageCount - 1);
+    const pageItems = items.slice(page * pageSize, (page + 1) * pageSize);
+
+    const pathNames: string[] = [];
+    const visitedPath = new Set<string>();
+    let pathCursor = currentFolderId ? folderMap.get(currentFolderId) : rootFolder || undefined;
+    while (pathCursor && !visitedPath.has(pathCursor.id)) {
+      visitedPath.add(pathCursor.id);
+      pathNames.unshift(pathCursor.name);
+      pathCursor = pathCursor.parent_id ? folderMap.get(pathCursor.parent_id) : undefined;
+    }
+    const currentPath = pathNames.join('  ›  ') || '学校資料';
+
+    let storageAdmin: Awaited<ReturnType<typeof ensureStudyMaterialsBucket>> | null = null;
+    if (pageItems.some(item => item.kind === 'material')) {
+      storageAdmin = await ensureStudyMaterialsBucket();
+    }
+
+    const rows: Record<string, unknown>[] = [];
+    for (const item of pageItems) {
+      if (item.kind === 'folder') {
+        rows.push({
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'sm',
+          margin: 'md',
+          alignItems: 'center',
+          contents: [
+            {
+              type: 'box',
+              layout: 'vertical',
+              flex: 1,
+              contents: [
+                { type: 'text', text: '📁 ' + item.folder.name, size: 'sm', weight: 'bold', color: '#233B53', wrap: true },
+                { type: 'text', text: 'フォルダー', size: 'xxs', color: '#64748B', margin: 'xs' },
+              ],
+            },
+            {
+              type: 'button',
+              style: 'secondary',
+              height: 'sm',
+              action: { type: 'message', label: '開く', text: 'CSAI 学校資料 フォルダー ' + item.folder.id + ' 0' },
+            },
+          ],
+        });
+      } else {
+        let signedUrl = '';
+        if (storageAdmin) {
+          const { data: signedData, error: signedError } = await storageAdmin.storage
+            .from(STUDY_MATERIAL_BUCKET)
+            .createSignedUrl(item.material.storage_path, 1800);
+          if (signedError) console.error('LINE school material signed URL failed:', signedError.message);
+          signedUrl = signedData?.signedUrl || '';
+        }
+        rows.push({
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'sm',
+          margin: 'md',
+          alignItems: 'center',
+          contents: [
+            {
+              type: 'box',
+              layout: 'vertical',
+              flex: 1,
+              contents: [
+                { type: 'text', text: (item.material.mime_type === 'application/pdf' ? '📄 ' : '🖼️ ') + item.material.title, size: 'sm', weight: 'bold', color: '#233B53', wrap: true },
+                { type: 'text', text: item.material.subject + ' ・ ' + item.material.material_type + ' ・ ' + lineMaterialSizeLabel(item.material.file_size), size: 'xxs', color: '#64748B', wrap: true, margin: 'xs' },
+              ],
+            },
+            signedUrl
+              ? { type: 'button', style: 'primary', color: '#176B87', height: 'sm', action: { type: 'uri', label: '開く', uri: signedUrl } }
+              : { type: 'text', text: '準備中', size: 'xxs', color: '#94A3B8' },
+          ],
+        });
+      }
+    }
+
+    if (pageItems.length === 0) {
+      rows.push({
+        type: 'text',
+        text: materials.length === 0
+          ? '公開された学校資料はまだありません。管理者が資料を登録して全校公開すると、ここからフォルダーを開けます。'
+          : 'このフォルダーには全校公開の資料がありません。別のフォルダーを開いてください。',
+        size: 'sm',
+        color: '#64748B',
+        wrap: true,
+        margin: 'lg',
+      });
+    }
+
+    const footerButtons: Record<string, unknown>[] = [];
+    if (currentFolderId && currentFolderId !== rootFolder?.id) {
+      const parentId = folderMap.get(currentFolderId)?.parent_id;
+      footerButtons.push({
+        type: 'button',
+        style: 'secondary',
+        height: 'sm',
+        action: { type: 'message', label: '上のフォルダー', text: parentId && parentId !== rootFolder?.id ? 'CSAI 学校資料 フォルダー ' + parentId + ' 0' : 'CSAI 学校資料 ルート' },
+      });
+    }
+    if (page > 0) {
+      footerButtons.push({
+        type: 'button',
+        style: 'secondary',
+        height: 'sm',
+        action: { type: 'message', label: '前へ', text: 'CSAI 学校資料 ページ ' + (currentFolderId || 'root') + ' ' + (page - 1) },
+      });
+    }
+    if (page + 1 < pageCount) {
+      footerButtons.push({
+        type: 'button',
+        style: 'secondary',
+        height: 'sm',
+        action: { type: 'message', label: '次へ', text: 'CSAI 学校資料 ページ ' + (currentFolderId || 'root') + ' ' + (page + 1) },
+      });
+    }
+    footerButtons.push({
+      type: 'button',
+      style: 'link',
+      height: 'sm',
+      action: { type: 'message', label: '最初へ', text: 'CSAI 学校資料 ルート' },
+    });
+
+    const bubble: Record<string, unknown> = {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#173B40',
+        paddingAll: '16px',
+        spacing: 'xs',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC / SCHOOL MATERIALS', size: 'xxs', color: '#A7D3CD', weight: 'bold' },
+          { type: 'text', text: '学校資料エクスプローラー', size: 'lg', color: '#FFFFFF', weight: 'bold', wrap: true },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: '現在の場所', size: 'xxs', color: '#64748B', weight: 'bold' },
+          { type: 'text', text: currentPath, size: 'sm', color: '#233B53', weight: 'bold', wrap: true },
+          { type: 'separator', color: '#D8E6E4', margin: 'sm' },
+          ...rows,
+          { type: 'text', text: (items.length ? (page + 1) + ' / ' + pageCount + ' ページ ・ ' + items.length + '項目' : '') + '\n学年・クラス限定資料は、ログインしたCampusSync内で確認してください。', size: 'xxs', color: '#64748B', wrap: true, margin: 'lg' },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        spacing: 'sm',
+        contents: footerButtons,
+      },
+    };
+
+    const messages = applyCampusSyncFlexFooters([{
+      type: 'flex',
+      altText: ('学校資料エクスプローラー：' + currentPath).slice(0, 400),
+      contents: bubble,
+    }]);
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyToken, messages }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+    await recordLineDeliveryResponse(response, {
+      channel: 'reply',
+      destinationType,
+      destinationId,
+      kind: 'campus_ai_school_materials',
+      accessToken,
+      messages,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('LINE school materials explorer reply failed:', response.status, detail.slice(0, 400));
+    }
+  } catch (error) {
+    console.error('LINE school materials explorer failed:', error instanceof Error ? error.message : 'unknown error');
+    await replyPlain(replyToken, fallback, accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+  }
+}
+
+
 async function notifyLineAiGroupIncident(
   chatId: string,
   chatType: 'group' | 'room',
@@ -1659,6 +1960,18 @@ async function handleLineEvents(
       : messageText;
 
     if (hasTrigger && question) {
+      const materialsCommand = parseLineSchoolMaterialsCommand(question);
+      if (materialsCommand) {
+        const destinationType = event.source?.type === 'room' ? 'room' : event.source?.type === 'group' ? 'group' : 'user';
+        const destinationId = event.source?.type === 'room'
+          ? event.source.roomId || null
+          : event.source?.type === 'group'
+            ? event.source.groupId || null
+            : event.source?.userId || null;
+        await replyLineSchoolMaterialsExplorer(event.replyToken, materialsCommand, channelAccessToken, destinationType, destinationId);
+        return;
+      }
+
       const reminderHandled = await handleLineScheduledReminder(event, event.replyToken, question, channelAccessToken, botSlot);
       if (reminderHandled) return;
     }

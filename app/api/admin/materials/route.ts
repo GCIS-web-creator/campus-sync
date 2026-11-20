@@ -52,18 +52,23 @@ export async function GET(request: Request) {
   const admin = getStudyMaterialsAdminClient();
   if (!admin) return fail('Supabaseのサーバー設定が不足しています。', 503);
 
-  const { data, error } = await admin
-    .from('study_materials')
-    .select('id,title,description,subject,material_type,target_scope,target_value,file_name,mime_type,file_size,storage_path,is_published,published_at,created_at,updated_at')
-    .is('archived_at', null)
-    .order('created_at', { ascending: false })
-    .limit(300);
+  const [{ data, error }, { data: folders, error: folderError }] = await Promise.all([
+    admin.from('study_materials')
+      .select('id,title,description,subject,material_type,target_scope,target_value,file_name,mime_type,file_size,storage_path,folder_id,is_published,published_at,created_at,updated_at')
+      .is('archived_at', null)
+      .order('created_at', { ascending: false })
+      .limit(300),
+    admin.from('study_material_folders')
+      .select('id,name,parent_id,sort_order,created_at,updated_at')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true }),
+  ]);
 
-  if (error) {
-    console.error('Study materials admin list failed:', error.message);
-    return fail('資料一覧を取得できませんでした。', 500);
+  if (error || folderError) {
+    console.error('Study materials admin list failed:', error?.message || folderError?.message);
+    return fail('資料・フォルダー一覧を取得できませんでした。', 500);
   }
-  return NextResponse.json({ success: true, materials: data || [] }, { headers: noStore });
+  return NextResponse.json({ success: true, materials: data || [], folders: folders || [] }, { headers: noStore });
 }
 
 export async function POST(request: Request) {
@@ -77,6 +82,12 @@ export async function POST(request: Request) {
   const metadata = validateMetadata(body);
   if ('error' in metadata) return fail(metadata.error || '資料情報を確認してください。');
   const storagePath = body.storage_path;
+  const folderId = typeof body.folder_id === 'string' ? body.folder_id : null;
+  if (folderId && !/^[0-9a-f-]{36}$/i.test(folderId)) return fail('保存先フォルダーが正しくありません。');
+  if (folderId) {
+    const { data: folder, error: folderError } = await admin.from('study_material_folders').select('id').eq('id', folderId).maybeSingle();
+    if (folderError || !folder) return fail('保存先フォルダーが見つかりません。', folderError ? 500 : 404);
+  }
   const fileName = typeof body.file_name === 'string' ? body.file_name.trim() : '';
   const mimeType = typeof body.mime_type === 'string' ? body.mime_type : '';
   const fileSize = Number(body.file_size);
@@ -100,6 +111,7 @@ export async function POST(request: Request) {
       material_type: metadata.materialType,
       target_scope: metadata.targetScope,
       target_value: metadata.targetValue,
+      folder_id: folderId,
       storage_path: storagePath,
       file_name: fileName,
       mime_type: mimeType,
@@ -126,15 +138,27 @@ export async function PATCH(request: Request) {
   const admin = getStudyMaterialsAdminClient();
   if (!admin) return fail('Supabaseのサーバー設定が不足しています。', 503);
 
-  const body = await request.json().catch(() => null) as { id?: unknown; is_published?: unknown } | null;
+  const body = await request.json().catch(() => null) as { id?: unknown; is_published?: unknown; folder_id?: unknown } | null;
   const id = typeof body?.id === 'string' ? body.id : '';
-  if (!/^[0-9a-f-]{36}$/i.test(id) || typeof body?.is_published !== 'boolean') return fail('変更内容が正しくありません。');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return fail('変更対象の資料IDが正しくありません。');
 
-  const update = {
-    is_published: body.is_published,
-    published_at: body.is_published ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString(),
-  };
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof body?.is_published === 'boolean') {
+    update.is_published = body.is_published;
+    update.published_at = body.is_published ? new Date().toISOString() : null;
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, 'folder_id')) {
+    const folderId = typeof body.folder_id === 'string' ? body.folder_id : null;
+    if (folderId && !/^[0-9a-f-]{36}$/i.test(folderId)) return fail('移動先フォルダーが正しくありません。');
+    if (folderId) {
+      const { data: folder, error: folderError } = await admin.from('study_material_folders').select('id').eq('id', folderId).maybeSingle();
+      if (folderError || !folder) return fail('移動先フォルダーが見つかりません。', folderError ? 500 : 404);
+    }
+    update.folder_id = folderId;
+  }
+  if (!Object.prototype.hasOwnProperty.call(update, 'is_published') && !Object.prototype.hasOwnProperty.call(update, 'folder_id')) {
+    return fail('変更内容がありません。');
+  }
   const { data, error } = await admin.from('study_materials')
     .update(update).eq('id', id).is('archived_at', null)
     .select('id,is_published').maybeSingle();

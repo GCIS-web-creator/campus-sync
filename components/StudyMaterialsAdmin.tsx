@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileText, FileImage, UploadCloud, RefreshCw, Eye, Download, Trash2, Globe, Users, GraduationCap, Search, X, CheckCircle2 } from 'lucide-react';
+import { FileText, FileImage, UploadCloud, RefreshCw, Eye, Download, Trash2, Globe, Users, GraduationCap, Search, X, CheckCircle2, Folder, FolderOpen, ChevronRight, FolderPlus, Pencil, ArrowUp } from 'lucide-react';
 
 type StudyMaterial = {
   id: string;
@@ -16,9 +16,17 @@ type StudyMaterial = {
   mime_type: string;
   file_size: number;
   storage_path: string;
+  folder_id: string | null;
   is_published: boolean;
   published_at: string | null;
   created_at: string;
+};
+
+type MaterialFolder = {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  sort_order: number;
 };
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健', 'その他'];
@@ -50,6 +58,8 @@ function fileSizeLabel(bytes: number) {
 
 export default function StudyMaterialsAdmin() {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
+  const [folders, setFolders] = useState<MaterialFolder[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -76,6 +86,7 @@ export default function StudyMaterialsAdmin() {
       const result = await response.json().catch(() => null);
       if (!response.ok || !result?.success) throw new Error(result?.message || '資料一覧を取得できませんでした。');
       setMaterials((result.materials || []) as StudyMaterial[]);
+      setFolders((result.folders || []) as MaterialFolder[]);
       setMessage('');
     } catch (error) {
       setMaterials([]);
@@ -147,6 +158,7 @@ export default function StudyMaterialsAdmin() {
           mime_type: file.type,
           file_size: file.size,
           is_published: publishImmediately,
+          folder_id: currentFolderId || folders.find(folder => folder.parent_id === null && folder.name === '学校資料')?.id || null,
         }),
         cache: 'no-store',
       });
@@ -228,11 +240,126 @@ export default function StudyMaterialsAdmin() {
     }
   };
 
+
+  const rootFolder = folders.find(folder => folder.parent_id === null && folder.name === '学校資料') || null;
+  const activeFolderId = currentFolderId || rootFolder?.id || null;
+  const folderMap = new Map(folders.map(folder => [folder.id, folder]));
+  const folderPath = (folderId: string | null): string => {
+    if (!folderId || folderId === rootFolder?.id) return '学校資料';
+    const parts: string[] = [];
+    const visited = new Set<string>();
+    let cursor = folderMap.get(folderId);
+    while (cursor && cursor.id !== rootFolder?.id && !visited.has(cursor.id)) {
+      visited.add(cursor.id);
+      parts.unshift(cursor.name);
+      cursor = cursor.parent_id ? folderMap.get(cursor.parent_id) : undefined;
+    }
+    return ['学校資料', ...parts].join(' / ');
+  };
+  const folderOptions = (() => {
+    const result: Array<{ id: string; label: string }> = [];
+    const visit = (parentId: string | null, depth: number) => {
+      folders
+        .filter(folder => folder.parent_id === parentId)
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ja'))
+        .forEach(folder => {
+          result.push({ id: folder.id, label: '　'.repeat(depth) + folder.name });
+          visit(folder.id, depth + 1);
+        });
+    };
+    visit(null, 0);
+    return result;
+  })();
+  const childFolders = folders
+    .filter(folder => folder.parent_id === activeFolderId)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ja'));
+
+  const createFolder = async () => {
+    const name = window.prompt('作成するフォルダー名を入力してください。');
+    if (!name?.trim()) return;
+    setMessage('');
+    try {
+      const response = await fetch('/api/admin/materials/folders', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), parent_id: activeFolderId }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || 'フォルダーを作成できませんでした。');
+      await loadMaterials();
+      setCurrentFolderId(activeFolderId === rootFolder?.id ? null : activeFolderId);
+      setMessage('フォルダーを作成しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'フォルダーを作成できませんでした。');
+    }
+  };
+
+  const renameFolder = async (folder: MaterialFolder) => {
+    const name = window.prompt('新しいフォルダー名を入力してください。', folder.name);
+    if (!name?.trim() || name.trim() === folder.name) return;
+    try {
+      const response = await fetch('/api/admin/materials/folders', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folder.id, name: name.trim() }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || 'フォルダー名を変更できませんでした。');
+      await loadMaterials();
+      setMessage('フォルダー名を変更しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'フォルダー名を変更できませんでした。');
+    }
+  };
+
+  const deleteFolder = async (folder: MaterialFolder) => {
+    if (!window.confirm('「' + folder.name + '」を削除します。空のフォルダーだけ削除できます。')) return;
+    try {
+      const response = await fetch('/api/admin/materials/folders', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folder.id }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || 'フォルダーを削除できませんでした。');
+      if (currentFolderId === folder.id) setCurrentFolderId(folder.parent_id === rootFolder?.id ? null : folder.parent_id);
+      await loadMaterials();
+      setMessage('空のフォルダーを削除しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'フォルダーを削除できませんでした。');
+    }
+  };
+
+  const moveMaterial = async (item: StudyMaterial, folderId: string) => {
+    if (!folderId || folderId === item.folder_id) return;
+    try {
+      const response = await fetch('/api/admin/materials', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, folder_id: folderId }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || '資料を移動できませんでした。');
+      await loadMaterials();
+      setMessage('資料を「' + folderPath(folderId) + '」へ移動しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '資料を移動できませんでした。');
+    }
+  };
+
   const visibleMaterials = materials.filter(item => {
     const matchesSubject = filterSubject === 'all' || item.subject === filterSubject;
     const term = search.trim().toLowerCase();
     const matchesSearch = !term || [item.title, item.description, item.file_name].some(value => value.toLowerCase().includes(term));
-    return matchesSubject && matchesSearch;
+    return item.folder_id === activeFolderId && matchesSubject && matchesSearch;
   });
 
   return (
@@ -307,10 +434,17 @@ export default function StudyMaterialsAdmin() {
       <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-base font-black text-white">登録済み資料 <span className="ml-1 text-xs text-slate-500">{materials.length}件</span></h3>
-            <p className="mt-1 text-xs text-slate-500">公開状態の切替・プレビュー・削除ができます。</p>
+            <h3 className="text-base font-black text-white">学校資料エクスプローラー <span className="ml-1 text-xs text-slate-500">{materials.length}件</span></h3>
+            <p className="mt-1 text-xs text-slate-500">フォルダーを開いて資料を整理できます。アップロード先は現在開いているフォルダーです。</p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <button type="button" onClick={() => void createFolder()} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-300 hover:bg-amber-500/20"><FolderPlus size={14} /> 新規フォルダー</button>
+            {currentFolderId && folderMap.get(currentFolderId) && (
+              <>
+                <button type="button" onClick={() => void renameFolder(folderMap.get(currentFolderId)!)} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-700"><Pencil size={13} /> 名前変更</button>
+                <button type="button" onClick={() => void deleteFolder(folderMap.get(currentFolderId)!)} className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/20"><Trash2 size={13} /> 空フォルダー削除</button>
+              </>
+            )}
             <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 sm:flex-none">
               <Search size={14} className="text-slate-500" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="資料名を検索" className="min-w-0 bg-transparent text-xs text-white outline-none placeholder:text-slate-500" />
@@ -320,6 +454,38 @@ export default function StudyMaterialsAdmin() {
               {SUBJECTS.map(value => <option key={value} value={value}>{value}</option>)}
             </select>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button type="button" onClick={() => setCurrentFolderId(null)} className="font-black text-cyan-300 hover:underline">学校資料</button>
+            {(() => {
+              const chain: MaterialFolder[] = [];
+              const visited = new Set<string>();
+              let cursor = currentFolderId ? folderMap.get(currentFolderId) : undefined;
+              while (cursor && cursor.id !== rootFolder?.id && !visited.has(cursor.id)) {
+                visited.add(cursor.id);
+                chain.unshift(cursor);
+                cursor = cursor.parent_id ? folderMap.get(cursor.parent_id) : undefined;
+              }
+              return chain.map(folder => <React.Fragment key={folder.id}><ChevronRight size={12} className="text-slate-600" /><button type="button" onClick={() => setCurrentFolderId(folder.id)} className="font-bold text-slate-200 hover:text-cyan-300">{folder.name}</button></React.Fragment>);
+            })()}
+            {currentFolderId && <button type="button" onClick={() => { const parentId = folderMap.get(currentFolderId)?.parent_id; setCurrentFolderId(parentId && parentId !== rootFolder?.id ? parentId : null); }} className="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] font-bold text-slate-300"><ArrowUp size={12} /> 上へ</button>}
+          </div>
+          <p className="mt-2 text-[10px] text-slate-500">現在の場所：{folderPath(currentFolderId)}</p>
+          {childFolders.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {childFolders.map(folder => (
+                <div key={folder.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3">
+                  <Folder size={19} className="shrink-0 text-amber-400" />
+                  <button type="button" onClick={() => setCurrentFolderId(folder.id)} className="min-w-0 flex-1 truncate text-left text-xs font-black text-slate-100 hover:text-cyan-300">{folder.name}</button>
+                  <button type="button" onClick={() => void renameFolder(folder)} aria-label="フォルダー名を変更" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={13} /></button>
+                  <button type="button" onClick={() => void deleteFolder(folder)} aria-label="空フォルダーを削除" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 size={13} /></button>
+                  <ChevronRight size={14} className="text-slate-600" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {loading ? <p className="py-8 text-center text-xs text-slate-500">資料を読み込み中...</p>
@@ -337,11 +503,18 @@ export default function StudyMaterialsAdmin() {
                       <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + (item.is_published ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300')}>{item.is_published ? '公開中' : '下書き'}</span>
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">{item.subject} ・ {typeLabel(item.material_type)} ・ {targetLabel(item)}</p>
+                    <p className="mt-1 truncate text-[10px] text-slate-500">保存場所：{folderPath(item.folder_id)}</p>
                     <p className="mt-1 break-all text-[10px] text-slate-500">{item.file_name} ・ {fileSizeLabel(item.file_size)}</p>
                     {item.description && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-400">{item.description}</p>}
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-800 pt-3">
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3">
+                  <label className="flex min-w-0 items-center gap-2 text-[10px] font-bold text-slate-400">
+                    移動先
+                    <select value={item.folder_id || ''} onChange={event => void moveMaterial(item, event.target.value)} className="max-w-[190px] rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-[10px] text-white">
+                      {folderOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                    </select>
+                  </label>
                   <button type="button" disabled={previewLoading} onClick={() => void openPreview(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-[11px] font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-50"><Eye size={13} /> プレビュー</button>
                   <button type="button" onClick={() => void openPreview(item, true)} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-[11px] font-bold text-slate-200 hover:bg-slate-700"><Download size={13} /> ダウンロード</button>
                   <button type="button" onClick={() => void togglePublish(item)} className={'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold ' + (item.is_published ? 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20')}>{item.is_published ? '非公開にする' : '公開する'}</button>
