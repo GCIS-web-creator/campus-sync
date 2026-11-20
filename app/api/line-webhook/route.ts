@@ -1057,7 +1057,6 @@ async function replyLineSchoolMaterialsExplorer(
       admin.from('study_materials')
         .select('id,title,subject,material_type,target_scope,target_value,folder_id,file_name,mime_type,file_size,storage_path')
         .eq('is_published', true)
-        .eq('target_scope', 'all')
         .is('archived_at', null)
         .order('published_at', { ascending: false })
         .limit(300),
@@ -1114,7 +1113,7 @@ async function replyLineSchoolMaterialsExplorer(
       return;
     }
 
-    // LINE has no verified school-account link yet. Only published all-school documents are listed here.
+    // LINEの1対1トークでは連携済み・管理者確認済みの学年/クラスを反映。グループは全校公開資料に限定する。
     const visibleFolderIds = new Set<string>();
     for (const material of materials) {
       let cursorId = material.folder_id;
