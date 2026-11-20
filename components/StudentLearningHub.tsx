@@ -64,6 +64,24 @@ const duration = (seconds: number) => {
   return hours ? hours + '時間' + (minutes ? minutes + '分' : '') : minutes + '分';
 };
 const dateLabel = (value: string) => new Date(value + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
+const deadlineStatus = (value: string | null) => {
+  if (!value) return { label: '期限なし', tone: 'neutral' as const };
+  const due = new Date(value);
+  if (Number.isNaN(due.getTime())) return { label: '期限未設定', tone: 'neutral' as const };
+  const now = new Date();
+  if (due.getTime() < now.getTime()) {
+    const elapsedDays = Math.floor((now.getTime() - due.getTime()) / 86400000);
+    return elapsedDays === 0
+      ? { label: '期限超過（本日）', tone: 'overdue' as const }
+      : { label: `期限超過・${elapsedDays}日前`, tone: 'overdue' as const };
+  }
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const days = Math.round((dueDay - today) / 86400000);
+  return days === 0
+    ? { label: `本日 ${due.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで`, tone: 'today' as const }
+    : { label: `あと${days}日`, tone: 'future' as const };
+};
 
 export default function StudentLearningHub({ userId, userEmail = '', userClass = '', isDarkMode = false }: { userId: string; userEmail?: string; userClass?: string; isDarkMode?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history' | 'planetube'>('overview');
@@ -77,7 +95,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
   const [personalTaskTitle, setPersonalTaskTitle] = useState('');
   const [personalTaskDetails, setPersonalTaskDetails] = useState('');
-  const [personalTaskSubject, setPersonalTaskSubject] = useState<Subject>('その他');
+  const [personalTaskSubject, setPersonalTaskSubject] = useState<string>('その他');
   const [personalTaskType, setPersonalTaskType] = useState<'paper' | 'classroom' | 'other'>('paper');
   const [personalTaskDueAt, setPersonalTaskDueAt] = useState('');
 
@@ -308,6 +326,76 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     else setRanges(current => current.map(item => item.id === id ? { ...item, status } : item));
   };
 
+  const isVisibleSchoolRange = (item: SchoolExamRange) => item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass);
+  const getPublishedRangeProgress = (targetExamId: string, subjectName: string) => {
+    const rows = schoolRanges.filter(item => item.exam_id === targetExamId && item.subject === subjectName && isVisibleSchoolRange(item));
+    const sections = rows.flatMap(row => (row.range_sections || []).filter(section => section.kind !== 'notice').map(section => ({ row, section })));
+    const completed = sections.filter(({ row, section }) => publishedRangeProgress.some(progress => progress.school_test_range_id === row.id && progress.section_id === section.section_id && progress.completed)).length;
+    return { total: sections.length, completed, percent: sections.length ? Math.round(completed / sections.length * 100) : 0 };
+  };
+
+  const setPublishedRangeCompleted = async (range: SchoolExamRange, section: SchoolRangeSection, completed: boolean) => {
+    setError('');
+    const { error: saveError } = await supabase.from('student_school_range_progress').upsert({
+      user_id: userId,
+      school_test_range_id: range.id,
+      section_id: section.section_id,
+      completed,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,school_test_range_id,section_id' });
+    if (saveError) {
+      setError('範囲の履修状態を保存できませんでした: ' + saveError.message);
+      return;
+    }
+    setPublishedRangeProgress(current => {
+      const found = current.some(item => item.school_test_range_id === range.id && item.section_id === section.section_id);
+      return found
+        ? current.map(item => item.school_test_range_id === range.id && item.section_id === section.section_id ? { ...item, completed } : item)
+        : [...current, { school_test_range_id: range.id, section_id: section.section_id, completed }];
+    });
+  };
+
+  const addPersonalTask = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!studentIdentifier) { setError('ログイン情報を取得できません。再ログインしてください。'); return; }
+    if (!personalTaskTitle.trim()) { setError('課題名を入力してください。'); return; }
+    const dueAt = personalTaskDueAt ? new Date(personalTaskDueAt) : null;
+    if (dueAt && Number.isNaN(dueAt.getTime())) { setError('提出期限を確認してください。'); return; }
+    setSaving(true); setError('');
+    try {
+      const dueAtIso = dueAt ? dueAt.toISOString() : null;
+      const { data, error: insertError } = await supabase.from('todos').insert({
+        student_id: studentIdentifier,
+        title: personalTaskTitle.trim(),
+        details: personalTaskDetails.trim(),
+        subject: personalTaskSubject,
+        source: '自分で追加',
+        type: personalTaskType,
+        due: dueAt ? dueAt.toLocaleString('ja-JP') : '期限なし',
+        due_at: dueAtIso,
+        completed: false,
+      }).select('id,title,details,subject,source,type,due,due_at,completed,created_at').single();
+      if (insertError) throw insertError;
+      setPersonalTasks(current => [data as PersonalTask, ...current]);
+      setPersonalTaskTitle(''); setPersonalTaskDetails(''); setPersonalTaskDueAt('');
+      setPersonalTaskSubject('その他'); setPersonalTaskType('paper');
+      setMessage('自分用の課題を追加しました。');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '課題を追加できませんでした。'); }
+    finally { setSaving(false); }
+  };
+
+  const updatePersonalTask = async (id: string, changes: { completed?: boolean }) => {
+    const { error: updateError } = await supabase.from('todos').update({ ...changes, updated_at: new Date().toISOString() }).eq('id', id).eq('student_id', studentIdentifier);
+    if (updateError) { setError('自分用課題を更新できませんでした: ' + updateError.message); return; }
+    setPersonalTasks(current => current.map(item => item.id === id ? { ...item, ...changes } : item));
+  };
+
+  const deletePersonalTask = async (id: string) => {
+    const { error: deleteError } = await supabase.from('todos').delete().eq('id', id).eq('student_id', studentIdentifier);
+    if (deleteError) { setError('自分用課題を削除できませんでした: ' + deleteError.message); return; }
+    setPersonalTasks(current => current.filter(item => item.id !== id));
+  };
+
   const setPreset = (focus: number, rest: number) => {
     setFocusMinutes(focus); setBreakMinutes(rest); setCustomFocus(String(focus)); setCustomBreak(String(rest));
     if (timerState === 'idle') { setPhase('focus'); setTimerRemaining(focus * 60); }
@@ -364,6 +452,12 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     const done = list.filter(item => item.status === 'completed' || item.status === 'reviewed').length;
     return { count: list.length, percent: list.length ? Math.round(done / list.length * 100) : 0 };
   };
+  const scopeColor = (percent: number, total: number) => !total
+    ? dark ? 'border-slate-600 bg-slate-800 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
+    : percent === 100 ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+    : percent >= 50 ? 'border-cyan-300 bg-cyan-100 text-cyan-900'
+    : percent > 0 ? 'border-amber-300 bg-amber-100 text-amber-900'
+    : 'border-rose-200 bg-rose-50 text-rose-800';
   const timeText = String(Math.floor(remaining / 60)).padStart(2, '0') + ':' + String(remaining % 60).padStart(2, '0');
 
   if (loading) return <div className={panel + ' mx-auto max-w-3xl text-center'}><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent"/><p className={'mt-3 text-sm ' + muted}>学習データを読み込んでいます…</p></div>;
