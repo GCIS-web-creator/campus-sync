@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2 } from 'lucide-react';
+import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
