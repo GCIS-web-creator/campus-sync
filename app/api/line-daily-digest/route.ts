@@ -72,10 +72,10 @@ function upcomingWeatherDays(value: unknown, startDate: string): WeatherDayForec
 }
 
 async function fetchDigestWeatherForecast(
-  admin: ReturnType<typeof createClient>,
+  admin: unknown,
   startDate: string,
 ): Promise<DigestWeatherResult> {
-  const weatherCache = (admin as unknown as WeatherCacheTableClient).from('campussync_weather_forecast_cache');
+  const weatherCache = (admin as WeatherCacheTableClient).from('campussync_weather_forecast_cache');
 
   try {
     const freshForecast = await fetchSchoolWeatherForecast(5);
