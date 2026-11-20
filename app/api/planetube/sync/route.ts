@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     planetLevel?: unknown;
     growthPoints?: unknown;
   } | null;
-  if (!isUuid(body?.planetubeUserId) ||
+  if (!body || !isUuid(body.planetubeUserId) ||
       !Number.isInteger(body?.planetLevel) || Number(body.planetLevel) < 0 || Number(body.planetLevel) > 1_000_000 ||
       !Number.isInteger(body?.growthPoints) || Number(body.growthPoints) < 0 || Number(body.growthPoints) > 2_000_000_000) {
     return planetubeFail('惑星データの形式が正しくありません。', 400);
