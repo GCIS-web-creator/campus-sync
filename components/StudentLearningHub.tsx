@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
+import { createPlanetubeSessionId, postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
@@ -301,7 +301,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     let sessionId = planetubeSessionId.current;
     if (timerState === 'running') {
       if (!sessionId) {
-        sessionId = window.crypto?.randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+        sessionId = createPlanetubeSessionId();
         planetubeSessionId.current = sessionId;
       }
       const command = previous === 'paused' ? 'FOCUS_RESUME' : 'FOCUS_START';
@@ -392,7 +392,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
     setError(''); setMessage('');
     if (timerState === 'idle') {
-      startedAt.current = new Date().toISOString(); planetubeSessionId.current = window.crypto?.randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
+      startedAt.current = new Date().toISOString(); planetubeSessionId.current = createPlanetubeSessionId(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
   };
