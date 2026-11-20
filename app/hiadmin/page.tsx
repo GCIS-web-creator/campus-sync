@@ -21,12 +21,19 @@ type PlanetubeEventMonitor = {
   extension_version: string | null; details: Record<string, unknown>; created_at: string;
 };
 type PlanetubeMonitor = {
-  summary: { total: number; linked: number; pending: number; revoked: number; extensionsSeen24h: number; events24h: number };
+  summary: { total: number; linked: number; pending: number; revoked: number; extensionsSeen24h: number; events24h: number; errors24h: number; restrictionEvents24h: number };
   connections: PlanetubeConnectionMonitor[];
   events: PlanetubeEventMonitor[];
 };
 
 const dateText = (value?: string | null) => value ? new Date(value).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '記録なし';
+const planetubeEventDetailText = (details: Record<string, unknown>) => {
+  if (typeof details.errorCode === 'string') return 'エラー：' + details.errorCode.slice(0, 64);
+  if (typeof details.enabled === 'boolean') return 'YouTube制限：' + (details.enabled ? '有効' : '無効');
+  if (details.phase === 'focus' || details.phase === 'break') return details.phase === 'focus' ? '集中' : '休憩';
+  if (typeof details.durationSeconds === 'number' && Number.isInteger(details.durationSeconds)) return 'タイマー残り ' + details.durationSeconds + ' 秒';
+  return '—';
+};
 
 export default function HiAdminPage() {
   const [token, setToken] = useState('');
@@ -271,6 +278,8 @@ export default function HiAdminPage() {
                 ['解除済み',planetubeMonitor.summary.revoked],
                 ['24時間以内に拡張機能検出',planetubeMonitor.summary.extensionsSeen24h],
                 ['直近24時間のイベント',planetubeMonitor.summary.events24h],
+                ['24時間以内の拡張機能エラー',planetubeMonitor.summary.errors24h],
+                ['24時間以内の制限状態通知',planetubeMonitor.summary.restrictionEvents24h],
               ].map(([label,value]) => <article key={String(label)} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p className="text-xs font-bold text-slate-400">{label}</p><p className="mt-2 text-2xl font-black tabular-nums">{Number(value).toLocaleString('ja-JP')}</p></article>)}
             </div>
             <div className="rounded-2xl border border-white/10">
@@ -282,9 +291,9 @@ export default function HiAdminPage() {
             </div>
             <div className="rounded-2xl border border-white/10">
               <div className="border-b border-white/10 px-4 py-3"><h3 className="text-sm font-black">最近のイベント（最大50件）</h3></div>
-              <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-xs"><thead className="bg-white/[0.04] text-slate-400"><tr><th className="px-4 py-3">日時</th><th className="px-4 py-3">イベント</th><th className="px-4 py-3">CampusSync ID</th><th className="px-4 py-3">拡張機能</th></tr></thead><tbody>
-                {planetubeMonitor.events.map(row => <tr key={row.id} className="border-t border-white/5"><td className="px-4 py-3 text-slate-400">{dateText(row.created_at)}</td><td className="px-4 py-3 font-bold text-violet-200">{row.event_type}</td><td className="px-4 py-3 font-mono text-[10px] text-slate-400">{row.campus_user_id.slice(0,8)}…</td><td className="px-4 py-3 text-slate-400">{row.extension_version || '—'}</td></tr>)}
-                {planetubeMonitor.events.length===0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">イベントはまだありません。</td></tr>}
+              <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-xs"><thead className="bg-white/[0.04] text-slate-400"><tr><th className="px-4 py-3">日時</th><th className="px-4 py-3">イベント</th><th className="px-4 py-3">CampusSync ID</th><th className="px-4 py-3">拡張機能</th><th className="px-4 py-3">内容</th></tr></thead><tbody>
+                {planetubeMonitor.events.map(row => <tr key={row.id} className="border-t border-white/5"><td className="px-4 py-3 text-slate-400">{dateText(row.created_at)}</td><td className="px-4 py-3 font-bold text-violet-200">{row.event_type}</td><td className="px-4 py-3 font-mono text-[10px] text-slate-400">{row.campus_user_id.slice(0,8)}…</td><td className="px-4 py-3 text-slate-400">{row.extension_version || '—'}</td><td className="px-4 py-3 text-slate-400">{planetubeEventDetailText(row.details || {})}</td></tr>)}
+                {planetubeMonitor.events.length===0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">イベントはまだありません。</td></tr>}
               </tbody></table></div>
             </div>
           </> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-400">Planetube連携情報を読み込んでください。</div>}
