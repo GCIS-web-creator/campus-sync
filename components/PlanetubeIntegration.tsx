@@ -233,6 +233,10 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
           {canIssueCode && <button type="button" className={button} onClick={() => void issueCode()} disabled={saving || loading}><Link2 size={16}/>{connection?.status === 'pending' ? 'コードを再発行' : '連携コードを発行'}</button>}
           {isLinked && <button type="button" className={secondary + ' text-rose-600'} onClick={() => void disconnect()} disabled={saving}><Unlink size={16}/>連携を解除</button>}
         </div>
+        {isLinked && scopes.includes('planet:read') && <div className={'mt-4 grid grid-cols-2 gap-2'}>
+          <div className={'rounded-xl p-3 ' + (dark ? 'bg-slate-800' : 'bg-slate-50')}><p className={'text-[10px] ' + muted}>Planetube 惑星レベル</p><p className="mt-1 text-2xl font-black">{connection?.planet_level == null ? '—' : 'Lv.' + connection.planet_level}</p></div>
+          <div className={'rounded-xl p-3 ' + (dark ? 'bg-slate-800' : 'bg-slate-50')}><p className={'text-[10px] ' + muted}>成長ポイント</p><p className="mt-1 text-2xl font-black">{connection?.planet_growth_points == null ? '—' : connection.planet_growth_points.toLocaleString('ja-JP')}</p></div>
+        </div>}
         {connection?.planetube_user_id && <p className={'mt-3 break-all text-[11px] ' + muted}>PlanetubeアカウントID：{connection.planetube_user_id}</p>}
         {loading && <p className={'mt-3 text-xs ' + muted}>連携状態を確認しています…</p>}
       </section>
