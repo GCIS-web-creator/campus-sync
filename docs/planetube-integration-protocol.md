@@ -65,15 +65,15 @@ Commands use \`type: "COMMAND"\`, a \`command\` name, and a payload:
 
 | Command | Payload | Meaning |
 |---|---|---|
-| \`FOCUS_START\` | \`{ sessionId, durationSeconds, phase }\` | Start the restriction session with the Pomodoro timer |
-| \`FOCUS_PAUSE\` | \`{ sessionId }\` | Pause timer-linked control |
+| \`FOCUS_START\` | \`{ sessionId, durationSeconds, phase, reconnect? }\` | Start or restore the restriction session with the Pomodoro timer |
+| \`FOCUS_PAUSE\` | \`{ sessionId, reconnect? }\` | Pause timer-linked control |
 | \`FOCUS_RESUME\` | \`{ sessionId, durationSeconds, phase }\` | Resume timer-linked control |
 | \`PHASE_CHANGED\` | \`{ sessionId, phase }\` | Notify focus/break transition |
 | \`SESSION_END\` | \`{ sessionId, releaseRestrictions: true }\` | End the session and release session restrictions |
 
 ### Extension → page
 
-The extension replies with \`source: "PLANETUBE_EXTENSION"\` and \`protocol: 1\`:
+The extension replies with \`source: "PLANETUBE_EXTENSION"\` and \`protocol: 1\`. It must send an \`ACK\` or \`ERROR\` for each accepted command and publish \`RESTRICTION_STATUS\` after the effective restriction state changes. The page may resend a command after reconnecting; repeated \`FOCUS_START\` messages with the same \`sessionId\` must restore the same session rather than creating duplicate sessions. A \`reconnect: true\` flag means the extension should reconcile its local state with the active CampusSync timer.
 
 - \`{ type: "READY", extensionVersion: "1.0.0" }\`
 - \`{ type: "DISCONNECTED" }\`
@@ -99,4 +99,4 @@ Never transmit or store through this integration:
 - task titles, subject names, reflections, homework details, or grades;
 - visited URLs, YouTube watch history, search terms, or browsing history.
 
-Timer event metadata is restricted to the session UUID, phase, duration, extension version, and small status/error codes. The extension itself must remain user-installed and user-authorized; a web page cannot silently install or enable a browser extension.
+Timer event metadata is restricted to the session UUID, phase, duration, extension version, and small status/error codes. The CampusSync event API allows at most 60 events per user per minute. The extension itself must remain user-installed and user-authorized; a web page cannot silently install or enable a browser extension.
