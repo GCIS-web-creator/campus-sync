@@ -28,7 +28,13 @@ export async function GET(request: Request) {
     console.error('Planetube connection read failed:', error.message);
     return planetubeFail('連携状態を読み込めませんでした。', 500);
   }
-  return NextResponse.json({ success: true, connection: data || null }, { headers: NO_STORE });
+  const visibleConnection = data ? {
+    ...data,
+    planet_level: data.approved_scopes?.includes('planet:read') ? data.planet_level : null,
+    planet_growth_points: data.approved_scopes?.includes('planet:read') ? data.planet_growth_points : null,
+    planet_synced_at: data.approved_scopes?.includes('planet:read') ? data.planet_synced_at : null,
+  } : null;
+  return NextResponse.json({ success: true, connection: visibleConnection }, { headers: NO_STORE });
 }
 
 export async function POST(request: Request) {
@@ -94,10 +100,16 @@ export async function PATCH(request: Request) {
   if (readError) return planetubeFail('連携状態を確認できません。', 500);
   if (!existing || existing.status === 'revoked') return planetubeFail('Planetube連携が開始されていません。', 404);
 
-  const { error } = await auth.admin.from('planetube_connections').update({
+  const updateValues: Record<string, unknown> = {
     approved_scopes: approvedScopes,
     updated_at: new Date().toISOString(),
-  }).eq('id', existing.id);
+  };
+  if (!approvedScopes.includes('planet:read')) {
+    updateValues.planet_level = null;
+    updateValues.planet_growth_points = null;
+    updateValues.planet_synced_at = null;
+  }
+  const { error } = await auth.admin.from('planetube_connections').update(updateValues).eq('id', existing.id);
   if (error) return planetubeFail('データ利用範囲を保存できませんでした。', 500);
   return NextResponse.json({ success: true, approvedScopes }, { headers: NO_STORE });
 }
