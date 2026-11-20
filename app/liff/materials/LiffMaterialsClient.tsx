@@ -10,8 +10,174 @@ type LiffSdk = {
   login(config?: { redirectUri?: string }): void;
   getIDToken(): string | null;
 };
+type PdfViewport = { width: number; height: number };
+type PdfPageHandle = {
+  getViewport(options: { scale: number }): PdfViewport;
+  render(options: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): { promise: Promise<void> };
+};
+type PdfDocumentHandle = {
+  numPages: number;
+  getPage(pageNumber: number): Promise<PdfPageHandle>;
+  destroy?(): Promise<void> | void;
+};
+type PdfJsHandle = {
+  getDocument(options: { data: Uint8Array }): { promise: Promise<PdfDocumentHandle> };
+};
+
 declare global {
-  interface Window { liff?: LiffSdk; }
+  interface Window { liff?: LiffSdk; pdfjsLib?: PdfJsHandle; }
+}
+
+let pdfJsLoading: Promise<PdfJsHandle> | null = null;
+
+function loadPdfJs(): Promise<PdfJsHandle> {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!pdfJsLoading) {
+    pdfJsLoading = new Promise<PdfJsHandle>((resolve, reject) => {
+      let script = document.querySelector<HTMLScriptElement>('script[data-cs-pdfjs]');
+      const onLoad = () => {
+        if (window.pdfjsLib) resolve(window.pdfjsLib);
+        else reject(new Error('PDFビューアーを初期化できませんでした。'));
+      };
+      const onError = () => reject(new Error('PDFビューアーを読み込めませんでした。通信環境を確認してください。'));
+      if (!script) {
+        script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/pdfjs-loader.js';
+        script.dataset.csPdfjs = 'true';
+        script.addEventListener('load', onLoad, { once: true });
+        script.addEventListener('error', onError, { once: true });
+        document.head.appendChild(script);
+      } else {
+        script.addEventListener('load', onLoad, { once: true });
+        script.addEventListener('error', onError, { once: true });
+      }
+    }).catch(error => {
+      pdfJsLoading = null;
+      throw error;
+    });
+  }
+  return pdfJsLoading;
+}
+
+function PdfCanvasViewer({ fileUrl }: { fileUrl: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [pdf, setPdf] = useState<PdfDocumentHandle | null>(null);
+  const [page, setPage] = useState(1);
+  const [scale, setScale] = useState(1.25);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [rendering, setRendering] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadedDocument: PdfDocumentHandle | null = null;
+
+    async function openPdf() {
+      setLoading(true);
+      setError('');
+      setPdf(null);
+      setPage(1);
+      try {
+        const library = await loadPdfJs();
+        const response = await fetch(fileUrl, { cache: 'no-store', credentials: 'same-origin' });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { message?: string } | null;
+          throw new Error(payload?.message || 'PDFファイルを取得できませんでした。');
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().includes('application/pdf')) {
+          throw new Error('取得したファイルがPDFではありません。管理者にファイル形式を確認してください。');
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (!bytes.length) throw new Error('PDFファイルが空です。');
+        const document = await library.getDocument({ data: bytes }).promise;
+        if (cancelled) {
+          await document.destroy?.();
+          return;
+        }
+        loadedDocument = document;
+        setPdf(document);
+      } catch (openError) {
+        if (!cancelled) setError(openError instanceof Error ? openError.message : 'PDFを開けませんでした。');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void openPdf();
+    return () => {
+      cancelled = true;
+      if (loadedDocument) void loadedDocument.destroy?.();
+    };
+  }, [fileUrl]);
+
+  useEffect(() => {
+    if (!pdf || !canvasRef.current) return;
+    let cancelled = false;
+
+    async function renderPage() {
+      setRendering(true);
+      setError('');
+      try {
+        const pageData = await pdf.getPage(page);
+        if (cancelled || !canvasRef.current) return;
+        const viewport = pageData.getViewport({ scale });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('PDFの描画領域を作成できませんでした。');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        await pageData.render({ canvasContext: context, viewport }).promise;
+      } catch (renderError) {
+        if (!cancelled) setError(renderError instanceof Error ? renderError.message : 'ページを描画できませんでした。');
+      } finally {
+        if (!cancelled) setRendering(false);
+      }
+    }
+
+    void renderPage();
+    return () => { cancelled = true; };
+  }, [pdf, page, scale]);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#111d2d] p-3 sm:p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-slate-300">
+          {pdf ? `ページ ${page} / ${pdf.numPages}` : 'PDFプレビュー'}
+          {rendering ? <span className="ml-2 text-cyan-300">描画中…</span> : null}
+        </div>
+        {pdf ? (
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setScale(value => Math.max(0.75, Number((value - 0.2).toFixed(2))))} disabled={scale <= 0.75} className="rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-40" aria-label="縮小">−</button>
+            <span className="min-w-12 text-center text-xs text-slate-400">{Math.round(scale * 100)}%</span>
+            <button type="button" onClick={() => setScale(value => Math.min(2.5, Number((value + 0.2).toFixed(2))))} disabled={scale >= 2.5} className="rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-40" aria-label="拡大">＋</button>
+          </div>
+        ) : null}
+      </div>
+
+      {loading ? (
+        <div className="flex min-h-64 items-center justify-center text-sm text-slate-300">PDFを読み込んでいます…</div>
+      ) : error ? (
+        <div className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-sm leading-6 text-rose-100">
+          {error}
+          <p className="mt-2 text-xs text-slate-400">上部の「ダウンロード」からファイルを開くこともできます。</p>
+        </div>
+      ) : (
+        <div className="flex min-h-64 justify-center overflow-auto rounded-xl bg-slate-300 p-1">
+          <canvas ref={canvasRef} className="h-auto max-w-full bg-white shadow-xl" />
+        </div>
+      )}
+
+      {pdf ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setPage(value => Math.max(1, value - 1))} disabled={page <= 1 || rendering} className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-40">← 前のページ</button>
+          <span className="text-xs tabular-nums text-slate-400">{page} / {pdf.numPages}</span>
+          <button type="button" onClick={() => setPage(value => Math.min(pdf.numPages, value + 1))} disabled={page >= pdf.numPages || rendering} className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-40">次のページ →</button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 type Folder = { id: string; name: string; parent_id: string | null; sort_order: number };
@@ -194,7 +360,9 @@ export default function LiffMaterialsClient({ liffId }: { liffId: string }) {
             <div className="border-t border-white/10 bg-[#0b1727] p-2 sm:p-4">
               {selected.mime_type.startsWith('image/')
                 ? <div className="flex min-h-[55vh] items-center justify-center"><img src={fileUrl} alt={selected.title} className="max-h-[75vh] max-w-full rounded-xl object-contain" /></div>
-                : <iframe title={selected.title} src={fileUrl} className="h-[70vh] min-h-[480px] w-full rounded-xl bg-white" referrerPolicy="no-referrer" />}
+                : selected.mime_type === 'application/pdf'
+                  ? <PdfCanvasViewer fileUrl={fileUrl} />
+                  : <div className="flex min-h-64 items-center justify-center rounded-xl border border-white/10 text-sm text-slate-400">このファイル形式のプレビューには対応していません。ダウンロードして開いてください。</div>}
             </div>
           </section>
         ) : (
