@@ -487,7 +487,17 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           const examSubjects = subjects.filter(item => item.exam_id === exam.id).slice().sort((a,b)=>a.exam_date.localeCompare(b.exam_date)||a.sort_order-b.sort_order);
           return <article key={exam.id} className={'mb-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
-            <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=><span key={item.id} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">{item.sort_order} ・ {item.subject}</span>)}</div></div>)}
+            <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=>{
+                  const scope = getPublishedRangeProgress(exam.id, item.subject);
+                  return <button key={item.id} type="button" onClick={() => {
+                    setExamId(exam.id);
+                    setShowRangeManager(true);
+                    window.setTimeout(() => document.getElementById('subject-range-'+item.id)?.scrollIntoView({behavior:'smooth',block:'start'}), 80);
+                  }} className={'flex min-w-[112px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black shadow-sm transition hover:-translate-y-0.5 '+scopeColor(scope.percent, scope.total)}>
+                    <span>{item.sort_order} ・ {item.subject}</span>
+                    <span className="shrink-0 text-[10px] tabular-nums">{scope.total ? scope.percent+'%' : '未登録'}</span>
+                  </button>;
+                })}</div></div>)}
             {!examSubjects.length&&<p className={'text-xs '+muted}>実施教科・日ごとの日程は調整中です。確定後にここへ表示されます。</p>}</div>
             {schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass))).length > 0 && (() => {
               const visibleRanges = schoolRanges.filter(item => item.exam_id === exam.id && (item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass)));
@@ -498,21 +508,38 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
                   <button type="button" onClick={() => setExpandedSchoolRangeIds(allExpanded ? current => current.filter(id => !visibleRanges.some(item => item.id === id)) : current => Array.from(new Set([...current, ...visibleRanges.map(item => item.id)])))} className={secondary}>{allExpanded ? 'すべて閉じる' : 'すべて開く'}</button>
                 </div>
                 <div className="space-y-2">{visibleRanges.map(item => {
-                  const expanded = expandedSchoolRangeIds.includes(item.id);
-                  return <article key={item.id} className={'overflow-hidden rounded-xl border '+(dark?'border-slate-700 bg-slate-900':'border-white bg-white')}>
-                    <button type="button" aria-expanded={expanded} aria-controls={'school-range-'+item.id} onClick={() => setExpandedSchoolRangeIds(current => expanded ? current.filter(id => id !== item.id) : [...current, item.id])} className={'flex w-full items-center justify-between gap-3 p-3 text-left '+(dark?'hover:bg-slate-800':'hover:bg-slate-50')}>
-                      <span className="min-w-0"><span className="block text-sm font-black">{item.display_subject}</span><span className={'mt-1 block text-[10px] font-bold '+muted}>{item.audience} ・ {(item.range_sections || []).length}項目</span></span>
-                      <span className="flex shrink-0 items-center gap-2 text-cyan-600"><span className="text-[10px] font-bold">{expanded ? '閉じる' : '範囲を見る'}</span><span className={'text-lg transition-transform '+(expanded?'rotate-90':'')}>›</span></span>
-                    </button>
-                    {expanded && <div id={'school-range-'+item.id} className={'space-y-2 border-t p-3 '+(dark?'border-slate-700':'border-slate-100')}>
-                      {(item.range_sections || []).map((section,index)=><div key={item.id+'-'+index} className={'rounded-lg p-2.5 '+(dark?'bg-slate-800':'bg-slate-50')}>
-                        <h5 className="text-xs font-black">{section.title}</h5>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5">{section.body}</p>
-                        {section.note && <p className="mt-1 whitespace-pre-wrap text-[11px] font-bold leading-5 text-amber-700">{section.note}</p>}
-                      </div>)}
-                    </div>}
-                  </article>;
-                })}</div>
+                   const expanded = expandedSchoolRangeIds.includes(item.id);
+                   const rangeSections = (item.range_sections || []).filter(section => section.kind !== 'notice');
+                   const noticeSections = (item.range_sections || []).filter(section => section.kind === 'notice');
+                   const completedCount = rangeSections.filter(section => publishedRangeProgress.some(progress => progress.school_test_range_id === item.id && progress.section_id === section.section_id && progress.completed)).length;
+                   return <article key={item.id} className={'overflow-hidden rounded-xl border '+(dark?'border-slate-700 bg-slate-900':'border-white bg-white')}>
+                     <button type="button" aria-expanded={expanded} aria-controls={'school-range-'+item.id} onClick={() => setExpandedSchoolRangeIds(current => expanded ? current.filter(id => id !== item.id) : [...current, item.id])} className={'flex w-full items-center justify-between gap-3 p-3 text-left '+(dark?'hover:bg-slate-800':'hover:bg-slate-50')}>
+                       <span className="min-w-0"><span className="block text-sm font-black">{item.display_subject}</span><span className={'mt-1 block text-[10px] font-bold '+muted}>{item.audience} ・ 範囲 {completedCount}/{rangeSections.length} 完了 ・ お知らせ {noticeSections.length}件</span></span>
+                       <span className="flex shrink-0 items-center gap-2 text-cyan-600"><span className="text-[10px] font-bold">{expanded ? '閉じる' : '範囲を見る'}</span><span className={'text-lg transition-transform '+(expanded?'rotate-90':'')}>›</span></span>
+                     </button>
+                     {expanded && <div id={'school-range-'+item.id} className={'space-y-3 border-t p-3 '+(dark?'border-slate-700':'border-slate-100')}>
+                       <div>
+                         <div className="mb-2 flex items-center justify-between gap-2"><h5 className="text-xs font-black">出題範囲</h5><span className="text-[10px] font-bold text-cyan-600">{completedCount}/{rangeSections.length} 履修済み</span></div>
+                         {rangeSections.length ? <div className="space-y-2">{rangeSections.map((section,index)=>{
+                           const checked = publishedRangeProgress.some(progress => progress.school_test_range_id === item.id && progress.section_id === section.section_id && progress.completed);
+                           return <label key={section.section_id || item.id+'-'+index} className={'flex cursor-pointer items-start gap-3 rounded-xl border p-3 '+(checked?(dark?'border-emerald-800 bg-emerald-950/30':'border-emerald-200 bg-emerald-50'):(dark?'border-slate-700 bg-slate-800':'border-slate-200 bg-slate-50'))}>
+                             <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-emerald-600" checked={checked} onChange={event=>void setPublishedRangeCompleted(item,section,event.target.checked)} />
+                             <span className="min-w-0 flex-1"><span className={'block text-xs font-black '+(checked?'line-through opacity-70':'')}>{section.title}</span><span className="mt-1 block whitespace-pre-wrap break-words text-xs leading-5">{section.body}</span>{section.note && <span className="mt-1 block whitespace-pre-wrap text-[11px] font-bold leading-5 text-amber-700">{section.note}</span>}</span>
+                             {checked && <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-500"/>}
+                           </label>;
+                         })}</div> : <p className={'rounded-lg border border-dashed p-3 text-xs '+muted}>出題範囲として登録された項目はありません。</p>}
+                       </div>
+                       {noticeSections.length > 0 && <section className={'rounded-xl border p-3 '+(dark?'border-amber-900 bg-amber-950/20':'border-amber-200 bg-amber-50')}>
+                         <h5 className="mb-2 flex items-center gap-2 text-xs font-black text-amber-800"><Info size={14}/>お知らせ（履修チェック対象外）</h5>
+                         <div className="space-y-2">{noticeSections.map((section,index)=><div key={section.section_id || item.id+'-notice-'+index} className="rounded-lg bg-white/60 p-2.5">
+                           <p className="text-xs font-black text-amber-900">{section.title}</p>
+                           <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">{section.body}</p>
+                           {section.note && <p className="mt-1 whitespace-pre-wrap text-[11px] font-bold leading-5 text-amber-800">{section.note}</p>}
+                         </div>)}</div>
+                       </section>}
+                     </div>}
+                   </article>;
+                 })}</div>
               </section>;
             })()}
           </article>;
