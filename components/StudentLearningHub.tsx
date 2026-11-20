@@ -361,7 +361,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
 
-    {tab === 'planetube' && <div className="space-y-3"><PlanetubeDashboard campusEmail={userEmail} isDarkMode={isDarkMode} /><a href="/planetube" className="flex items-center justify-center gap-2 rounded-xl border border-cyan-200/20 bg-cyan-50/5 px-4 py-3 text-xs font-black text-cyan-600 hover:bg-cyan-50/10">Planetube拡張機能の導入案内（希望者向け）<Globe2 size={15}/></a></div>
+    {tab === 'planetube' && <div className="space-y-3"><PlanetubeDashboard campusEmail={userEmail} isDarkMode={isDarkMode} /><a href="/planetube" className="flex items-center justify-center gap-2 rounded-xl border border-cyan-200/20 bg-cyan-50/5 px-4 py-3 text-xs font-black text-cyan-600 hover:bg-cyan-50/10">Planetube拡張機能の導入案内（希望者向け）<Globe2 size={15}/></a></div>}
 
     {tab === 'overview' && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
