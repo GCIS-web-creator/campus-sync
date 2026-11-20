@@ -26,11 +26,20 @@ export async function GET(request:Request){
   const admin=getAdmin();if(!admin)return fail('Supabase設定がありません。',503);
   const {data:exams,error}=await admin.from('school_test_exams').select('*').order('start_date',{ascending:false});
   if(error)return fail('考査日程を取得できませんでした。',500);
-  const ids=(exams||[]).map(x=>x.id);let subjects:any[]=[];
-  if(ids.length){const result=await admin.from('school_test_subjects').select('*').in('exam_id',ids).order('exam_date').order('sort_order');if(result.error)return fail('実施教科を取得できませんでした。',500);subjects=result.data||[];}
-  const grouped=new Map<string,any[]>();
+  const ids=(exams||[]).map(x=>x.id);let subjects:any[]=[];let ranges:any[]=[];
+  if(ids.length){
+    const [subjectResult,rangeResult]=await Promise.all([
+      admin.from('school_test_subjects').select('*').in('exam_id',ids).order('exam_date').order('sort_order'),
+      admin.from('school_test_ranges').select('*').in('exam_id',ids).order('sort_order'),
+    ]);
+    if(subjectResult.error)return fail('実施教科を取得できませんでした。',500);
+    if(rangeResult.error)return fail('試験範囲を取得できませんでした。',500);
+    subjects=subjectResult.data||[];ranges=rangeResult.data||[];
+  }
+  const grouped=new Map<string,any[]>(),groupedRanges=new Map<string,any[]>();
   for(const subject of subjects){const list=grouped.get(subject.exam_id)||[];list.push(subject);grouped.set(subject.exam_id,list);}
-  return NextResponse.json({success:true,exams:(exams||[]).map(exam=>({...exam,subjects:grouped.get(exam.id)||[]}))},{headers:{'Cache-Control':'no-store, private'}});
+  for(const range of ranges){const list=groupedRanges.get(range.exam_id)||[];list.push(range);groupedRanges.set(range.exam_id,list);}
+  return NextResponse.json({success:true,exams:(exams||[]).map(exam=>({...exam,subjects:grouped.get(exam.id)||[],ranges:groupedRanges.get(exam.id)||[]}))},{headers:{'Cache-Control':'no-store, private'}});
 }
 export async function POST(request:Request){
   if(!sameOrigin(request))return fail('不正な管理操作です。',403);
