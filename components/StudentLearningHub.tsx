@@ -545,22 +545,40 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           </article>;
         }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はまだ登録されていません。Admin・先生の登録後にここへ表示されます。</p>}
       </section>
-      {exams.length > 0 && <label className={'block space-y-1 text-xs font-bold ' + muted}>テスト範囲を管理する考査
-        <select className={input} value={examId} onChange={e=>setExamId(e.target.value)}>
-          {exams.map(exam=><option key={exam.id} value={exam.id}>{exam.school_year}年度・{exam.term}学期 {exam.exam_type}</option>)}
-        </select>
-      </label>}
-      {activeSubjects.map(subject=>{
-        const list=ranges.filter(item=>item.school_test_subject_id===subject.id);
-        const pct=progress(subject.id).percent;
-        return <section key={subject.id} className={panel}>
-          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className="rounded-full bg-cyan-50 px-3 py-1 text-xs text-cyan-800">{pct}% 完了</b></div>
-          <div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:pct+'%'}}/></div>
-          <div className="mt-3 space-y-2">{list.map(item=><div key={item.id} className={'flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><span data-user-content className="min-w-0 flex-1 text-sm font-bold">{item.title}</span><select aria-label={item.title+'の進捗'} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700" value={item.status} onChange={e=>void setRangeStatus(item.id,e.target.value as Range['status'])}>{Object.entries(STATUS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>)}{!list.length&&<p className={'text-xs '+muted}>テスト範囲はまだ登録されていません。</p>}</div>
-          <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：教科書 P20〜35、問題集 第2章" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>範囲を追加</button></form>
-        </section>;
-      })}
-    </div>}
+      <section className={panel}>
+        <button type="button" aria-expanded={showRangeManager} onClick={()=>setShowRangeManager(value=>!value)} className="flex w-full items-center justify-between gap-3 text-left">
+          <span><span className="block font-black">テスト範囲を管理する考査</span><span className={'mt-1 block text-[10px] '+muted}>教科別の進捗と自分用の学習メモを確認できます</span></span>
+          <span className="flex items-center gap-2 text-xs font-bold text-cyan-600">{showRangeManager?'閉じる':'開く'}<span className={'text-lg transition-transform '+(showRangeManager?'rotate-180':'')}>⌄</span></span>
+        </button>
+        {showRangeManager && <div className="mt-4 space-y-3">
+          {exams.length > 0 && <label className={'block space-y-1 text-xs font-bold ' + muted}>対象の考査
+            <select className={input} value={examId} onChange={e=>setExamId(e.target.value)}>
+              {exams.map(exam=><option key={exam.id} value={exam.id}>{exam.school_year}年度・{exam.term}学期 {exam.exam_type}</option>)}
+            </select>
+          </label>}
+          {activeSubjects.map(subject=>{
+            const list=ranges.filter(item=>item.school_test_subject_id===subject.id);
+            const official=getPublishedRangeProgress(examId,subject.subject);
+            const pct=official.percent;
+            return <section id={'subject-range-'+subject.id} key={subject.id} className={panel+' scroll-mt-24'}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className={'rounded-full border px-3 py-1 text-xs '+scopeColor(official.percent,official.total)}>{official.total ? official.percent + '% 履修済み' : '範囲未登録'}</b></div>
+              {official.total>0 && <><div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:pct+'%'}}/></div><p className={'mt-1 text-[10px] '+muted}>学校公開の出題範囲 {official.completed}/{official.total} 項目完了。上の「学校公開の試験範囲」でチェックできます。</p></>}
+              <div className="mt-4 border-t border-slate-200/60 pt-3">
+                <h4 className="mb-2 text-xs font-black">自分用の学習メモ</h4>
+                <div className="space-y-2">{list.map(item=>{
+                  const checked=item.status==='completed'||item.status==='reviewed';
+                  return <label key={item.id} className={'flex cursor-pointer items-start gap-2 rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}>
+                    <input type="checkbox" className="mt-0.5 h-4 w-4 accent-cyan-600" checked={checked} onChange={e=>void setRangeStatus(item.id,e.target.checked?'completed':'not_started')}/>
+                    <span className={'min-w-0 flex-1 text-sm font-bold '+(checked?'line-through opacity-60':'')}>{item.title}</span>
+                    {checked&&<CheckCircle2 size={15} className="shrink-0 text-emerald-500"/>}
+                  </label>;
+                })}{!list.length&&<p className={'text-xs '+muted}>自分用の学習メモはまだありません。</p>}</div>
+                <form onSubmit={e=>{e.preventDefault();void addRange(subject.id);}} className="mt-3 flex flex-col gap-2 sm:flex-row"><input className={input} value={rangeTarget===subject.id?rangeInput:''} onFocus={()=>setRangeTarget(subject.id)} onChange={e=>{setRangeTarget(subject.id);setRangeInput(e.target.value)}} placeholder="例：自分で追加する復習項目" maxLength={160}/><button className={secondary} disabled={saving||!rangeInput.trim()||rangeTarget!==subject.id}><Plus size={14}/>メモを追加</button></form>
+              </div>
+            </section>;
+          })}
+        </div>}
+      </section>
 
     {tab === 'mini-tests' && <div className="space-y-4">
       <section className={panel}>
