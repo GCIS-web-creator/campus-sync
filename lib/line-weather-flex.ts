@@ -66,7 +66,7 @@ function buildWeatherShareRow(day: WeatherDayForecast, index: number) {
   };
 }
 
-export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
+export function buildWeatherForecastBubble(weather: WeatherDayForecast[], notice?: string) {
   // LINEの画像・詳細ボタンは必ずCampusSyncの本番URLを使う。NEXT_PUBLIC_SITE_URL等の誤設定でVercel管理画面へ飛ばないよう固定。
   const origin = 'https://campus-sync-mocha.vercel.app';
   const icon = (name: string) => origin + '/api/weather/icons/' + name + '?format=png';
@@ -98,6 +98,7 @@ export function buildWeatherForecastBubble(weather: WeatherDayForecast[]) {
     ],
   }));
   const body: Record<string, unknown>[] = days.length ? [
+    ...(notice ? [{ type: 'text', text: notice, size: 'xxs', color: '#B45309', wrap: true }] : []),
     { type: 'text', text: '天気・最高/最低気温・降水確率・湿度', size: 'xs', color: '#64748B', wrap: true },
     { type: 'box', layout: 'horizontal', spacing: 'sm', contents: dayCards },
     { type: 'separator', color: '#CBD5E1', margin: 'md' },
