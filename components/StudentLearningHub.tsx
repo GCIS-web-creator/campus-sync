@@ -604,20 +604,55 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     </div>}
 
     {tab === 'assignments' && <div className="space-y-3">
-      <section className={panel}><h2 className="font-black">課題一覧</h2><p className={'mt-1 text-xs '+muted}>教科・課題内容・提出期限を確認できます。理系クラスの選択科目は対象を明記しています。</p></section>
-      {assignments.length ? assignments.map(assignment=>{
-        const left=daysUntilDue(assignment.due_at);
-        const target=targetLabel(assignment);
-        return <article key={assignment.id} className={panel}>
-          <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-[10px] font-black text-cyan-900">{assignment.subject||'その他'}</span><span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold '+(assignment.target_class==='science'?'bg-violet-100 text-violet-800':'bg-slate-100 text-slate-700')}>{target}</span></div>
-          <h3 className="mt-2 text-base font-black">{assignment.title}</h3>
-          <p className={'mt-2 whitespace-pre-wrap text-sm leading-6 '+muted}>{assignment.details||'課題の詳細はありません。'}</p>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
-            <p className={'text-xs font-bold '+muted}>{assignment.due_at ? new Date(assignment.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
-            {left===null ? <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">期限なし</span> : left<0 ? <span className="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-black text-rose-800">{Math.abs(left)}日超過</span> : left===0 ? <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-900">今日が期限</span> : <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-black text-blue-900">あと{left}日</span>}
+      <section className={panel}><h2 className="font-black">課題一覧</h2><p className={'mt-1 text-xs '+muted}>学校からの課題と、自分だけに表示される個人課題をまとめて管理できます。</p></section>
+      <section className={panel}>
+        <div className="mb-3"><h3 className="font-black">自分用の課題を作成</h3><p className={'mt-1 text-[10px] '+muted}>ここで作成した課題は自分のアカウントだけに保存・表示されます。</p></div>
+        <form onSubmit={addPersonalTask} className="space-y-3">
+          <label className="block space-y-1 text-xs font-bold">課題名<input className={input} value={personalTaskTitle} onChange={e=>setPersonalTaskTitle(e.target.value)} maxLength={200} placeholder="例：数学の問題集 P30〜35" required/></label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block space-y-1 text-xs font-bold">教科<select className={input} value={personalTaskSubject} onChange={e=>setPersonalTaskSubject(e.target.value)}><option value="その他">その他</option>{SUBJECTS.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select></label>
+            <label className="block space-y-1 text-xs font-bold">課題の種類<select className={input} value={personalTaskType} onChange={e=>setPersonalTaskType(e.target.value as 'paper'|'classroom'|'other')}><option value="paper">紙プリント・ノート</option><option value="classroom">Classroom</option><option value="other">その他・授業内指示</option></select></label>
+            <label className="block space-y-1 text-xs font-bold sm:col-span-2">提出期限（任意）<input className={input} type="datetime-local" value={personalTaskDueAt} onChange={e=>setPersonalTaskDueAt(e.target.value)}/></label>
           </div>
-        </article>;
-      }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>現在公開中の課題はありません。</p>}
+          <label className="block space-y-1 text-xs font-bold">詳細・メモ<textarea className={input} rows={2} value={personalTaskDetails} onChange={e=>setPersonalTaskDetails(e.target.value)} maxLength={5000} placeholder="課題の内容や提出先など"/></label>
+          <div className="flex justify-end"><button type="submit" className={primary} disabled={saving||!personalTaskTitle.trim()}><Plus size={15}/>課題を追加</button></div>
+        </form>
+        <div className="mt-4 space-y-2">
+          {personalTasks.length ? personalTasks.map(item=>{
+            const due=deadlineStatus(item.due_at);
+            const dueClass=due.tone==='overdue'?'bg-rose-100 text-rose-800':due.tone==='today'?'bg-amber-100 text-amber-900':due.tone==='future'?'bg-blue-100 text-blue-900':'bg-slate-100 text-slate-600';
+            return <article key={item.id} className={'rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
+              <div className="flex items-start gap-3">
+                <input type="checkbox" aria-label={item.title+'を完了にする'} className="mt-1 h-4 w-4 shrink-0 accent-cyan-700" checked={item.completed} onChange={e=>void updatePersonalTask(item.id,{completed:e.target.checked})}/>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-cyan-100 px-2 py-1 text-[10px] font-black text-cyan-900">{item.subject||'その他'}</span><span className={'rounded-md px-2 py-1 text-[10px] font-bold '+dueClass}>{item.completed?'完了':due.label}</span></div>
+                  <h4 className={'mt-2 text-sm font-black '+(item.completed?'line-through opacity-60':'')}>{item.title}</h4>
+                  {item.details&&<p className={'mt-1 whitespace-pre-wrap text-xs leading-5 '+muted}>{item.details}</p>}
+                  <p className={'mt-2 text-[10px] '+muted}>{item.source} ・ {item.due_at?new Date(item.due_at).toLocaleString('ja-JP'):'期限未設定'}</p>
+                </div>
+                <button type="button" onClick={()=>void deletePersonalTask(item.id)} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50" aria-label={item.title+'を削除'}><Trash2 size={15}/></button>
+              </div>
+            </article>;
+          }) : <p className={'rounded-lg border border-dashed p-3 text-xs '+muted}>自分用の課題はまだありません。上のフォームから追加できます。</p>}
+        </div>
+      </section>
+      <section className="space-y-3">
+        <h3 className="px-1 text-sm font-black">学校・先生からの課題</h3>
+        {assignments.length ? assignments.map(assignment=>{
+          const due=deadlineStatus(assignment.due_at);
+          const target=targetLabel(assignment);
+          const dueClass=due.tone==='overdue'?'bg-rose-100 text-rose-800':due.tone==='today'?'bg-amber-100 text-amber-900':due.tone==='future'?'bg-blue-100 text-blue-900':'bg-slate-100 text-slate-600';
+          return <article key={assignment.id} className={panel}>
+            <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-cyan-100 px-2.5 py-1 text-[10px] font-black text-cyan-900">{assignment.subject||'その他'}</span><span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold '+(assignment.target_class==='science'?'bg-violet-100 text-violet-800':'bg-slate-100 text-slate-700')}>{target}</span></div>
+            <h3 className="mt-2 text-base font-black">{assignment.title}</h3>
+            <p className={'mt-2 whitespace-pre-wrap text-sm leading-6 '+muted}>{assignment.details||'課題の詳細はありません。'}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
+              <p className={'text-xs font-bold '+muted}>{assignment.due_at ? new Date(assignment.due_at).toLocaleString('ja-JP') : '提出期限未設定'}</p>
+              <span className={'rounded-full px-3 py-1 text-[11px] font-black '+dueClass}>{due.label}</span>
+            </div>
+          </article>;
+        }) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>現在公開中の学校課題はありません。</p>}
+      </section>
     </div>}
 
     {tab === 'focus' && <div className="space-y-4">
