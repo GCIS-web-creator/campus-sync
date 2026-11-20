@@ -315,7 +315,7 @@ export async function GET(request: Request) {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const [
         totalConnections, linkedConnections, pendingConnections, revokedConnections,
-        activeExtensions, recentEventCount, connectionsResult, eventsResult,
+        activeExtensions, recentEventCount, extensionErrors, restrictionEvents, connectionsResult, eventsResult,
       ] = await Promise.all([
         auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }),
         auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).eq('status', 'linked'),
@@ -323,6 +323,8 @@ export async function GET(request: Request) {
         auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).eq('status', 'revoked'),
         auth.admin.from('planetube_connections').select('id', { count: 'exact', head: true }).gte('last_extension_seen_at', since),
         auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).gte('created_at', since),
+        auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).eq('event_type', 'extension_error').gte('created_at', since),
+        auth.admin.from('planetube_extension_events').select('id', { count: 'exact', head: true }).eq('event_type', 'restriction_status').gte('created_at', since),
         auth.admin.from('planetube_connections')
           .select('id,campus_user_id,status,approved_scopes,planet_level,planet_growth_points,planet_synced_at,last_extension_seen_at,updated_at')
           .order('updated_at', { ascending: false }).limit(50),
@@ -331,8 +333,8 @@ export async function GET(request: Request) {
           .order('created_at', { ascending: false }).limit(50),
       ]);
       const firstError = totalConnections.error || linkedConnections.error || pendingConnections.error ||
-        revokedConnections.error || activeExtensions.error || recentEventCount.error ||
-        connectionsResult.error || eventsResult.error;
+        revokedConnections.error || activeExtensions.error || recentEventCount.error || extensionErrors.error ||
+        restrictionEvents.error || connectionsResult.error || eventsResult.error;
       if (firstError) throw new Error('Planetube連携監視データを取得できませんでした。');
       return NextResponse.json({
         summary: {
@@ -342,6 +344,8 @@ export async function GET(request: Request) {
           revoked: revokedConnections.count || 0,
           extensionsSeen24h: activeExtensions.count || 0,
           events24h: recentEventCount.count || 0,
+          errors24h: extensionErrors.count || 0,
+          restrictionEvents24h: restrictionEvents.count || 0,
         },
         connections: connectionsResult.data || [],
         events: eventsResult.data || [],
