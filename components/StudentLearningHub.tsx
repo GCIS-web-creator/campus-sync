@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import PlanetubeDashboard from '@/components/PlanetubeDashboard';
+import PlanetubeExtensionPanel from '@/components/PlanetubeExtensionPanel';
 import { supabase } from '@/lib/supabase';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2 } from 'lucide-react';
 
@@ -374,7 +374,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
 
-    {tab === 'planetube' && <PlanetubeDashboard campusEmail={userEmail} isDarkMode={dark} studyStats={planetubeStudyStats} />}
+    {tab === 'planetube' && <PlanetubeExtensionPanel />}
 
     {tab === 'overview' && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
