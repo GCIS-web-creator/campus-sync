@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowLeftRight, CheckCircle2, Clock3, Copy, Globe2, Link2, LockKeyhole, Plug, PlayCircle, RefreshCw, ShieldCheck, Unlink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
+import { postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } from '@/lib/planetube-bridge';
 
 type Connection = {
   id: string;
@@ -140,6 +140,9 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
   const saveScopes = async () => {
     setSaving(true); setError(''); setMessage('');
     try {
+      if (connection?.approved_scopes?.includes('extension:control') && !scopes.includes('extension:control')) {
+        postPlanetubeCommand('SESSION_END', { sessionId: null, releaseRestrictions: true, reason: 'permission_revoked' });
+      }
       await requestApi('/api/planetube/link', 'PATCH', { approvedScopes: scopes });
       await load();
       setMessage('データ利用範囲を保存しました。');
@@ -154,6 +157,9 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
     if (!window.confirm('Planetubeとの連携を解除しますか？共有設定と保存済み惑星サマリーを削除します。')) return;
     setSaving(true); setError(''); setMessage('');
     try {
+      if (connection?.approved_scopes?.includes('extension:control')) {
+        postPlanetubeCommand('SESSION_END', { sessionId: null, releaseRestrictions: true, reason: 'account_disconnected' });
+      }
       await requestApi('/api/planetube/link', 'DELETE', {});
       setConnection(null);
       setScopes([]);
