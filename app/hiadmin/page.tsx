@@ -11,6 +11,20 @@ type Account = { id: string; email: string | null; created_at: string | null; la
 type Detail = { user: Omit<Account, 'profile'>; profile: Profile | null; counts: { todos: number; assignmentCompletions: number; contributionHistory: number; classMessages: number; schoolMessages: number; lostItems: number } };
 type Audit = { id: string; actor_email: string; action: string; target_user_id: string | null; created_at: string };
 type Overview = { profiles: number; todos: number; assignments: number; classMessages: number; schoolMessages: number; lostItems: number };
+type PlanetubeConnectionMonitor = {
+  id: string; campus_user_id: string; status: string; approved_scopes: string[];
+  planet_level: number | null; planet_growth_points: number | null;
+  planet_synced_at: string | null; last_extension_seen_at: string | null; updated_at: string;
+};
+type PlanetubeEventMonitor = {
+  id: string; campus_user_id: string; event_type: string;
+  extension_version: string | null; details: Record<string, unknown>; created_at: string;
+};
+type PlanetubeMonitor = {
+  summary: { total: number; linked: number; pending: number; revoked: number; extensionsSeen24h: number; events24h: number };
+  connections: PlanetubeConnectionMonitor[];
+  events: PlanetubeEventMonitor[];
+};
 
 const dateText = (value?: string | null) => value ? new Date(value).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '記録なし';
 
@@ -24,7 +38,8 @@ export default function HiAdminPage() {
   const [hiadminPassword2, setHiadminPassword2] = useState('');
   const [hiadminPassword3, setHiadminPassword3] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'audit' | 'database' | 'planetube'>('overview');
+  const [planetubeMonitor, setPlanetubeMonitor] = useState<PlanetubeMonitor | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<Account[]>([]);
   const [page, setPage] = useState(1);
@@ -167,10 +182,23 @@ export default function HiAdminPage() {
     finally { setLoading(false); }
   };
 
-  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database') => {
+  const loadPlanetube = async () => {
+    setLoading(true); setMessage('');
+    try {
+      const data = await api('view=planetube');
+      setPlanetubeMonitor(data as PlanetubeMonitor);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeTab = (next: 'overview' | 'users' | 'audit' | 'database' | 'planetube') => {
     setTab(next);
     if (next === 'users') void loadUsers(1, '');
     if (next === 'audit') void loadLogs();
+    if (next === 'planetube') void loadPlanetube();
     if (next === 'overview') void checkAccess();
   };
 
@@ -225,9 +253,42 @@ export default function HiAdminPage() {
       </section>}
 
       {access === 'ready' && <>
-        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
+        <nav className="mb-6 flex flex-wrap gap-2">{([{id:'overview',label:'概要'},{id:'users',label:'ユーザー管理'},{id:'database',label:'DBエクスプローラー'},{id:'audit',label:'監査ログ'},{id:'planetube',label:'Planetube連携'}] as const).map((item) => <button key={item.id} onClick={() => changeTab(item.id)} className={'rounded-xl border px-4 py-2.5 text-xs font-black ' + (tab === item.id ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-white/10 text-slate-400')}>{item.label}</button>)}</nav>
 
         {tab === 'overview' && <section><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">システムデータ概要</h2><p className="text-xs text-slate-400">個別本文ではなく、管理対象の件数のみ表示します。</p></div><button onClick={() => void checkAccess()} className="rounded-xl border border-white/10 p-2"><RefreshCw size={16}/></button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaryCards.map(([label,value,Icon]) => <article key={label} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5"><div className="flex justify-between text-xs font-bold text-slate-400"><span>{label}</span><Icon size={18} className="text-cyan-300"/></div><p className="mt-3 text-3xl font-black tabular-nums">{value.toLocaleString('ja-JP')}</p></article>)}</div><div className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={17}/><b className="text-sm">保護状態</b></div><p className="mt-2 text-xs leading-5 text-slate-300">学校メール許可リストと3段階の認証をサーバー側で確認しています。パスワード・ハッシュ・チャット本文は画面に出力しません。</p></div></section>}
+
+        {tab === 'planetube' && <section className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><p className="text-[10px] font-black tracking-[0.2em] text-violet-300">EXTERNAL SERVICE / PLANETUBE</p><h2 className="mt-1 text-lg font-black">Planetube連携監視</h2><p className="mt-1 text-xs text-slate-400">アカウント連携、利用範囲、拡張機能の応答を監視します。閲覧履歴や個人の学習内容は表示しません。</p></div>
+            <button type="button" onClick={() => void loadPlanetube()} className="rounded-xl border border-white/10 p-2" aria-label="Planetube監視情報を更新"><RefreshCw size={16}/></button>
+          </div>
+          {planetubeMonitor ? <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ['連携レコード',planetubeMonitor.summary.total],
+                ['連携済み',planetubeMonitor.summary.linked],
+                ['認証待ち',planetubeMonitor.summary.pending],
+                ['解除済み',planetubeMonitor.summary.revoked],
+                ['24時間以内に拡張機能検出',planetubeMonitor.summary.extensionsSeen24h],
+                ['直近24時間のイベント',planetubeMonitor.summary.events24h],
+              ].map(([label,value]) => <article key={String(label)} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p className="text-xs font-bold text-slate-400">{label}</p><p className="mt-2 text-2xl font-black tabular-nums">{Number(value).toLocaleString('ja-JP')}</p></article>)}
+            </div>
+            <div className="rounded-2xl border border-white/10">
+              <div className="border-b border-white/10 px-4 py-3"><h3 className="text-sm font-black">連携アカウント</h3></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-xs"><thead className="bg-white/[0.04] text-slate-400"><tr><th className="px-4 py-3">CampusSync ID</th><th className="px-4 py-3">状態</th><th className="px-4 py-3">許可範囲</th><th className="px-4 py-3">Planetube</th><th className="px-4 py-3">拡張機能最終検出</th></tr></thead><tbody>
+                {planetubeMonitor.connections.map(row => <tr key={row.id} className="border-t border-white/5"><td className="px-4 py-3 font-mono text-[10px] text-slate-400">{row.campus_user_id.slice(0,8)}…</td><td className="px-4 py-3"><span className={'rounded-full px-2 py-1 text-[10px] font-black ' + (row.status==='linked'?'bg-emerald-300/10 text-emerald-200':row.status==='pending'?'bg-amber-300/10 text-amber-200':'bg-slate-700 text-slate-300')}>{row.status==='linked'?'連携済み':row.status==='pending'?'認証待ち':'解除済み'}</span></td><td className="px-4 py-3">{row.approved_scopes.length} 項目</td><td className="px-4 py-3">{row.planet_level == null ? '未同期' : 'Lv.'+row.planet_level+' / '+(row.planet_growth_points ?? 0)+' pt'}</td><td className="px-4 py-3 text-slate-400">{dateText(row.last_extension_seen_at)}</td></tr>)}
+                {planetubeMonitor.connections.length===0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">連携アカウントはまだありません。</td></tr>}
+              </tbody></table></div>
+            </div>
+            <div className="rounded-2xl border border-white/10">
+              <div className="border-b border-white/10 px-4 py-3"><h3 className="text-sm font-black">最近のイベント（最大50件）</h3></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-xs"><thead className="bg-white/[0.04] text-slate-400"><tr><th className="px-4 py-3">日時</th><th className="px-4 py-3">イベント</th><th className="px-4 py-3">CampusSync ID</th><th className="px-4 py-3">拡張機能</th></tr></thead><tbody>
+                {planetubeMonitor.events.map(row => <tr key={row.id} className="border-t border-white/5"><td className="px-4 py-3 text-slate-400">{dateText(row.created_at)}</td><td className="px-4 py-3 font-bold text-violet-200">{row.event_type}</td><td className="px-4 py-3 font-mono text-[10px] text-slate-400">{row.campus_user_id.slice(0,8)}…</td><td className="px-4 py-3 text-slate-400">{row.extension_version || '—'}</td></tr>)}
+                {planetubeMonitor.events.length===0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">イベントはまだありません。</td></tr>}
+              </tbody></table></div>
+            </div>
+          </> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-400">Planetube連携情報を読み込んでください。</div>}
+        </section>}
 
         {tab === 'database' && <HiAdminDataExplorer token={token} password2={hiadminPassword2} password3={hiadminPassword3} />}
 
