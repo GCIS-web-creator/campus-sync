@@ -344,19 +344,6 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     sessions.forEach(item => totals.set(item.subject_name, (totals.get(item.subject_name) || 0) + item.focus_seconds));
     return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
   }, [sessions]);
-  // Achievement inputs stay in CampusSync. Study sessions loaded above cover the latest 120 days.
-  const planetubeStudyStats = useMemo(() => {
-    const tokyoDate = (value: string) => new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(new Date(value));
-    return {
-      focusSeconds: sessions.reduce((sum, item) => sum + Math.max(0, item.focus_seconds), 0),
-      sessionCount: sessions.length,
-      studyDays: new Set(sessions.map(item => tokyoDate(item.started_at))).size,
-      subjectCount: new Set(sessions.map(item => item.subject_name)).size,
-      reviewedRanges: ranges.filter(item => item.status === 'completed' || item.status === 'reviewed').length,
-    };
-  }, [sessions, ranges]);
   const progress = (id: string) => {
     const list = ranges.filter(item => item.school_test_subject_id === id);
     const done = list.filter(item => item.status === 'completed' || item.status === 'reviewed').length;
