@@ -58,8 +58,9 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 - `user_id uuid not null`
 - `planet_id uuid not null`
 - `xp_type text not null`: `learning` / `contribution` / `knowledge`
-- `amount integer not null`: awardは0以上。reversal/adjustmentは符号付き差分を許可する。
+- `amount integer not null check (amount >= 0)`: awardは0以上。reversal/adjustmentは正の量で記録する。
 - `entry_kind text not null`: `award` / `reversal` / `adjustment`
+- `adjustment_direction text null`: adjustment行の `increase` / `decrease` を記録する。
 - `source_type text not null` / `source_id uuid not null`
 - `source_date date not null`: Asia/Tokyo基準日
 - `credited_seconds integer not null default 0`: 学習XP用。同日の日次上限と端数計算の根拠
@@ -73,8 +74,8 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 制約・計算:
 
 - award行は `amount >= 0`。ただしPomodoroの端数秒を同日内で繰り越すため、`amount = 0` でも `credited_seconds > 0` の行を許可する。
-- reversal/adjustment行は0以外の符号付き差分とし、サーバー関数のみが作成できる。
-- 学習XPの累計はaward/reversal/adjustmentの符号付き合計で再計算する。学習XPの `credited_seconds` はaward行のみを日次上限計算に使い、取消時は元行を直接変更せず、相殺行と再計算結果を残す。
+- reversal/adjustment行は正の `amount` と `entry_kind` / `adjustment_direction` の組み合わせで増減方向を表現し、サーバー関数のみが作成できる。既存の `amount >= 0` 制約を維持できる。
+- 学習XPの累計はawardを加算し、reversalおよび `adjustment_direction='decrease'` を減算、`adjustment_direction='increase'` を加算して再計算する。学習XPの `credited_seconds` はaward行のみを日次上限計算に使い、取消時は元行を直接変更せず、相殺行と再計算結果を残す。
 - 知識XPの `source_id` は、再挑戦で変わる回答IDではなく、ユーザーごとに一度だけ付与したい安定した問題IDを使う。問題改訂を別問題と扱う場合は明示的に別IDにする。
 - `source_type` はサーバー側で許可リスト管理し、クライアントから自由入力させない。
 
@@ -84,7 +85,8 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 
 主な列:
 
-- `planet_id uuid primary key`
+- `id uuid primary key`（既存列を維持）
+- `planet_id uuid not null unique`
 - `user_id uuid not null`
 - `learning_xp bigint not null default 0`
 - `contribution_xp bigint not null default 0`
