@@ -335,20 +335,19 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   useEffect(() => {
     if (!timerReady || !planetubeScopesReady) return;
     const previous = previousTimerState.current;
-    // 記録フォーム表示中は、保存または再開を選ぶまでセッションを終了しない。
-    if (timerState === 'idle' && showRecord) return;
     if (timerState === previous) return;
     let sessionId = planetubeSessionId.current;
     if (timerState === 'running') {
+      const canResumeExistingSession = previous === 'paused' && Boolean(sessionId);
       if (!sessionId) {
         sessionId = createPlanetubeSessionId();
         planetubeSessionId.current = sessionId;
       }
-      const command = previous === 'paused' ? 'FOCUS_RESUME' : 'FOCUS_START';
+      const command = canResumeExistingSession ? 'FOCUS_RESUME' : 'FOCUS_START';
       if (planetubeScopes.includes('extension:control')) {
         postPlanetubeCommand(command, { sessionId, durationSeconds: Math.max(0, remaining), phase });
       }
-      void reportPlanetubeEvent(previous === 'paused' ? 'focus_resumed' : 'focus_started', sessionId, {
+      void reportPlanetubeEvent(canResumeExistingSession ? 'focus_resumed' : 'focus_started', sessionId, {
         phase,
         durationSeconds: Math.max(0, remaining),
       });
@@ -363,7 +362,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       planetubeSessionId.current = null;
     }
     previousTimerState.current = timerState;
-  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, showRecord, planetubeScopes, reportPlanetubeEvent]);
+  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, planetubeScopes, reportPlanetubeEvent]);
 
   // 拡張機能がタイマー開始後に接続・再接続した場合も、現在の状態を再同期する。
   // sessionId を固定キーとして送るため、拡張機能側では同一セッションの再送を冪等に処理できる。
