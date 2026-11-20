@@ -8,7 +8,6 @@ import { postPlanetubeCommand, postPlanetubePing, subscribePlanetubeExtension } 
 type Connection = {
   id: string;
   status: 'pending' | 'linked' | 'revoked';
-  planetube_user_id: string | null;
   approved_scopes: string[];
   planet_level: number | null;
   planet_growth_points: number | null;
@@ -263,7 +262,6 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
           <div className={'rounded-xl p-3 ' + (dark ? 'bg-slate-800' : 'bg-slate-50')}><p className={'text-[10px] ' + muted}>Planetube 惑星レベル</p><p className="mt-1 text-2xl font-black">{connection?.planet_level == null ? '—' : 'Lv.' + connection.planet_level}</p></div>
           <div className={'rounded-xl p-3 ' + (dark ? 'bg-slate-800' : 'bg-slate-50')}><p className={'text-[10px] ' + muted}>成長ポイント</p><p className="mt-1 text-2xl font-black">{connection?.planet_growth_points == null ? '—' : connection.planet_growth_points.toLocaleString('ja-JP')}</p></div>
         </div>}
-        {connection?.planetube_user_id && <p className={'mt-3 break-all text-[11px] ' + muted}>PlanetubeアカウントID：{connection.planetube_user_id}</p>}
         {loading && <p className={'mt-3 text-xs ' + muted}>連携状態を確認しています…</p>}
       </section>
 
