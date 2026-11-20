@@ -11,6 +11,7 @@ import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
+import LineAccountLinkCard from '@/components/LineAccountLinkCard';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
 import CampusGlobalSearch, { type CampusSearchItem } from '@/components/CampusGlobalSearch';
@@ -5636,6 +5637,8 @@ Supabaseの設定を確認してください。
                 </button>
               </div>
             </div>
+
+            <LineAccountLinkCard />
 
             {/* テーマカラーカスタム */}
             <div className={`campus-theme-settings-card ${cardBgClass} rounded-3xl p-5 border shadow-sm space-y-3`}>

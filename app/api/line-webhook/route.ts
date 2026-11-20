@@ -1,7 +1,7 @@
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -12,7 +12,7 @@ import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
 import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
-import { ensureStudyMaterialsBucket, STUDY_MATERIAL_BUCKET } from '@/lib/study-materials-server';
+import { canStudentViewMaterial, ensureStudyMaterialsBucket, STUDY_MATERIAL_BUCKET } from '@/lib/study-materials-server';
 import { LINE_GROUP_SHIRITORI_STATE_PREFIX, isLineShiritoriControlCommand, isLineShiritoriStartCommand, isLineSoloShiritoriCommand, playLineSoloShiritori, startLineShiritori, takeLineShiritoriTurn, type LineShiritoriState } from '@/lib/line-shiritori';
 
 export const runtime = 'nodejs';
@@ -962,12 +962,67 @@ function parseLineSchoolMaterialsCommand(input: string): LineSchoolMaterialsComm
   return null;
 }
 
+
+async function completeLineStudentLink(
+  replyToken: string,
+  lineUserId: string,
+  code: string,
+  accessToken: string,
+): Promise<void> {
+  const admin = getLineAssignmentAdmin();
+  if (!admin) {
+    await replyPlain(replyToken, 'LINE連携サービスに接続できません。少し待ってからもう一度お試しください。', accessToken, [], 'campus_ai_school_materials_link', 'user', lineUserId);
+    return;
+  }
+
+  const codeHash = createHash('sha256').update(code.toLowerCase(), 'utf8').digest('hex');
+  const { data, error } = await admin.rpc('claim_line_student_link_code', {
+    p_line_user_id: lineUserId,
+    p_code_hash: codeHash,
+  });
+  if (error) {
+    console.error('LINE student account link claim failed:', error.message);
+    await replyPlain(replyToken, 'LINE連携を完了できませんでした。しばらくしてから再度お試しください。', accessToken, [], 'campus_ai_school_materials_link', 'user', lineUserId);
+    return;
+  }
+
+  const claim = Array.isArray(data) ? data[0] : data;
+  if (!claim?.ok) {
+    const reason = claim?.reason === 'rate_limited'
+      ? 'コードの入力回数が上限に達しました。15分ほど空けてから、新しいコードを発行してください。'
+      : claim?.reason === 'already_linked'
+        ? 'このLINEアカウントはすでに別のCampusSyncアカウントと連携されています。'
+        : 'コードが正しくないか、有効期限が切れています。CampusSyncの設定画面で新しいコードを発行してください。';
+    await replyPlain(replyToken, reason, accessToken, [], 'campus_ai_school_materials_link', 'user', lineUserId);
+    return;
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('verified_class')
+    .eq('student_id', claim.linked_student_id)
+    .eq('auth_user_id', claim.linked_auth_user_id)
+    .maybeSingle();
+  if (profileError) console.error('LINE linked profile verification lookup failed:', profileError.message);
+
+  const verifiedClass = typeof profile?.verified_class === 'string'
+    && /^[1-3]-[1-8]$/.test(profile.verified_class)
+      ? profile.verified_class
+      : null;
+  const message = verifiedClass
+    ? '✅ CampusSyncアカウントとLINEの連携が完了しました。管理者確認済みクラスは ' + verifiedClass + ' 組です。これからこの1対1トークで、あなたが閲覧できる学校資料を確認できます。'
+    : '✅ CampusSyncアカウントとLINEの連携が完了しました。ただし、管理者による所属クラス確認はまだ完了していません。確認が終わるまでは全校公開資料のみ表示されます。';
+  await replyPlain(replyToken, message, accessToken, [], 'campus_ai_school_materials_link', 'user', lineUserId);
+}
+
 type LineSchoolMaterialFolder = { id: string; name: string; parent_id: string | null; sort_order: number };
 type LineSchoolMaterial = {
   id: string;
   title: string;
   subject: string;
   material_type: string;
+  target_scope: string;
+  target_value: string | null;
   folder_id: string | null;
   file_name: string;
   mime_type: string;
@@ -1000,7 +1055,7 @@ async function replyLineSchoolMaterialsExplorer(
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true }),
       admin.from('study_materials')
-        .select('id,title,subject,material_type,folder_id,file_name,mime_type,file_size,storage_path')
+        .select('id,title,subject,material_type,target_scope,target_value,folder_id,file_name,mime_type,file_size,storage_path')
         .eq('is_published', true)
         .eq('target_scope', 'all')
         .is('archived_at', null)
@@ -1014,7 +1069,43 @@ async function replyLineSchoolMaterialsExplorer(
     }
 
     const folders = (folderRows || []) as LineSchoolMaterialFolder[];
-    const materials = (materialRows || []) as LineSchoolMaterial[];
+    const allMaterials = (materialRows || []) as LineSchoolMaterial[];
+    let verifiedClass: string | null = null;
+
+    // 学年・クラス限定資料は、1対1トークで連携済みかつ管理者確認済みのプロフィールだけに許可する。
+    // グループ/ルームではLINEユーザーとの対応付けができないため、全校公開資料だけに限定する。
+    if (destinationType === 'user' && destinationId && /^U[A-Za-z0-9]{20,40}$/.test(destinationId)) {
+      const { data: link, error: linkError } = await admin
+        .from('line_student_links')
+        .select('student_id,auth_user_id')
+        .eq('line_user_id', destinationId)
+        .not('linked_at', 'is', null)
+        .maybeSingle();
+      if (linkError) {
+        console.error('LINE student link lookup failed:', linkError.message);
+        await replyPlain(replyToken, fallback, accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+        return;
+      }
+      if (link) {
+        const { data: profile, error: profileError } = await admin
+          .from('profiles')
+          .select('verified_class')
+          .eq('student_id', link.student_id)
+          .eq('auth_user_id', link.auth_user_id)
+          .maybeSingle();
+        if (profileError) {
+          console.error('LINE verified class lookup failed:', profileError.message);
+          await replyPlain(replyToken, fallback, accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+          return;
+        }
+        const candidate = typeof profile?.verified_class === 'string' ? profile.verified_class : '';
+        if (/^[1-3]-[1-8]$/.test(candidate)) verifiedClass = candidate;
+      }
+    }
+
+    const materials = allMaterials.filter(material =>
+      material.target_scope === 'all' || (verifiedClass !== null && canStudentViewMaterial(material, verifiedClass)),
+    );
     const rootFolder = folders.find(folder => folder.parent_id === null && folder.name === '学校資料') || null;
     const currentFolderId = command.folderId || rootFolder?.id || null;
     const folderMap = new Map(folders.map(folder => [folder.id, folder]));
@@ -1033,6 +1124,10 @@ async function replyLineSchoolMaterialsExplorer(
         visibleFolderIds.add(cursorId);
         cursorId = folderMap.get(cursorId)?.parent_id || null;
       }
+    }
+    if (command.folderId && command.folderId !== rootFolder?.id && !visibleFolderIds.has(command.folderId)) {
+      await replyPlain(replyToken, 'このフォルダーを閲覧する権限がありません。最初のフォルダーから開き直してください。', accessToken, [], 'campus_ai_school_materials', destinationType, destinationId);
+      return;
     }
     const childFolders = folders
       .filter(folder => folder.parent_id === currentFolderId && visibleFolderIds.has(folder.id))
@@ -1095,7 +1190,7 @@ async function replyLineSchoolMaterialsExplorer(
         if (storageAdmin) {
           const { data: signedData, error: signedError } = await storageAdmin.storage
             .from(STUDY_MATERIAL_BUCKET)
-            .createSignedUrl(item.material.storage_path, 1800);
+            .createSignedUrl(item.material.storage_path, 300);
           if (signedError) console.error('LINE school material signed URL failed:', signedError.message);
           signedUrl = signedData?.signedUrl || '';
         }
@@ -1127,8 +1222,10 @@ async function replyLineSchoolMaterialsExplorer(
       rows.push({
         type: 'text',
         text: materials.length === 0
-          ? '公開された学校資料はまだありません。管理者が資料を登録して全校公開すると、ここからフォルダーを開けます。'
-          : 'このフォルダーには全校公開の資料がありません。別のフォルダーを開いてください。',
+          ? destinationType === 'user'
+            ? 'このアカウントで閲覧できる学校資料はまだありません。学年・クラス限定資料は、CampusSyncの設定からLINE連携を行い、管理者が確認済みクラスを設定すると表示されます。'
+            : '全校公開の学校資料はまだありません。管理者が資料を登録して全校公開すると、ここからフォルダーを開けます。'
+          : 'このフォルダーには閲覧できる資料がありません。別のフォルダーを開いてください。',
         size: 'sm',
         color: '#64748B',
         wrap: true,
@@ -1960,6 +2057,23 @@ async function handleLineEvents(
       : messageText;
 
     if (hasTrigger && question) {
+      const lineLinkCodeMatch = /^LINE連携\s+([0-9a-f]{12})$/iu.exec(question);
+      if (lineLinkCodeMatch) {
+        if (isDirectChat && event.source?.userId) {
+          await completeLineStudentLink(event.replyToken, event.source.userId, lineLinkCodeMatch[1], channelAccessToken);
+        } else {
+          await replyPlain(event.replyToken, '安全のため、LINE連携コードはCampusSync公式アカウントとの1対1トークで送信してください。グループでは連携できません。', channelAccessToken, [], 'campus_ai_school_materials_link');
+        }
+        return;
+      }
+      if (/^LINE連携(?:\s|$)/iu.test(question) && isDirectChat) {
+        await replyPlain(event.replyToken, 'CampusSyncの設定画面で連携コードを発行し、「CSAI LINE連携 12桁のコード」の形式でこの1対1トークに送信してください。コードの有効期限は5分です。', channelAccessToken, [], 'campus_ai_school_materials_link', 'user', event.source?.userId || null);
+        return;
+      }
+      if (/^LINE連携(?:\s|$)/iu.test(question) && !isDirectChat) {
+        await replyPlain(event.replyToken, 'LINE連携は安全のため、CampusSync公式アカウントとの1対1トークで行ってください。', channelAccessToken, [], 'campus_ai_school_materials_link');
+        return;
+      }
       const materialsCommand = parseLineSchoolMaterialsCommand(question);
       if (materialsCommand) {
         const destinationType = event.source?.type === 'room' ? 'room' : event.source?.type === 'group' ? 'group' : 'user';

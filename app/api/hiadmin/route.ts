@@ -139,7 +139,9 @@ const EXPLORER_TABLE_INFO: Record<string, { label: string; group: string; descri
   nkn: { label: 'システム記録（NKN）', group: 'システム・認証', description: '古い機能との互換性のために残されている小規模なシステム記録です。' },
   notification_reads: { label: 'お知らせの既読状態', group: 'お知らせ・LINE', description: 'ユーザーがお知らせを読んだ日時を保存します。' },
   notifications: { label: '全校お知らせ', group: 'お知らせ・LINE', description: '生徒用サイトに表示するお知らせ本文・画像・LINE送信状態です。' },
-  profiles: { label: '生徒プロフィール', group: '生徒・アカウント', description: '学籍番号・氏名・クラス・学校メール・アカウント連携情報です。個人情報を含みます。' },
+  profiles: { label: '生徒プロフィール', group: '生徒・アカウント', description: '学籍番号・氏名・クラス・学校メール等の個人情報です。verified_class（管理者確認済みクラス）はLINEの学年限定資料の閲覧権限に使います。本人申告のuser_classとは分け、確認できた場合だけ1-1〜3-8を設定してください。' },
+  line_student_links: { label: 'LINE生徒アカウント連携', group: 'システム・認証', description: 'CampusSync生徒アカウントとLINEユーザーの連携状態です。連携先の識別子やコードハッシュは保護されています。' },
+  line_student_link_attempts: { label: 'LINE連携の認証試行制限', group: 'システム・認証', description: 'LINE連携コードの誤入力回数と一時停止状態です。認証保護のため編集できません。' },
   push_reminder_deliveries: { label: 'プッシュ通知の送信記録', group: '通知・端末', description: '課題リマインダーの送信対象・種類・送信日時です。' },
   push_reminder_preferences: { label: '通知の個人設定', group: '通知・端末', description: '通知ON/OFF、通知時刻、対象曜日、通知カテゴリ、サイレント時間です。' },
   push_subscriptions: { label: 'プッシュ通知の端末登録', group: '通知・端末', description: 'ブラウザー端末への通知配信先・認証キー情報です。端末の秘密情報保護のため編集できません。' },
@@ -166,11 +168,11 @@ const EXPLORER_READ_ONLY = new Set([
   'jma_earthquake_notifications', 'jma_earthquake_reports', 'jma_earthquake_sync_state', 'jma_earthquakes',
   'jma_weather_alert_events', 'jma_weather_alerts', 'jma_weather_sync_state',
   'line_bot_rotation', 'line_bot_rotation_events', 'line_broadcast_history', 'line_delivery_events',
-  'line_group_delivery_logs', 'line_train_timetable_sends', 'nkn', 'push_reminder_deliveries',
+  'line_group_delivery_logs', 'line_student_links', 'line_student_link_attempts', 'line_train_timetable_sends', 'nkn', 'push_reminder_deliveries',
   'push_subscriptions', 'student_login_handoffs', 'teacher_access_codes', 'teacher_access_sessions',
 ]);
 const EXPLORER_REDACTED_COLUMNS = new Set([
-  'card_token', 'code_hash', 'secret_hash', 'login_token_hash', 'session_token_hash',
+  'card_token', 'code_hash', 'line_user_id', 'secret_hash', 'login_token_hash', 'session_token_hash',
   'subscription', 'endpoint', 'lock_token', 'high_lock_token', 'long_lock_token', 'sync_lock_token',
   'handoff_group_chat_id',
 ]);
@@ -182,7 +184,7 @@ const EXPLORER_LABELS: Record<string, string> = {
   is_active: '有効', active: '有効', completed: '完了', due: '提出期限', due_at: '提出日時',
   event_date: '開催日', service_date: '対象日', week_start: '週の開始日', days: '曜日別予定',
   score: '現在ポイント', delta: 'ポイント増減', reason: '理由', score_after: '処理後ポイント',
-  user_id: 'ユーザーID', chat_id: 'LINEグループID', chat_type: 'グループ種別', bot_slot: '使用BOT',
+  user_id: 'ユーザーID', verified_class: '管理者確認済みクラス（LINE閲覧権限）', line_user_id: 'LINEユーザーID', chat_id: 'LINEグループID', chat_type: 'グループ種別', bot_slot: '使用BOT',
   line_delivery_status: 'LINE配信状態', line_delivery_error: 'LINE配信エラー', line_sent_at: 'LINE送信日時',
   message: 'メッセージ', message_text: '配信本文', message_payload: '配信データ（JSON）',
   is_closed: '休業日', note: '備考', name: '名称', author: '著者', code: '管理番号',
