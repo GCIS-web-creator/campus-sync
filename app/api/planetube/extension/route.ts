@@ -48,11 +48,16 @@ export async function POST(request: Request) {
 
   const eventType = body.eventType;
   const isHandshakeEvent = eventType === 'extension_ready' || eventType === 'extension_disconnected';
+  const isTimerSyncEvent = [
+    'focus_started','focus_paused','focus_resumed','break_started',
+    'focus_resumed_from_break','session_ended',
+  ].includes(eventType);
+  const requiredScope = isTimerSyncEvent ? 'focus:sync' : 'extension:control';
   if (!isHandshakeEvent && (
     connection.status !== 'linked' ||
-    !connection.approved_scopes?.includes('extension:control')
+    !connection.approved_scopes?.includes(requiredScope)
   )) {
-    return planetubeFail('拡張機能の制御は許可されていません。', 403);
+    return planetubeFail('このイベントの送信は許可されていません。', 403);
   }
 
   const { count, error: rateError } = await auth.admin
