@@ -886,8 +886,8 @@ export type ExamScopeFlexInput = {
 function splitExamFlexText(value: string, maxLength = 1500): string[] {
   const parts: string[] = [];
   let current = '';
-  for (const line of value.split('\\n')) {
-    const candidate = current ? current + '\\n' + line : line;
+  for (const line of value.split('\n')) {
+    const candidate = current ? current + '\n' + line : line;
     if (candidate.length <= maxLength) {
       current = candidate;
       continue;
@@ -908,7 +908,7 @@ function splitExamFlexText(value: string, maxLength = 1500): string[] {
 }
 
 function formatExamFlexDate(value: string): string {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return value;
   const date = new Date(value + 'T00:00:00+09:00');
   const shortDate = new Intl.DateTimeFormat('ja-JP', {
@@ -995,9 +995,10 @@ function buildExamScopeSubjectBubble(input: {
     });
   }
 
-  const targetLabel = exam.targetClasses.length
-    ? exam.targetClasses.join('・')
-    : subject.audience || '対象区分未設定';
+  const targetLabel = subject.audience || '対象区分未設定';
+  const targetClassLabel = exam.targetClasses.length
+    ? '対象クラス：' + exam.targetClasses.join('・')
+    : '';
 
   return {
     type: 'bubble',
@@ -1062,6 +1063,14 @@ function buildExamScopeSubjectBubble(input: {
             },
           ],
         },
+        ...(targetClassLabel ? [{
+          type: 'text',
+          text: targetClassLabel,
+          size: 'xs',
+          color: '#64748B',
+          wrap: true,
+          margin: 'sm',
+        }] : []),
         {
           type: 'text',
           text: 'この科目の登録済み範囲',
