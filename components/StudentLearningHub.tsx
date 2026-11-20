@@ -97,8 +97,12 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [finishKind, setFinishKind] = useState<'completed' | 'stopped'>('completed');
   const [timerReady, setTimerReady] = useState(false);
   const [planetubeScopes, setPlanetubeScopes] = useState<string[]>([]);
+  const [planetubeScopesReady, setPlanetubeScopesReady] = useState(false);
   const [planetubeExtensionReady, setPlanetubeExtensionReady] = useState(false);
   const [planetubeExtensionVersion, setPlanetubeExtensionVersion] = useState('');
+  const [planetubeExtensionRestrictionEnabled, setPlanetubeExtensionRestrictionEnabled] = useState<boolean | null>(null);
+  const [planetubeExtensionLastAck, setPlanetubeExtensionLastAck] = useState('');
+  const [planetubeExtensionError, setPlanetubeExtensionError] = useState('');
   const planetubeSessionId = useRef<string | null>(null);
   const previousTimerState = useRef<'idle' | 'running' | 'paused'>('idle');
   const startedAt = useRef<string | null>(null);
@@ -112,7 +116,10 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     details: Record<string, unknown> = {},
     extensionVersion?: string,
   ) => {
-    if (!planetubeScopes.includes('focus:sync') && eventType !== 'extension_ready' && eventType !== 'extension_disconnected') return;
+    const isHandshakeEvent = eventType === 'extension_ready' || eventType === 'extension_disconnected';
+    const isFocusSyncEvent = ['focus_started', 'focus_paused', 'focus_resumed', 'break_started', 'focus_resumed_from_break', 'session_ended'].includes(eventType);
+    const requiredScope = isFocusSyncEvent ? 'focus:sync' : 'extension:control';
+    if (!isHandshakeEvent && !planetubeScopes.includes(requiredScope)) return;
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
@@ -275,18 +282,33 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
         });
         const payload = await response.json().catch(() => ({}));
         if (alive && response.ok) setPlanetubeScopes(payload.connection?.approved_scopes || []);
-      } catch {}
+      } catch {} finally {
+        if (alive) setPlanetubeScopesReady(true);
+      }
     };
     void loadPlanetubeScopes();
     const unsubscribe = subscribePlanetubeExtension((event) => {
       if (event.type === 'READY') {
         setPlanetubeExtensionReady(true);
         setPlanetubeExtensionVersion(event.extensionVersion || '');
+        setPlanetubeExtensionError('');
         void reportPlanetubeEvent('extension_ready', planetubeSessionId.current, {}, event.extensionVersion);
       } else if (event.type === 'DISCONNECTED') {
         setPlanetubeExtensionReady(false);
         setPlanetubeExtensionVersion('');
+        setPlanetubeExtensionRestrictionEnabled(null);
         void reportPlanetubeEvent('extension_disconnected', planetubeSessionId.current);
+      } else if (event.type === 'ACK') {
+        setPlanetubeExtensionLastAck(event.command ? `${event.command} の応答を受信` : '拡張機能から応答を受信');
+        setPlanetubeExtensionError('');
+      } else if (event.type === 'ERROR') {
+        const code = event.errorCode || 'unknown_error';
+        setPlanetubeExtensionError(`拡張機能エラー: ${code}`);
+        void reportPlanetubeEvent('extension_error', planetubeSessionId.current, { errorCode: code }, event.extensionVersion);
+      } else if (event.type === 'RESTRICTION_STATUS') {
+        setPlanetubeExtensionReady(true);
+        setPlanetubeExtensionRestrictionEnabled(event.enabled ?? null);
+        void reportPlanetubeEvent('restriction_status', planetubeSessionId.current, { enabled: event.enabled }, event.extensionVersion);
       }
     });
     postPlanetubePing();
@@ -295,7 +317,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
 
   // Timer state transitions are mirrored to the extension only after the student has granted that scope.
   useEffect(() => {
-    if (!timerReady) return;
+    if (!timerReady || !planetubeScopesReady) return;
     const previous = previousTimerState.current;
     if (timerState === previous) return;
     let sessionId = planetubeSessionId.current;
@@ -323,7 +345,22 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       planetubeSessionId.current = null;
     }
     previousTimerState.current = timerState;
-  }, [timerReady, timerState, phase, remaining, planetubeScopes, reportPlanetubeEvent]);
+  }, [timerReady, planetubeScopesReady, timerState, phase, remaining, planetubeScopes, reportPlanetubeEvent]);
+
+  // 拡張機能がタイマー開始後に接続・再接続した場合も、現在の状態を再同期する。
+  // sessionId を固定キーとして送るため、拡張機能側では同一セッションの再送を冪等に処理できる。
+  useEffect(() => {
+    if (!planetubeExtensionReady || !planetubeScopes.includes('extension:control')) return;
+    const sessionId = planetubeSessionId.current;
+    if (!sessionId) return;
+    const payload = { sessionId, durationSeconds: Math.max(0, remaining), phase, reconnect: true };
+    if (timerState === 'running') {
+      postPlanetubeCommand('FOCUS_START', payload);
+    } else if (timerState === 'paused') {
+      postPlanetubeCommand('FOCUS_START', payload);
+      postPlanetubeCommand('FOCUS_PAUSE', { sessionId, reconnect: true });
+    }
+  }, [planetubeExtensionReady, planetubeScopes, timerState, phase]);
 
   useEffect(() => {
     if (timerState !== 'running') return;
@@ -533,7 +570,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       <section className={panel + ' flex flex-wrap items-center justify-between gap-3'}>
         <div className="flex items-center gap-3">
           <div className={'flex h-10 w-10 items-center justify-center rounded-xl ' + (planetubeExtensionReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}><span className="text-lg">🪐</span></div>
-          <div><p className="text-sm font-black">Planetube連携</p><p className={'mt-1 text-xs ' + muted}>{planetubeExtensionReady ? '拡張機能を検出しました' : '拡張機能は未検出です'}{planetubeExtensionVersion ? ' ・ v' + planetubeExtensionVersion : ''}</p></div>
+          <div><p className="text-sm font-black">Planetube連携</p><p className={'mt-1 text-xs ' + muted}>{planetubeExtensionReady ? '拡張機能を検出しました' : '拡張機能は未検出です'}{planetubeExtensionVersion ? ' ・ v' + planetubeExtensionVersion : ''}</p>{planetubeExtensionRestrictionEnabled !== null && <p className={'mt-1 text-[11px] font-bold ' + (planetubeExtensionRestrictionEnabled ? 'text-emerald-600' : muted)}>YouTube制限：{planetubeExtensionRestrictionEnabled ? '有効' : '無効'}</p>}{planetubeExtensionLastAck && <p className={'mt-1 text-[10px] ' + muted}>{planetubeExtensionLastAck}</p>}{planetubeExtensionError && <p role="alert" className="mt-1 text-[10px] font-bold text-rose-600">{planetubeExtensionError}</p>}</div>
         </div>
         <a href="/#planetube" className={secondary}>連携設定を開く</a>
       </section>
