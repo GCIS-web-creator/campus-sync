@@ -128,14 +128,14 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     }
   }, [planetubeScopes]);
 
-  const notifyPlanetubePhase = (nextPhase: 'focus' | 'break') => {
+  const notifyPlanetubePhase = useCallback((nextPhase: 'focus' | 'break') => {
     const sessionId = planetubeSessionId.current;
     if (planetubeScopes.includes('extension:control')) {
       postPlanetubeCommand('PHASE_CHANGED', { sessionId, phase: nextPhase });
     }
     if (nextPhase === 'break') void reportPlanetubeEvent('break_started', sessionId, { phase: 'break' });
     else void reportPlanetubeEvent('focus_resumed_from_break', sessionId, { phase: 'focus' });
-  };
+  }, [planetubeScopes, reportPlanetubeEvent]);
 
   const dark = isDarkMode;
   const panel = 'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
@@ -348,7 +348,7 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     } else {
       setPhase('focus'); setTimerRemaining(focusMinutes * 60); notifyPlanetubePhase('focus'); setMessage('休憩が終了しました。次の集中セットを始められます。');
     }
-  }, [timerState, remaining, phase, breakMinutes, focusMinutes]);
+  }, [timerState, remaining, phase, breakMinutes, focusMinutes, notifyPlanetubePhase]);
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
