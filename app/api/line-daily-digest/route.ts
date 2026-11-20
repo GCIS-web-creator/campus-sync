@@ -32,6 +32,25 @@ type DigestWeatherResult = {
 
 const WEATHER_CACHE_MAX_AGE_MS = 30 * 60 * 60 * 1000;
 
+type WeatherCacheRow = {
+  forecast: unknown;
+  fetched_at: string | null;
+};
+
+type WeatherCacheTableClient = {
+  from(table: 'campussync_weather_forecast_cache'): {
+    upsert(
+      values: { cache_key: string; forecast: WeatherDayForecast[]; fetched_at: string },
+      options: { onConflict: string },
+    ): Promise<{ error: { message: string } | null }>;
+    select(columns: string): {
+      eq(column: string, value: string): {
+        maybeSingle(): Promise<{ data: WeatherCacheRow | null; error: { message: string } | null }>;
+      };
+    };
+  };
+};
+
 function isWeatherForecastDay(value: unknown): value is WeatherDayForecast {
   if (!value || typeof value !== 'object') return false;
   const day = value as Partial<WeatherDayForecast>;
@@ -56,17 +75,17 @@ async function fetchDigestWeatherForecast(
   admin: ReturnType<typeof createClient>,
   startDate: string,
 ): Promise<DigestWeatherResult> {
+  const weatherCache = (admin as unknown as WeatherCacheTableClient).from('campussync_weather_forecast_cache');
+
   try {
     const freshForecast = await fetchSchoolWeatherForecast(5);
     const upcoming = upcomingWeatherDays(freshForecast, startDate);
     if (upcoming.length > 0) {
-      const { error: cacheWriteError } = await admin
-        .from('campussync_weather_forecast_cache')
-        .upsert({
-          cache_key: 'kodaira-5day-v1',
-          forecast: freshForecast,
-          fetched_at: new Date().toISOString(),
-        } as never, { onConflict: 'cache_key' });
+      const { error: cacheWriteError } = await weatherCache.upsert({
+        cache_key: 'kodaira-5day-v1',
+        forecast: freshForecast,
+        fetched_at: new Date().toISOString(),
+      }, { onConflict: 'cache_key' });
 
       if (cacheWriteError) {
         console.error('日次まとめ：天気予報キャッシュの更新に失敗:', cacheWriteError.message);
@@ -78,8 +97,7 @@ async function fetchDigestWeatherForecast(
     console.error('日次まとめ：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
   }
 
-  const { data: cached, error: cacheReadError } = await admin
-    .from('campussync_weather_forecast_cache')
+  const { data: cached, error: cacheReadError } = await weatherCache
     .select('forecast,fetched_at')
     .eq('cache_key', 'kodaira-5day-v1')
     .maybeSingle();
