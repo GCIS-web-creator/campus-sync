@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
 
 type LiffSdk = {
@@ -25,13 +25,13 @@ type PdfJsHandle = {
 };
 
 declare global {
-  interface Window { liff?: LiffSdk; pdfjsLib?: PdfJsHandle; }
+  interface Window { liff?: LiffSdk; csPdfjsLib?: PdfJsHandle; }
 }
 
 let pdfJsLoading: Promise<PdfJsHandle> | null = null;
 
 function loadPdfJs(): Promise<PdfJsHandle> {
-  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (window.csPdfjsLib) return Promise.resolve(window.pdfjsLib);
   if (!pdfJsLoading) {
     pdfJsLoading = new Promise<PdfJsHandle>((resolve, reject) => {
       let script = document.querySelector<HTMLScriptElement>('script[data-cs-pdfjs]');
@@ -114,13 +114,14 @@ function PdfCanvasViewer({ fileUrl }: { fileUrl: string }) {
 
   useEffect(() => {
     if (!pdf || !canvasRef.current) return;
+    const currentPdf = pdf;
     let cancelled = false;
 
     async function renderPage() {
       setRendering(true);
       setError('');
       try {
-        const pageData = await pdf.getPage(page);
+        const pageData = await currentPdf.getPage(page);
         if (cancelled || !canvasRef.current) return;
         const viewport = pageData.getViewport({ scale });
         const canvas = canvasRef.current;
