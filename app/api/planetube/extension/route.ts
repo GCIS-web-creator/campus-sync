@@ -77,9 +77,11 @@ export async function POST(request: Request) {
     safeDetails.durationSeconds = Math.max(0, Math.min(details.durationSeconds, 10_800));
   }
   if (typeof details.enabled === 'boolean') safeDetails.enabled = details.enabled;
-  if (typeof details.errorCode === 'string') safeDetails.errorCode = details.errorCode.slice(0, 64);
-  const extensionVersion = typeof body.extensionVersion === 'string'
-    ? body.extensionVersion.slice(0, 32)
+  if (typeof details.errorCode === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(details.errorCode)) {
+    safeDetails.errorCode = details.errorCode;
+  }
+  const extensionVersion = typeof body.extensionVersion === 'string' && /^[A-Za-z0-9._+-]{1,32}$/.test(body.extensionVersion)
+    ? body.extensionVersion
     : null;
   const timerSessionId = body.timerSessionId == null
     ? null
