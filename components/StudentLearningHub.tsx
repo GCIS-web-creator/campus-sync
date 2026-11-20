@@ -69,14 +69,14 @@ const deadlineStatus = (value: string | null) => {
   const due = new Date(value);
   if (Number.isNaN(due.getTime())) return { label: '期限未設定', tone: 'neutral' as const };
   const now = new Date();
-  if (due.getTime() < now.getTime()) {
-    const elapsedDays = Math.floor((now.getTime() - due.getTime()) / 86400000);
-    return elapsedDays === 0
-      ? { label: '期限超過（本日）', tone: 'overdue' as const }
-      : { label: `期限超過・${elapsedDays}日前`, tone: 'overdue' as const };
-  }
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  if (due.getTime() < now.getTime()) {
+    const overdueDays = Math.round((today - dueDay) / 86400000);
+    return overdueDays === 0
+      ? { label: '期限超過（本日）', tone: 'overdue' as const }
+      : { label: `期限超過・${overdueDays}日前`, tone: 'overdue' as const };
+  }
   const days = Math.round((dueDay - today) / 86400000);
   return days === 0
     ? { label: `本日 ${due.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで`, tone: 'today' as const }
