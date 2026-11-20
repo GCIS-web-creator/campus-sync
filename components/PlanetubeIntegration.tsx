@@ -77,7 +77,7 @@ export default function PlanetubeIntegration({ isDarkMode = false }: { isDarkMod
       const data = await requestApi('/api/planetube/link');
       const next = (data.connection || null) as Connection | null;
       setConnection(next);
-      setScopes((next?.approved_scopes || []) as Scope[]);
+      setScopes(((next?.approved_scopes || []) as Scope[]).filter(scope => scope !== 'contribution:sync'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '連携状態を読み込めませんでした。');
     } finally {
