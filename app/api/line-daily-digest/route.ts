@@ -24,6 +24,99 @@ function constantTimeEqual(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+type DigestWeatherResult = {
+  days: WeatherDayForecast[];
+  source: 'live' | 'cache' | 'unavailable';
+  notice?: string;
+};
+
+const WEATHER_CACHE_MAX_AGE_MS = 30 * 60 * 60 * 1000;
+
+function isWeatherForecastDay(value: unknown): value is WeatherDayForecast {
+  if (!value || typeof value !== 'object') return false;
+  const day = value as Partial<WeatherDayForecast>;
+  return typeof day.date === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(day.date)
+    && typeof day.description === 'string'
+    && typeof day.iconName === 'string'
+    && Array.isArray(day.hours)
+    && day.hours.length > 0;
+}
+
+function upcomingWeatherDays(value: unknown, startDate: string): WeatherDayForecast[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isWeatherForecastDay)
+    .filter(day => day.date >= startDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 3);
+}
+
+async function fetchDigestWeatherForecast(
+  admin: ReturnType<typeof createClient>,
+  startDate: string,
+): Promise<DigestWeatherResult> {
+  try {
+    const freshForecast = await fetchSchoolWeatherForecast(5);
+    const upcoming = upcomingWeatherDays(freshForecast, startDate);
+    if (upcoming.length > 0) {
+      const { error: cacheWriteError } = await admin
+        .from('campussync_weather_forecast_cache')
+        .upsert({
+          cache_key: 'kodaira-5day-v1',
+          forecast: freshForecast,
+          fetched_at: new Date().toISOString(),
+        }, { onConflict: 'cache_key' });
+
+      if (cacheWriteError) {
+        console.error('日次まとめ：天気予報キャッシュの更新に失敗:', cacheWriteError.message);
+      }
+      return { days: freshForecast, source: 'live' };
+    }
+    console.error('日次まとめ：Open-Meteoの予報に明日以降のデータがありません。');
+  } catch (error) {
+    console.error('日次まとめ：天気予報の取得に失敗:', error instanceof Error ? error.message : 'unknown');
+  }
+
+  const { data: cached, error: cacheReadError } = await admin
+    .from('campussync_weather_forecast_cache')
+    .select('forecast,fetched_at')
+    .eq('cache_key', 'kodaira-5day-v1')
+    .maybeSingle();
+
+  if (cacheReadError) {
+    console.error('日次まとめ：保存済み天気予報の取得に失敗:', cacheReadError.message);
+    return { days: [], source: 'unavailable' };
+  }
+
+  const fetchedAt = cached?.fetched_at ? Date.parse(cached.fetched_at) : NaN;
+  const cacheAge = Date.now() - fetchedAt;
+  const cachedForecast = Array.isArray(cached?.forecast)
+    ? cached.forecast as unknown as WeatherDayForecast[]
+    : [];
+  const cachedUpcoming = upcomingWeatherDays(cachedForecast, startDate);
+
+  if (!Number.isFinite(fetchedAt) || cacheAge < 0 || cacheAge > WEATHER_CACHE_MAX_AGE_MS || cachedUpcoming.length === 0) {
+    console.error('日次まとめ：利用可能な最新の天気予報キャッシュがありません。');
+    return { days: [], source: 'unavailable' };
+  }
+
+  const updatedLabel = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(fetchedAt));
+
+  console.warn('日次まとめ：Open-Meteo取得失敗のため保存済み予報を使用します。更新時刻:', updatedLabel);
+  return {
+    days: cachedForecast,
+    source: 'cache',
+    notice: '予報APIに接続できなかったため、保存済み予報（' + updatedLabel + '更新）を表示しています。',
+  };
+}
+
 function tokyoParts(date: Date): Record<string, string> {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Tokyo',
@@ -556,11 +649,12 @@ function buildDailyDigest(input: {
   includeClassTimetable: boolean;
   includeTrainTimetable: boolean;
   weather: WeatherDayForecast[];
+  weatherNotice?: string;
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
   const transitBubbles = input.includeTrainTimetable ? buildTransitBubbles(input) : [];
-  const weatherBubble = buildWeatherForecastBubble(input.weather);
+  const weatherBubble = buildWeatherForecastBubble(input.weather, input.weatherNotice);
   const assignmentBubble = buildAssignmentListBubble({ today: input.today, assignments: input.assignments, error: input.assignmentError });
   const examScopeBubbles = input.today === '2026-11-09' ? buildChemistryExamRangeBubbles(input.dateLabel) : [];
   const altText = '【CampusSync 16:00】' + input.dateLabel + '｜' + (input.includeTrainTimetable ? '電車時刻表・' : '') + '天気・課題一覧' + (input.includeClassTimetable?'・7組と8組の時間割':'') + '・学校行事' + (examScopeBubbles.length ? '・本日限定：２学期期末考査「化学」試験範囲公開（教科書・問題集）' : '') + '。横にスワイプして確認できます。';
@@ -592,6 +686,7 @@ function buildSaturdayDigest(input: {
   higashimurayama: TimetableDeparture[];
   trainError: boolean;
   weather: WeatherDayForecast[];
+  weatherNotice?: string;
   assignments: AssignmentDigestRow[];
   assignmentError: boolean;
 }) {
@@ -608,7 +703,7 @@ function buildSaturdayDigest(input: {
   return {
     type: 'flex',
     altText: ('【CampusSync 土曜12:30】' + input.dateLabel + '｜鷹の台駅12:30〜14:00の時刻表・天気・課題一覧。横にスワイプして確認できます。').slice(0, 400),
-    contents: { type: 'carousel', contents: [...transitBubbles, buildWeatherForecastBubble(input.weather), assignmentBubble] },
+    contents: { type: 'carousel', contents: [...transitBubbles, buildWeatherForecastBubble(input.weather, input.weatherNotice), assignmentBubble] },
   };
 }
 
@@ -761,7 +856,7 @@ export async function POST(request: Request) {
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
     // 今日を除外しても明日から3日分を確保できるよう、5日分の予報を取得する。
-    fetchSchoolWeatherForecast(5).catch(error=>{console.error('天気予報の取得に失敗:',error instanceof Error?error.message:'unknown');return null;}),
+    fetchDigestWeatherForecast(admin, tomorrow.dateKey),
     admin.from('assignments')
       .select('id,title,details,subject,subject_option,target_class,due_at,is_active')
       .eq('is_active', true)
@@ -793,8 +888,9 @@ export async function POST(request: Request) {
   const higashimurayama = departures('higashimurayama');
 
   const events = (eventResult.data || []) as EventRow[];
-  const weatherDays = weatherResult as WeatherDayForecast[] | null;
-  const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
+  const forecastDays = weatherResult.days
+    .filter(day => day.date >= tomorrow.dateKey)
+    .slice(0, 3);
   const flex = normalizeDailyDigestCarouselSize(isSaturday
     ? buildSaturdayDigest({
         dateLabel: todayLabel,
@@ -803,6 +899,7 @@ export async function POST(request: Request) {
         higashimurayama,
         trainError: Boolean(trainResult.error),
         weather: forecastDays,
+        weatherNotice: weatherResult.notice,
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
       })
@@ -820,6 +917,7 @@ export async function POST(request: Request) {
         includeClassTimetable,
         includeTrainTimetable: !replayWithoutTrain,
         weather: forecastDays,
+        weatherNotice: weatherResult.notice,
         assignments: (assignmentResult.data || []) as AssignmentDigestRow[],
         assignmentError: Boolean(assignmentResult.error),
       }));
@@ -883,7 +981,8 @@ export async function POST(request: Request) {
       trainDepartures: kokubunji.length + higashimurayama.length,
       classTimetable:includeClassTimetable&&tomorrow.dayKey!==null,
       events:events.length,
-      weather:forecastDays.length>0,
+      weather: forecastDays.length > 0,
+      weatherSource: weatherResult.source,
       assignments: ((assignmentResult.data || []) as AssignmentDigestRow[]).length,
       assignmentError: Boolean(assignmentResult.error),
       carouselCards: isSaturday ? 4 : (includeClassTimetable ? 7 : 5) + (today === '2026-11-09' ? 2 : 0),
