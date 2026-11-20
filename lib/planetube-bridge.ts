@@ -18,6 +18,14 @@ const PAGE_SOURCE = 'CAMPUSSYNC_PLANETUBE';
 const EXTENSION_SOURCE = 'PLANETUBE_EXTENSION';
 const PROTOCOL_VERSION = 1;
 
+export function createPlanetubeSessionId() {
+  const template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+  return template.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    return (character === 'x' ? random : (random & 0x3) | 0x8).toString(16);
+  });
+}
+
 export function postPlanetubePing() {
   if (typeof window === 'undefined') return;
   window.postMessage({
