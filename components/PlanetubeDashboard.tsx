@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import PlanetubeAchievementBoard from '@/components/PlanetubeAchievementBoard';
 import { createClient, type User } from '@supabase/supabase-js';
 import {
   Award, BookOpen, Building2, CalendarDays, CheckCircle2, CircleHelp,
@@ -31,6 +32,22 @@ type SealSession = {
   is_test: boolean;
 };
 
+type CampusStudyStats = {
+  focusSeconds: number;
+  sessionCount: number;
+  studyDays: number;
+  subjectCount: number;
+  reviewedRanges: number;
+};
+
+const EMPTY_CAMPUS_STUDY_STATS: CampusStudyStats = {
+  focusSeconds: 0,
+  sessionCount: 0,
+  studyDays: 0,
+  subjectCount: 0,
+  reviewedRanges: 0,
+};
+
 const normalizeEmail = (value: string | null | undefined) => (value || '').trim().toLowerCase();
 const dateTime = (value: string) => new Date(value).toLocaleString('ja-JP', {
   month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -45,9 +62,11 @@ const statusLabel: Record<SealSession['status'], string> = {
 export default function PlanetubeDashboard({
   campusEmail,
   isDarkMode = false,
+  studyStats = EMPTY_CAMPUS_STUDY_STATS,
 }: {
   campusEmail: string;
   isDarkMode?: boolean;
+  studyStats?: CampusStudyStats;
 }) {
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -61,6 +80,7 @@ export default function PlanetubeDashboard({
   const [activeCount, setActiveCount] = useState(0);
   const [testCount, setTestCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [showAchievements, setShowAchievements] = useState(false);
 
   const dark = isDarkMode;
   const muted = dark ? 'text-slate-400' : 'text-slate-500';
@@ -211,9 +231,18 @@ export default function PlanetubeDashboard({
           <p className="text-[8px] tracking-[.2em] text-slate-400">MY LEARNING UNIVERSE / PERSONAL DASHBOARD</p>
         </div>
         {connected ? (
-          <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200">
-            <ShieldCheck size={13} /> 同一メール確認済み
-            <button type="button" onClick={disconnect} disabled={busy} className="ml-1 rounded-full p-1 hover:bg-white/10" aria-label="Planetubeからログアウト"><LogOut size={13}/></button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAchievements(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-violet-200/30 bg-violet-400/15 px-3 py-2 text-[10px] font-black text-violet-100 shadow-[0_0_18px_rgba(192,132,252,.12)] transition hover:bg-violet-300/25"
+            >
+              <Award size={14}/> Achievements
+            </button>
+            <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200">
+              <ShieldCheck size={13} /> 同一メール確認済み
+              <button type="button" onClick={disconnect} disabled={busy} className="ml-1 rounded-full p-1 hover:bg-white/10" aria-label="Planetubeからログアウト"><LogOut size={13}/></button>
+            </div>
           </div>
         ) : (
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold text-slate-300">連携アカウント</span>
@@ -261,8 +290,8 @@ export default function PlanetubeDashboard({
             <div className="relative flex min-h-[340px] flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(ellipse_at_50%_44%,#1b4a66_0%,#102b4c_44%,#08172f_78%)] p-4 sm:p-5">
               <div className="absolute inset-0 opacity-40" style={{backgroundImage:'radial-gradient(1px 1px at 12% 18%,#fff 99%,transparent),radial-gradient(1px 1px at 78% 24%,#fff 99%,transparent),radial-gradient(1px 1px at 88% 68%,#fff 99%,transparent),radial-gradient(1px 1px at 24% 74%,#fff 99%,transparent),radial-gradient(2px 2px at 54% 12%,#a5f3fc 99%,transparent)'}}/>
               <div className="absolute left-1/2 top-[47%] h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/20 shadow-[0_0_55px_rgba(45,212,191,.22)] sm:h-64 sm:w-64">
-                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_28%_24%,#c8f4d0_0%,#3da99a_27%,#17627a_58%,#09233f_82%,#06172e_100%)]"/>
-                <div className="absolute inset-[7%] rotate-[-18deg] rounded-full opacity-80" style={{backgroundImage:'radial-gradient(ellipse at 25% 30%,#9cda9d 0 12%,transparent 13%),radial-gradient(ellipse at 60% 22%,#b5e4a3 0 10%,transparent 11%),radial-gradient(ellipse at 72% 60%,#5dbd87 0 17%,transparent 18%),radial-gradient(ellipse at 38% 72%,#83d59c 0 13%,transparent 14%)'}}/>
+                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_23%,#d5f7ff_0%,#69b7f4_15%,#3d72df_34%,#3445bd_57%,#25226f_78%,#101638_100%)]"/>
+                <div className="absolute inset-[7%] rotate-[-18deg] rounded-full opacity-80" style={{backgroundImage:'radial-gradient(ellipse at 24% 30%,rgba(155,232,255,.75) 0 11%,transparent 12%),radial-gradient(ellipse at 63% 22%,rgba(164,180,255,.55) 0 12%,transparent 13%),radial-gradient(ellipse at 72% 62%,rgba(103,137,255,.45) 0 16%,transparent 17%),radial-gradient(ellipse at 37% 72%,rgba(80,207,255,.35) 0 12%,transparent 13%),radial-gradient(1.5px 1.5px at 49% 24%,#fff 99%,transparent),radial-gradient(1.5px 1.5px at 69% 47%,#d9faff 99%,transparent),radial-gradient(1.5px 1.5px at 32% 59%,#d9faff 99%,transparent)'}}/>
                 <div className="absolute -bottom-2 left-[18%] right-[16%] h-12 rounded-[50%] bg-cyan-300/20 blur-xl"/>
               </div>
               <div className="absolute left-[12%] top-[25%] rounded-full border border-amber-200/30 bg-[#122e50]/80 p-2 text-amber-200 shadow-lg"><BookOpen size={20}/></div>
@@ -334,6 +363,16 @@ export default function PlanetubeDashboard({
       )}
       {!connected && error && !checking && <p role="alert" className="mt-3 rounded-xl border border-rose-300/20 bg-rose-400/10 p-3 text-xs leading-5 text-rose-200">{error}</p>}
       {!connected && <p className="mt-4 text-center text-[9px] text-slate-500">Planetubeのアカウント情報と封印セッションのみ読み込みます。CampusSyncやPlanetubeの学習・活動データは変更しません。</p>}
+      {showAchievements && connected && (
+        <PlanetubeAchievementBoard
+          onClose={() => setShowAchievements(false)}
+          planetLevel={planetData?.level ?? null}
+          growthPoints={planetData?.growth_points ?? 0}
+          completedSeals={completedCount}
+          sealRecords={Math.max(0, totalCount - testCount)}
+          studyStats={studyStats}
+        />
+      )}
     </section>
   );
 }

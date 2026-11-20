@@ -344,6 +344,19 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     sessions.forEach(item => totals.set(item.subject_name, (totals.get(item.subject_name) || 0) + item.focus_seconds));
     return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
   }, [sessions]);
+  // Achievement inputs stay in CampusSync. Study sessions loaded above cover the latest 120 days.
+  const planetubeStudyStats = useMemo(() => {
+    const tokyoDate = (value: string) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(value));
+    return {
+      focusSeconds: sessions.reduce((sum, item) => sum + Math.max(0, item.focus_seconds), 0),
+      sessionCount: sessions.length,
+      studyDays: new Set(sessions.map(item => tokyoDate(item.started_at))).size,
+      subjectCount: new Set(sessions.map(item => item.subject_name)).size,
+      reviewedRanges: ranges.filter(item => item.status === 'completed' || item.status === 'reviewed').length,
+    };
+  }, [sessions, ranges]);
   const progress = (id: string) => {
     const list = ranges.filter(item => item.school_test_subject_id === id);
     const done = list.filter(item => item.status === 'completed' || item.status === 'reviewed').length;
@@ -361,7 +374,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
 
-    {tab === 'planetube' && <PlanetubeDashboard campusEmail={userEmail} isDarkMode={dark} />}
+    {tab === 'planetube' && <PlanetubeDashboard campusEmail={userEmail} isDarkMode={dark} studyStats={planetubeStudyStats} />}
 
     {tab === 'overview' && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
