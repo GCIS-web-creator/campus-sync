@@ -33,6 +33,7 @@ type AiTable = {
 type CampusAiResponse = {
   answer?: unknown;
   error?: unknown;
+  plainText?: unknown;
   table?: AiTable;
 };
 
@@ -67,12 +68,63 @@ async function getCampusAiAnswer(question: string): Promise<CampusAiResponse> {
   }
 }
 
+
+function splitLinePlainText(value: string, maxLength = 4500): string[] {
+  const chunks: string[] = [];
+  let current = '';
+  for (const line of value.split('\n')) {
+    const candidate = current ? current + '\n' + line : line;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+    if (current) chunks.push(current);
+    if (line.length <= maxLength) {
+      current = line;
+    } else {
+      for (let offset = 0; offset < line.length; offset += maxLength) {
+        chunks.push(line.slice(offset, offset + maxLength));
+      }
+      current = '';
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 5);
+}
+
 async function replyToLine(
   replyToken: string,
   payload: CampusAiResponse,
   question: string,
   channelAccessToken: string
 ): Promise<void> {
+  const plainText = typeof payload.plainText === 'string' ? payload.plainText.trim() : '';
+  if (plainText) {
+    const messages = splitLinePlainText(plainText).map(text => ({ type: 'text', text }));
+    try {
+      const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + channelAccessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ replyToken, messages }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
+      });
+      await recordLineDeliveryResponse(response, {
+        channel: 'reply', destinationType: 'user', kind: 'campus_ai_exam_scope',
+        accessToken: channelAccessToken, messages,
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        console.error('LINE exam scope reply API returned HTTP', response.status, detail.slice(0, 500));
+      }
+    } catch (error) {
+      console.error('LINE exam scope reply request failed:', error instanceof Error ? error.name : 'unknown');
+    }
+    return;
+  }
   const answer = typeof payload.answer === 'string'
     ? payload.answer.trim()
     : typeof payload.error === 'string'

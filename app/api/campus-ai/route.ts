@@ -104,6 +104,103 @@ export async function POST(req: Request) {
     question = `${followDirection}方面の次の電車は何時ですか`;
   }
   const normalizedQuestion = normalize(question);
+
+  // CSAIの「2学期期末試験範囲」質問には、AIの自由回答ではなく登録済みの試験範囲を返す。
+  const examScopeQuestion = normalize(question.normalize('NFKC'));
+  if (/(?:2|二)学期.*期末.*範囲/.test(examScopeQuestion)) {
+    const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceUrl || !serviceKey) {
+      return NextResponse.json({
+        answer: '期末試験範囲の取得設定を確認できません。時間をおいてもう一度質問してください。',
+      });
+    }
+
+    const admin = createClient(serviceUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { data: exam, error: examError } = await admin
+      .from('school_test_exams')
+      .select('id, school_year, start_date, end_date, target_classes')
+      .eq('term', 2)
+      .eq('exam_type', '期末考査')
+      .order('school_year', { ascending: false })
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (examError || !exam) {
+      console.error('Campus AI term exam lookup failed:', examError?.message || 'no exam');
+      return NextResponse.json({
+        answer: '2学期期末試験の日程がまだ登録されていないか、範囲を取得できませんでした。',
+      });
+    }
+
+    const { data: ranges, error: rangesError } = await admin
+      .from('school_test_ranges')
+      .select('subject, display_subject, audience, sort_order, range_sections')
+      .eq('exam_id', exam.id)
+      .order('audience', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('subject', { ascending: true });
+
+    if (rangesError) {
+      console.error('Campus AI term exam range lookup failed:', rangesError.message);
+      return NextResponse.json({
+        answer: '2学期期末試験範囲を読み込めませんでした。少し時間をおいてもう一度質問してください。',
+      });
+    }
+
+    if (!ranges?.length) {
+      return NextResponse.json({
+        answer: '2学期期末試験の日程は登録されていますが、試験範囲はまだ登録されていません。',
+      });
+    }
+
+    const dateLabel = (value: string) => {
+      const date = new Date(value + 'T00:00:00+09:00');
+      return new Intl.DateTimeFormat('ja-JP', {
+        timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short',
+      }).format(date);
+    };
+    const targetClasses = Array.isArray(exam.target_classes)
+      ? exam.target_classes.map((value: unknown) => String(value)).filter(Boolean)
+      : [];
+    const lines: string[] = [
+      '📚 ' + exam.school_year + '年度 2学期期末試験範囲',
+      '試験期間：' + dateLabel(String(exam.start_date)) + '〜' + dateLabel(String(exam.end_date)),
+      ...(targetClasses.length ? ['対象クラス：' + targetClasses.join('・')] : []),
+      '以下はCampusSyncに登録されている範囲です。',
+    ];
+    let activeAudience = '';
+
+    for (const range of ranges) {
+      const audience = String(range.audience || '対象区分未設定');
+      if (audience !== activeAudience) {
+        activeAudience = audience;
+        lines.push('', '━━━━━━━━━━━━', '【' + audience + '】');
+      }
+      lines.push('', '■ ' + String(range.display_subject || range.subject));
+      const sections = Array.isArray(range.range_sections) ? range.range_sections : [];
+      for (const section of sections) {
+        if (!section || typeof section !== 'object') continue;
+        const item = section as { title?: unknown; body?: unknown; note?: unknown };
+        const title = String(item.title || '').trim();
+        const body = String(item.body || '').trim();
+        const note = String(item.note || '').trim();
+        if (title) lines.push('・' + title);
+        if (body) lines.push(body);
+        if (note) lines.push('補足：' + note);
+      }
+    }
+    lines.push('', '※未登録の項目は推測で補わず、登録済みの内容のみ表示しています。');
+
+    const plainText = lines.join('\n');
+    return NextResponse.json({
+      answer: exam.school_year + '年度2学期期末試験の登録済み範囲を表示します。',
+      plainText,
+    });
+  }
   if (/(あなたができること|何ができる|何を聞ける|何ができるの|何を手伝える|機能一覧|できること一覧)/.test(question)) {
     return NextResponse.json({
       answer: 'CampusSync AIで対応できる主な機能です。実際の登録データがある機能は、データベースの内容を参照して回答します。',
