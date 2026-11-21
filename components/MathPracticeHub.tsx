@@ -400,7 +400,10 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   const nextCourse = e.target.value as MathCourse;
                   setCourse(nextCourse); setUnit(''); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === nextCourse);
-                  if (next) openQuestion(next);
+                  if (next) {
+                    setCurrent(next); setAnswer(''); setShowResult(false);
+                    questionStartedAt.current = Date.now();
+                  }
                 }} className={'w-full rounded-xl px-3 py-3 text-sm font-bold ' + field}>
                   {COURSES.map(value => <option key={value}>{value}</option>)}
                 </select>
@@ -410,7 +413,10 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   const nextUnit = e.target.value;
                   setUnit(nextUnit); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === course && (!nextUnit || q.unit === nextUnit));
-                  if (next) openQuestion(next);
+                  if (next) {
+                    setCurrent(next); setAnswer(''); setShowResult(false);
+                    questionStartedAt.current = Date.now();
+                  }
                 }} className={'w-full rounded-xl px-3 py-3 text-sm font-bold ' + field}>
                   <option value="">すべての単元</option>{units.map(value => <option key={value}>{value}</option>)}
                 </select>
