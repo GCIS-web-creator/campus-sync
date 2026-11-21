@@ -134,7 +134,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [timerReady, setTimerReady] = useState(false);
   const [timerScheduleId, setTimerScheduleId] = useState<string | null>(null);
   const [timerPushStatus, setTimerPushStatus] = useState('');
-  const timerMusicRef = useRef<HTMLAudioElement | null>(null);
+  const timerAudioContextRef = useRef<AudioContext | null>(null);
   const needsTimerPushRefresh = useRef(false);
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
@@ -194,14 +194,40 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     }
   }, [breakMinutes, cancelTimerPush]);
 
-  const playTimerMusic = useCallback(() => {
-    const audio = timerMusicRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      void audio.play().catch(() => {
-        setMessage('終了音楽を再生できませんでした。画面を開いた状態で再生操作を一度行ってください。');
-      });
+  const prepareTimerAudio = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+    try {
+      if (!timerAudioContextRef.current) timerAudioContextRef.current = new AudioContextClass();
+      void timerAudioContextRef.current.resume();
+    } catch (cause) {
+      console.warn('タイマー通知音を準備できませんでした:', cause);
+    }
+  }, []);
+
+  const playTimerChime = useCallback(() => {
+    const context = timerAudioContextRef.current;
+    if (context?.state === 'running') {
+      const startAt = context.currentTime + 0.02;
+      const notes = [
+        { frequency: 523.25, start: 0, duration: 0.18 },
+        { frequency: 659.25, start: 0.17, duration: 0.2 },
+        { frequency: 783.99, start: 0.36, duration: 0.38 },
+      ];
+      for (const note of notes) {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(note.frequency, startAt + note.start);
+        gain.gain.setValueAtTime(0.0001, startAt + note.start);
+        gain.gain.exponentialRampToValueAtTime(0.12, startAt + note.start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + note.start + note.duration);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(startAt + note.start);
+        oscillator.stop(startAt + note.start + note.duration + 0.02);
+      }
     }
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate([260, 120, 260, 120, 520]);
@@ -372,14 +398,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   useEffect(() => {
     if (timerState !== 'running' || remaining > 0) return;
-    playTimerMusic();
+    playTimerChime();
     if (phase === 'focus') {
       setPhase('break'); setTimerRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
     } else {
       setPhase('focus'); setTimerRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
       void scheduleTimerPush('focus', focusMinutes * 60);
     }
-  }, [timerState, remaining, phase, breakMinutes, focusMinutes, playTimerMusic, scheduleTimerPush]);
+  }, [timerState, remaining, phase, breakMinutes, focusMinutes, playTimerChime, scheduleTimerPush]);
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
@@ -503,6 +529,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
+    prepareTimerAudio();
     void scheduleTimerPush('focus', timerState === 'idle' ? focusMinutes * 60 : remaining);
   };
   const pauseTimer = () => {
@@ -511,6 +538,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   };
   const resumeTimer = () => {
     setTimerState('running');
+    prepareTimerAudio();
     void scheduleTimerPush(phase, remaining);
   };
   const switchTimerPhase = () => {
@@ -830,12 +858,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
     {tab === 'focus' && <div className="space-y-4">
       <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div>
-        <p className={'mb-3 text-xs leading-5 '+muted}>集中終了・休憩終了時に「さばの味噌煮と牛乳」を再生します。通知を有効にした端末には、画面ロック中もプッシュ通知を送ります。</p><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
+        <p className={'mb-3 text-xs leading-5 '+muted}>集中終了・休憩終了時に短いオリジナル通知音を鳴らします。通知を有効にした端末には、画面ロック中もプッシュ通知を送ります。</p><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
       <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">FOCUS SESSION</p><h2 className="mt-1 text-lg font-black">今日の自習</h2></div><span className={'rounded-full px-3 py-1.5 text-[10px] font-black '+(phase==='focus'?'bg-cyan-100 text-cyan-900':'bg-amber-100 text-amber-900')}>{phase==='focus'?'集中時間':'休憩時間'}</span></div>
-        <audio ref={timerMusicRef} src="/audio/saba-miso-to-milk.mp3" preload="none" />
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
           <span className={timerPushStatus.includes('予約しました') ? 'text-emerald-600' : muted}>{timerPushStatus || 'ロック中の通知には、この端末のWeb Push登録が必要です。'}</span>
-          <span className={muted}>音源：音々「さばの味噌煮と牛乳」</span>
+          <button type="button" onClick={() => { prepareTimerAudio(); playTimerChime(); }} className={secondary}>通知音をテスト</button>
         </div>
         <div className="mb-5 flex flex-col items-center rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 px-4 py-7 text-white"><p className="text-[10px] font-bold tracking-[.2em] text-cyan-200">{phase==='focus'?'FOCUS':'BREAK'}</p><p className="my-2 font-mono text-6xl font-black tabular-nums sm:text-7xl">{timeText}</p><p className="text-xs text-white/70">勉強 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button><button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button></>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">途中終了</button>}</div>
