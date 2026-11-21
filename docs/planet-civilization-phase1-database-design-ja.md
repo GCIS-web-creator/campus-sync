@@ -2,7 +2,7 @@
 
 - 最終更新: 2026-11-21
 - 対象: CampusSync 本体 / Supabase
-- 状態: 設計初版（レビュー・実装前）
+- 状態: Phase 1初版実装済み（DB適用・トランザクションテスト済み、CI/回帰確認中）
 - 関連仕様: [ロードマップ](./planet-civilization-roadmap-ja.md)
 - 関連実装: [実装記録](./planet-civilization-implementation.md)
 
@@ -69,15 +69,15 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 - `reverses_entry_id uuid null references campus_xp_ledger(id)`: 取消時の参照先
 - `created_at timestamptz`
 - 所有者整合性: `foreign key (planet_id, user_id) references campus_planets(id, user_id)`
-- awardの一意制約: `unique(user_id, xp_type, source_type, source_id) where entry_kind = 'award'` の部分一意インデックス。同じ活動・XP種別の通常付与は一回だけ。
-- 訂正行の冪等性: `unique(user_id, source_type, source_id)`。訂正・取消には元活動IDを再利用せず、サーバーが発行した一意な訂正リクエストIDを `source_id` に使う。
+- awardの重複防止: 初期マイグレーションにある `unique(user_id, xp_type, source_type, source_id)` を維持する。同じ活動ID・XP種別の重複を拒否する。
+- 訂正・取消の重複防止: 各訂正は元活動IDとは別の一意な訂正リクエストIDを `source_id` に使い、`reverses_entry_id` で元awardを参照する。`unique(reverses_entry_id)` の部分一意インデックスで同じ元awardの二重取消を拒否する。
 - 取消の一意制約: `unique(reverses_entry_id) where reverses_entry_id is not null`（1つの元awardを二重取消ししない）
 
 制約・計算:
 
 - award行は `amount >= 0`。ただしPomodoroの端数秒を同日内で繰り越すため、`amount = 0` でも `credited_seconds > 0` の行を許可する。
 - reversal/adjustment行は正の `amount` と `entry_kind` / `adjustment_direction` の組み合わせで増減方向を表現し、サーバー関数のみが作成できる。既存の `amount >= 0` 制約を維持できる。
-- 部分一意インデックスを採用するため、現行プロトタイプの `campus_xp_ledger_source_unique` 制約は追加マイグレーションで安全に置き換える。既に適用済みのマイグレーションファイル自体は書き換えない。
+- 既存の `campus_xp_ledger_source_unique` 制約は変更せず維持する。訂正行の `source_type` は `xp_reversal` / `xp_adjustment` 等のサーバー許可値を使い、source_idは専用の訂正要求IDにする。
 - 学習XPの累計はawardを加算し、reversalおよび `adjustment_direction='decrease'` を減算、`adjustment_direction='increase'` を加算して再計算する。学習XPの `credited_seconds` はaward行のみを日次上限計算に使い、取消時は元行を直接変更せず、相殺行と再計算結果を残す。
 - 知識XPの `source_id` は、再挑戦で変わる回答IDではなく、ユーザーごとに一度だけ付与したい安定した問題IDを使う。問題改訂を別問題と扱う場合は明示的に別IDにする。
 - `source_type` はサーバー側で許可リスト管理し、クライアントから自由入力させない。
@@ -109,6 +109,7 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 
 - `id uuid primary key`
 - `planet_id uuid not null`
+- `user_id uuid not null references auth.users(id)`
 - `unlock_key text not null`（コード側の安定ID。表示名をキーにしない）
 - `unlock_type text not null`: `building` / `technology` / `landscape`
 - `unlocked_at timestamptz not null`
@@ -162,8 +163,8 @@ XPの唯一の正本。通常操作でUPDATE/DELETEしない追記型にする�
 4. 惑星行を `FOR UPDATE` でロックし、同じユーザーの日次同時付与を直列化する。
 5. `started_at` をAsia/Tokyoへ変換し、日次のcredited_secondsを集計する。
 6. 10,800秒までをXP対象にし、60秒単位でXPを付与。端数秒は同日内で繰り越す。
-7. award部分一意インデックスにより同じsession IDを二度付与しない。訂正・取消は別の訂正リクエストIDで記録し、元awardとの参照は `reverses_entry_id` で行う。
-8. XP台帳追加・集計キャッシュ再計算・文明段階更新・解放行追加・イベント追加を一つのDBトランザクションで完了する。
+7. 既存の `campus_xp_ledger_source_unique` 制約により同じsession IDを二度付与しない。訂正・取消は別の訂正リクエストIDで記録し、元awardとの参照は `reverses_entry_id` で行う。
+8. XP台帳追加・自然成長判定・集計キャッシュ再計算・文明段階更新・段階イベント追加を一つのDBトランザクションで完了する。建物・技術・景観の解放判定とunlock行の追加は後続Phase 5で行う。
 
 ### 3.2 自然成長日の付与
 
@@ -252,13 +253,8 @@ Phase 1は、以下を全て実証するまで完了扱いにしない。
 
 ## 7. 現在のDraft PRとの差分
 
-現行PR #36には `campus_planets`・`campus_planet_growth`・`campus_xp_ledger` の3テーブルと、Pomodoroの学習XP付与関数がある。初期のRLS設定・本人の読み取り・server-only付与の骨格は存在するが、次が未完了。
+現行PR #36の初期プロトタイプには `campus_planets`・`campus_planet_growth`・`campus_xp_ledger` の3テーブルと、Pomodoroの学習XP付与関数があった。追加マイグレーション `20261121004717_campus_planet_phase1_foundation` を適用し、5つの主要テーブルと自然成長補助台帳、再計算・日次自然成長・学習XP関数を追加した。
 
-1. `campus_planet_unlocks` と `campus_planet_events` がない。
-2. 自然成長日の専用台帳がない。
-3. `campus_planet_growth` は直接加算され、正本台帳から完全再構築する機能がない。
-4. 4軸Level・文明発展スコア・新しいStageしきい値がDB処理とUIに反映されていない。
-5. 取消・調整履歴とルールバージョンの扱いが不足している。
-6. 実テスト用アカウントA/Bによる相互アクセス拒否の実証がない。
+初回実装との差分は追加マイグレーションで解消した。DB適用後にテストトランザクションを実行し、実在する2つのAuthユーザーIDを使ったA/B相互参照拒否、直接書き込み拒否、service_role専用RPC、日次上限、セッション再送信、自然成長日一意性、再計算安定性、段階イベント一意性を確認した。テスト用の行は最後にROLLBACKし、本番データは残していない。
 
-したがって、PR #36は引き続きDraftとし、この設計に合わせた追加マイグレーション・RPC・テストを行ってから完了判定する。CI成功やSQL適用だけではPhase 1完了としない。
+**現在も残るリリース確認:** GitHub Actions CI、Cloudflare Worker dry-run、ブラウザ上での画面/APIスモーク、既存機能の回帰確認。これらが終わるまではPR #36をDraftのままにして、本番アプリへのマージ・デプロイはしない。
