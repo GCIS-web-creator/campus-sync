@@ -100,6 +100,9 @@ export async function POST(request: NextRequest) {
     });
     if (error) {
       console.error('[contributions] submit failed:', error.message);
+      if (error.code === '23505') {
+        return json({ success: false, message: '同じ活動名・活動日ですでに申請があります。申請履歴を確認してください。' }, 409);
+      }
       return json({ success: false, message: '申請を保存できませんでした。入力内容を確認して再度お試しください。' }, 500);
     }
 
