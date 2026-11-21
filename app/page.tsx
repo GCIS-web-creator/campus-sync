@@ -6142,7 +6142,7 @@ Supabaseの設定を確認してください。
           onSelect: () => setActiveTab('study'),
         }] : []),
         ...(authUser?.id ? [{
-          key: 'math-practice', label: '数学演習', icon: <Calculator size={17} />,
+          key: 'math-practice', label: '数学演習ラボ', icon: <Calculator size={17} />,
           isActive: activeTab === 'math-practice', keywords: ['数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
           onSelect: () => setActiveTab('math-practice'),
         }] : []),
