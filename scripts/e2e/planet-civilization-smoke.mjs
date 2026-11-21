@@ -168,7 +168,16 @@ try {
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
 
   const firstLoadCount = planetGetCalls;
-  await page.getByRole('button', { name: '更新' }).click();
+  const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
+  const refreshButton = planetHeader.locator('button').filter({ hasText: '更新' }).first();
+  const refreshCount = await refreshButton.count();
+  if (refreshCount !== 1) {
+    const visibleButtons = await page.locator('button').allTextContents();
+    const visibleHeaders = await page.locator('header').allTextContents();
+    throw new Error('Planet refresh button not found. buttons=' + JSON.stringify(visibleButtons) + ' headers=' + JSON.stringify(visibleHeaders));
+  }
+  assert.equal(await refreshButton.isEnabled(), true, 'Planet refresh button should be enabled after initial load');
+  await refreshButton.click();
   for (let attempt = 0; attempt < 30 && planetGetCalls <= firstLoadCount; attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -201,9 +210,13 @@ try {
   assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 1, 'Pomodoro should save a positive focus duration');
   assert.equal(xpAwardPayload?.action, 'award-learning-xp', 'Saved session should call the learning XP endpoint');
   assert.equal(xpAwardPayload?.session_id, '44444444-4444-4444-8444-444444444444', 'Learning XP request should reference the saved session ID');
+
+  await page.getByRole('button', { name: 'Planetube', exact: true }).click();
+  await page.getByRole('heading', { name: 'Planetubeにログイン', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro save, and XP API handoff');
+  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro save, XP API handoff, and Planetube login screen');
 } finally {
   await browser.close();
 }
