@@ -57,9 +57,12 @@ export function validateKnowledgeQuestion(input: unknown):
   const target_class = input.target_class === undefined ? 'all' : readString(input.target_class);
   const source_name = readString(input.source_name, 'CampusSyncオリジナル') || 'CampusSyncオリジナル';
   const source_url = readString(input.source_url) || null;
-  const source_license = readString(input.source_license) || null;
-  const source_attribution = readString(input.source_attribution) || null;
-  const source_revision = readString(input.source_revision) || null;
+  const source_license_text = readString(input.source_license);
+  const source_attribution_text = readString(input.source_attribution);
+  const source_revision_text = readString(input.source_revision);
+  const source_license = source_license_text || null;
+  const source_attribution = source_attribution_text || null;
+  const source_revision = source_revision_text || null;
   const correct_answer = readString(input.correct_answer) || null;
   const toleranceRaw = input.answer_tolerance === undefined ? 0 : Number(input.answer_tolerance);
   const answer_tolerance = Number.isFinite(toleranceRaw) ? toleranceRaw : -1;
@@ -79,7 +82,7 @@ export function validateKnowledgeQuestion(input: unknown):
   if (!status) return { error: '公開状態が正しくありません。' };
   if (!source_name || source_name.length > 120) return { error: '出典名は1〜120文字で入力してください。' };
   if (source_url && (source_url.length > 2048 || !/^https:\/\/\S+$/i.test(source_url))) return { error: '出典URLはhttps://から始まるURLを入力してください。' };
-  if (source_license.length > 100 || source_attribution.length > 500 || source_revision.length > 200) {
+  if (source_license_text.length > 100 || source_attribution_text.length > 500 || source_revision_text.length > 200) {
     return { error: '出典情報の文字数が上限を超えています。' };
   }
   if (source_url && (!source_license || !source_attribution)) {
