@@ -116,7 +116,7 @@ function expectedAnswer(question) {
     const x = Number(match[3]);
     return 3 * x ** 2 + 2 * a * x + b;
   }
-  if ((match = p.match(/lim\(x→(\d+)\) \(x² − (\d+)\/\(x − (\d+)\)/))) {
+  if ((match = p.match(/lim\(x→(\d+)\) \(x² − (\d+)\)\/\(x − (\d+)\)/))) {
     return 2 * Number(match[1]);
   }
   if ((match = p.match(/f\(x\)=x⁴\+(\d*)x³\+(\d*)x²\+(\d*)x とする。f'\((\d+)\)/))) {
