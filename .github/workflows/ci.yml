@@ -77,6 +77,17 @@ jobs:
             exit 1
           fi
           node scripts/e2e/planet-civilization-smoke.mjs
+      # Build-time public Supabase config must be real for the production Worker.
+      # The service_role key remains a Cloudflare secret and is never bundled.
+      - name: Build production Worker with Supabase public config
+        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://sgvhktudhxufluuaipwt.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_-0qezEAXvQ8_9KgEGGXsZw_ZMUJExE5
+        run: |
+          npm run build
+          npx opennextjs-cloudflare build
+          npx wrangler deploy --dry-run
       - name: Deploy Cloudflare Worker to production
         if: github.ref == 'refs/heads/cloudflare-workers-migration'
         env:
