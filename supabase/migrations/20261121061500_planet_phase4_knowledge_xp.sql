@@ -7,8 +7,10 @@ create table if not exists public.campus_knowledge_questions (
   title text not null check (char_length(trim(title)) between 1 and 160),
   prompt text not null check (char_length(trim(prompt)) between 1 and 4000),
   options jsonb not null check (
-    jsonb_typeof(options) = 'array'
-    and jsonb_array_length(options) between 2 and 6
+    case when jsonb_typeof(options) = 'array'
+      then jsonb_array_length(options) between 2 and 6
+      else false
+    end
   ),
   correct_option_id text not null check (correct_option_id ~ '^[a-z][a-z0-9_-]{0,11}$'),
   explanation text not null default '' check (char_length(explanation) <= 2000),
@@ -21,7 +23,9 @@ create table if not exists public.campus_knowledge_questions (
   created_by_label text not null default 'CampusSync Admin',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  published_at timestamptz
+  published_at timestamptz,
+  constraint campus_knowledge_questions_answer_in_options_check
+    check (options @> jsonb_build_array(jsonb_build_object('id', correct_option_id)))
 );
 
 create index if not exists campus_knowledge_questions_published_idx
