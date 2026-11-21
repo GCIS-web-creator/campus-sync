@@ -10,7 +10,7 @@ const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KE
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SCHOOL_EMAIL = /^[0-9]{6}@tokyo\.soka\.ed\.jp$/i;
 const PAGE_SIZE_DEFAULT = 18;
-const PAGE_SIZE_MAX = 50;
+const PAGE_SIZE_MAX = 250;
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, {
   status,

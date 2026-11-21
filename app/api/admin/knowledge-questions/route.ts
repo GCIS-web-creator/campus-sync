@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   try {
     const admin = getAdminClient();
     const { data, count, error } = await admin.from('campus_knowledge_questions')
-      .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,created_at,published_at', { count: 'exact' })
+      .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,xp_weight,created_at,published_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(0, 999);
     if (error) throw error;
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       created_by_label: 'CampusSync Admin',
       published_at: value.status === 'published' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
-    }).select('id,subject,unit,title,question_type,difficulty,target_class,status,source_name,source_url,created_at,published_at').single();
+    }).select('id,subject,unit,title,question_type,difficulty,xp_weight,target_class,status,source_name,source_url,created_at,published_at').single();
     if (error?.code === '23505') return json({ success: false, message: '同じ単元・問題文の問題がすでに登録されています。重複を確認してください。' }, 409);
     if (error) throw error;
     return json({ success: true, question: data }, 201);
@@ -97,31 +97,43 @@ export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return json({ success: false, message: '不正な管理操作です。' }, 403);
   const denied = authorize(request);
   if (denied) return denied;
-  const body = await request.json().catch(() => null) as { id?: unknown; action?: unknown } | null;
+  const body = await request.json().catch(() => null) as { id?: unknown; action?: unknown; xp_weight?: unknown } | null;
   if (typeof body?.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.id)) {
     return json({ success: false, message: '問題IDが正しくありません。' }, 400);
   }
-  if (body.action !== 'publish' && body.action !== 'archive') {
+  if (body.action !== 'publish' && body.action !== 'archive' && body.action !== 'set-xp-weight') {
     return json({ success: false, message: '操作内容が正しくありません。' }, 400);
+  }
+
+  let update: Record<string, unknown>;
+  let allowedStatuses: string[];
+  if (body.action === 'set-xp-weight') {
+    const weight = Number(body.xp_weight);
+    if (!Number.isInteger(weight) || weight < 1 || weight > 100) {
+      return json({ success: false, message: '知識XPは1〜100の整数で設定してください。' }, 400);
+    }
+    update = { xp_weight: weight, updated_at: new Date().toISOString() };
+    allowedStatuses = ['draft', 'published'];
+  } else {
+    update = body.action === 'publish'
+      ? { status: 'published', published_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+      : { status: 'archived', updated_at: new Date().toISOString() };
+    allowedStatuses = body.action === 'publish' ? ['draft'] : ['draft', 'published'];
   }
 
   try {
     const admin = getAdminClient();
-    const update = body.action === 'publish'
-      ? { status: 'published', published_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-      : { status: 'archived', updated_at: new Date().toISOString() };
-    const allowedStatuses = body.action === 'publish' ? ['draft'] : ['draft', 'published'];
     const { data, error } = await admin.from('campus_knowledge_questions')
       .update(update)
       .eq('id', body.id)
       .in('status', allowedStatuses)
-      .select('id,status,published_at')
+      .select('id,status,xp_weight,published_at')
       .maybeSingle();
     if (error) throw error;
     if (!data) return json({ success: false, message: '対象問題が見つからないか、状態が変更済みです。' }, 409);
     return json({ success: true, question: data });
   } catch (error) {
     console.error('[admin/knowledge-questions] PATCH failed:', error instanceof Error ? error.message : 'unknown');
-    return json({ success: false, message: '問題状態を更新できませんでした。' }, 500);
+    return json({ success: false, message: '問題を更新できませんでした。' }, 500);
   }
 }

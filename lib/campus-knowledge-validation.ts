@@ -17,6 +17,7 @@ export type KnowledgeQuestionInput = {
   answer_tolerance: number;
   explanation: string;
   difficulty: KnowledgeDifficulty;
+  xp_weight: number;
   target_class: string;
   status: 'draft' | 'published';
   source_name: string;
@@ -53,6 +54,9 @@ export function validateKnowledgeQuestion(input: unknown):
   const explanation = readString(input.explanation);
   const question_type = (input.question_type === undefined ? 'multiple_choice' : input.question_type) as KnowledgeQuestionType;
   const difficulty = input.difficulty;
+  const defaultXpWeight = difficulty === 'advanced' ? 4 : difficulty === 'challenge' ? 6 : 2;
+  const xpWeightRaw = input.xp_weight === undefined ? defaultXpWeight : Number(input.xp_weight);
+  const xp_weight = Number.isInteger(xpWeightRaw) ? xpWeightRaw : -1;
   const status = input.status === 'published' ? 'published' : input.status === 'draft' || input.status === undefined ? 'draft' : null;
   const target_class = input.target_class === undefined ? 'all' : readString(input.target_class);
   const source_name = readString(input.source_name, 'CampusSyncオリジナル') || 'CampusSyncオリジナル';
@@ -79,6 +83,7 @@ export function validateKnowledgeQuestion(input: unknown):
     return { error: '難易度を選択してください。' };
   }
   if (!KNOWLEDGE_QUESTION_TYPES.includes(question_type)) return { error: '問題形式を選択してください。' };
+  if (xp_weight < 1 || xp_weight > 100) return { error: '知識XPは1〜100の整数で設定してください。' };
   if (!status) return { error: '公開状態が正しくありません。' };
   if (!source_name || source_name.length > 120) return { error: '出典名は1〜120文字で入力してください。' };
   if (source_url && (source_url.length > 2048 || !/^https:\/\/\S+$/i.test(source_url))) return { error: '出典URLはhttps://から始まるURLを入力してください。' };
@@ -137,7 +142,7 @@ export function validateKnowledgeQuestion(input: unknown):
       correct_option_id: question_type === 'multiple_choice' ? correct_option_id : null,
       correct_answer: question_type === 'multiple_choice' ? null : correct_answer,
       answer_tolerance: question_type === 'numeric' ? answer_tolerance : 0,
-      explanation, difficulty: difficulty as KnowledgeDifficulty, target_class, status,
+      explanation, difficulty: difficulty as KnowledgeDifficulty, xp_weight, target_class, status,
       source_name, source_url, source_license: source_license || null,
       source_attribution: source_attribution || null, source_revision: source_revision || null,
     },

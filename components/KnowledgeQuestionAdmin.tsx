@@ -23,6 +23,7 @@ type Question = {
   answer_tolerance: number;
   explanation: string;
   difficulty: Difficulty;
+  xp_weight: number;
   target_class: string;
   status: 'draft' | 'published' | 'archived';
   source_name: string;
@@ -46,8 +47,9 @@ const makeOptions = (): Option[] => [
   { id: 'a', text: '' }, { id: 'b', text: '' }, { id: 'c', text: '' }, { id: 'd', text: '' },
 ];
 const difficultyLabel: Record<Difficulty, string> = {
-  normal: '基礎・2 XP', advanced: '応用・4 XP', challenge: '発展・6 XP',
+  normal: '基礎', advanced: '応用', challenge: '発展',
 };
+const defaultXpWeight = (value: Difficulty) => value === 'advanced' ? 4 : value === 'challenge' ? 6 : 2;
 const typeLabel: Record<QuestionType, string> = {
   multiple_choice: '選択式', numeric: '数値入力', written: '記述式',
 };
@@ -69,6 +71,8 @@ export default function KnowledgeQuestionAdmin() {
   const [answerTolerance, setAnswerTolerance] = useState('0');
   const [explanation, setExplanation] = useState('');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [xpWeight, setXpWeight] = useState('2');
+  const [xpDrafts, setXpDrafts] = useState<Record<string, string>>({});
   const [targetClass, setTargetClass] = useState('all');
   const [sourceName, setSourceName] = useState('CampusSyncオリジナル');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -121,7 +125,7 @@ export default function KnowledgeQuestionAdmin() {
     setSubject('数学III'); setSubjectCode('math3'); setUnit('微分法');
     setQuestionType('multiple_choice'); setTitle(''); setPrompt('');
     setOptions(makeOptions()); setCorrectOptionId('a'); setCorrectAnswer('');
-    setAnswerTolerance('0'); setExplanation(''); setDifficulty('normal');
+    setAnswerTolerance('0'); setExplanation(''); setDifficulty('normal'); setXpWeight('2');
     setTargetClass('all'); setSourceName('CampusSyncオリジナル');
     setSourceUrl(''); setSourceLicense(''); setSourceAttribution(''); setSourceRevision('');
     setStatus('draft');
@@ -140,7 +144,7 @@ export default function KnowledgeQuestionAdmin() {
           correct_option_id: questionType === 'multiple_choice' ? correctOptionId : null,
           correct_answer: questionType === 'multiple_choice' ? null : correctAnswer,
           answer_tolerance: questionType === 'numeric' ? Number(answerTolerance) : 0,
-          explanation, difficulty, target_class: targetClass, status,
+          explanation, difficulty, xp_weight: Number(xpWeight), target_class: targetClass, status,
           source_name: sourceName, source_url: sourceUrl || null,
           source_license: sourceLicense || null, source_attribution: sourceAttribution || null,
           source_revision: sourceRevision || null,
@@ -185,6 +189,30 @@ export default function KnowledgeQuestionAdmin() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'JSONを読み込めませんでした。');
     } finally { setImporting(false); }
+  };
+
+  const saveXpWeight = async (question: Question) => {
+    const value = Number(xpDrafts[question.id] ?? question.xp_weight);
+    if (!Number.isInteger(value) || value < 1 || value > 100) {
+      setError('知識XPは1〜100の整数で設定してください。');
+      return;
+    }
+    if (value === question.xp_weight) return;
+    setBusyId(question.id); setError(''); setMessage('');
+    try {
+      const response = await fetch('/api/admin/knowledge-questions', {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: question.id, action: 'set-xp-weight', xp_weight: value }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) throw new Error(payload.message || '知識XPを更新できませんでした。');
+      setMessage('「' + question.title + '」の知識XPを更新しました（' + value + ' XP）。');
+      setXpDrafts(current => { const next = { ...current }; delete next[question.id]; return next; });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '知識XPを更新できませんでした。');
+    } finally { setBusyId(''); }
   };
 
   const changeStatus = async (question: Question, action: 'publish' | 'archive') => {
@@ -259,9 +287,14 @@ export default function KnowledgeQuestionAdmin() {
         <label className={labelClass}>問題形式<select className={inputClass} value={questionType} onChange={event => setQuestionType(event.target.value as QuestionType)}>
           <option value="multiple_choice">選択式（自動採点）</option><option value="numeric">数値入力（自動採点）</option><option value="written">記述式（自己確認）</option>
         </select></label>
-        <label className={labelClass}>難易度<select className={inputClass} value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>
-          <option value="normal">基礎（2 XP）</option><option value="advanced">応用（4 XP）</option><option value="challenge">発展（6 XP）</option>
+        <label className={labelClass}>難易度<select className={inputClass} value={difficulty} onChange={event => {
+          const value = event.target.value as Difficulty;
+          setDifficulty(value);
+          setXpWeight(String(defaultXpWeight(value)));
+        }}>
+          <option value="normal">基礎</option><option value="advanced">応用</option><option value="challenge">発展</option>
         </select></label>
+        <label className={labelClass}>知識XP（1〜100）<input className={inputClass} type="number" inputMode="numeric" min={1} max={100} step={1} value={xpWeight} onChange={event => setXpWeight(event.target.value)} required/><span className="text-[10px] font-normal text-slate-500">初期値：基礎2・応用4・発展6。問題ごとに調整できます。</span></label>
         <label className={labelClass + ' sm:col-span-2'}>問題名<input className={inputClass} value={title} onChange={event => setTitle(event.target.value)} maxLength={160} placeholder="例：導関数の基本計算" required/></label>
         <label className={labelClass + ' sm:col-span-2'}>対象クラス<input className={inputClass} value={targetClass} onChange={event => setTargetClass(event.target.value)} maxLength={80} placeholder="all または 1-1" required/><span className="text-[10px] font-normal text-slate-500">全生徒に公開する場合は all</span></label>
       </div>
@@ -316,7 +349,7 @@ export default function KnowledgeQuestionAdmin() {
           <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-[10px] font-black text-cyan-200">{question.subject}</span>
           <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">{question.unit}</span>
           <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">{typeLabel[question.question_type]}</span>
-          <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">{difficultyLabel[question.difficulty]}</span>
+          <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">{difficultyLabel[question.difficulty]} · {question.xp_weight} XP</span>
           <span className={'rounded-lg px-2.5 py-1 text-[10px] font-bold ' + (question.status === 'published' ? 'bg-emerald-950 text-emerald-200' : question.status === 'draft' ? 'bg-amber-950 text-amber-200' : 'bg-slate-800 text-slate-400')}>{question.status === 'published' ? '公開中' : question.status === 'draft' ? '下書き' : 'アーカイブ'}</span>
           <span className="text-[10px] text-slate-500">対象：{question.target_class}</span>
         </div>
@@ -326,6 +359,19 @@ export default function KnowledgeQuestionAdmin() {
           ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{question.options.map((option, index)=><div key={option.id} className={'rounded-lg border p-2 text-xs ' + (option.id === question.correct_option_id ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200' : 'border-slate-800 bg-slate-900 text-slate-300')}><b className="mr-2">{String.fromCharCode(65 + index)}.</b>{option.text}{option.id === question.correct_option_id && <CheckCircle2 size={13} className="ml-2 inline text-emerald-400"/>}</div>)}</div>
           : <p className="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs leading-6 text-slate-200">模範解答：{question.correct_answer}</p>}
         {question.explanation && <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-slate-400">解説：{question.explanation}</p>}
+        {question.status !== 'archived' && <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
+          <label className="min-w-32 flex-1 space-y-1 text-[10px] font-bold text-slate-400">この問題の知識XP
+            <input type="number" min={1} max={100} step={1}
+              value={xpDrafts[question.id] ?? String(question.xp_weight)}
+              onChange={event => setXpDrafts(current => ({ ...current, [question.id]: event.target.value }))}
+              className={inputClass}/>
+          </label>
+          <button type="button" onClick={() => void saveXpWeight(question)}
+            disabled={busyId === question.id || Number(xpDrafts[question.id] ?? question.xp_weight) === question.xp_weight}
+            className="rounded-lg border border-cyan-700 px-3 py-2.5 text-[10px] font-black text-cyan-300 disabled:opacity-40">
+            {busyId === question.id ? '保存中…' : 'XPを保存'}
+          </button>
+        </div>}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
           <div className="min-w-0 text-[10px] text-slate-500">{question.source_url ? <a href={question.source_url} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline underline-offset-2">{question.source_name}</a> : question.source_name}{question.source_license ? ' · ' + question.source_license : ''}</div>
           {question.status !== 'archived' && <div className="flex shrink-0 justify-end gap-2">

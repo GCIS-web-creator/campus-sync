@@ -17,12 +17,8 @@ type MathQuestion = {
   title: string;
   prompt: string;
   options: Option[] | null;
-  correct_option_id: string | null;
-  correct_answer: string | null;
-  answer_tolerance: string | null;
-  explanation: string;
   difficulty: string;
-  question_type: 'multiple_choice' | 'numeric';
+  question_type: 'multiple_choice' | 'numeric' | 'written';
   source_name: string | null;
   source_url: string | null;
   source_license: string | null;
@@ -54,30 +50,18 @@ const shuffle = <T,>(items: T[]) => {
 };
 const clock = (seconds: number) => String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, '0') + ':' + String(Math.max(0, seconds) % 60).padStart(2, '0');
 const percent = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
-function parseNumber(value: string): number | null {
-  const v = value.trim().normalize('NFKC').replace(/[−ー]/g, '-').replace(/,/g, '').replace(/\s/g, '');
-  const fraction = v.match(/^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/);
-  if (fraction) {
-    const denominator = Number(fraction[2]);
-    return denominator ? Number(fraction[1]) / denominator : null;
-  }
-  if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
-  return null;
-}
-function isCorrectAnswer(question: MathQuestion, value: string) {
-  if (question.question_type === 'multiple_choice') return value === question.correct_option_id;
-  const actual = parseNumber(value);
-  const expected = question.correct_answer === null ? null : parseNumber(question.correct_answer);
-  if (actual === null || expected === null) return false;
-  const tolerance = Math.max(0, Number(question.answer_tolerance || 0));
-  return Math.abs(actual - expected) <= Math.max(tolerance, 1e-9);
-}
-function correctAnswerLabel(question: MathQuestion) {
-  if (question.question_type === 'multiple_choice') {
-    return question.options?.find(option => option.id === question.correct_option_id)?.text || '正答データを確認できません';
-  }
-  return question.correct_answer ?? '正答データを確認できません';
-}
+type ServerGrade = {
+  is_correct: boolean;
+  is_graded: boolean;
+  xp_awarded: number;
+  already_awarded: boolean;
+  question_type: 'multiple_choice' | 'numeric' | 'written';
+  correct_option_text: string | null;
+  correct_answer: string | null;
+  explanation: string;
+  replayed: boolean;
+};
+type PendingKnowledgeSubmission = { questionId: string; answer: string; attemptId: string };
 
 export default function MathPracticeHub({ userId, isDarkMode = false }: { userId: string; isDarkMode?: boolean }) {
   const [section, setSection] = useState<Section>('practice');
@@ -89,6 +73,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
   const [answer, setAnswer] = useState('');
   const [showResult, setShowResult] = useState(false);
   const [lastCorrect, setLastCorrect] = useState(false);
+  const [gradingResult, setGradingResult] = useState<ServerGrade | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -105,6 +90,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
   const [reviewIndex, setReviewIndex] = useState(0);
   const questionStartedAt = useRef(Date.now());
   const mockStartedAt = useRef<number | null>(null);
+  const pendingKnowledgeSubmission = useRef<PendingKnowledgeSubmission | null>(null);
 
   const dark = isDarkMode;
   const panel = 'rounded-3xl border shadow-sm ' + (dark ? 'border-slate-700 bg-slate-900/80 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
@@ -118,40 +104,43 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
     setLoading(true);
     setError('');
     try {
-      const attemptsRequest = supabase.from('math_practice_attempts')
-        .select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1000);
+      const [{ data: authData, error: authError }, attemptsResponse] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.from('math_practice_attempts')
+          .select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1000),
+      ]);
+      const token = authData.session?.access_token;
+      if (authError || !token) throw new Error('ログイン状態を確認してください。');
+      if (attemptsResponse.error) throw attemptsResponse.error;
 
-      // Supabase Data API may cap a single response at 1,000 rows.
-      // Fetch in pages so every published question (including rows after #1,000) is playable.
-      const pageSize = 1000;
+      // Answer keys never reach the browser. Load published, class-eligible questions
+      // from the authenticated server API in bounded pages.
+      const pageSize = 250;
       const bank: MathQuestion[] = [];
-      for (let offset = 0; ; offset += pageSize) {
-        const { data, error: questionError } = await supabase.from('campus_knowledge_questions')
-          .select('id,subject,subject_code,unit,title,prompt,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,question_type,source_name,source_url,source_license,source_attribution')
-          .eq('status', 'published')
-          .order('subject', { ascending: true })
-          .order('unit', { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (questionError) throw questionError;
-        const page = (data || []) as MathQuestion[];
-        bank.push(...page);
-        if (page.length < pageSize) break;
+      let totalPages = 1;
+      for (let page = 1; page <= totalPages; page += 1) {
+        const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+        const response = await fetch('/api/knowledge-practice?' + params.toString(), {
+          headers: { Authorization: 'Bearer ' + token },
+          cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success) throw new Error(payload.message || '知識問題を読み込めませんでした。');
+        bank.push(...(Array.isArray(payload.questions) ? payload.questions as MathQuestion[] : []));
+        totalPages = Math.max(1, Number(payload.pagination?.totalPages || 1));
       }
 
-      const { data: attemptData, error: attemptError } = await attemptsRequest;
-      if (attemptError) throw attemptError;
       setQuestions(bank);
-      setAttempts((attemptData || []) as Attempt[]);
+      setAttempts((attemptsResponse.data || []) as Attempt[]);
       setCurrent(previous => previous && bank.some(item => item.id === previous.id)
         ? previous
         : bank.find(item => item.subject === '数学I') || bank[0] || null);
       const invalid = bank.filter(item =>
-        !item.prompt?.trim() || !item.explanation?.trim() ||
-        (item.question_type === 'numeric' && !item.correct_answer?.trim()) ||
-        (item.question_type === 'multiple_choice' && (!item.correct_option_id || !item.options?.some(option => option.id === item.correct_option_id)))
+        !item.prompt?.trim() ||
+        (item.question_type === 'multiple_choice' && (!item.options || item.options.length < 2))
       );
       if (invalid.length) setError('問題データに確認が必要な項目があります（' + invalid.length + '問）。管理者による確認が必要です。');
     } catch (cause) {
@@ -276,33 +265,74 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
 
   const submitAnswer = async () => {
     if (!current || saving || !answer.trim() || showResult) return;
-    const correct = isCorrectAnswer(current, answer);
+    const submittedAnswer = answer.trim();
     const seconds = Math.max(0, Math.round((Date.now() - questionStartedAt.current) / 1000));
-    const entry: MockAnswer = { questionId: current.id, answer: answer.trim(), isCorrect: correct, seconds };
+    const previousPending = pendingKnowledgeSubmission.current;
+    const request = previousPending
+      && previousPending.questionId === current.id
+      && previousPending.answer === submittedAnswer
+      ? previousPending
+      : { questionId: current.id, answer: submittedAnswer, attemptId: crypto.randomUUID() };
+    pendingKnowledgeSubmission.current = request;
+
     setSaving(true);
-    setLastCorrect(correct);
-    setShowResult(true);
+    setError('');
+    let successfulEntry: MockAnswer | null = null;
     try {
-      const { data, error: insertError } = await supabase.from('math_practice_attempts').insert({
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      const token = authData.session?.access_token;
+      if (authError || !token) throw new Error('ログイン状態を確認してください。');
+
+      const response = await fetch('/api/knowledge-practice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          question_id: request.questionId,
+          attempt_id: request.attemptId,
+          selected_option_id: current.question_type === 'multiple_choice' ? submittedAnswer : null,
+          selected_answer: current.question_type === 'multiple_choice' ? null : submittedAnswer,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !payload.result) {
+        throw new Error(payload.message || '回答を採点できませんでした。');
+      }
+
+      const graded = payload.result as ServerGrade;
+      const correct = Boolean(graded.is_correct);
+      successfulEntry = { questionId: current.id, answer: submittedAnswer, isCorrect: correct, seconds };
+      pendingKnowledgeSubmission.current = null;
+      setLastCorrect(correct);
+      setGradingResult(graded);
+      setShowResult(true);
+
+      // Preserve the existing learning report. The server-side knowledge attempt
+      // and XP ledger are committed before this secondary history mirror.
+      const { data: historyRow, error: historyError } = await supabase.from('math_practice_attempts').insert({
         user_id: userId,
         question_id: current.id,
         course: current.subject,
         unit: current.unit,
         is_correct: correct,
-        answer_text: answer.trim(),
+        answer_text: submittedAnswer,
         mode: mockActive ? 'mock' : mode,
         time_spent_seconds: seconds,
       }).select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at').single();
-      if (insertError) throw insertError;
-      setAttempts(previous => [data as Attempt, ...previous].slice(0, 1000));
+
+      if (historyError) {
+        setError('採点と知識XPは保存されましたが、学習レポート用の履歴保存に失敗しました。');
+      } else if (historyRow) {
+        setAttempts(previous => [historyRow as Attempt, ...previous].slice(0, 1000));
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? '採点はできましたが、学習履歴を保存できませんでした: ' + cause.message : '学習履歴を保存できませんでした。');
+      // Reuse this idempotency key after network failures to prevent duplicate XP.
+      setError(cause instanceof Error ? cause.message : '回答を送信できませんでした。');
     } finally {
       setSaving(false);
     }
 
-    if (mockActive) {
-      const updated = [...mockAnswers, entry];
+    if (successfulEntry && mockActive) {
+      const updated = [...mockAnswers, successfulEntry];
       setMockAnswers(updated);
       if (mockIndex + 1 >= mockQueue.length) {
         await finishMock(updated);
@@ -480,8 +510,13 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                 {showResult && (
                   <div className={'mt-4 rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-cyan-100 bg-white')}>
                     <div className="text-xs font-black tracking-wider text-cyan-700">ANSWER & EXPLANATION</div>
-                    <div className="mt-2 text-base font-black">正答：{correctAnswerLabel(current)}</div>
-                    <p className={'mt-3 whitespace-pre-wrap text-sm leading-7 ' + muted}>{current.explanation}</p>
+                    <div className="mt-2 text-base font-black">正答：{gradingResult?.question_type === 'multiple_choice' ? gradingResult.correct_option_text : (gradingResult?.correct_answer || '正答データを確認できません')}</div>
+                    <p className={'mt-3 whitespace-pre-wrap text-sm leading-7 ' + muted}>{gradingResult?.explanation || '解説が登録されていません。'}</p>
+                    {gradingResult?.is_graded && <div className={'mt-3 rounded-xl px-3 py-2 text-xs font-black ' + (gradingResult.xp_awarded > 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/10 ' + muted)}>
+                      {gradingResult.xp_awarded > 0
+                        ? '知識XP +' + gradingResult.xp_awarded + (gradingResult.replayed ? '（この回答で付与済み）' : ' 獲得')
+                        : gradingResult.already_awarded ? 'この問題の初回正解XPは獲得済みです' : 'この問題は知識XPの追加付与対象外です'}
+                    </div>}
                   </div>
                 )}
                 <details className={'mt-4 rounded-xl border p-3 text-xs ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
