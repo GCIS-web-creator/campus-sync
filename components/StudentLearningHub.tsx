@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { matchSchoolRangeSubjects } from '@/lib/school-range-matching.mts';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import { supabase } from '@/lib/supabase';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
@@ -56,13 +57,6 @@ function readTimerSnapshot(userId: string): TimerSnapshot | null {
 }
 const STATUS: Record<Range['status'], string> = { not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' };
 
-// 日程データと公開範囲データで使われている科目名の違いを吸収する。
-// 複合科目は構成科目ごとに照合し、一部だけ公開されている状態も判定する。
-const SCHOOL_RANGE_SUBJECT_ALIASES: Record<string, string[]> = {
-  '英コミュⅡ': ['英コミュ'],
-  '論理表現Ⅱ（30分）': ['論表'],
-  '物理・生物': ['物理', '生物'],
-};
 
 const dayKey = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const duration = (seconds: number) => {
@@ -336,24 +330,16 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const isVisibleSchoolRange = (item: SchoolExamRange) => item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass);
   const getPublishedRangeProgress = (targetExamId: string, subjectName: string) => {
-    const expectedSubjects = SCHOOL_RANGE_SUBJECT_ALIASES[subjectName] || [subjectName];
-    const rows = schoolRanges.filter(item =>
-      item.exam_id === targetExamId &&
-      isVisibleSchoolRange(item) &&
-      expectedSubjects.some(expected => item.subject === expected || item.display_subject === expected)
-    );
-    const registeredSubjects = expectedSubjects.filter(expected =>
-      rows.some(item => item.subject === expected || item.display_subject === expected)
-    );
-    const missingSubjects = expectedSubjects.filter(expected => !registeredSubjects.includes(expected));
-    const sections = rows.flatMap(row => (row.range_sections || []).filter(section => section.kind !== 'notice').map(section => ({ row, section })));
+    const visibleRows = schoolRanges.filter(item => item.exam_id === targetExamId && isVisibleSchoolRange(item));
+    const matched = matchSchoolRangeSubjects(subjectName, visibleRows);
+    const sections = matched.rows.flatMap(row => (row.range_sections || []).filter(section => section.kind !== 'notice').map(section => ({ row, section })));
     const completed = sections.filter(({ row, section }) => publishedRangeProgress.some(progress => progress.school_test_range_id === row.id && progress.section_id === section.section_id && progress.completed)).length;
     return {
       total: sections.length,
       completed,
       percent: sections.length ? Math.round(completed / sections.length * 100) : 0,
-      registeredSubjects,
-      missingSubjects,
+      registeredSubjects: matched.registeredSubjects,
+      missingSubjects: matched.missingSubjects,
     };
   };
 
