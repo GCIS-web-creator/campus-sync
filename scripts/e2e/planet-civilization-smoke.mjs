@@ -212,11 +212,13 @@ try {
   await page.getByLabel('課題・勉強内容').fill('ブラウザ確認用の学習');
   await page.getByRole('button', { name: '開始' }).click();
   await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '休憩に切り替える' }).click();
   await page.getByText('休憩時間', { exact: true }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '集中に戻る' }).click();
   await page.getByText('集中時間', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '一時停止' }).click();
   await page.getByText('一時停止中', { exact: true }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
@@ -235,6 +237,7 @@ try {
   assert.equal(xpAwardPayload?.session_id, '44444444-4444-4444-8444-000000000001', 'Learning XP request should reference the saved session ID');
 
   // Simulate an XP API outage after the study session has already been saved.
+  await page.getByLabel('課題・勉強内容').fill('XP再試行の動作確認');
   await page.getByRole('button', { name: '開始' }).click();
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '途中終了' }).click();
@@ -251,7 +254,7 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /XPを再試行/ }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByRole('button', { name: /XPを再試行/ }).click();
-  await page.getByText(/1件の学習XPを確認しました/).waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByText(/1件の学習XP付与状態を確認しました/).waitFor({ state: 'visible', timeout: 15000 });
   const retriedRequests = xpAwardRequests.filter(item => item.session_id === pendingSessionId);
   assert.equal(retriedRequests.length, 2, 'Pending XP request should be retried with the same session ID');
   const persistedAfterRetry = await page.evaluate(key => localStorage.getItem(key), pendingStorageKey);
