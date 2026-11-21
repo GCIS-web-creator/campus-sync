@@ -285,8 +285,6 @@ try {
   await page.getByLabel('次にやること').fill('再読み込み後に未反映XPを再試行');
   failNextXpAward = true;
   await page.getByRole('button', { name: '記録を保存' }).click();
-  failNextXpAward = true;
-  await page.getByRole('button', { name: '記録を保存' }).click();
   await page.getByText(/途中の学習記録を保存しました。残り時間と課題を保持しています/).waitFor({ state: 'visible', timeout: 15000 });
   const pendingSessionId = xpAwardRequests.at(-1)?.session_id;
   assert.equal(pendingSessionId, '44444444-4444-4444-8444-000000000002', 'Second saved session should have a unique ID');
