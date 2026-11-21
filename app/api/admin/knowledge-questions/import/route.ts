@@ -41,6 +41,16 @@ export async function POST(request: Request) {
     if (!value.source_url || !value.source_license || !value.source_attribution) {
       return json({ success: false, message: (index + 1) + '問目: 外部教材のURL・ライセンス・出典表示が必要です。' }, 400);
     }
+    const sourceLabel = value.source_name.toLocaleLowerCase('ja-JP');
+    if (sourceLabel.includes('wikibooks') && !value.source_revision) {
+      return json({ success: false, message: (index + 1) + '問目: Wikibooksはページrevision IDを記録してください。' }, 400);
+    }
+    if (sourceLabel.includes('wikibooks') && !/CC BY-SA 4\\.0|GFDL/i.test(value.source_license)) {
+      return json({ success: false, message: (index + 1) + '問目: Wikibooksの再利用ライセンス表示を確認してください。' }, 400);
+    }
+    if (sourceLabel.includes('ftext') && !/CC BY 4\\.0/i.test(value.source_license)) {
+      return json({ success: false, message: (index + 1) + '問目: FTEXTのCC BY 4.0表示を確認してください。' }, 400);
+    }
     const normalized = [
       value.subject_code || value.subject,
       value.unit,
