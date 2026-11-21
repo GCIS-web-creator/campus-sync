@@ -208,6 +208,10 @@ export default function MiniTestScheduleAdmin() {
       <h2 className="flex items-center gap-2 text-2xl font-black text-white"><CalendarDays className="text-cyan-400"/>小テスト管理</h2>
       <p className="mt-2 text-sm text-slate-400">実施日時・試験範囲・出題形式を登録し、生徒の「学習・テスト対策」に公開します。LINEからの登録提案は承認後に公開されます。</p>
     </header>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3">
+      <div><p className="text-xs font-black text-cyan-200">知識XP・理解度チェック</p><p className="mt-1 text-[10px] text-slate-400">採点できる選択問題を登録し、生徒の初回正解に知識XPを付与します。</p></div>
+      <a href="/admin/knowledge" className="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-black text-white hover:bg-cyan-600">知識問題を管理</a>
+    </div>
     <form onSubmit={save} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
       <h3 className="text-base font-black text-white">新しい小テストを登録</h3>
       <div className="grid gap-3 sm:grid-cols-2">
