@@ -642,7 +642,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           if (!xpResponse.ok || !xpPayload.success) throw new Error(xpPayload.message || '学習XPを反映できませんでした。');
           const awarded = Math.max(0, Number(xpPayload.result?.awarded_xp || 0));
           removePendingXpSession(savedSession.id);
-          if (awarded > 0) xpNotice = '学習XP +' + awarded.toLocaleString('ja-JP') + ' を獲得しました。';
+          if (xpPayload.result?.already_processed) xpNotice = 'この学習記録のXPはすでに反映済みです。二重付与はありません。';
+          else if (awarded > 0) xpNotice = '学習XP +' + awarded.toLocaleString('ja-JP') + ' を獲得しました。';
           else if (xpPayload.result?.daily_limit_reached) xpNotice = '本日の学習XP上限に達しています。学習記録は保存されています。';
           else xpNotice = '学習時間を記録しました。XPは次の加算に繰り越されます。';
         } catch (xpCause) {
