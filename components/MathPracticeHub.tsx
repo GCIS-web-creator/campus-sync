@@ -453,7 +453,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   </div>
                 ) : (
                   <label className="mt-6 block"><span className="mb-2 block text-sm font-black">あなたの解答</span>
-                    <input type="text" inputMode="decimal" value={answer} onChange={e => setAnswer(e.target.value)} disabled={showResult}
+                    <input type="text" inputMode="decimal" value={answer} onChange={e => setAnswer(e.target.value)} disabled={showResult || timedExpired}
                       placeholder="答えを入力（整数・小数・分数）"
                       className={'w-full rounded-2xl px-4 py-3 text-base outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 ' + field} />
                   </label>
@@ -474,6 +474,15 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                     <p className={'mt-3 whitespace-pre-wrap text-sm leading-7 ' + muted}>{current.explanation}</p>
                   </div>
                 )}
+                <details className={'mt-4 rounded-xl border p-3 text-xs ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+                  <summary className="cursor-pointer font-bold">出典・利用情報</summary>
+                  <div className={'mt-2 space-y-2 leading-6 ' + muted}>
+                    <div><span className="font-bold">登録された出典：</span>{current.source_name || '未登録'}</div>
+                    {current.source_license && <div><span className="font-bold">ライセンス：</span>{current.source_license}</div>}
+                    {current.source_attribution && <p>{current.source_attribution}</p>}
+                    {current.source_url && <a href={current.source_url} target="_blank" rel="noreferrer" className="font-bold text-cyan-700 underline">出典ページを開く</a>}
+                  </div>
+                </details>
               </div>
             )}
             <div className={'mt-4 flex flex-wrap items-center justify-between gap-2 text-xs ' + muted}>
