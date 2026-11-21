@@ -285,7 +285,9 @@ try {
   await page.getByLabel('次にやること').fill('再読み込み後に未反映XPを再試行');
   failNextXpAward = true;
   await page.getByRole('button', { name: '記録を保存' }).click();
-  await page.getByText(/途中の学習記録を保存しました。残り時間と課題を保持しています/).waitFor({ state: 'visible', timeout: 15000 });
+  // Wait for the unique XP-outage message, not the previous segment's still-visible success message.
+  await page.getByText(/学習XPは未反映のため、下の「XPを再試行」から反映できます/).waitFor({ state: 'visible', timeout: 15000 });
+  assert.equal(xpAwardRequests.length, 2, 'Second interrupted save should create a separate XP request');
   const pendingSessionId = xpAwardRequests.at(-1)?.session_id;
   assert.equal(pendingSessionId, '44444444-4444-4444-8444-000000000002', 'Second saved session should have a unique ID');
   const pendingStorageKey = 'campus-sync-pending-planet-xp:11111111-1111-4111-8111-111111111111';
