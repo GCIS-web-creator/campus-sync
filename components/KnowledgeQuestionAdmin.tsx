@@ -56,6 +56,7 @@ const labelClass = 'block space-y-1 text-xs font-bold text-slate-300';
 
 export default function KnowledgeQuestionAdmin() {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionTotal, setQuestionTotal] = useState(0);
   const [subject, setSubject] = useState('数学III');
   const [subjectCode, setSubjectCode] = useState('math3');
   const [unit, setUnit] = useState('微分法');
@@ -90,6 +91,7 @@ export default function KnowledgeQuestionAdmin() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.success) throw new Error(payload.message || '問題一覧を取得できませんでした。');
       setQuestions(Array.isArray(payload.questions) ? payload.questions as Question[] : []);
+      setQuestionTotal(Number.isFinite(Number(payload.questionTotal)) ? Number(payload.questionTotal) : 0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '問題一覧を取得できませんでした。');
     } finally { setLoading(false); }
@@ -214,8 +216,8 @@ export default function KnowledgeQuestionAdmin() {
           <p className="mt-2 max-w-2xl text-xs leading-6 text-slate-300">数学I・A・II・B・III・Cの問題、単元、解答形式、難易度、出典とライセンスを一元管理します。</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-          <p className="text-[10px] font-bold text-slate-300">登録済み（最新1,000問まで表示）</p>
-          <p className="mt-1 text-2xl font-black tabular-nums">{questions.length.toLocaleString('ja-JP')}<span className="ml-1 text-xs text-slate-300">問</span></p>
+          <p className="text-[10px] font-bold text-slate-300">登録済み（一覧は最新1,000問を表示）</p>
+          <p className="mt-1 text-2xl font-black tabular-nums">{questionTotal.toLocaleString('ja-JP')}<span className="ml-1 text-xs text-slate-300">問</span></p>
         </div>
       </div>
     </header>
@@ -226,8 +228,8 @@ export default function KnowledgeQuestionAdmin() {
     <section className="rounded-3xl border border-cyan-500/20 bg-cyan-500/[.04] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-black text-slate-100"><UploadCloud size={17} className="text-cyan-300"/>ライセンス確認済み問題の一括登録</h2>
-          <p className="mt-1 text-[10px] leading-5 text-slate-400">JSONファイル1つにつき最大100問。重複は自動スキップし、取り込んだ問題はすべて下書きになります。</p>
+          <h2 className="flex items-center gap-2 text-sm font-black text-slate-100"><UploadCloud size={17} className="text-cyan-300"/>数学問題の一括登録</h2>
+          <p className="mt-1 text-[10px] leading-5 text-slate-400">JSONファイル1つにつき最大100問。重複は自動スキップします。安全のため、取り込んだ問題はすべて下書きになります。</p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-cyan-600">
           {importing ? <Loader2 size={15} className="animate-spin"/> : <FileUp size={15}/>}
@@ -236,7 +238,8 @@ export default function KnowledgeQuestionAdmin() {
         </label>
       </div>
       <p className="mt-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] leading-5 text-slate-400">
-        必須項目：subject / subject_code / unit / title / prompt / question_type / difficulty / source_name / source_url / source_license / source_attribution。
+        必須項目：subject / subject_code / unit / title / prompt / question_type / difficulty / source_name。
+        CampusSyncオリジナルはsource_nameを「CampusSyncオリジナル」とし、source_url・source_licenseは省略できます。外部教材はsource_url・source_license・source_attributionが必須です。
         選択式はoptions・correct_option_id、数値・記述式はcorrect_answerを指定してください。
       </p>
     </section>
@@ -307,7 +310,7 @@ export default function KnowledgeQuestionAdmin() {
     </form>
 
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-black text-white">登録済み問題 <span className="ml-1 text-xs text-slate-400">{questions.length.toLocaleString('ja-JP')}件</span></h2><button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200"><RefreshCw size={14} className={loading ? 'animate-spin' : ''}/>更新</button></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-black text-white">登録済み問題 <span className="ml-1 text-xs text-slate-400">{questionTotal.toLocaleString('ja-JP')}件</span></h2><button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200"><RefreshCw size={14} className={loading ? 'animate-spin' : ''}/>更新</button></div>
       {questions.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"><BookOpen size={25} className="mx-auto mb-2"/>まだ問題が登録されていません。</div> : questions.map(question => <article key={question.id} className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-lg bg-cyan-950 px-2.5 py-1 text-[10px] font-black text-cyan-200">{question.subject}</span>

@@ -52,12 +52,12 @@ export async function GET(request: Request) {
   if (denied) return denied;
   try {
     const admin = getAdminClient();
-    const { data, error } = await admin.from('campus_knowledge_questions')
-      .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,created_at,published_at')
+    const { data, count, error } = await admin.from('campus_knowledge_questions')
+      .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,created_at,published_at', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(1000);
+      .range(0, 999);
     if (error) throw error;
-    return json({ success: true, questions: data || [] });
+    return json({ success: true, questions: data || [], questionTotal: Number(count || 0) });
   } catch (error) {
     console.error('[admin/knowledge-questions] GET failed:', error instanceof Error ? error.message : 'unknown');
     return json({ success: false, message: '知識問題一覧を取得できませんでした。' }, 500);
