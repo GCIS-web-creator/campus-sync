@@ -107,7 +107,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -10)(x − 3) と因数分解できるため、解は -10 と 3 です。",
+    "explanation": "左辺は (x + 10)(x − 3) と因数分解できるため、解は x = -10, 3 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -145,7 +145,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -14x + 3 = (x − -7)² + -46 です。",
+    "explanation": "x² + 14x + 3 = (x + 7)² − 46 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -343,7 +343,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -9)(x − 4) と因数分解できるため、解は -9 と 4 です。",
+    "explanation": "左辺は (x + 9)(x − 4) と因数分解できるため、解は x = -9, 4 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -381,7 +381,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -12x + 10 = (x − -6)² + -26 です。",
+    "explanation": "x² + 12x + 10 = (x + 6)² − 26 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -579,7 +579,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -8)(x − 5) と因数分解できるため、解は -8 と 5 です。",
+    "explanation": "左辺は (x + 8)(x − 5) と因数分解できるため、解は x = -8, 5 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -617,7 +617,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -10x + 17 = (x − -5)² + -8 です。",
+    "explanation": "x² + 10x + 17 = (x + 5)² − 8 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -792,7 +792,7 @@
     "subject_code": "math1",
     "unit": "数と式",
     "title": "数と式｜二次方程式の解 028",
-    "prompt": "二次方程式 x² + 1x − 42 = 0 の解の組として正しいものを選びなさい。",
+    "prompt": "二次方程式 x² + x − 42 = 0 の解の組として正しいものを選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -815,7 +815,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -7)(x − 6) と因数分解できるため、解は -7 と 6 です。",
+    "explanation": "左辺は (x + 7)(x − 6) と因数分解できるため、解は x = -7, 6 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -853,7 +853,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -8x + 5 = (x − -4)² + -11 です。",
+    "explanation": "x² + 8x + 5 = (x + 4)² − 11 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -1028,7 +1028,7 @@
     "subject_code": "math1",
     "unit": "数と式",
     "title": "数と式｜二次方程式の解 036",
-    "prompt": "二次方程式 x² − 1x − 42 = 0 の解の組として正しいものを選びなさい。",
+    "prompt": "二次方程式 x² − x − 42 = 0 の解の組として正しいものを選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -1051,7 +1051,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -6)(x − 7) と因数分解できるため、解は -6 と 7 です。",
+    "explanation": "左辺は (x + 6)(x − 7) と因数分解できるため、解は x = -6, 7 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1089,7 +1089,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -6x + 12 = (x − -3)² + 3 です。",
+    "explanation": "x² + 6x + 12 = (x + 3)² + 3 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1287,7 +1287,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -5)(x − 8) と因数分解できるため、解は -5 と 8 です。",
+    "explanation": "左辺は (x + 5)(x − 8) と因数分解できるため、解は x = -5, 8 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1325,7 +1325,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -4x + 19 = (x − -2)² + 15 です。",
+    "explanation": "x² + 4x + 19 = (x + 2)² + 15 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1523,7 +1523,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -4)(x − 9) と因数分解できるため、解は -4 と 9 です。",
+    "explanation": "左辺は (x + 4)(x − 9) と因数分解できるため、解は x = -4, 9 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -1561,7 +1561,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -2x + 7 = (x − -1)² + 6 です。",
+    "explanation": "x² + 2x + 7 = (x + 1)² + 6 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -1759,7 +1759,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -3)(x − 10) と因数分解できるため、解は -3 と 10 です。",
+    "explanation": "左辺は (x + 3)(x − 10) と因数分解できるため、解は x = -3, 10 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1774,7 +1774,7 @@
     "subject_code": "math1",
     "unit": "二次関数",
     "title": "二次関数｜平方完成 061",
-    "prompt": "二次式 x² + 0x + 14 を平方完成した形として正しいものを選びなさい。",
+    "prompt": "二次式 x² + 14 を平方完成した形として正しいものを選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -1793,7 +1793,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − 0x + 14 = (x − 0)² + 14 です。",
+    "explanation": "x² + 14 = x² + 14 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -1991,7 +1991,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -2)(x − 11) と因数分解できるため、解は -2 と 11 です。",
+    "explanation": "左辺は (x + 2)(x − 11) と因数分解できるため、解は x = -2, 11 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -2227,7 +2227,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − -1)(x − 12) と因数分解できるため、解は -1 と 12 です。",
+    "explanation": "左辺は (x + 1)(x − 12) と因数分解できるため、解は x = -1, 12 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -2440,7 +2440,7 @@
     "subject_code": "math1",
     "unit": "数と式",
     "title": "数と式｜二次方程式の解 084",
-    "prompt": "二次方程式 x² − 13x + 0 = 0 の解の組として正しいものを選びなさい。",
+    "prompt": "二次方程式 x² − 13x = 0 の解の組として正しいものを選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -2455,7 +2455,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 0)(x − 13) と因数分解できるため、解は 0 と 13 です。",
+    "explanation": "左辺は (x − 0)(x − 13) と因数分解できるため、解は x = 0, 13 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -2691,7 +2691,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 1)(x − 14) と因数分解できるため、解は 1 と 14 です。",
+    "explanation": "左辺は (x − 1)(x − 14) と因数分解できるため、解は x = 1, 14 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -2729,7 +2729,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − 8x + 4 = (x − 4)² + -12 です。",
+    "explanation": "x² − 8x + 4 = (x − 4)² − 12 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -2927,7 +2927,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 2)(x − 15) と因数分解できるため、解は 2 と 15 です。",
+    "explanation": "左辺は (x − 2)(x − 15) と因数分解できるため、解は x = 2, 15 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -2965,7 +2965,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − 10x + 11 = (x − 5)² + -14 です。",
+    "explanation": "x² − 10x + 11 = (x − 5)² − 14 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -3163,7 +3163,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 3)(x − 16) と因数分解できるため、解は 3 と 16 です。",
+    "explanation": "左辺は (x − 3)(x − 16) と因数分解できるため、解は x = 3, 16 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -3201,7 +3201,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − 12x + 18 = (x − 6)² + -18 です。",
+    "explanation": "x² − 12x + 18 = (x − 6)² − 18 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -3399,7 +3399,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 4)(x − 17) と因数分解できるため、解は 4 と 17 です。",
+    "explanation": "左辺は (x − 4)(x − 17) と因数分解できるため、解は x = 4, 17 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -3437,7 +3437,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − 14x + 6 = (x − 7)² + -43 です。",
+    "explanation": "x² − 14x + 6 = (x − 7)² − 43 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -3635,7 +3635,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 5)(x − 18) と因数分解できるため、解は 5 と 18 です。",
+    "explanation": "左辺は (x − 5)(x − 18) と因数分解できるため、解は x = 5, 18 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -3673,7 +3673,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -14x + 13 = (x − -7)² + -36 です。",
+    "explanation": "x² + 14x + 13 = (x + 7)² − 36 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -3871,7 +3871,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 6)(x − 19) と因数分解できるため、解は 6 と 19 です。",
+    "explanation": "左辺は (x − 6)(x − 19) と因数分解できるため、解は x = 6, 19 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -3909,7 +3909,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -12x + 20 = (x − -6)² + -16 です。",
+    "explanation": "x² + 12x + 20 = (x + 6)² − 16 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4107,7 +4107,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 7)(x − 20) と因数分解できるため、解は 7 と 20 です。",
+    "explanation": "左辺は (x − 7)(x − 20) と因数分解できるため、解は x = 7, 20 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4145,7 +4145,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -10x + 8 = (x − -5)² + -17 です。",
+    "explanation": "x² + 10x + 8 = (x + 5)² − 17 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4343,7 +4343,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 8)(x − 21) と因数分解できるため、解は 8 と 21 です。",
+    "explanation": "左辺は (x − 8)(x − 21) と因数分解できるため、解は x = 8, 21 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -4381,7 +4381,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -8x + 15 = (x − -4)² + -1 です。",
+    "explanation": "x² + 8x + 15 = (x + 4)² − 1 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -4579,7 +4579,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 9)(x − 22) と因数分解できるため、解は 9 と 22 です。",
+    "explanation": "左辺は (x − 9)(x − 22) と因数分解できるため、解は x = 9, 22 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4617,7 +4617,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -6x + 3 = (x − -3)² + -6 です。",
+    "explanation": "x² + 6x + 3 = (x + 3)² − 6 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4815,7 +4815,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 10)(x − 23) と因数分解できるため、解は 10 と 23 です。",
+    "explanation": "左辺は (x − 10)(x − 23) と因数分解できるため、解は x = 10, 23 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -4853,7 +4853,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -4x + 10 = (x − -2)² + 6 です。",
+    "explanation": "x² + 4x + 10 = (x + 2)² + 6 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -5051,7 +5051,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 11)(x − 24) と因数分解できるため、解は 11 と 24 です。",
+    "explanation": "左辺は (x − 11)(x − 24) と因数分解できるため、解は x = 11, 24 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -5089,7 +5089,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "x² − -2x + 17 = (x − -1)² + 16 です。",
+    "explanation": "x² + 2x + 17 = (x + 1)² + 16 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -5287,7 +5287,7 @@
     "correct_option_id": "b",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x − 12)(x − 25) と因数分解できるため、解は 12 と 25 です。",
+    "explanation": "左辺は (x − 12)(x − 25) と因数分解できるため、解は x = 12, 25 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -5421,21 +5421,21 @@
     "options": [
       {
         "id": "a",
-        "text": "120/1°"
+        "text": "120°"
       },
       {
         "id": "b",
-        "text": "60/1°"
+        "text": "60°"
       },
       {
         "id": "c",
-        "text": "90/1°"
+        "text": "90°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷3 = 120/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷3 = 120° です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -5636,21 +5636,21 @@
     "options": [
       {
         "id": "a",
-        "text": "90/1°"
+        "text": "90°"
       },
       {
         "id": "b",
-        "text": "72/1°"
+        "text": "72°"
       },
       {
         "id": "c",
-        "text": "45/1°"
+        "text": "45°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷4 = 90/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷4 = 90° です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -5851,25 +5851,25 @@
     "options": [
       {
         "id": "a",
-        "text": "72/1°"
+        "text": "72°"
       },
       {
         "id": "b",
-        "text": "108/1°"
+        "text": "108°"
       },
       {
         "id": "c",
-        "text": "60/1°"
+        "text": "60°"
       },
       {
         "id": "d",
-        "text": "36/1°"
+        "text": "36°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷5 = 72/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷5 = 72° です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -6066,11 +6066,11 @@
     "options": [
       {
         "id": "a",
-        "text": "60/1°"
+        "text": "60°"
       },
       {
         "id": "b",
-        "text": "120/1°"
+        "text": "120°"
       },
       {
         "id": "c",
@@ -6078,13 +6078,13 @@
       },
       {
         "id": "d",
-        "text": "30/1°"
+        "text": "30°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷6 = 60/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷6 = 60° です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -6293,7 +6293,7 @@
       },
       {
         "id": "c",
-        "text": "45/1°"
+        "text": "45°"
       },
       {
         "id": "d",
@@ -6504,15 +6504,15 @@
     "options": [
       {
         "id": "a",
-        "text": "45/1°"
+        "text": "45°"
       },
       {
         "id": "b",
-        "text": "135/1°"
+        "text": "135°"
       },
       {
         "id": "c",
-        "text": "40/1°"
+        "text": "40°"
       },
       {
         "id": "d",
@@ -6522,7 +6522,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷8 = 45/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷8 = 45° です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -6719,25 +6719,25 @@
     "options": [
       {
         "id": "a",
-        "text": "40/1°"
+        "text": "40°"
       },
       {
         "id": "b",
-        "text": "140/1°"
+        "text": "140°"
       },
       {
         "id": "c",
-        "text": "36/1°"
+        "text": "36°"
       },
       {
         "id": "d",
-        "text": "20/1°"
+        "text": "20°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷9 = 40/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷9 = 40° です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -6938,11 +6938,11 @@
     "options": [
       {
         "id": "a",
-        "text": "36/1°"
+        "text": "36°"
       },
       {
         "id": "b",
-        "text": "144/1°"
+        "text": "144°"
       },
       {
         "id": "c",
@@ -6950,13 +6950,13 @@
       },
       {
         "id": "d",
-        "text": "18/1°"
+        "text": "18°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷10 = 36/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷10 = 36° です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -7161,7 +7161,7 @@
       },
       {
         "id": "c",
-        "text": "30/1°"
+        "text": "30°"
       },
       {
         "id": "d",
@@ -7372,11 +7372,11 @@
     "options": [
       {
         "id": "a",
-        "text": "30/1°"
+        "text": "30°"
       },
       {
         "id": "b",
-        "text": "150/1°"
+        "text": "150°"
       },
       {
         "id": "c",
@@ -7384,13 +7384,13 @@
       },
       {
         "id": "d",
-        "text": "15/1°"
+        "text": "15°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷12 = 30/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷12 = 30° です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -7814,7 +7814,7 @@
       },
       {
         "id": "c",
-        "text": "24/1°"
+        "text": "24°"
       },
       {
         "id": "d",
@@ -8021,11 +8021,11 @@
     "options": [
       {
         "id": "a",
-        "text": "24/1°"
+        "text": "24°"
       },
       {
         "id": "b",
-        "text": "156/1°"
+        "text": "156°"
       },
       {
         "id": "c",
@@ -8033,13 +8033,13 @@
       },
       {
         "id": "d",
-        "text": "12/1°"
+        "text": "12°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷15 = 24/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷15 = 24° です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -8463,7 +8463,7 @@
       },
       {
         "id": "c",
-        "text": "20/1°"
+        "text": "20°"
       },
       {
         "id": "d",
@@ -8674,11 +8674,11 @@
     "options": [
       {
         "id": "a",
-        "text": "20/1°"
+        "text": "20°"
       },
       {
         "id": "b",
-        "text": "160/1°"
+        "text": "160°"
       },
       {
         "id": "c",
@@ -8686,13 +8686,13 @@
       },
       {
         "id": "d",
-        "text": "10/1°"
+        "text": "10°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷18 = 20/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷18 = 20° です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -8901,7 +8901,7 @@
       },
       {
         "id": "c",
-        "text": "18/1°"
+        "text": "18°"
       },
       {
         "id": "d",
@@ -9112,11 +9112,11 @@
     "options": [
       {
         "id": "a",
-        "text": "18/1°"
+        "text": "18°"
       },
       {
         "id": "b",
-        "text": "162/1°"
+        "text": "162°"
       },
       {
         "id": "c",
@@ -9124,13 +9124,13 @@
       },
       {
         "id": "d",
-        "text": "9/1°"
+        "text": "9°"
       }
     ],
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷20 = 18/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷20 = 18° です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -9769,7 +9769,7 @@
       },
       {
         "id": "c",
-        "text": "15/1°"
+        "text": "15°"
       },
       {
         "id": "d",
@@ -9976,11 +9976,11 @@
     "options": [
       {
         "id": "a",
-        "text": "15/1°"
+        "text": "15°"
       },
       {
         "id": "b",
-        "text": "165/1°"
+        "text": "165°"
       },
       {
         "id": "c",
@@ -9994,7 +9994,7 @@
     "correct_option_id": "a",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷24 = 15/1° です。",
+    "explanation": "正多角形の外角の和は360°なので、1つ分は 360°÷24 = 15° です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -10190,7 +10190,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜剰余の定理 001",
-    "prompt": "多項式 f(x)=x³+1x²+2x+3 を x−1 で割った余りを求めなさい。",
+    "prompt": "多項式 f(x)=x³+x²+2x+3 を x−1 で割った余りを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -10211,7 +10211,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 002",
-    "prompt": "二次方程式 x² − (-7)x + (-30) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² + 7x − 30 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -10234,7 +10234,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-10)(x−3) と因数分解できるため、解は -10, 3 です。",
+    "explanation": "左辺は (x + 10)(x − 3) と因数分解できるため、解は -10, 3 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -10371,7 +10371,7 @@
     "subject_code": "math2",
     "unit": "微分・積分の考え",
     "title": "微分・積分の考え｜多項式の微分 008",
-    "prompt": "f(x)=x³+1x²+2x とする。f'(1) の値を求めなさい。",
+    "prompt": "f(x)=x³+x²+2x とする。f'(1) の値を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -10413,7 +10413,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 010",
-    "prompt": "二次方程式 x² − (-5)x + (-36) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² + 5x − 36 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -10436,7 +10436,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-9)(x−4) と因数分解できるため、解は -9, 4 です。",
+    "explanation": "左辺は (x + 9)(x − 4) と因数分解できるため、解は -9, 4 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -10615,7 +10615,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 018",
-    "prompt": "二次方程式 x² − (-3)x + (-40) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² + 3x − 40 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -10638,7 +10638,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-8)(x−5) と因数分解できるため、解は -8, 5 です。",
+    "explanation": "左辺は (x + 8)(x − 5) と因数分解できるため、解は -8, 5 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -10817,7 +10817,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 026",
-    "prompt": "二次方程式 x² − (-1)x + (-42) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² + x − 42 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -10840,7 +10840,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-7)(x−6) と因数分解できるため、解は -7, 6 です。",
+    "explanation": "左辺は (x + 7)(x − 6) と因数分解できるため、解は -7, 6 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -11019,7 +11019,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 034",
-    "prompt": "二次方程式 x² − (1)x + (-42) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − x − 42 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -11042,7 +11042,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-6)(x−7) と因数分解できるため、解は -6, 7 です。",
+    "explanation": "左辺は (x + 6)(x − 7) と因数分解できるため、解は -6, 7 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -11221,7 +11221,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 042",
-    "prompt": "二次方程式 x² − (3)x + (-40) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 3x − 40 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -11244,7 +11244,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-5)(x−8) と因数分解できるため、解は -5, 8 です。",
+    "explanation": "左辺は (x + 5)(x − 8) と因数分解できるため、解は -5, 8 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -11423,7 +11423,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 050",
-    "prompt": "二次方程式 x² − (5)x + (-36) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 5x − 36 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -11446,7 +11446,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-4)(x−9) と因数分解できるため、解は -4, 9 です。",
+    "explanation": "左辺は (x + 4)(x − 9) と因数分解できるため、解は -4, 9 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -11583,7 +11583,7 @@
     "subject_code": "math2",
     "unit": "微分・積分の考え",
     "title": "微分・積分の考え｜多項式の微分 056",
-    "prompt": "f(x)=x³+1x²+2x とする。f'(7) の値を求めなさい。",
+    "prompt": "f(x)=x³+x²+2x とする。f'(7) の値を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -11604,7 +11604,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜剰余の定理 057",
-    "prompt": "多項式 f(x)=x³+1x²+12x+12 を x−3 で割った余りを求めなさい。",
+    "prompt": "多項式 f(x)=x³+x²+12x+12 を x−3 で割った余りを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -11625,7 +11625,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 058",
-    "prompt": "二次方程式 x² − (7)x + (-30) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 7x − 30 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -11648,7 +11648,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-3)(x−10) と因数分解できるため、解は -3, 10 です。",
+    "explanation": "左辺は (x + 3)(x − 10) と因数分解できるため、解は -3, 10 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -11827,7 +11827,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 066",
-    "prompt": "二次方程式 x² − (9)x + (-22) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 9x − 22 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -11850,7 +11850,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-2)(x−11) と因数分解できるため、解は -2, 11 です。",
+    "explanation": "左辺は (x + 2)(x − 11) と因数分解できるため、解は -2, 11 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -12029,7 +12029,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 074",
-    "prompt": "二次方程式 x² − (11)x + (-12) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 11x − 12 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -12052,7 +12052,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−-1)(x−12) と因数分解できるため、解は -1, 12 です。",
+    "explanation": "左辺は (x + 1)(x − 12) と因数分解できるため、解は -1, 12 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -12231,7 +12231,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 082",
-    "prompt": "二次方程式 x² − (13)x + (0) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 13x = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -12246,7 +12246,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−0)(x−13) と因数分解できるため、解は 0, 13 です。",
+    "explanation": "左辺は (x − 0)(x − 13) と因数分解できるため、解は 0, 13 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -12425,7 +12425,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 090",
-    "prompt": "二次方程式 x² − (15)x + (14) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 15x + 14 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -12448,7 +12448,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−1)(x−14) と因数分解できるため、解は 1, 14 です。",
+    "explanation": "左辺は (x − 1)(x − 14) と因数分解できるため、解は 1, 14 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -12627,7 +12627,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 098",
-    "prompt": "二次方程式 x² − (17)x + (30) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 17x + 30 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -12650,7 +12650,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−2)(x−15) と因数分解できるため、解は 2, 15 です。",
+    "explanation": "左辺は (x − 2)(x − 15) と因数分解できるため、解は 2, 15 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -12787,7 +12787,7 @@
     "subject_code": "math2",
     "unit": "微分・積分の考え",
     "title": "微分・積分の考え｜多項式の微分 104",
-    "prompt": "f(x)=x³+1x²+2x とする。f'(6) の値を求めなさい。",
+    "prompt": "f(x)=x³+x²+2x とする。f'(6) の値を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -12829,7 +12829,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 106",
-    "prompt": "二次方程式 x² − (19)x + (48) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 19x + 48 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -12852,7 +12852,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−3)(x−16) と因数分解できるため、解は 3, 16 です。",
+    "explanation": "左辺は (x − 3)(x − 16) と因数分解できるため、解は 3, 16 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -13010,7 +13010,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜剰余の定理 113",
-    "prompt": "多項式 f(x)=x³+1x²+11x+8 を x−5 で割った余りを求めなさい。",
+    "prompt": "多項式 f(x)=x³+x²+11x+8 を x−5 で割った余りを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -13031,7 +13031,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 114",
-    "prompt": "二次方程式 x² − (21)x + (68) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 21x + 68 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -13054,7 +13054,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−4)(x−17) と因数分解できるため、解は 4, 17 です。",
+    "explanation": "左辺は (x − 4)(x − 17) と因数分解できるため、解は 4, 17 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -13233,7 +13233,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 122",
-    "prompt": "二次方程式 x² − (23)x + (90) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 23x + 90 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -13256,7 +13256,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−5)(x−18) と因数分解できるため、解は 5, 18 です。",
+    "explanation": "左辺は (x − 5)(x − 18) と因数分解できるため、解は 5, 18 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -13435,7 +13435,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 130",
-    "prompt": "二次方程式 x² − (25)x + (114) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 25x + 114 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -13458,7 +13458,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−6)(x−19) と因数分解できるため、解は 6, 19 です。",
+    "explanation": "左辺は (x − 6)(x − 19) と因数分解できるため、解は 6, 19 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -13637,7 +13637,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 138",
-    "prompt": "二次方程式 x² − (27)x + (140) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 27x + 140 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -13660,7 +13660,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−7)(x−20) と因数分解できるため、解は 7, 20 です。",
+    "explanation": "左辺は (x − 7)(x − 20) と因数分解できるため、解は 7, 20 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -13839,7 +13839,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 146",
-    "prompt": "二次方程式 x² − (29)x + (168) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 29x + 168 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -13862,7 +13862,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−8)(x−21) と因数分解できるため、解は 8, 21 です。",
+    "explanation": "左辺は (x − 8)(x − 21) と因数分解できるため、解は 8, 21 です。",
     "difficulty": "challenge",
     "target_class": "all",
     "status": "published",
@@ -13999,7 +13999,7 @@
     "subject_code": "math2",
     "unit": "微分・積分の考え",
     "title": "微分・積分の考え｜多項式の微分 152",
-    "prompt": "f(x)=x³+1x²+2x とする。f'(5) の値を求めなさい。",
+    "prompt": "f(x)=x³+x²+2x とする。f'(5) の値を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -14041,7 +14041,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 154",
-    "prompt": "二次方程式 x² − (31)x + (198) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 31x + 198 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -14064,7 +14064,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−9)(x−22) と因数分解できるため、解は 9, 22 です。",
+    "explanation": "左辺は (x − 9)(x − 22) と因数分解できるため、解は 9, 22 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -14243,7 +14243,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 162",
-    "prompt": "二次方程式 x² − (33)x + (230) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 33x + 230 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -14266,7 +14266,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−10)(x−23) と因数分解できるため、解は 10, 23 です。",
+    "explanation": "左辺は (x − 10)(x − 23) と因数分解できるため、解は 10, 23 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -14424,7 +14424,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜剰余の定理 169",
-    "prompt": "多項式 f(x)=x³+1x²+10x+4 を x−2 で割った余りを求めなさい。",
+    "prompt": "多項式 f(x)=x³+x²+10x+4 を x−2 で割った余りを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -14445,7 +14445,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 170",
-    "prompt": "二次方程式 x² − (35)x + (264) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 35x + 264 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -14468,7 +14468,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−11)(x−24) と因数分解できるため、解は 11, 24 です。",
+    "explanation": "左辺は (x − 11)(x − 24) と因数分解できるため、解は 11, 24 です。",
     "difficulty": "advanced",
     "target_class": "all",
     "status": "published",
@@ -14647,7 +14647,7 @@
     "subject_code": "math2",
     "unit": "いろいろな式",
     "title": "いろいろな式｜二次方程式 178",
-    "prompt": "二次方程式 x² − (37)x + (300) = 0 の解を選びなさい。",
+    "prompt": "二次方程式 x² − 37x + 300 = 0 の解を選びなさい。",
     "question_type": "multiple_choice",
     "options": [
       {
@@ -14670,7 +14670,7 @@
     "correct_option_id": "d",
     "correct_answer": null,
     "answer_tolerance": 0,
-    "explanation": "左辺は (x−12)(x−25) と因数分解できるため、解は 12, 25 です。",
+    "explanation": "左辺は (x − 12)(x − 25) と因数分解できるため、解は 12, 25 です。",
     "difficulty": "normal",
     "target_class": "all",
     "status": "published",
@@ -18066,7 +18066,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 002",
-    "prompt": "f(x)=x⁴+1x³+2x²+1x とする。f'(1) を求めなさい。",
+    "prompt": "f(x)=x⁴+x³+2x²+x とする。f'(1) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -18087,7 +18087,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜接線の傾き 003",
-    "prompt": "曲線 y=x²+1x+0 上の x=1 における接線の傾きを求めなさい。",
+    "prompt": "曲線 y=x²+x+0 上の x=1 における接線の傾きを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -18192,7 +18192,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜対数関数の微分 008",
-    "prompt": "f(x)=ln x + 1x とする。f'(1) を求めなさい。",
+    "prompt": "f(x)=ln x +x とする。f'(1) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -19242,7 +19242,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 058",
-    "prompt": "f(x)=x⁴+8x³+5x²+1x とする。f'(3) を求めなさい。",
+    "prompt": "f(x)=x⁴+8x³+5x²+x とする。f'(3) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -19410,7 +19410,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 066",
-    "prompt": "f(x)=x⁴+1x³+8x²+6x とする。f'(4) を求めなさい。",
+    "prompt": "f(x)=x⁴+x³+8x²+6x とする。f'(4) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -20418,7 +20418,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 114",
-    "prompt": "f(x)=x⁴+7x³+8x²+1x とする。f'(5) を求めなさい。",
+    "prompt": "f(x)=x⁴+7x³+8x²+x とする。f'(5) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -20754,7 +20754,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 130",
-    "prompt": "f(x)=x⁴+1x³+5x²+4x とする。f'(2) を求めなさい。",
+    "prompt": "f(x)=x⁴+x³+5x²+4x とする。f'(2) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -20943,7 +20943,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜接線の傾き 139",
-    "prompt": "曲線 y=x²+1x+12 上の x=9 における接線の傾きを求めなさい。",
+    "prompt": "曲線 y=x²+x+12 上の x=9 における接線の傾きを求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -21594,7 +21594,7 @@
     "subject_code": "math3",
     "unit": "微分法",
     "title": "微分法｜高次関数の導関数 170",
-    "prompt": "f(x)=x⁴+6x³+2x²+1x とする。f'(2) を求めなさい。",
+    "prompt": "f(x)=x⁴+6x³+2x²+x とする。f'(2) を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -21930,7 +21930,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 006",
-    "prompt": "複素数 (1+2i) と (1+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (1+2i) と (1+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -22485,7 +22485,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 030",
-    "prompt": "複素数 (4+4i) と (8+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (4+4i) と (8+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -23040,7 +23040,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 054",
-    "prompt": "複素数 (7+6i) と (7+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (7+6i) と (7+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -23595,7 +23595,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 078",
-    "prompt": "複素数 (1+8i) と (6+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (1+8i) と (6+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -24150,7 +24150,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 102",
-    "prompt": "複素数 (4+3i) と (5+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (4+3i) と (5+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -24705,7 +24705,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 126",
-    "prompt": "複素数 (7+5i) と (4+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (7+5i) と (4+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -25260,7 +25260,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 150",
-    "prompt": "複素数 (1+7i) と (3+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (1+7i) と (3+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
@@ -25815,7 +25815,7 @@
     "subject_code": "mathc",
     "unit": "複素数平面",
     "title": "複素数平面｜複素数の積 174",
-    "prompt": "複素数 (4+2i) と (2+1i) の積の虚部の係数を求めなさい。",
+    "prompt": "複素数 (4+2i) と (2+i) の積の虚部の係数を求めなさい。",
     "question_type": "numeric",
     "options": [],
     "correct_option_id": null,
