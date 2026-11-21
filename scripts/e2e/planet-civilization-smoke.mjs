@@ -202,6 +202,14 @@ try {
   await page.getByLabel('課題・勉強内容').fill('ブラウザ確認用の学習');
   await page.getByRole('button', { name: '開始' }).click();
   await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '休憩に切り替える' }).click();
+  await page.getByText('休憩時間', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '集中に戻る' }).click();
+  await page.getByText('集中時間', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '一時停止' }).click();
+  await page.getByText('一時停止中', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '再開' }).click();
+  await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '途中終了' }).click();
   await page.getByLabel('勉強した内容').fill('短い集中セッションを保存する');
@@ -217,7 +225,7 @@ try {
 
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro save, XP API handoff, and Planetube login screen');
+  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro start/break/focus/pause/resume/save, XP API handoff, and Planetube login screen');
 } finally {
   await browser.close();
 }
