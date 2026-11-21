@@ -330,18 +330,36 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     if (focusSeconds < 1) { setError('勉強時間が記録されていません。'); return; }
     setSaving(true); setError('');
     try {
-      const { error: insertError } = await supabase.from('student_study_sessions').insert({
+      const { data: savedSession, error: insertError } = await supabase.from('student_study_sessions').insert({
         user_id: userId, test_subject_id: null,
         subject_name: focusSubject, task_title: task.trim(),
         test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
         started_at: startedAt.current || new Date().toISOString(), ended_at: new Date().toISOString(),
         reflection: reflection.trim(), next_action: nextAction.trim(), finish_kind: finishKind,
-      });
+      }).select('id').single();
       if (insertError) throw insertError;
+
+      let xpNotice = '学習記録を保存しました。';
+      try {
+        const { data: xpData, error: xpError } = await supabase.rpc('campus_award_learning_xp', {
+          p_user_id: userId,
+          p_session_id: savedSession.id,
+        });
+        if (xpError) {
+          xpNotice = '学習記録を保存しました。XPの反映は概要の「12時間上限でXPを再計算」から実行できます。';
+        } else {
+          const awarded = Number((xpData as { awarded_xp?: number } | null)?.awarded_xp || 0);
+          xpNotice = `学習記録を保存しました。学習XP +${awarded.toLocaleString('ja-JP')} XP`;
+        }
+      } catch {
+        xpNotice = '学習記録を保存しました。XPの反映は概要の「12時間上限でXPを再計算」から実行できます。';
+      }
+
       setShowRecord(false); setTimerState('idle'); setFocusSeconds(0); setBreakSeconds(0); setTimerRemaining(focusMinutes * 60);
       startedAt.current = null; setTask(''); setRangeId(''); setReflection(''); setNextAction('');
-      setMessage('学習記録を保存しました。'); await load();
+      await load();
+      setMessage(xpNotice);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '学習記録を保存できませんでした。'); }
     finally { setSaving(false); }
   };
