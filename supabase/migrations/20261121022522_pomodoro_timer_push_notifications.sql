@@ -23,7 +23,7 @@ begin
   if p_remaining_seconds < 1 or p_remaining_seconds > 21600 then raise exception 'Remaining time must be between 1 second and 6 hours'; end if;
   if p_phase = 'focus' and (p_break_seconds < 1 or p_break_seconds > 10800) then raise exception 'Break time must be between 1 second and 3 hours'; end if;
 
-  select coalesce((notification_settings ->> 'todo_reminders')::boolean, true)
+  select coalesce((notification_settings ->> 'study_timer')::boolean, true)
   into v_enabled from public.push_reminder_preferences where user_id = p_user_id;
   if not found then v_enabled := true; end if;
   if v_enabled is not true then return 0; end if;
