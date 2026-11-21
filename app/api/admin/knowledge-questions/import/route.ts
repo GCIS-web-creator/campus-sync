@@ -38,6 +38,9 @@ export async function POST(request: Request) {
       return json({ success: false, message: (index + 1) + '問目: ' + (validated.error || '問題データが正しくありません。') }, 400);
     }
     const value = validated.value;
+    if (!value.subject_code) {
+      return json({ success: false, message: (index + 1) + '問目: 数学の教科コードを指定してください。' }, 400);
+    }
     if (!value.source_url || !value.source_license || !value.source_attribution) {
       return json({ success: false, message: (index + 1) + '問目: 外部教材のURL・ライセンス・出典表示が必要です。' }, 400);
     }
