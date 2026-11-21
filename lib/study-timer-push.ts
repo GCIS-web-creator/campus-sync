@@ -21,7 +21,7 @@ export function parseStudyTimerPushRequest(value: unknown): StudyTimerPushReques
   const remainingSeconds = body.remaining_seconds;
   const breakSeconds = body.break_seconds;
   if (phase !== 'focus' && phase !== 'break') throw new Error('タイマーの状態が正しくありません。');
-  if (!Number.isSafeInteger(remainingSeconds) || Number(remainingSeconds) < 1 || Number(remainingSeconds) > 21600) {
+  if (typeof remainingSeconds !== 'number' || !Number.isSafeInteger(remainingSeconds) || remainingSeconds < 1 || remainingSeconds > 21600) {
     throw new Error('残り時間は1秒から6時間の範囲で指定してください。');
   }
   const parsedBreakSeconds = Number(breakSeconds);
