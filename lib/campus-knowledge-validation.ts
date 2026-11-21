@@ -92,10 +92,10 @@ export function validateKnowledgeQuestion(input: unknown):
   if (source_url && sourceLabel.includes('wikibooks') && !source_revision) {
     return { error: 'Wikibooksを参照した場合はページrevision IDを記録してください。' };
   }
-  if (source_url && sourceLabel.includes('wikibooks') && !/CC BY-SA 4\\.0|GFDL/i.test(source_license || '')) {
+  if (source_url && sourceLabel.includes('wikibooks') && !/CC BY-SA 4\.0|GFDL/i.test(source_license || '')) {
     return { error: 'Wikibooksの再利用条件を確認してライセンスを記録してください。' };
   }
-  if (source_url && sourceLabel.includes('ftext') && !/CC BY 4\\.0/i.test(source_license || '')) {
+  if (source_url && sourceLabel.includes('ftext') && !/CC BY 4\.0/i.test(source_license || '')) {
     return { error: 'FTEXTのCC BY 4.0ライセンスを確認してください。' };
   }
   if (!Number.isFinite(answer_tolerance) || answer_tolerance < 0 || answer_tolerance > 1000000000000) {
