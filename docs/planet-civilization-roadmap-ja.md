@@ -3,8 +3,8 @@
 - 最終更新: 2026-11-21
 - Phase 3実装ブランチ: feature/planet-phase3-contributions-20261121（PR #41 Draft作成済み・CI検証中）
 - 対象: CampusSync 本体
-- 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・ローカルWorkerスモークは本番反映済み / 実認証ライブE2E・全学校機能回帰は未完了 / Phase 2の復旧強化をPR #39で検証中
-- 対象ブランチ: cloudflare-workers-migration / feature/planet-civilization-phase2-reliability-20261121
+- 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・ローカルWorkerスモークは本番反映済み / 実認証ライブE2E・全学校機能回帰は未完了 / Phase 2の学習XP信頼性強化はPR #39で本番反映済み / 中断再開・曲再生の後続改善はPR #40でCI修正中
+- 対象ブランチ: cloudflare-workers-migration / feature/planet-phase3-contributions-20261121
 
 この文書は、CampusSync内に個人の惑星を持ち、CampusSync内で確認できる学習・学校への貢献・知識習得・学習継続に応じて、惑星の自然と文明が成長する仕組みを定義する。PlanetubeやYouTubeの利用履歴には依存しない。フェーズを順番に進め、既存機能を壊さず、小さく動作確認しながら拡張する。
 
