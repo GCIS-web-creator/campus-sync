@@ -118,23 +118,33 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
     setLoading(true);
     setError('');
     try {
-      const [q, a] = await Promise.all([
-        supabase.from('campus_knowledge_questions')
+      const attemptsRequest = supabase.from('math_practice_attempts')
+        .select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      // Supabase Data API may cap a single response at 1,000 rows.
+      // Fetch in pages so every published question (including rows after #1,000) is playable.
+      const pageSize = 1000;
+      const bank: MathQuestion[] = [];
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error: questionError } = await supabase.from('campus_knowledge_questions')
           .select('id,subject,subject_code,unit,title,prompt,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,question_type,source_name,source_url,source_license,source_attribution')
           .eq('status', 'published')
           .order('subject', { ascending: true })
-          .order('unit', { ascending: true }),
-        supabase.from('math_practice_attempts')
-          .select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1000),
-      ]);
-      if (q.error) throw q.error;
-      if (a.error) throw a.error;
-      const bank = (q.data || []) as MathQuestion[];
+          .order('unit', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (questionError) throw questionError;
+        const page = (data || []) as MathQuestion[];
+        bank.push(...page);
+        if (page.length < pageSize) break;
+      }
+
+      const { data: attemptData, error: attemptError } = await attemptsRequest;
+      if (attemptError) throw attemptError;
       setQuestions(bank);
-      setAttempts((a.data || []) as Attempt[]);
+      setAttempts((attemptData || []) as Attempt[]);
       setCurrent(previous => previous && bank.some(item => item.id === previous.id)
         ? previous
         : bank.find(item => item.subject === '数学I') || bank[0] || null);
