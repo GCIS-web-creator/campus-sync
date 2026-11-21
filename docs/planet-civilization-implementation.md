@@ -1,12 +1,13 @@
 # CampusSync 惑星・文明システム 実装記録
 
-- 対象ブランチ: feature/planet-civilization-phase1-2-20261120
+- 対象ブランチ: cloudflare-workers-migration / feature/planet-civilization-phase2-reliability-20261121
 - 基準ブランチ: cloudflare-workers-migration
 - 更新日: 2026-11-21
-- 状態: Phase 0仕様確定 / Phase 1 DB・SQL・Cloudflare Worker CI・モックブラウザスモーク完了 / 実アカウントを使う全機能回帰は未実施
+- 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・モックブラウザスモークは本番反映済み / 実認証ライブE2E・学校機能全体の広範な回帰は未完了 / Phase 2のXP未反映復旧をPR #39で検証中
 - 設計書: docs/planet-civilization-roadmap-ja.md
 - Phase 1 DB設計: docs/planet-civilization-phase1-database-design-ja.md
-- PR: #36（Draft、未マージ）
+- Phase 1基盤: PR #36（マージ済み）
+- Phase 2復旧強化: PR #39（Draft、CI確認中）
 
 ## Phase 0で確定した方針
 
@@ -75,21 +76,33 @@
 - Planetubeのログイン画面へ遷移できることを確認。別サービスの認証・DBアクセスは行っていない。
 - すべて架空のテストアカウントとモックレスポンスで動作し、実SupabaseユーザーデータやPlanetubeデータは変更しない。
 
-### リリース前に残っている確認
+### Phase 1の最終受け入れ確認として残っている項目
 
-- 実Supabase認証アカウントを使ったライブE2E（惑星GET・保存後の実XP反映・再読み込み後の値維持）。
+- 実Supabase認証アカウントを使ったライブE2E（本人の惑星GET・学習記録保存後の実XP反映・再読み込み後の値維持）。
 - 実アカウントA/Bを別ブラウザで使った画面レベルの相互アクセス拒否確認。
-- 今回の自動テスト対象外である時間割・課題・授業連絡・通知など学校機能全体の回帰確認。
-- これらの確認とマージ判断まではPR #36をDraft維持。本番アプリへのマージ・Cloudflareデプロイは行わない。
+- 今回の自動テスト対象外である時間割・課題・授業連絡・通知など学校機能全体の広範な回帰確認。
+- これらはPhase 1のDB基盤完了とは区別して、リリース受け入れテストとして追跡する。
 
-## Phase 2 — Pomodoro連携の初回実装
+## Phase 2 — Pomodoro連携と学習XP
+
+### 本番に入っている基本経路
 
 - 既存 `student_study_sessions` を唯一の学習セッション記録として読み取る。既存の保存形式・RLS・タイマー処理は変更しない。
-- 有効集中時間60秒につき1 XP。秒単位で同じ日の累積を管理し、端数は次のセッションへ繰り越す。
+- 学習記録の保存後、発行されたsession IDを本人認証付きAPIへ送信し、サーバー側RPCでXPを付与する。
+- XPは有効集中時間60秒につき1 XP。秒単位で同じ日の累積を管理し、端数は次のセッションへ繰り越す。
 - 東京時間の1日あたり有効集中時間10,800秒（180分）をXP算定対象とする。
+- 休憩秒数・一時停止時間はXP対象に含めず、途中終了も保存済みの有効集中時間だけを対象にする。
 - 上限を超えても元の学習セッションは削除・短縮しない。
-- 同じ学習セッションIDからのXP再付与は行わない。
-- Phase 1 DB関数で集計・文明スコア・段階更新まで連携済み。Pomodoro画面の保存フローは初回実装として既存画面から呼び出す。
+- 同じ学習セッションIDからのXP再付与はDB側で重複排除する。
+
+### Phase 2の信頼性強化（PR #39・検証中）
+
+- XP APIの一時失敗に備え、学習記録の保存直後に未反映session IDを端末のlocalStorageへ保存する。
+- 未反映IDは複数件保持し、画面再読み込み後も復旧して順に再試行できるようにする。
+- 再試行は同じsession IDを使い、DB側の冪等性によって二重付与を防ぐ。
+- すでに付与済みの結果を、新たなXP獲得として誤表示しない。
+- E2Eでは集中・休憩・一時停止の秒数分離、API一時失敗、再読み込み後の復旧、再試行後のキュー削除を確認する。
+- PR #39のCIは現在実行中。成功・マージ・本番反映はまだ確定していない。
 
 ## 今回は対象外
 
@@ -101,11 +114,10 @@
 
 ## 非破壊リリース条件
 
-- [x] Feature branchで実装し、cloudflare-workers-migration向けPR #36をDraftで維持。
-- [x] Next.js build、Cloudflare OpenNext build、Wrangler dry-runをCIで確認。
-- [x] ローカルWorkerで惑星画面・更新操作・390px幅の表示をChromiumで確認。
-- [x] モック学習記録を保存し、保存されたsession IDでXP付与APIを呼ぶフローを確認。
-- [x] Planetubeログイン画面への遷移を確認し、Planetubeデータにはアクセスしない。
-- [x] DBトランザクションで二重付与・日次上限・A/B相互閲覧拒否を確認。
-- [ ] 実ユーザー認証・実DBを使ったブラウザE2Eと、全学校機能の広範な回帰確認を行う。
-- [ ] これらが終わってからPRレビューとマージ可否を判断する。本番マージ・デプロイは未実施。
+- [x] Phase 1の6テーブル・RLS・所有者整合性・service_role専用処理を本番Supabaseへ適用。
+- [x] DBトランザクションで重複付与・日次上限・自然成長日次重複・再計算安定性・A/B相互閲覧拒否を確認。
+- [x] Next.js build、Cloudflare OpenNext build、Wrangler dry-run、ローカルWorkerのChromiumスモークをCIで確認。
+- [x] 惑星画面・更新操作・390px幅の表示・Pomodoro保存からXP APIへのsession ID引き渡しをモックE2Eで確認。
+- [ ] 実Supabase認証アカウントを使ったライブE2Eと実アカウントA/Bの画面レベル相互アクセス拒否を確認。
+- [ ] 時間割・課題・授業連絡・通知など学校機能全体の広範な回帰を確認。
+- [ ] Phase 2 PR #39のCI成功後、レビュー・マージ・Cloudflare本番デプロイを確認。
