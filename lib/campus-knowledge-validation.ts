@@ -88,6 +88,16 @@ export function validateKnowledgeQuestion(input: unknown):
   if (source_url && (!source_license || !source_attribution)) {
     return { error: '外部教材を使う場合はライセンスと出典表示を必ず入力してください。' };
   }
+  const sourceLabel = source_name.toLocaleLowerCase('ja-JP');
+  if (source_url && sourceLabel.includes('wikibooks') && !source_revision) {
+    return { error: 'Wikibooksを参照した場合はページrevision IDを記録してください。' };
+  }
+  if (source_url && sourceLabel.includes('wikibooks') && !/CC BY-SA 4\\.0|GFDL/i.test(source_license || '')) {
+    return { error: 'Wikibooksの再利用条件を確認してライセンスを記録してください。' };
+  }
+  if (source_url && sourceLabel.includes('ftext') && !/CC BY 4\\.0/i.test(source_license || '')) {
+    return { error: 'FTEXTのCC BY 4.0ライセンスを確認してください。' };
+  }
   if (!Number.isFinite(answer_tolerance) || answer_tolerance < 0 || answer_tolerance > 1000000000000) {
     return { error: '数値の許容誤差が正しくありません。' };
   }
@@ -115,6 +125,7 @@ export function validateKnowledgeQuestion(input: unknown):
   } else {
     if (rawOptions.length !== 0) return { error: '数値入力・記述式では選択肢を指定しないでください。' };
     if (!correct_answer || correct_answer.length > 2000) return { error: '模範解答を1〜2000文字で入力してください。' };
+    if (question_type === 'numeric' && correct_answer.length > 120) return { error: '数値の正答は120文字以内で入力してください。' };
     if (question_type === 'numeric' && !NUMERIC_ANSWER.test(correct_answer)) {
       return { error: '数値入力式の正答は数値で入力してください。' };
     }
