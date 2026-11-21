@@ -677,9 +677,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
             body: JSON.stringify({ action: 'award-learning-xp', session_id: sessionId }),
           });
-          const payload = await response.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number } };
+          const payload = await response.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number; already_processed?: boolean } };
           if (!response.ok || !payload.success) throw new Error(payload.message || '学習XPを反映できませんでした。');
-          awardedTotal += Math.max(0, Number(payload.result?.awarded_xp || 0));
+          if (!payload.result?.already_processed) {
+            awardedTotal += Math.max(0, Number(payload.result?.awarded_xp || 0));
+          }
           removePendingXpSession(sessionId);
           processed += 1;
         } catch (cause) {
@@ -692,9 +694,9 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         setError(failed + '件の学習XPを再試行できませんでした。通信状態を確認して、もう一度お試しください。');
         setMessage(processed + '件を確認しました。未反映分は端末に保存されています。');
       } else {
-        setMessage(processed + '件の学習XPを確認しました。' + (awardedTotal > 0
-          ? '今回の反映は合計 +' + awardedTotal.toLocaleString('ja-JP') + ' XP です。'
-          : '二重付与は発生しません。'));
+        setMessage(processed + '件の学習XP付与状態を確認しました。' + (awardedTotal > 0
+          ? '新たに +' + awardedTotal.toLocaleString('ja-JP') + ' XP を反映しました。'
+          : '新規加算はありません（二重付与なし）。'));
       }
       await load();
     } catch (cause) {
