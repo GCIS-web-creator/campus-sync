@@ -298,7 +298,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
         throw new Error(payload.message || '回答を採点できませんでした。');
       }
 
-      const graded = payload.result as ServerGrade;
+      const graded = { ...payload.result, question_type: current.question_type } as ServerGrade;
       const correct = Boolean(graded.is_correct);
       successfulEntry = { questionId: current.id, answer: submittedAnswer, isCorrect: correct, seconds };
       pendingKnowledgeSubmission.current = null;
