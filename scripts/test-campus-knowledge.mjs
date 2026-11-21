@@ -33,7 +33,7 @@ test('accepts a valid published knowledge question', () => {
 });
 
 test('accepts only the defined difficulty values and derives no client XP amount', () => {
-  for (const [difficulty, expected] of [['normal', 2], ['advanced', 4], ['challenge', 6]] as const) {
+  for (const [difficulty, expected] of [['normal', 2], ['advanced', 4], ['challenge', 6]]) {
     const result = validateKnowledgeQuestion({ ...validQuestion, difficulty });
     assert.equal(result.error, undefined);
     assert.equal(result.value?.difficulty, difficulty);
