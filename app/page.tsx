@@ -1688,7 +1688,8 @@ export default function CampusSyncApp() {
     | 'cafeteria_updates'
     | 'activity_updates'
     | 'weather_alerts'
-    | 'disaster_alerts';
+    | 'disaster_alerts'
+    | 'study_timer';
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderTimes, setReminderTimes] = useState<string[]>(['dayBefore', 'morningOf']);
   const [allowedNotificationDays, setAllowedNotificationDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
@@ -1701,6 +1702,7 @@ export default function CampusSyncApp() {
     activity_updates: true,
     weather_alerts: true,
     disaster_alerts: true,
+    study_timer: true,
   });
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('21:00');
@@ -3613,6 +3615,7 @@ Supabaseの設定を確認してください。
         activity_updates: true,
         weather_alerts: true,
         disaster_alerts: true,
+        study_timer: true,
       });
       setQuietHoursEnabled(false);
       setQuietHoursStart('21:00');
@@ -3634,6 +3637,7 @@ Supabaseの設定を確認してください。
       activity_updates: true,
       weather_alerts: true,
       disaster_alerts: true,
+      study_timer: true,
     });
     setQuietHoursEnabled(false);
     setQuietHoursStart('21:00');
@@ -3668,6 +3672,7 @@ Supabaseの設定を確認してください。
           activity_updates: loaded.activity_updates !== false,
           weather_alerts: loaded.weather_alerts !== false,
           disaster_alerts: loaded.disaster_alerts !== false,
+          study_timer: loaded.study_timer !== false,
         });
         setQuietHoursEnabled(data.quiet_hours_enabled === true);
         setQuietHoursStart(String(data.quiet_hours_start || '21:00').slice(0, 5));
@@ -5797,7 +5802,8 @@ Supabaseの設定を確認してください。
                         { key: 'cafeteria_updates' as NotificationCategory, label: '学食の更新', description: '毎朝7時の今日の献立・売切・学食からのお知らせ' },
                         { key: 'activity_updates' as NotificationCategory, label: '部活動・校内活動', description: '部活動・委員会ノートの新着投稿' },
                         { key: 'weather_alerts' as NotificationCategory, label: '気象警報', description: '毎朝7時の今日の天気・小平市の気象警報' },
-                        { key: 'disaster_alerts' as NotificationCategory, label: '地震・防災速報', description: '全国の震度2以上・緊急地震速報（EEW）' }
+                        { key: 'disaster_alerts' as NotificationCategory, label: '地震・防災速報', description: '全国の震度2以上・緊急地震速報（EEW）' },
+                        { key: 'study_timer' as NotificationCategory, label: 'ポモドーロタイマー', description: '集中時間・休憩時間の終了通知' }
                       ].map(item => (
                         <label key={item.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2 mb-1.5 cursor-pointer">
                           <span className="min-w-0">
