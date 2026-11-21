@@ -627,6 +627,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     void cancelTimerPush();
     setTimerState('idle');
     setShowRecord(false);
+    setPhase('focus');
     setFocusSeconds(0);
     setBreakSeconds(0);
     setTimerRemaining(focusMinutes * 60);
@@ -691,6 +692,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         setMessage('途中の学習記録を保存しました。残り時間と課題を保持しています。「再開」から続けられます。' + xpNotice);
       } else {
         setTimerState('idle');
+        setPhase('focus');
         setFocusSeconds(0);
         setBreakSeconds(0);
         setTimerRemaining(focusMinutes * 60);
