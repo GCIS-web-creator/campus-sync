@@ -45,6 +45,13 @@ function formatTime(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ja-JP');
 }
+function eventStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    pending: '審査待ち', approved: '承認', rejected: '却下',
+    returned: '差し戻し', withdrawn: '取り下げ',
+  };
+  return labels[value] || value;
+}
 
 export default function ContributionActivityPanel({ userId, isDarkMode = false }: Props) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -236,7 +243,7 @@ export default function ContributionActivityPanel({ userId, isDarkMode = false }
             {item.review_reason && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-950">Adminからのコメント：{item.review_reason}</p>}
             {item.status === 'pending' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => void withdraw(item.id)} disabled={busyId === item.id} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-[10px] font-bold disabled:opacity-50"><XCircle size={13} />{busyId === item.id ? '処理中…' : '申請を取り下げる'}</button></div>}
             {item.status === 'returned' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => startResubmit(item)} className="rounded-lg bg-orange-600 px-3 py-1.5 text-[10px] font-black text-white">内容を修正して再提出</button></div>}
-            {itemEvents.length > 0 && <details className="mt-3 border-t border-slate-200/60 pt-2"><summary className={'cursor-pointer text-[10px] font-bold ' + muted}>審査・申請履歴（{itemEvents.length}件）</summary><ol className="mt-2 space-y-2">{itemEvents.map((event) => <li key={event.id} className="text-[10px] leading-4"><span className="font-bold">{event.actor_label} ・ {event.to_status}</span><span className={'ml-2 ' + muted}>{formatTime(event.created_at)}</span>{event.reason && <p className={muted}>{event.reason}</p>}</li>)}</ol></details>}
+            {itemEvents.length > 0 && <details className="mt-3 border-t border-slate-200/60 pt-2"><summary className={'cursor-pointer text-[10px] font-bold ' + muted}>審査・申請履歴（{itemEvents.length}件）</summary><ol className="mt-2 space-y-2">{itemEvents.map((event) => <li key={event.id} className="text-[10px] leading-4"><span className="font-bold">{event.actor_label} ・ {eventStatusLabel(event.to_status)}</span><span className={'ml-2 ' + muted}>{formatTime(event.created_at)}</span>{event.reason && <p className={muted}>{event.reason}</p>}</li>)}</ol></details>}
           </article>;
         })}</div> : <p className={'rounded-xl border border-dashed p-6 text-center text-xs ' + muted}>まだ申請はありません。活動内容を入力して申請できます。</p>}
     </section>
