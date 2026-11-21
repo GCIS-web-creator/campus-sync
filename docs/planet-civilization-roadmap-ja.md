@@ -2,8 +2,8 @@
 
 - 最終更新: 2026-11-21
 - 対象: CampusSync 本体
-- 状態: Phase 0仕様確定 / Phase 1 DB・SQL・Worker CI・ローカルブラウザスモーク確認済み / 実認証・全機能回帰は未完了
-- 対象ブランチ: feature/planet-civilization-phase1-2-20261120
+- 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・ローカルWorkerスモークは本番反映済み / 実認証ライブE2E・全学校機能回帰は未完了 / Phase 2の復旧強化をPR #39で検証中
+- 対象ブランチ: cloudflare-workers-migration / feature/planet-civilization-phase2-reliability-20261121
 
 この文書は、CampusSync内に個人の惑星を持ち、CampusSync内で確認できる学習・学校への貢献・知識習得・学習継続に応じて、惑星の自然と文明が成長する仕組みを定義する。PlanetubeやYouTubeの利用履歴には依存しない。フェーズを順番に進め、既存機能を壊さず、小さく動作確認しながら拡張する。
 
@@ -370,21 +370,27 @@ CampusSync内に次の画面を分けて設ける。
 
 **完了条件:** 2つ以上のテストアカウントで、他人のXP・惑星を読み書きできない。重複登録・連続送信・再読み込みでもXPが二重に増えない。
 
-**実装・DB・CI・ローカルブラウザテスト:** 6テーブル、所有者複合外部キー、本人限定SELECT RLS、service_role専用関数、台帳再計算、自然成長日次判定、Stageイベント記録を追加済み。テスト用データをトランザクション内で作り、A/B相互閲覧拒否・直接書き込み拒否・重複送信・180分上限・10分の自然成長しきい値・再計算安定性を確認してROLLBACK済み。GitHub Actions [Run #729](https://github.com/GCIS-web-creator/campus-sync/actions/runs/44851577269) でi18n、Next.js build、Worker build、Wrangler dry-run、ローカルWorkerのChromiumテストがすべて成功。ブラウザテストでは惑星表示・更新・390px幅、モックPomodoro保存からXP APIへのsession ID引き渡し、Planetubeログイン画面への遷移を確認した。実Supabase認証を使うライブE2Eと、対象外の学校機能全体の回帰は未実施。PR #36はDraft、本番アプリ未反映。
+**実装・DB・CI・ローカルブラウザテスト:** 6テーブル、所有者複合外部キー、本人限定SELECT RLS、service_role専用関数、台帳再計算、自然成長日次判定、Stageイベント記録を追加済み。テスト用データをトランザクション内で作り、A/B相互閲覧拒否・直接書き込み拒否・重複送信・180分上限・10分の自然成長しきい値・再計算安定性を確認してROLLBACK済み。GitHub Actions [Run #729](https://github.com/GCIS-web-creator/campus-sync/actions/runs/44851577269) とその後の本番ブランチCIでi18n、Next.js build、Worker build、Wrangler dry-run、ローカルWorkerのChromiumテストが成功し、PR #36はマージ、本番反映済み。ブラウザテストでは惑星表示・更新・390px幅、モックPomodoro保存からXP APIへのsession ID引き渡し、Planetubeログイン画面への遷移を確認した。実Supabase認証を使うライブE2Eと、対象外の学校機能全体の広範な回帰は未実施。
 
 ### Phase 2 — ポモドーロと学習XPの連携
 
-**目的:** 最初の実際に動くXP獲得経路を作る。
+**状態: 基本の保存・付与経路は本番実装済み / 未反映XPの復旧・全パターンE2EをPR #39で強化中**
+
+**目的:** 学習記録からのXP付与を確実にし、失敗後も記録を失わず、重複付与なく復旧できるようにする。
 
 - CampusSyncの集中モードで保存した学習記録を対象にする。
 - 有効な集中秒数から学習XPを計算する。
 - 休憩秒数・一時停止時間は除外する。
 - 途中終了した場合も、保存された有効な集中時間を対象にする。
 - 学習記録ID単位でXP付与済みかを管理する。
-- 付与したXPと根拠となる学習記録を確認できるようにする。
+- 付与したXPと根拠となる学習記録を確認できるようにする。惑星の成長履歴から教科・課題名・集中/休憩時間・完了状態を確認する。
+- XP APIの一時失敗時は、未反映session IDを端末に複数件保存し、再読み込み後も再試行できるようにする。
+- 再試行は同じsession IDで行い、DB側の冪等性で二重付与を防止する。
 - XPの対象上限を設けても、通常の学習時間・履歴は削除しない。
 
-**完了条件:** タイマーを開始・一時停止・再開・途中終了・完了した全パターンで、集中時間とXPが一致する。更新・再送信による二重付与が発生しない。
+**実装済みの基本経路:** Pomodoro保存後にsession IDを本人認証付きAPIへ渡し、DB RPCが保存済みfocus_secondsを検証してXPを付与する。東京時間の1日10,800秒上限・端数繰越・同一session IDの重複防止はDBで処理する。学習記録はXP API失敗時も保持する。
+
+**完了条件:** タイマーを開始・一時停止・再開・途中終了・完了した全パターンで、集中時間とXPが一致する。API一時失敗後の再読み込みでも未反映IDを復旧し、同一session IDの再試行で二重付与が発生しない。
 
 ### Phase 3 — 学校貢献XPとAdmin承認
 

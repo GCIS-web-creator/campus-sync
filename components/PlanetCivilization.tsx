@@ -36,6 +36,15 @@ type LedgerEntry = {
   source_date: string;
   reason: string;
   created_at: string;
+  source_session: {
+    id: string;
+    subject_name: string;
+    task_title: string;
+    focus_seconds: number;
+    break_seconds: number;
+    started_at: string;
+    finish_kind: 'completed' | 'stopped';
+  } | null;
 };
 type ApiPayload = {
   success: boolean;
@@ -57,6 +66,14 @@ const STAGES = [
 
 function formatNumber(value: number) {
   return Math.max(0, Number(value) || 0).toLocaleString('ja-JP');
+}
+
+function formatStudyDuration(seconds: number) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(total / 60);
+  const remainder = total % 60;
+  if (minutes > 0) return minutes + '分' + (remainder ? remainder + '秒' : '');
+  return remainder + '秒';
 }
 
 function PlanetArtwork({ stage }: { stage: number }) {
@@ -260,7 +277,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
           <div className="mb-3 flex items-center gap-2"><ArrowUpRight size={16} className="text-cyan-500"/><h2 className="text-sm font-black">最近の成長履歴</h2></div>
           {recentLedger.length ? <div className="divide-y divide-slate-200/60 dark:divide-slate-700">{recentLedger.map(entry => {
             const isDecrease = entry.entry_kind === 'reversal' || (entry.entry_kind === 'adjustment' && entry.adjustment_direction === 'decrease');
-            return <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div><p className="text-xs font-bold">{entry.xp_type === 'learning' ? '学習XP' : entry.xp_type === 'contribution' ? '学校貢献XP' : '知識XP'}{entry.entry_kind !== 'award' ? ' ・訂正' : ''}</p><p className={`mt-1 text-[10px] ${subText}`}>{entry.reason || '惑星の成長'}</p></div><div className="text-right"><p className={`text-sm font-black ${isDecrease ? 'text-amber-600' : 'text-cyan-600'}`}>{isDecrease ? '−' : '+'}{formatNumber(entry.amount)} XP</p><p className={`mt-1 text-[9px] ${subText}`}>{entry.source_date}</p></div></div>;
+            return <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div className="min-w-0 flex-1"><p className="text-xs font-bold">{entry.xp_type === 'learning' ? '学習XP' : entry.xp_type === 'contribution' ? '学校貢献XP' : '知識XP'}{entry.entry_kind !== 'award' ? ' ・訂正' : ''}</p><p className={`mt-1 text-[10px] ${subText}`}>{entry.reason || '惑星の成長'}</p>{entry.source_session && <div className={`mt-2 rounded-lg px-3 py-2 text-[10px] leading-5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'}`}><p className="font-black">根拠となる学習記録</p><p>{entry.source_session.subject_name} ・ {entry.source_session.task_title}</p><p>集中 {formatStudyDuration(entry.source_session.focus_seconds)} ・ 休憩 {formatStudyDuration(entry.source_session.break_seconds)} ・ {entry.source_session.finish_kind === 'stopped' ? '途中終了' : '完了'}</p></div>}</div><div className="text-right"><p className={`text-sm font-black ${isDecrease ? 'text-amber-600' : 'text-cyan-600'}`}>{isDecrease ? '−' : '+'}{formatNumber(entry.amount)} XP</p><p className={`mt-1 text-[9px] ${subText}`}>{entry.source_date}</p></div></div>;
           })}</div> : <div className={`rounded-xl border border-dashed p-5 text-center text-xs ${subText}`}>学習記録を保存すると、ここに惑星の成長履歴が表示されます。</div>}
         </section>
       </>}

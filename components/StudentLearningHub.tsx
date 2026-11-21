@@ -56,6 +56,36 @@ function readTimerSnapshot(userId: string): TimerSnapshot | null {
     return null;
   }
 }
+
+const PENDING_PLANET_XP_KEY = 'campus-sync-pending-planet-xp:';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function readPendingPlanetXpSessionIds(userId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(PENDING_PLANET_XP_KEY + userId);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.filter((value): value is string =>
+      typeof value === 'string' && UUID_PATTERN.test(value)
+    ))].slice(-100);
+  } catch {
+    return [];
+  }
+}
+
+function writePendingPlanetXpSessionIds(userId: string, ids: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    const unique = [...new Set(ids.filter(id => UUID_PATTERN.test(id)))].slice(-100);
+    const key = PENDING_PLANET_XP_KEY + userId;
+    if (unique.length) window.localStorage.setItem(key, JSON.stringify(unique));
+    else window.localStorage.removeItem(key);
+  } catch (cause) {
+    console.warn('未反映の学習XP IDを端末に保存できませんでした:', cause);
+  }
+}
 const STATUS: Record<Range['status'], string> = { not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' };
 
 
@@ -109,7 +139,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [pendingXpSessionId, setPendingXpSessionId] = useState<string | null>(null);
+  const [pendingXpSessionIds, setPendingXpSessionIds] = useState<string[]>([]);
+  const [pendingXpReady, setPendingXpReady] = useState(false);
   const [examId, setExamId] = useState('');
   const [rangeInput, setRangeInput] = useState('');
   const [rangeTarget, setRangeTarget] = useState('');
@@ -278,6 +309,33 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   }, [userId, userClass, studentIdentifier]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const pending = readPendingPlanetXpSessionIds(userId);
+    setPendingXpSessionIds(pending);
+    if (pending.length) {
+      setMessage('前回反映できなかった学習XPが' + pending.length + '件あります。再試行できます。');
+    }
+    setPendingXpReady(true);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!pendingXpReady) return;
+    writePendingPlanetXpSessionIds(userId, pendingXpSessionIds);
+  }, [pendingXpReady, pendingXpSessionIds, userId]);
+
+  const enqueuePendingXpSession = (sessionId: string) => {
+    const current = readPendingPlanetXpSessionIds(userId);
+    const next = current.includes(sessionId) ? current : [...current, sessionId].slice(-100);
+    writePendingPlanetXpSessionIds(userId, next);
+    setPendingXpSessionIds(previous => previous.includes(sessionId) ? previous : [...previous, sessionId].slice(-100));
+  };
+
+  const removePendingXpSession = (sessionId: string) => {
+    const next = readPendingPlanetXpSessionIds(userId).filter(id => id !== sessionId);
+    writePendingPlanetXpSessionIds(userId, next);
+    setPendingXpSessionIds(previous => previous.filter(id => id !== sessionId));
+  };
 
   // 集中モードを別タブへ移動したり、ページを再読み込みしても同じ端末で復元する。
   useEffect(() => {
@@ -569,6 +627,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
       let xpNotice = '学習XPの反映は保留されています。下の「XPを再試行」から反映できます。';
       if (savedSession?.id) {
+        // 学習記録が保存できた時点で、付与リクエストより先に再試行IDを永続化する。
+        enqueuePendingXpSession(savedSession.id);
         try {
           const { data: authData, error: authError } = await supabase.auth.getSession();
           const accessToken = authData.session?.access_token;
@@ -581,12 +641,13 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           const xpPayload = await xpResponse.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number; credited_seconds?: number; daily_limit_reached?: boolean; already_processed?: boolean } };
           if (!xpResponse.ok || !xpPayload.success) throw new Error(xpPayload.message || '学習XPを反映できませんでした。');
           const awarded = Math.max(0, Number(xpPayload.result?.awarded_xp || 0));
-          setPendingXpSessionId(null);
-          if (awarded > 0) xpNotice = '学習XP +' + awarded.toLocaleString('ja-JP') + ' を獲得しました。';
+          removePendingXpSession(savedSession.id);
+          if (xpPayload.result?.already_processed) xpNotice = 'この学習記録のXPはすでに反映済みです。二重付与はありません。';
+          else if (awarded > 0) xpNotice = '学習XP +' + awarded.toLocaleString('ja-JP') + ' を獲得しました。';
           else if (xpPayload.result?.daily_limit_reached) xpNotice = '本日の学習XP上限に達しています。学習記録は保存されています。';
           else xpNotice = '学習時間を記録しました。XPは次の加算に繰り越されます。';
         } catch (xpCause) {
-          setPendingXpSessionId(savedSession.id);
+          xpNotice = '学習記録は保存済みです。学習XPは未反映のため、下の「XPを再試行」から反映できます。';
           console.error('惑星の学習XP反映に失敗しました（学習記録は保存済み）:', xpCause);
         }
       }
@@ -598,27 +659,46 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   };
 
   const retryLearningXp = async () => {
-    if (!pendingXpSessionId) return;
+    if (!pendingXpSessionIds.length) return;
     setSaving(true);
     setError('');
+    const queuedIds = [...pendingXpSessionIds];
+    let processed = 0;
+    let awardedTotal = 0;
+    let failed = 0;
     try {
       const { data: authData, error: authError } = await supabase.auth.getSession();
       const accessToken = authData.session?.access_token;
       if (authError || !accessToken) throw new Error('ログイン状態を確認できません。');
-      const response = await fetch('/api/planet-civilization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
-        body: JSON.stringify({ action: 'award-learning-xp', session_id: pendingXpSessionId }),
-      });
-      const payload = await response.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number; daily_limit_reached?: boolean } };
-      if (!response.ok || !payload.success) throw new Error(payload.message || '学習XPを反映できませんでした。');
-      const awarded = Math.max(0, Number(payload.result?.awarded_xp || 0));
-      setPendingXpSessionId(null);
-      setMessage(awarded > 0
-        ? '学習XP +' + awarded.toLocaleString('ja-JP') + ' を反映しました。'
-        : payload.result?.daily_limit_reached
-          ? '本日の学習XP上限に達しています。学習記録は保存されています。'
-          : '学習時間を記録しました。XPは次の加算に繰り越されます。');
+
+      for (const sessionId of queuedIds) {
+        try {
+          const response = await fetch('/api/planet-civilization', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+            body: JSON.stringify({ action: 'award-learning-xp', session_id: sessionId }),
+          });
+          const payload = await response.json() as { success?: boolean; message?: string; result?: { awarded_xp?: number; already_processed?: boolean } };
+          if (!response.ok || !payload.success) throw new Error(payload.message || '学習XPを反映できませんでした。');
+          if (!payload.result?.already_processed) {
+            awardedTotal += Math.max(0, Number(payload.result?.awarded_xp || 0));
+          }
+          removePendingXpSession(sessionId);
+          processed += 1;
+        } catch (cause) {
+          failed += 1;
+          console.error('学習XPの再試行に失敗しました:', sessionId, cause);
+        }
+      }
+
+      if (failed) {
+        setError(failed + '件の学習XPを再試行できませんでした。通信状態を確認して、もう一度お試しください。');
+        setMessage(processed + '件を確認しました。未反映分は端末に保存されています。');
+      } else {
+        setMessage(processed + '件の学習XP付与状態を確認しました。' + (awardedTotal > 0
+          ? '新たに +' + awardedTotal.toLocaleString('ja-JP') + ' XP を反映しました。'
+          : '新規加算はありません（二重付与なし）。'));
+      }
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習XPを再試行できませんでした。');
@@ -665,7 +745,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History},{id:'planetube',label:'Planetube',icon:Globe2}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
-    {message && <div role="status" className={'flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs font-bold ' + (pendingXpSessionId ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}><span>{message}</span>{pendingXpSessionId && <button type="button" onClick={() => void retryLearningXp()} disabled={saving} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-black text-amber-900 disabled:opacity-50">{saving ? '再試行中…' : 'XPを再試行'}</button>}</div>}
+    {message && <div role="status" className={'flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs font-bold ' + (pendingXpSessionIds.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}><span>{message}</span>{pendingXpSessionIds.length > 0 && <button type="button" onClick={() => void retryLearningXp()} disabled={saving} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-black text-amber-900 disabled:opacity-50">{saving ? '再試行中…' : 'XPを再試行（' + pendingXpSessionIds.length + '件）'}</button>}</div>}
 
     {tab === 'planetube' && <div className="space-y-3"><PlanetubeDashboard campusEmail={userEmail} isDarkMode={isDarkMode} /><a href="/planetube" className="flex items-center justify-center gap-2 rounded-xl border border-cyan-200/20 bg-cyan-50/5 px-4 py-3 text-xs font-black text-cyan-600 hover:bg-cyan-50/10">Planetube拡張機能の導入案内（希望者向け）<Globe2 size={15}/></a></div>}
 
