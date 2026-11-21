@@ -24,21 +24,20 @@ alter table public.campus_knowledge_questions
     check (question_type in ('multiple_choice', 'numeric', 'written')),
   add constraint campus_knowledge_questions_question_format_check
     check (
-      (
-        question_type = 'multiple_choice'
-        and jsonb_typeof(options) = 'array'
-        and jsonb_array_length(options) between 2 and 6
-        and correct_option_id is not null
-        and options @> jsonb_build_array(jsonb_build_object('id', correct_option_id))
-      )
-      or
-      (
-        question_type in ('numeric', 'written')
-        and options = '[]'::jsonb
-        and correct_option_id is null
-        and correct_answer is not null
-        and char_length(trim(correct_answer)) between 1 and 2000
-      )
+      case
+        when question_type = 'multiple_choice' then
+          case when jsonb_typeof(options) = 'array' then
+            jsonb_array_length(options) between 2 and 6
+            and correct_option_id is not null
+            and options @> jsonb_build_array(jsonb_build_object('id', correct_option_id))
+          else false end
+        when question_type in ('numeric', 'written') then
+          options = '[]'::jsonb
+          and correct_option_id is null
+          and correct_answer is not null
+          and char_length(trim(correct_answer)) between 1 and 2000
+        else false
+      end
     ),
   add constraint campus_knowledge_questions_unit_check
     check (char_length(trim(unit)) between 1 and 120),
