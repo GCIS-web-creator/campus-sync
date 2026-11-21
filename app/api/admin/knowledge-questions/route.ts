@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
@@ -37,15 +38,24 @@ function sameOrigin(request: Request) {
   catch { return false; }
 }
 
+function contentHash(value: { subject: string; subject_code: string | null; unit: string; prompt: string }) {
+  const normalized = [
+    value.subject_code || value.subject,
+    value.unit,
+    value.prompt.normalize('NFKC').toLocaleLowerCase('ja-JP').replace(/\s+/g, ' ').trim(),
+  ].join('\n');
+  return createHash('sha256').update(normalized, 'utf8').digest('hex');
+}
+
 export async function GET(request: Request) {
   const denied = authorize(request);
   if (denied) return denied;
   try {
     const admin = getAdminClient();
     const { data, error } = await admin.from('campus_knowledge_questions')
-      .select('id,subject,title,prompt,options,correct_option_id,explanation,difficulty,target_class,status,created_at,published_at')
+      .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,created_at,published_at')
       .order('created_at', { ascending: false })
-      .limit(250);
+      .limit(1000);
     if (error) throw error;
     return json({ success: true, questions: data || [] });
   } catch (error) {
@@ -66,20 +76,15 @@ export async function POST(request: Request) {
   try {
     const admin = getAdminClient();
     const value = validated.value;
+    const hash = contentHash(value);
     const { data, error } = await admin.from('campus_knowledge_questions').insert({
-      subject: value.subject,
-      title: value.title,
-      prompt: value.prompt,
-      options: value.options,
-      correct_option_id: value.correct_option_id,
-      explanation: value.explanation,
-      difficulty: value.difficulty,
-      target_class: value.target_class,
-      status: value.status,
+      ...value,
+      content_hash: hash,
       created_by_label: 'CampusSync Admin',
       published_at: value.status === 'published' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
-    }).select('id,subject,title,difficulty,target_class,status,created_at,published_at').single();
+    }).select('id,subject,unit,title,question_type,difficulty,target_class,status,source_name,source_url,created_at,published_at').single();
+    if (error?.code === '23505') return json({ success: false, message: '同じ単元・問題文の問題がすでに登録されています。重複を確認してください。' }, 409);
     if (error) throw error;
     return json({ success: true, question: data }, 201);
   } catch (error) {
