@@ -88,7 +88,7 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
   const selected = useMemo(() => questions.find(question => question.id === selectedId) || null, [questions, selectedId]);
   const masteredSet = useMemo(() => new Set(masteredIds), [masteredIds]);
   const currentPending = pending?.questionId === selectedId ? pending : null;
-  const currentResult = result && result.replayed === false ? result : null;
+  const currentResult = result;
   const correctCount = useMemo(() => masteredIds.length, [masteredIds]);
 
   const submit = async (optionId: string) => {
