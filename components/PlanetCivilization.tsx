@@ -225,6 +225,25 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
         </div>
 
         <section className={`rounded-2xl border p-4 ${panel}`}>
+          <div className="mb-3"><h2 className="text-sm font-black">4つの成長軸</h2><p className={`mt-1 text-[10px] ${subText}`}>各分野は対応する実績だけで独立して成長します。</p></div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: '技術文明', level: growth.technical_level, value: growth.learning_xp, unit: '学習XP', color: 'text-blue-500' },
+              { label: '社会文明', level: growth.social_level, value: growth.contribution_xp, unit: '学校貢献XP', color: 'text-amber-500' },
+              { label: '研究・知識', level: growth.research_level, value: growth.knowledge_xp, unit: '知識XP', color: 'text-emerald-500' },
+              { label: '自然環境', level: growth.nature_level, value: growth.nature_growth, unit: '自然成長値', color: 'text-teal-500' },
+            ].map(axis => (
+              <div key={axis.label} className="rounded-xl border border-slate-200/70 p-3 dark:border-slate-700">
+                <div className="flex items-center justify-between gap-2"><p className="text-xs font-black">{axis.label}</p><span className={`text-[10px] font-black ${axis.color}`}>LEVEL {axis.level}</span></div>
+                <p className="mt-2 text-lg font-black tabular-nums">{formatNumber(axis.value)}</p>
+                <p className={`mt-1 text-[9px] ${subText}`}>{axis.unit}</p>
+                <div className="mt-2 flex gap-1">{Array.from({ length: 5 }, (_, index) => <span key={index} className={`h-1.5 flex-1 rounded-full ${index < axis.level ? 'bg-cyan-500' : 'bg-slate-200 dark:bg-slate-700'}`}/>)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`rounded-2xl border p-4 ${panel}`}>
           <div className="mb-3 flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">文明の成長段階</h2><p className={`mt-1 text-[10px] ${subText}`}>学習と学校への貢献で、惑星の外観が少しずつ変化します。</p></div><span className={`text-[10px] font-bold ${subText}`}>全6段階</span></div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">{STAGES.map((item, index) => <div key={item.name} className={`rounded-xl border p-3 ${index <= stage ? 'border-cyan-500/35 bg-cyan-500/5' : isDarkMode ? 'border-slate-700 bg-slate-800/50 opacity-60' : 'border-slate-200 bg-slate-50 opacity-60'}`}><p className="text-[9px] font-black text-cyan-600">STAGE {index}</p><p className="mt-1 text-xs font-black">{item.name}</p><p className={`mt-1 text-[9px] leading-4 ${subText}`}>{item.description}</p></div>)}</div>
         </section>
