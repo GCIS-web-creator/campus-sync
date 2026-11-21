@@ -2,7 +2,7 @@
 
 - 最終更新: 2026-11-21
 - 対象: CampusSync 本体 / Supabase
-- 状態: Phase 1初版実装済み（DB適用・トランザクションテスト済み、CI/回帰確認中）
+- 状態: Phase 1初版実装済み（DB適用・SQLテスト・Cloudflare Worker CI・ローカルブラウザスモークテスト済み。実アカウントを使う全機能回帰は未実施）
 - 関連仕様: [ロードマップ](./planet-civilization-roadmap-ja.md)
 - 関連実装: [実装記録](./planet-civilization-implementation.md)
 
@@ -249,11 +249,18 @@ Phase 1は、以下を全て実証するまで完了扱いにしない。
 - [x] 二重付与・並行送信・日次上限がDB制約/トランザクションで守られる。別々のDBリクエスト3本を同時送信し、日次10,800秒を超えず、同じセッションの重複行が作られないことを確認。
 - [x] 生徒A/Bで全6テーブルの相互参照ができず、authenticatedの直接書き込み権限もないことをSQLテストで確認。テストデータはROLLBACK済み。
 - [x] Adminロールに直接の惑星テーブル権限は付与せず、サーバーのservice_role関数だけに限定。Admin向け承認機能はPhase 3で別途実装する。
-- [ ] 既存機能のブラウザ回帰テストとCloudflare Worker CI / dry-runを完了する。
+- [x] Cloudflare Worker CI（i18n、Next.js build、Worker build、Wrangler dry-run）を完了する。成功Run: [#729](https://github.com/GCIS-web-creator/campus-sync/actions/runs/44851577269)。
+- [x] ローカルWorker上のChromiumテストで惑星画面・惑星名・非公開表示・成長スコア・4軸・履歴・Stage SVG・更新操作を確認する。
+- [x] 390px幅で横スクロールが発生しないことを確認する。
+- [x] モック認証・モックAPIを使い、Pomodoro記録保存から `award-learning-xp` APIへの `session_id` 引き渡しを確認する。
+- [x] 既存Planetubeのログイン画面へ遷移できることを確認する（Planetubeの外部認証・DBは呼び出さない）。
+- [ ] 実Supabase認証アカウントによるライブE2Eと、今回の対象外である全学校機能の画面回帰を実施する。
 
 ## 7. 実装反映状況
 
 追加マイグレーション `20261121004717_campus_planet_phase1_foundation` はSupabaseに適用済みで、同じ内容のSQLを `supabase/migrations/20261121004717_campus_planet_phase1_foundation.sql` としてfeature branchへ保存済み。A/Bの行分離・直接書き込み拒否・並行リクエスト時の日次上限・重複送信・再計算安定性のSQLテストも通過した。テスト用行は削除し、各テーブルの件数が0であることを確認している。
+
+ローカルWorker上のChromium E2Eも成功した。架空の生徒セッションとAPIレスポンスをブラウザ内でモックし、惑星画面の主要表示、更新ボタン、390px幅の表示、Pomodoro記録の保存リクエストとXP付与APIへのセッションID引き渡し、Planetubeログイン画面への遷移を確認した。実Supabase認証・実データを使ったE2Eではなく、対象外の学校機能すべてを網羅した回帰試験でもない点は区別する。
 
 ## 8. 初期Draft PRとの差分
 
@@ -261,4 +268,4 @@ Phase 1は、以下を全て実証するまで完了扱いにしない。
 
 初回実装との差分は追加マイグレーションで解消した。DB適用後にテストトランザクションを実行し、実在する2つのAuthユーザーIDを使ったA/B相互参照拒否、直接書き込み拒否、service_role専用RPC、日次上限、セッション再送信、自然成長日一意性、再計算安定性、段階イベント一意性を確認した。テスト用の行は最後にROLLBACKし、本番データは残していない。
 
-**現在も残るリリース確認:** GitHub Actions CI、Cloudflare Worker dry-run、ブラウザ上での画面/APIスモーク、既存機能の回帰確認。これらが終わるまではPR #36をDraftのままにして、本番アプリへのマージ・デプロイはしない。
+**現在も残るリリース確認:** 実Supabase認証アカウントによるライブE2Eと、今回のテスト対象外である学校機能全体の回帰確認。PR #36はDraftのまま、本番アプリへのマージ・デプロイは行っていない。
