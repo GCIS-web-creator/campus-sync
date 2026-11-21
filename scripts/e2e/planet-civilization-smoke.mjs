@@ -153,6 +153,25 @@ try {
   });
 
   await page.addInitScript(() => {
+    window.__campusSongPlayCalls = [];
+    class MockAudio {
+      src;
+      currentTime = 0;
+      volume = 1;
+      muted = false;
+      preload = 'auto';
+      paused = true;
+      constructor(src) { this.src = src; }
+      addEventListener() {}
+      play() {
+        window.__campusSongPlayCalls.push(this.src);
+        this.paused = false;
+        return Promise.resolve();
+      }
+      pause() { this.paused = true; }
+    }
+    Object.defineProperty(window, 'Audio', { configurable: true, value: MockAudio });
+
     const now = Math.floor(Date.now() / 1000);
     const session = {
       access_token: 'browser-smoke-placeholder-token',
@@ -220,10 +239,15 @@ try {
   await page.goto(origin + '/#study', { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '学習・テスト対策', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByRole('button', { name: '集中', exact: true }).click();
+  await page.getByRole('button', { name: '通知音をテスト', exact: true }).click();
+  await page.getByText(/「鯖の味噌煮と牛乳」を再生しています/).waitFor({ state: 'visible' });
+  const testedSongPaths = await page.evaluate(() => window.__campusSongPlayCalls);
+  assert.ok(testedSongPaths.length >= 1, 'Notification test should play the supplied song');
+  assert.ok(testedSongPaths.every(path => path === '/audio/x005_saba.mp3'), 'Notification test should use the supplied MP3 asset');
   await page.getByLabel('集中時間（分）').fill('1');
   await page.getByLabel('課題・勉強内容').fill('ブラウザ確認用の学習');
   await page.getByRole('button', { name: '開始' }).click();
-  await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '中断して記録' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '休憩に切り替える' }).click();
   await page.getByText('休憩時間', { exact: true }).waitFor({ state: 'visible' });
@@ -235,29 +259,35 @@ try {
   await page.getByText('一時停止中', { exact: true }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '再開' }).click();
-  await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '中断して記録' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
-  await page.getByRole('button', { name: '途中終了' }).click();
+  await page.getByRole('button', { name: '中断して記録' }).click();
   await page.getByLabel('勉強した内容').fill('短い集中セッションを保存する');
   await page.getByLabel('次にやること').fill('次回も続ける');
   await page.getByRole('button', { name: '記録を保存' }).click();
-  await page.getByText('学習記録を保存しました。学習XP +1 を獲得しました。', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
-  assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 2, 'Pomodoro should save positive focus time including the resumed segment');
+  await page.getByText(/途中の学習記録を保存しました。残り時間と課題を保持しています/).waitFor({ state: 'visible', timeout: 15000 });
+  assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 2, 'Interrupted Pomodoro segment should save positive focus time');
+  const interruptedTaskValue = await page.getByLabel('課題・勉強内容').inputValue();
+  assert.equal(interruptedTaskValue, 'ブラウザ確認用の学習', 'Saved interruption should preserve its task for continuation');
+  assert.equal(await page.getByRole('button', { name: '再開', exact: true }).count(), 1, 'Saved interruption should offer resume');
+  await page.getByRole('button', { name: '再開', exact: true }).click();
+  await page.getByRole('button', { name: '中断して記録', exact: true }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
+  assert.equal(await page.getByLabel('課題・勉強内容').inputValue(), 'ブラウザ確認用の学習', 'Resuming should keep the same task');
+  await page.getByRole('button', { name: '中断して記録', exact: true }).click();
   assert.ok(Number(savedStudySession.focus_seconds) <= 5, 'Break and paused time must not be added to focus duration');
   assert.ok(Number(savedStudySession.break_seconds) >= 1, 'Break time should be stored separately from focus time');
   assert.equal(xpAwardPayload?.action, 'award-learning-xp', 'Saved session should call the learning XP endpoint');
   assert.equal(xpAwardPayload?.session_id, '44444444-4444-4444-8444-000000000001', 'Learning XP request should reference the saved session ID');
 
   // Simulate an XP API outage after the study session has already been saved.
-  await page.getByLabel('課題・勉強内容').fill('XP再試行の動作確認');
-  await page.getByRole('button', { name: '開始' }).click();
-  await page.waitForTimeout(1300);
-  await page.getByRole('button', { name: '途中終了' }).click();
   await page.getByLabel('勉強した内容').fill('XP再試行キューの確認');
   await page.getByLabel('次にやること').fill('再読み込み後に未反映XPを再試行');
   failNextXpAward = true;
   await page.getByRole('button', { name: '記録を保存' }).click();
-  await page.getByText(/学習記録を保存しました。/).waitFor({ state: 'visible', timeout: 15000 });
+  // Wait for the unique XP-outage message, not the previous segment's still-visible success message.
+  await page.getByText(/学習XPは未反映のため、下の「XPを再試行」から反映できます/).waitFor({ state: 'visible', timeout: 15000 });
+  assert.equal(xpAwardRequests.length, 2, 'Second interrupted save should create a separate XP request');
   const pendingSessionId = xpAwardRequests.at(-1)?.session_id;
   assert.equal(pendingSessionId, '44444444-4444-4444-8444-000000000002', 'Second saved session should have a unique ID');
   const pendingStorageKey = 'campus-sync-pending-planet-xp:11111111-1111-4111-8111-111111111111';
@@ -271,13 +301,19 @@ try {
   assert.equal(retriedRequests.length, 2, 'Pending XP request should be retried with the same session ID');
   const persistedAfterRetry = await page.evaluate(key => localStorage.getItem(key), pendingStorageKey);
   assert.equal(persistedAfterRetry, null, 'Successfully retried XP session should be removed from local storage');
+  // The page reload resets the learning-hub subtab to Overview; reopen Focus
+  // before asserting the restored paused timer controls.
+  await page.getByRole('button', { name: '集中', exact: true }).click();
+  await page.getByRole('button', { name: 'この勉強を終了', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('button', { name: 'この勉強を終了', exact: true }).click();
+  await page.getByRole('button', { name: '開始', exact: true }).waitFor({ state: 'visible' });
 
   await page.getByRole('button', { name: 'Planetube', exact: true }).click();
   await page.getByRole('heading', { name: 'Planetubeにログイン', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
 
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: planet screen, private badge, XP/axis/history content with linked study evidence, refresh, 390px mobile layout, Pomodoro start/break/focus/pause/resume/save, XP API handoff, durable pending-XP recovery after reload, and Planetube login screen');
+  console.log('PASS: planet screen, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed with task/remaining time, XP handoff, and retry recovery');
 } finally {
   await browser.close();
 }
