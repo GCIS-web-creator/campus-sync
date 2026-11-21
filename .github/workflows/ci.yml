@@ -45,6 +45,35 @@ jobs:
       - name: Validate Worker bundle without deploying
         if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: npx wrangler deploy --dry-run
+      - name: Install Playwright for browser smoke tests
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+      - name: Smoke-test Planet Civilization in a local Worker browser
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
+        run: |
+          set -euo pipefail
+          npx wrangler dev --ip 127.0.0.1 --port 8787 > /tmp/campus-sync-wrangler.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          READY=false
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:8787/ >/dev/null; then
+              READY=true
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat /tmp/campus-sync-wrangler.log
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$READY" != "true" ]; then
+            cat /tmp/campus-sync-wrangler.log
+            exit 1
+          fi
+          node scripts/e2e/planet-civilization-smoke.mjs
       - name: Upload validated Cloudflare Worker bundle
         if: github.ref == 'refs/heads/cloudflare-workers-migration'
         uses: actions/upload-artifact@v4
