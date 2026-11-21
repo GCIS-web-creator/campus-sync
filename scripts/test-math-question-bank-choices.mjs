@@ -30,7 +30,7 @@ test('all 225 multiple-choice answer keys match the mathematical condition in th
     const answer = correctText(question);
     let match;
 
-    if ((match = prompt.match(/x² \+ (\d+)x \+ (\d+)/))) {
+    if (question.title.includes('因数分解') && (match = prompt.match(/x² \+ (\d+)x \+ (\d+)/))) {
       const factors = answer.match(/^\(x \+ (\d+)\)\(x \+ (\d+)\)$/);
       assert.ok(factors, question.title);
       assert.equal(Number(factors[1]) + Number(factors[2]), Number(match[1]), question.title);
