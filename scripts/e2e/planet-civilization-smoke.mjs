@@ -53,6 +53,15 @@ const planetPayload = {
     source_date: '2026-11-21',
     reason: 'ブラウザ確認用のダミー記録',
     created_at: '2026-11-21T00:00:00.000Z',
+    source_session: {
+      id: '44444444-4444-4444-8444-999999999999',
+      subject_name: '物理',
+      task_title: 'モック学習を60秒記録',
+      focus_seconds: 60,
+      break_seconds: 0,
+      started_at: '2026-11-21T00:00:00.000Z',
+      finish_kind: 'completed',
+    },
   }],
 };
 
@@ -171,6 +180,9 @@ try {
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByText('わたしの惑星', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('非公開', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('根拠となる学習記録', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('物理 ・ モック学習を60秒記録', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('集中 1分 ・ 休憩 0秒 ・ 完了', { exact: true }).waitFor({ state: 'visible' });
 
   for (const label of ['文明発展スコア', '4つの成長軸', '技術文明', '社会文明', '研究・知識', '自然環境', '最近の成長履歴']) {
     await page.getByText(label, { exact: true }).first().waitFor({ state: 'visible' });
@@ -265,7 +277,7 @@ try {
 
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro start/break/focus/pause/resume/save, XP API handoff, durable pending-XP recovery after reload, and Planetube login screen');
+  console.log('PASS: planet screen, private badge, XP/axis/history content with linked study evidence, refresh, 390px mobile layout, Pomodoro start/break/focus/pause/resume/save, XP API handoff, durable pending-XP recovery after reload, and Planetube login screen');
 } finally {
   await browser.close();
 }
