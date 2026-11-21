@@ -32,6 +32,7 @@ self.addEventListener('push', (event) => {
       silent: false,
       renotify: false,
       requireInteraction: payload.requireInteraction === true || payload.priority === 'urgent',
+      ...(payload.priority === 'urgent' ? { vibrate: [260, 120, 260, 120, 520] } : {}),
       timestamp: Date.now(),
     })
   );

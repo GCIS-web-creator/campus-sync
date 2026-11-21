@@ -36,6 +36,8 @@ jobs:
       - run: npm run check:i18n
       - name: Test school exam range subject matching
         run: node --experimental-strip-types --test scripts/test-school-range-matching.mjs
+      - name: Test study timer Push request validation
+        run: node --experimental-strip-types --test scripts/test-study-timer-push.mjs
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime and Playwright for browser smoke tests

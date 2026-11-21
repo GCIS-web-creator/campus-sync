@@ -37,6 +37,7 @@ type TimerSnapshot = {
   reflection: string;
   nextAction: string;
   finishKind: 'completed' | 'stopped';
+  scheduleId: string | null;
 };
 function readTimerSnapshot(userId: string): TimerSnapshot | null {
   if (typeof window === 'undefined') return null;
@@ -131,10 +132,81 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [nextAction, setNextAction] = useState('');
   const [finishKind, setFinishKind] = useState<'completed' | 'stopped'>('completed');
   const [timerReady, setTimerReady] = useState(false);
+  const [timerScheduleId, setTimerScheduleId] = useState<string | null>(null);
+  const [timerPushStatus, setTimerPushStatus] = useState('');
+  const timerMusicRef = useRef<HTMLAudioElement | null>(null);
+  const needsTimerPushRefresh = useRef(false);
   const startedAt = useRef<string | null>(null);
   const lastTick = useRef(Date.now());
   const remainingRef = useRef(1500);
   const setTimerRemaining = (value: number) => { remainingRef.current = value; setRemaining(value); };
+
+  const cancelTimerPush = useCallback(async (scheduleId = timerScheduleId): Promise<boolean> => {
+    if (!scheduleId) return true;
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (authError || !accessToken) throw new Error('ログイン状態を確認できません。');
+      const response = await fetch('/api/push/study-timer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: 'cancel', schedule_id: scheduleId }),
+      });
+      const payload = await response.json().catch(() => ({})) as { success?: boolean; message?: string };
+      if (!response.ok || !payload.success) throw new Error(payload.message || '予約通知を取り消せませんでした。');
+      setTimerScheduleId(current => current === scheduleId ? null : current);
+      return true;
+    } catch (cause) {
+      setTimerPushStatus(cause instanceof Error ? cause.message : '予約通知を取り消せませんでした。');
+      return false;
+    }
+  }, [timerScheduleId]);
+
+  const scheduleTimerPush = useCallback(async (phaseValue: 'focus' | 'break', seconds: number) => {
+    const cleared = await cancelTimerPush();
+    if (!cleared) {
+      setTimerPushStatus('以前の通知予約を取り消せなかったため、新しい予約は作成していません。通信状態を確認して再開してください。');
+      return;
+    }
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (authError || !accessToken) throw new Error('ログイン状態を確認できません。');
+      const scheduleId = crypto.randomUUID();
+      setTimerScheduleId(scheduleId);
+      const response = await fetch('/api/push/study-timer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({
+          action: 'schedule',
+          schedule_id: scheduleId,
+          phase: phaseValue,
+          remaining_seconds: Math.max(1, Math.ceil(seconds)),
+          break_seconds: phaseValue === 'focus' ? breakMinutes * 60 : 0,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { success?: boolean; message?: string; scheduled_count?: number };
+      if (!response.ok || !payload.success) throw new Error(payload.message || 'タイマー通知を予約できませんでした。');
+      setTimerPushStatus('ロック中の終了通知を予約しました。');
+    } catch (cause) {
+      setTimerScheduleId(null);
+      setTimerPushStatus(cause instanceof Error ? cause.message : 'タイマー通知を予約できませんでした。');
+    }
+  }, [breakMinutes, cancelTimerPush]);
+
+  const playTimerMusic = useCallback(() => {
+    const audio = timerMusicRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        setMessage('終了音楽を再生できませんでした。画面を開いた状態で再生操作を一度行ってください。');
+      });
+    }
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([260, 120, 260, 120, 520]);
+    }
+  }, []);
 
   const studentIdentifier = (userEmail || '').trim().toLowerCase().split('@')[0];
   const dark = isDarkMode;
@@ -204,6 +276,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setReflection(snapshot.reflection || '');
     setNextAction(snapshot.nextAction || '');
     setFinishKind(snapshot.finishKind || 'completed');
+    setTimerScheduleId(snapshot.scheduleId || null);
     startedAt.current = snapshot.startedAt;
 
     let restoredPhase = snapshot.phase;
@@ -234,6 +307,10 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setPhase(restoredPhase);
     setTimerRemaining(restoredRemaining);
     setTimerState(phaseChanges >= 10000 ? 'paused' : snapshot.timerState);
+    if (snapshot.timerState === 'running' && (!snapshot.scheduleId || phaseChanges >= 2)) {
+      setTimerScheduleId(null);
+      needsTimerPushRefresh.current = true;
+    }
     if (snapshot.timerState === 'running' && Date.now() - snapshot.savedAt > 1000) {
       setMessage('集中モードを前回の状態から復元しました。');
     }
@@ -266,9 +343,16 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       reflection,
       nextAction,
       finishKind,
+      scheduleId: timerScheduleId,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
-  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind]);
+  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+
+  useEffect(() => {
+    if (!timerReady || !needsTimerPushRefresh.current || timerState !== 'running') return;
+    needsTimerPushRefresh.current = false;
+    void scheduleTimerPush(phase, Math.max(1, remaining));
+  }, [timerReady, timerState, phase, remaining, scheduleTimerPush]);
 
   useEffect(() => {
     if (timerState !== 'running') return;
@@ -288,12 +372,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   useEffect(() => {
     if (timerState !== 'running' || remaining > 0) return;
+    playTimerMusic();
     if (phase === 'focus') {
       setPhase('break'); setTimerRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
     } else {
       setPhase('focus'); setTimerRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
+      void scheduleTimerPush('focus', focusMinutes * 60);
     }
-  }, [timerState, remaining, phase, breakMinutes, focusMinutes]);
+  }, [timerState, remaining, phase, breakMinutes, focusMinutes, playTimerMusic, scheduleTimerPush]);
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
@@ -417,8 +503,25 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
+    void scheduleTimerPush('focus', timerState === 'idle' ? focusMinutes * 60 : remaining);
+  };
+  const pauseTimer = () => {
+    setTimerState('paused');
+    void cancelTimerPush();
+  };
+  const resumeTimer = () => {
+    setTimerState('running');
+    void scheduleTimerPush(phase, remaining);
+  };
+  const switchTimerPhase = () => {
+    const nextPhase = phase === 'focus' ? 'break' : 'focus';
+    const nextSeconds = (nextPhase === 'focus' ? focusMinutes : breakMinutes) * 60;
+    setPhase(nextPhase);
+    setTimerRemaining(nextSeconds);
+    void scheduleTimerPush(nextPhase, nextSeconds);
   };
   const finish = (kind: 'completed' | 'stopped') => {
+    void cancelTimerPush();
     setTimerState('idle'); setFinishKind(kind); setShowRecord(true); setReflection(''); setNextAction('');
   };
   const saveSession = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -726,11 +829,17 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     </div>}
 
     {tab === 'focus' && <div className="space-y-4">
-      <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
+      <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div>
+        <p className={'mb-3 text-xs leading-5 '+muted}>集中終了・休憩終了時に「さばの味噌煮と牛乳」を再生します。通知を有効にした端末には、画面ロック中もプッシュ通知を送ります。</p><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
       <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">FOCUS SESSION</p><h2 className="mt-1 text-lg font-black">今日の自習</h2></div><span className={'rounded-full px-3 py-1.5 text-[10px] font-black '+(phase==='focus'?'bg-cyan-100 text-cyan-900':'bg-amber-100 text-amber-900')}>{phase==='focus'?'集中時間':'休憩時間'}</span></div>
+        <audio ref={timerMusicRef} src="/audio/saba-miso-to-milk.mp3" preload="none" />
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+          <span className={timerPushStatus.includes('予約しました') ? 'text-emerald-600' : muted}>{timerPushStatus || 'ロック中の通知には、この端末のWeb Push登録が必要です。'}</span>
+          <span className={muted}>音源：音々「さばの味噌煮と牛乳」</span>
+        </div>
         <div className="mb-5 flex flex-col items-center rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 px-4 py-7 text-white"><p className="text-[10px] font-bold tracking-[.2em] text-cyan-200">{phase==='focus'?'FOCUS':'BREAK'}</p><p className="my-2 font-mono text-6xl font-black tabular-nums sm:text-7xl">{timeText}</p><p className="text-xs text-white/70">勉強 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={()=>setTimerState('paused')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={()=>setTimerState('running')} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button><button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button></>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">途中終了</button>}</div>
-          {timerState==='running'&&<button type="button" onClick={()=>{setPhase(phase==='focus'?'break':'focus');setTimerRemaining((phase==='focus'?breakMinutes:focusMinutes)*60)}} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
+          <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button><button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button></>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">途中終了</button>}</div>
+          {timerState==='running'&&<button type="button" onClick={switchTimerPhase} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">一時停止中</p>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
       </section>
