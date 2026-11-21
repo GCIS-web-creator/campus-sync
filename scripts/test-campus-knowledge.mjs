@@ -102,6 +102,7 @@ test('requires numeric answers to be numeric and rejects negative tolerance', ()
   const numeric = { ...validQuestion, question_type: 'numeric', options: [], correct_option_id: null, correct_answer: '2.5' };
   assert.equal(validateKnowledgeQuestion(numeric).error, undefined);
   assert.match(validateKnowledgeQuestion({ ...numeric, correct_answer: 'x+1' }).error || '', /数値/);
+  assert.match(validateKnowledgeQuestion({ ...numeric, correct_answer: '1'.repeat(121) }).error || '', /120文字/);
   assert.match(validateKnowledgeQuestion({ ...numeric, answer_tolerance: -1 }).error || '', /許容誤差/);
 });
 
@@ -115,6 +116,21 @@ test('requires license and attribution whenever an external source URL is suppli
     source_url: 'https://ftext.org/',
     source_license: 'CC BY 4.0',
     source_attribution: 'FTEXT（https://ftext.org）',
+  }).error, undefined);
+  assert.match(validateKnowledgeQuestion({
+    ...validQuestion,
+    source_name: 'Wikibooks',
+    source_url: 'https://ja.wikibooks.org/wiki/高等学校数学III',
+    source_license: 'CC BY-SA 4.0',
+    source_attribution: 'Wikibooks',
+  }).error || '', /revision ID/);
+  assert.equal(validateKnowledgeQuestion({
+    ...validQuestion,
+    source_name: 'Wikibooks',
+    source_url: 'https://ja.wikibooks.org/wiki/高等学校数学III',
+    source_license: 'CC BY-SA 4.0',
+    source_attribution: 'Wikibooks',
+    source_revision: 'oldid=123456',
   }).error, undefined);
 });
 
