@@ -55,6 +55,9 @@ type ApiPayload = {
 };
 type Props = { isDarkMode?: boolean };
 
+const TECHNICAL_LEVEL_THRESHOLDS = [1200, 6000, 18000, 30000, 60000] as const;
+const DAILY_LEARNING_XP_LIMIT_SECONDS = 12 * 60 * 60;
+
 const STAGES = [
   { name: '原始惑星', description: 'まだ文明のない静かな惑星', required: 0 },
   { name: '集落時代', description: '最初の暮らしの灯りが生まれる', required: 100 },
@@ -163,6 +166,8 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [recalculatingXp, setRecalculatingXp] = useState(false);
+  const [xpFeedback, setXpFeedback] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(async (quiet = false) => {
@@ -195,6 +200,28 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const recalculateLearningXp = async () => {
+    if (recalculatingXp) return;
+    setRecalculatingXp(true);
+    setError('');
+    setXpFeedback('');
+    try {
+      const { data, error: recalculateError } = await supabase.rpc('campus_recalculate_learning_xp');
+      if (recalculateError) throw recalculateError;
+      const result = data as { net_xp_change?: number; learning_xp?: number } | null;
+      if (!result) throw new Error('再計算結果を取得できませんでした。');
+
+      await load(true);
+      const delta = Number(result.net_xp_change || 0);
+      const deltaLabel = delta > 0 ? '+' + formatNumber(delta) : delta < 0 ? '−' + formatNumber(Math.abs(delta)) : '±0';
+      setXpFeedback(`12時間上限で再計算しました。学習XP ${deltaLabel}（累計 ${formatNumber(Number(result.learning_xp || 0))} XP）`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '学習XPを再計算できませんでした。');
+    } finally {
+      setRecalculatingXp(false);
+    }
+  };
 
   const totalXp = useMemo(() => growth
     ? Number(growth.learning_xp) + Number(growth.contribution_xp) + Number(growth.knowledge_xp)
@@ -250,18 +277,38 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
         </div>
 
         <section className={`rounded-2xl border p-4 ${panel}`}>
-          <div className="mb-3"><h2 className="text-sm font-black">4つの成長軸</h2><p className={`mt-1 text-[10px] ${subText}`}>各分野は対応する実績だけで独立して成長します。</p></div>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-black">4つの成長軸</h2>
+              <p className={`mt-1 text-[10px] ${subText}`}>各分野は対応する実績だけで独立して成長します。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void recalculateLearningXp()}
+              disabled={recalculatingXp || refreshing}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black disabled:opacity-50 ${isDarkMode ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20' : 'border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100'}`}
+            >
+              <RefreshCw size={13} className={recalculatingXp ? 'animate-spin' : ''}/>
+              {recalculatingXp ? '再計算中…' : '12時間上限でXPを再計算'}
+            </button>
+          </div>
+          <p className={`mb-3 rounded-xl px-3 py-2 text-[10px] leading-5 ${isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
+            学習XPは集中1分につき1XP、日本時間の1日につき最大12時間までです。再計算すると過去の学習記録も新ルールで集計し、差額は訂正履歴として残します。
+          </p>
+          {xpFeedback && <p role="status" className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-800">{xpFeedback}</p>}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { label: '技術文明', level: growth.technical_level, value: growth.learning_xp, unit: '学習XP', color: 'text-blue-500' },
-              { label: '社会文明', level: growth.social_level, value: growth.contribution_xp, unit: '学校貢献XP', color: 'text-amber-500' },
-              { label: '研究・知識', level: growth.research_level, value: growth.knowledge_xp, unit: '知識XP', color: 'text-emerald-500' },
-              { label: '自然環境', level: growth.nature_level, value: growth.nature_growth, unit: '自然成長値', color: 'text-teal-500' },
+              { label: '技術文明', level: growth.technical_level, value: growth.learning_xp, unit: '学習XP', color: 'text-blue-500', nextLevelXp: TECHNICAL_LEVEL_THRESHOLDS[growth.technical_level] ?? null },
+              { label: '社会文明', level: growth.social_level, value: growth.contribution_xp, unit: '学校貢献XP', color: 'text-amber-500', nextLevelXp: null },
+              { label: '研究・知識', level: growth.research_level, value: growth.knowledge_xp, unit: '知識XP', color: 'text-emerald-500', nextLevelXp: null },
+              { label: '自然環境', level: growth.nature_level, value: growth.nature_growth, unit: '自然成長値', color: 'text-teal-500', nextLevelXp: null },
             ].map(axis => (
               <div key={axis.label} className="rounded-xl border border-slate-200/70 p-3 dark:border-slate-700">
                 <div className="flex items-center justify-between gap-2"><p className="text-xs font-black">{axis.label}</p><span className={`text-[10px] font-black ${axis.color}`}>LEVEL {axis.level}</span></div>
                 <p className="mt-2 text-lg font-black tabular-nums">{formatNumber(axis.value)}</p>
                 <p className={`mt-1 text-[9px] ${subText}`}>{axis.unit}</p>
+                {axis.nextLevelXp !== null && <p className={`mt-2 text-[9px] font-bold ${subText}`}>次のLv.{axis.level + 1}まで {formatNumber(Math.max(0, axis.nextLevelXp - axis.value))} XP（累計 {formatNumber(axis.nextLevelXp)} XP）</p>}
+                {axis.label === '技術文明' && axis.nextLevelXp === null && <p className={`mt-2 text-[9px] font-bold ${subText}`}>最高レベルに到達</p>}
                 <div className="mt-2 flex gap-1">{Array.from({ length: 5 }, (_, index) => <span key={index} className={`h-1.5 flex-1 rounded-full ${index < axis.level ? 'bg-cyan-500' : 'bg-slate-200 dark:bg-slate-700'}`}/>)}</div>
               </div>
             ))}
