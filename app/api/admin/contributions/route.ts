@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const admin = getAdminClient();
     const { data: submissions, error } = await admin.from('campus_contribution_submissions')
       .select('id,user_id,activity_title,activity_date,description,status,xp_amount,review_reason,reviewer_label,reviewed_at,created_at,updated_at')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
 
