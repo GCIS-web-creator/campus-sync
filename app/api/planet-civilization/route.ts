@@ -70,7 +70,7 @@ async function ensurePlanet(admin: ReturnType<typeof getAdminClient>, userId: st
   if (growthCreateError) throw growthCreateError;
 
   const { data: growth, error: growthError } = await admin.from('campus_planet_growth')
-    .select('learning_xp,contribution_xp,knowledge_xp,nature_growth,updated_at')
+    .select('learning_xp,contribution_xp,knowledge_xp,nature_growth,technical_level,social_level,research_level,nature_level,civilization_score,recalculated_at,updated_at')
     .eq('planet_id', planet.id)
     .single();
   if (growthError || !growth) throw growthError || new Error('惑星の成長情報を取得できません。');
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     const { planet, growth } = await ensurePlanet(owner.admin, owner.user.id);
     const { data: recentLedger, error: ledgerError } = await owner.admin.from('campus_xp_ledger')
-      .select('id,xp_type,amount,source_type,source_date,reason,created_at')
+      .select('id,xp_type,amount,entry_kind,adjustment_direction,source_type,source_date,reason,rule_version,created_at')
       .eq('user_id', owner.user.id)
       .order('created_at', { ascending: false })
       .limit(12);
