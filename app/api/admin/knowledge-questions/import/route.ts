@@ -41,8 +41,11 @@ export async function POST(request: Request) {
     if (!value.subject_code) {
       return json({ success: false, message: (index + 1) + '問目: 数学の教科コードを指定してください。' }, 400);
     }
-    if (!value.source_url || !value.source_license || !value.source_attribution) {
-      return json({ success: false, message: (index + 1) + '問目: 外部教材のURL・ライセンス・出典表示が必要です。' }, 400);
+    if (!value.source_url && value.source_name !== 'CampusSyncオリジナル') {
+      return json({ success: false, message: (index + 1) + '問目: URLを省略できるのはCampusSyncオリジナルの問題だけです。' }, 400);
+    }
+    if (value.source_url && (!value.source_license || !value.source_attribution)) {
+      return json({ success: false, message: (index + 1) + '問目: 外部教材のライセンス・出典表示が必要です。' }, 400);
     }
     const sourceLabel = value.source_name.toLocaleLowerCase('ja-JP');
     if (sourceLabel.includes('wikibooks') && !value.source_revision) {
