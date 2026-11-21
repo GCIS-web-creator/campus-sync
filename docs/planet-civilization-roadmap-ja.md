@@ -2,7 +2,7 @@
 
 - 最終更新: 2026-11-21
 - 対象: CampusSync 本体
-- 状態: Phase 0仕様確定 / Phase 1 DB初版実装・SQL検証済み / CI・画面回帰確認中
+- 状態: Phase 0仕様確定 / Phase 1 DB・SQL・Worker CI・ローカルブラウザスモーク確認済み / 実認証・全機能回帰は未完了
 - 対象ブランチ: feature/planet-civilization-phase1-2-20261120
 
 この文書は、CampusSync内に個人の惑星を持ち、CampusSync内で確認できる学習・学校への貢献・知識習得・学習継続に応じて、惑星の自然と文明が成長する仕組みを定義する。PlanetubeやYouTubeの利用履歴には依存しない。フェーズを順番に進め、既存機能を壊さず、小さく動作確認しながら拡張する。
@@ -370,7 +370,7 @@ CampusSync内に次の画面を分けて設ける。
 
 **完了条件:** 2つ以上のテストアカウントで、他人のXP・惑星を読み書きできない。重複登録・連続送信・再読み込みでもXPが二重に増えない。
 
-**実装・DBテスト:** 6テーブル、所有者複合外部キー、本人限定SELECT RLS、service_role専用関数、台帳再計算、自然成長日次判定、Stageイベント記録を追加済み。テスト用データをトランザクション内で作り、A/B相互閲覧拒否・直接書き込み拒否・重複送信・180分上限・10分の自然成長しきい値・再計算安定性を確認してROLLBACK済み。GitHub Actions CIとブラウザ回帰確認は未完了のため、PRはDraft、本番アプリ未反映。
+**実装・DB・CI・ローカルブラウザテスト:** 6テーブル、所有者複合外部キー、本人限定SELECT RLS、service_role専用関数、台帳再計算、自然成長日次判定、Stageイベント記録を追加済み。テスト用データをトランザクション内で作り、A/B相互閲覧拒否・直接書き込み拒否・重複送信・180分上限・10分の自然成長しきい値・再計算安定性を確認してROLLBACK済み。GitHub Actions [Run #729](https://github.com/GCIS-web-creator/campus-sync/actions/runs/44851577269) でi18n、Next.js build、Worker build、Wrangler dry-run、ローカルWorkerのChromiumテストがすべて成功。ブラウザテストでは惑星表示・更新・390px幅、モックPomodoro保存からXP APIへのsession ID引き渡し、Planetubeログイン画面への遷移を確認した。実Supabase認証を使うライブE2Eと、対象外の学校機能全体の回帰は未実施。PR #36はDraft、本番アプリ未反映。
 
 ### Phase 2 — ポモドーロと学習XPの連携
 
