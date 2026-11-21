@@ -53,7 +53,7 @@ jobs:
         if: github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration')
         run: |
           set -euo pipefail
-          npx wrangler dev --ip 127.0.0.1 --port 8787 > /tmp/campus-sync-wrangler.log 2>&1 &
+          npx wrangler dev --local --ip 127.0.0.1 --port 8787 > /tmp/campus-sync-wrangler.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           READY=false
