@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     const { data, error } = await admin.from('campus_knowledge_questions')
       .select('id,subject,subject_code,unit,title,prompt,question_type,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,target_class,status,source_name,source_url,source_license,source_attribution,source_revision,content_hash,created_at,published_at')
       .order('created_at', { ascending: false })
-      .limit(500);
+      .limit(1000);
     if (error) throw error;
     return json({ success: true, questions: data || [] });
   } catch (error) {
