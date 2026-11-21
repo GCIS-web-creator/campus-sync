@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X } from 'lucide-react';
+import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, RefreshCw, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
@@ -11,6 +11,10 @@ type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: s
 type Range = { id: string; subject_id: string | null; school_test_subject_id: string | null; title: string; status: 'not_started' | 'in_progress' | 'completed' | 'reviewed' };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
+type PlanetGrowth = { learning_xp: number; technical_level: number };
+type LearningXpRecalculation = { net_xp_change: number; added_xp: number; removed_xp: number; learning_xp: number; technical_level: number };
+const LEARNING_XP_LEVEL_THRESHOLDS = [1200, 6000, 18000, 30000, 60000] as const;
+const DAILY_LEARNING_XP_CAP_SECONDS = 12 * 60 * 60;
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
 type TimerSnapshot = {
   version: 1;
@@ -72,6 +76,8 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [planetGrowth, setPlanetGrowth] = useState<PlanetGrowth | null>(null);
+  const [recalculatingXp, setRecalculatingXp] = useState(false);
   const [examId, setExamId] = useState('');
   const [rangeInput, setRangeInput] = useState('');
   const [rangeTarget, setRangeTarget] = useState('');
@@ -111,25 +117,48 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     setLoading(true); setError('');
     try {
       const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e, f] = await Promise.all([
+      const [a, b, c, d, e, f, g] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
         supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
         supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
+        supabase.from('campus_planet_growth').select('learning_xp,technical_level').eq('user_id', userId).maybeSingle(),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error || f.error;
+      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error;
       if (issue) throw issue;
       const newExams = (a.data || []) as Exam[];
       setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions((d.data || []) as Session[]);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
+      setPlanetGrowth(g.data ? { learning_xp: Number(g.data.learning_xp || 0), technical_level: Number(g.data.technical_level || 0) } : null);
       setExamId(current => current && newExams.some(exam => exam.id === current) ? current : (newExams[0]?.id || ''));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '学習データを読み込めませんでした。');
     } finally { setLoading(false); }
   }, [userId]);
+
+  const recalculateLearningXp = async () => {
+    if (recalculatingXp) return;
+    setRecalculatingXp(true);
+    setError('');
+    setMessage('');
+    try {
+      const { data, error: recalculateError } = await supabase.rpc('campus_recalculate_learning_xp');
+      if (recalculateError) throw recalculateError;
+      const result = data as LearningXpRecalculation | null;
+      if (!result) throw new Error('再計算結果を受け取れませんでした。');
+      await load();
+      const delta = Number(result.net_xp_change || 0);
+      const deltaLabel = delta > 0 ? '+' + delta : String(delta);
+      setMessage(`12時間上限で再計算しました。学習XP ${deltaLabel} XP（累計 ${Number(result.learning_xp || 0).toLocaleString('ja-JP')} XP）`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '学習XPを再計算できませんでした。');
+    } finally {
+      setRecalculatingXp(false);
+    }
+  };
 
   useEffect(() => { void load(); }, [load]);
 
@@ -350,6 +379,61 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
 
     {tab === 'overview' && <div className="space-y-4">
+      <section className={panel}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black tracking-[.18em] text-cyan-600">LEARNING XP</p>
+            <h2 className="mt-1 text-lg font-black">学習XP・技術レベル</h2>
+            <p className={'mt-1 text-xs ' + muted}>集中した時間を、1分につき1XPとして反映します。</p>
+          </div>
+          <div className="text-right">
+            <p className={'text-[10px] font-bold ' + muted}>累計学習XP</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-cyan-600">{(planetGrowth?.learning_xp || 0).toLocaleString('ja-JP')} <span className="text-xs">XP</span></p>
+            <p className={'text-xs font-black ' + muted}>TECHNICAL LV.{planetGrowth?.technical_level || 0}</p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
+            <span className="font-bold">次のレベルまで</span>
+            <span className={'font-bold tabular-nums ' + muted}>
+              {(planetGrowth?.technical_level || 0) >= 5
+                ? '最高レベル'
+                : `${Math.max(0, LEARNING_XP_LEVEL_THRESHOLDS[planetGrowth?.technical_level || 0] - (planetGrowth?.learning_xp || 0)).toLocaleString('ja-JP')} XP`}
+            </span>
+          </div>
+          <div className={'h-2.5 overflow-hidden rounded-full ' + (dark ? 'bg-slate-700' : 'bg-slate-100')}>
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-sky-400 transition-all"
+              style={{
+                width: (planetGrowth?.technical_level || 0) >= 5
+                  ? '100%'
+                  : Math.min(100, Math.max(0, ((planetGrowth?.learning_xp || 0) - ((planetGrowth?.technical_level || 0) > 0 ? LEARNING_XP_LEVEL_THRESHOLDS[(planetGrowth?.technical_level || 0) - 1] : 0)) /
+                      (LEARNING_XP_LEVEL_THRESHOLDS[planetGrowth?.technical_level || 0] - ((planetGrowth?.technical_level || 0) > 0 ? LEARNING_XP_LEVEL_THRESHOLDS[(planetGrowth?.technical_level || 0) - 1] : 0)) * 100)) + '%',
+              }}
+            />
+          </div>
+          <div className={'mt-1.5 flex justify-between text-[10px] ' + muted}>
+            <span>Lv.1 1,200 XP</span><span>Lv.5 60,000 XP</span>
+          </div>
+        </div>
+        <div className={'mt-4 rounded-xl p-3 ' + (dark ? 'bg-slate-900' : 'bg-slate-50')}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-black">今日のXP対象時間</span>
+            <span className="text-xs font-black tabular-nums">{duration(Math.min(todaySeconds, DAILY_LEARNING_XP_CAP_SECONDS))} / 12時間</span>
+          </div>
+          <div className={'mt-2 h-2 overflow-hidden rounded-full ' + (dark ? 'bg-slate-700' : 'bg-slate-200')}>
+            <div className="h-full rounded-full bg-cyan-600" style={{ width: Math.min(100, todaySeconds / DAILY_LEARNING_XP_CAP_SECONDS * 100) + '%' }} />
+          </div>
+          <p className={'mt-2 text-[10px] leading-5 ' + muted}>日本時間の1日ごとに最大12時間までがXP対象です。実際の学習時間の記録は上限で削られません。</p>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className={'max-w-md text-[10px] leading-5 ' + muted}>過去の学習記録も新ルールで再計算します。差額は調整履歴として保存され、同じ記録に二重付与されません。</p>
+          <button type="button" onClick={() => void recalculateLearningXp()} disabled={recalculatingXp || loading} className={primary}>
+            <RefreshCw size={15} className={recalculatingXp ? 'animate-spin' : ''} />
+            {recalculatingXp ? '再計算中…' : '12時間上限でXPを再計算'}
+          </button>
+        </div>
+      </section>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><section className={panel}><p className={'text-[10px] font-bold '+muted}>今日</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(todaySeconds)}</p></section><section className={panel}><p className={'text-[10px] font-bold '+muted}>今週</p><p className="mt-2 text-2xl font-black text-cyan-600">{duration(weekSeconds)}</p></section><section className={panel+' col-span-2 sm:col-span-1'}><p className={'text-[10px] font-bold '+muted}>考査登録数</p><p className="mt-2 text-2xl font-black">{exams.length}件</p></section></div>
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">今週の集中時間</h2><button type="button" onClick={() => setTab('history')} className="text-xs font-bold text-cyan-600">詳細</button></div><div className="grid grid-cols-7 items-end gap-2">{weekData.map(day => <div key={day.key} className="flex flex-col items-center gap-2"><span className={'text-[9px] '+muted}>{day.seconds ? Math.round(day.seconds/60)+'分' : '—'}</span><div className={'flex h-24 w-full items-end overflow-hidden rounded-lg '+(dark?'bg-slate-900':'bg-slate-100')}><div className="w-full rounded-lg bg-gradient-to-t from-cyan-700 to-sky-400" style={{height:Math.max(day.seconds?5:0,day.seconds/maxDay*100)+'%'}}/></div><span className={'text-[10px] font-bold '+muted}>{day.label}</span></div>)}</div></section>
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">次の考査</h2><button type="button" onClick={() => setTab('tests')} className="text-xs font-bold text-cyan-600">日程を見る</button></div>{exams.length ? exams.slice().sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,1).map(exam => <div key={exam.id} className="rounded-xl bg-gradient-to-r from-cyan-800 to-blue-700 p-4 text-white"><p className="text-xs text-cyan-100">{exam.school_year}年度・{exam.term}学期</p><p className="mt-1 text-xl font-black">{exam.exam_type}</p><p className="mt-2 text-xs">{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p><p className="mt-2 text-[11px] text-white/80">{subjects.filter(item=>item.exam_id===exam.id).length}教科登録</p></div>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はAdmin・先生が登録するとここに表示されます。</p>}</section>
