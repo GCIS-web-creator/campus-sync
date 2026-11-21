@@ -122,3 +122,13 @@
 - [ ] 実Supabase認証アカウントを使ったライブE2Eと実アカウントA/Bの画面レベル相互アクセス拒否を確認。
 - [ ] 時間割・課題・授業連絡・通知など学校機能全体の広範な回帰を確認。
 - [ ] Phase 2 PR #39のCI成功後、レビュー・マージ・Cloudflare本番デプロイを確認。
+
+
+## Phase 3 — 学校貢献XPとAdmin承認（実装中）
+
+- 生徒向け申請・履歴UI、申請API、Admin審査UI・APIを追加する。
+- 承認時のみ10 / 25 / 50 XPを学校貢献XPとして campus_xp_ledger に追記する。
+- 既存 contribution_scores / contribution_history と剣ランクには接続せず、独立した文明XPとして扱う。
+- 申請・再提出・取り下げ・審査イベントを保存し、本人のみが自分の履歴を読めるRLSを設定する。
+- 承認RPCは申請行をロックし、XP台帳・承認状態・監査イベント・惑星成長再計算を1トランザクションで実行する。
+- feature/planet-phase3-contributions-20261121 でCI検証を行う。Supabase本番マイグレーションとCloudflare本番デプロイはPR確認まで行わない。
