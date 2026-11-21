@@ -34,6 +34,8 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - run: npm ci
       - run: npm run check:i18n
+      - name: Test school exam range subject matching
+        run: node --experimental-strip-types --test scripts/test-school-range-matching.mjs
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime used by the LINE webhook
