@@ -202,7 +202,15 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC · MY PLANET</p><h1 className="mt-1 text-2xl font-black sm:text-3xl">惑星・文明</h1><p className={`mt-1 text-xs ${subText}`}>CampusSyncで積み重ねた学習と貢献が、ひとつの惑星を育てます。</p></div>
+        <div>
+          <p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC · MY PLANET</p>
+          <h1 className="mt-1 text-2xl font-black sm:text-3xl">惑星・文明</h1>
+          {planet && <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-3 py-1 text-xs font-bold ${isDarkMode ? 'border-slate-700 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}>{planet.planet_name || 'わたしの惑星'}</span>
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${planet.is_public ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : isDarkMode ? 'border-slate-700 bg-slate-800 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>{planet.is_public ? '公開中' : '非公開'}</span>
+          </div>}
+          <p className={`mt-2 text-xs ${subText}`}>CampusSyncで積み重ねた学習と貢献が、ひとつの惑星を育てます。</p>
+        </div>
         <button type="button" onClick={() => void load(true)} disabled={refreshing} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition ${isDarkMode ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-slate-200 bg-white hover:bg-slate-50'}`}><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''}/>更新</button>
       </header>
 
