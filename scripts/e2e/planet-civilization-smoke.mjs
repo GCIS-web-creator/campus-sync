@@ -4,6 +4,8 @@ import { chromium } from 'playwright';
 const origin = 'http://127.0.0.1:8787';
 const supabaseHost = 'build-check-placeholder.supabase.co';
 let planetGetCalls = 0;
+let savedStudySession = null;
+let xpAwardPayload = null;
 const user = {
   id: '11111111-1111-4111-8111-111111111111',
   aud: 'authenticated',
@@ -73,7 +75,8 @@ try {
           planetGetCalls += 1;
           return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(planetPayload) });
         }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, result: { awarded_xp: 1 } }) });
+        xpAwardPayload = request.postDataJSON();
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, result: { awarded_xp: 1, credited_seconds: 60 } }) });
       }
       if (url.pathname.startsWith('/api/')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }) });
@@ -90,6 +93,14 @@ try {
       };
       if (request.method() === 'OPTIONS') {
         return route.fulfill({ status: 204, headers: corsHeaders, body: '' });
+      }
+      if (url.pathname === '/rest/v1/student_study_sessions' && request.method() === 'POST') {
+        savedStudySession = request.postDataJSON();
+        return route.fulfill({
+          status: 200,
+          headers: { ...corsHeaders, 'content-type': 'application/json' },
+          body: JSON.stringify({ id: '44444444-4444-4444-8444-444444444444' }),
+        });
       }
       if (url.pathname === '/rest/v1/profiles') {
         return route.fulfill({
@@ -174,9 +185,25 @@ try {
     Math.max(mobileWidth.document, mobileWidth.body) <= mobileWidth.viewport + 2,
     'Planet screen should not introduce horizontal overflow on a 390px viewport: ' + JSON.stringify(mobileWidth),
   );
+  await page.goto(origin + '/#study', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '学習・テスト対策', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  await page.getByRole('button', { name: '集中', exact: true }).click();
+  await page.getByLabel('集中時間（分）').fill('1');
+  await page.getByLabel('課題・勉強内容').fill('ブラウザ確認用の学習');
+  await page.getByRole('button', { name: '開始' }).click();
+  await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
+  await page.getByRole('button', { name: '途中終了' }).click();
+  await page.getByLabel('勉強した内容').fill('短い集中セッションを保存する');
+  await page.getByLabel('次にやること').fill('次回も続ける');
+  await page.getByRole('button', { name: '記録を保存' }).click();
+  await page.getByText('学習記録を保存しました。学習XP +1 を獲得しました。', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+  assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 1, 'Pomodoro should save a positive focus duration');
+  assert.equal(xpAwardPayload?.action, 'award-learning-xp', 'Saved session should call the learning XP endpoint');
+  assert.equal(xpAwardPayload?.session_id, '44444444-4444-4444-8444-444444444444', 'Learning XP request should reference the saved session ID');
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: authenticated planet screen, private badge, XP/axis/history content, refresh action, and 390px mobile layout');
+  console.log('PASS: planet screen, private badge, XP/axis/history content, refresh, 390px mobile layout, Pomodoro save, and XP API handoff');
 } finally {
   await browser.close();
 }
