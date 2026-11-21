@@ -17,12 +17,21 @@ type Growth = {
   contribution_xp: number;
   knowledge_xp: number;
   nature_growth: number;
+  technical_level: number;
+  social_level: number;
+  research_level: number;
+  nature_level: number;
+  civilization_score: number;
+  recalculated_at: string | null;
   updated_at: string;
 };
 type LedgerEntry = {
   id: string;
   xp_type: 'learning' | 'contribution' | 'knowledge';
   amount: number;
+  entry_kind: 'award' | 'reversal' | 'adjustment';
+  adjustment_direction: 'increase' | 'decrease' | null;
+  rule_version: number;
   source_type: string;
   source_date: string;
   reason: string;
@@ -39,11 +48,11 @@ type Props = { isDarkMode?: boolean };
 
 const STAGES = [
   { name: '原始惑星', description: 'まだ文明のない静かな惑星', required: 0 },
-  { name: '集落時代', description: '最初の暮らしの灯りが生まれる', required: 60 },
-  { name: '都市形成期', description: '小さな街や道路が広がり始める', required: 240 },
-  { name: '産業・研究時代', description: '研究施設や交通網が発展する', required: 600 },
-  { name: '高度文明', description: '大都市と先端施設が共存する', required: 1200 },
-  { name: '惑星文明', description: '惑星全体に文明の光が広がる', required: 2400 },
+  { name: '集落時代', description: '最初の暮らしの灯りが生まれる', required: 100 },
+  { name: '都市形成期', description: '小さな街や道路が広がり始める', required: 500 },
+  { name: '産業・研究時代', description: '研究施設や交通網が発展する', required: 1200 },
+  { name: '高度文明', description: '大都市と先端施設が共存する', required: 2500 },
+  { name: '惑星文明', description: '惑星全体に文明の光が広がる', required: 5000 },
 ] as const;
 
 function formatNumber(value: number) {
@@ -170,14 +179,17 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const totalGrowth = useMemo(() => growth
+  const totalXp = useMemo(() => growth
     ? Number(growth.learning_xp) + Number(growth.contribution_xp) + Number(growth.knowledge_xp)
     : 0, [growth]);
+  const civilizationScore = useMemo(() => growth
+    ? Number(growth.civilization_score ?? (totalXp + Number(growth.nature_growth) * 5))
+    : 0, [growth, totalXp]);
   const stage = Math.max(0, Math.min(5, planet?.civilization_stage ?? 0));
   const nextStage = STAGES[Math.min(5, stage + 1)];
   const previousThreshold = STAGES[stage].required;
   const progress = stage >= 5 ? 100 : Math.max(0, Math.min(100,
-    Math.round((totalGrowth - previousThreshold) / Math.max(1, nextStage.required - previousThreshold) * 100)
+    Math.round((civilizationScore - previousThreshold) / Math.max(1, nextStage.required - previousThreshold) * 100)
   ));
 
   const panel = isDarkMode ? 'border-slate-700 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-900';
@@ -201,7 +213,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
           <PlanetArtwork stage={stage}/>
           <section className={`rounded-[26px] border p-4 sm:p-5 ${panel}`}>
             <div className="flex items-start justify-between gap-3"><div><p className={`text-[9px] font-black tracking-[.2em] ${subText}`}>CIVILIZATION</p><h2 className="mt-1 text-xl font-black">{STAGES[stage].name}</h2><p className={`mt-2 text-xs leading-5 ${subText}`}>{STAGES[stage].description}</p></div><span className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-500"><Orbit size={23}/></span></div>
-            <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">惑星の成長</span><span className="text-xs font-black tabular-nums">{formatNumber(totalGrowth)} XP</span></div><div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-700" style={{ width: progress + '%' }}/></div><p className={`mt-2 text-[10px] ${subText}`}>{stage >= 5 ? '現在の最終段階に到達しています。' : `次の段階「${nextStage.name}」まであと ${formatNumber(Math.max(0, nextStage.required - totalGrowth))} XP`}</p></div>
+            <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">文明発展スコア</span><span className="text-xs font-black tabular-nums">{formatNumber(civilizationScore)}</span></div><div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-700" style={{ width: progress + '%' }}/></div><p className={`mt-2 text-[10px] ${subText}`}>{stage >= 5 ? '現在の最終段階に到達しています。' : `次の段階「${nextStage.name}」まであと ${formatNumber(Math.max(0, nextStage.required - civilizationScore))} ポイント`}</p><p className={`mt-1 text-[9px] ${subText}`}>XP合計 {formatNumber(totalXp)} + 自然成長値 {formatNumber(growth.nature_growth)} × 5</p></div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-3"><div className="flex items-center gap-2 text-blue-500"><BookOpen size={15}/><span className="text-[10px] font-black">学習XP</span></div><p className="mt-2 text-xl font-black tabular-nums">{formatNumber(growth.learning_xp)}</p><p className={`mt-1 text-[9px] ${subText}`}>集中した学習時間</p></div>
               <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-3"><div className="flex items-center gap-2 text-amber-500"><Users size={15}/><span className="text-[10px] font-black">学校貢献XP</span></div><p className="mt-2 text-xl font-black tabular-nums">{formatNumber(growth.contribution_xp)}</p><p className={`mt-1 text-[9px] ${subText}`}>承認された学校への貢献</p></div>
