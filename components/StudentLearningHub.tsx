@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { matchSchoolRangeSubjects } from '@/lib/school-range-matching.mts';
+import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import { supabase } from '@/lib/supabase';
 import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
