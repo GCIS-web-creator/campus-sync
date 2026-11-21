@@ -2,8 +2,8 @@
 
 - 最終更新: 2026-11-21
 - 対象: CampusSync 本体
-- 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・ローカルWorkerスモークは本番反映済み / 実認証ライブE2E・全学校機能回帰は未完了 / Phase 2の復旧強化をPR #39で検証中
-- 対象ブランチ: cloudflare-workers-migration / feature/planet-civilization-phase2-reliability-20261121
+- 状態: Phase 0〜2の実装・CI・Cloudflare本番反映済み / Phase 3の学校貢献XP・Admin審査はコードとテスト実装済み、Supabase本番マイグレーション・実認証ライブ確認は未完了 / 実認証ライブE2E・学校機能全体回帰も未完了
+- 対象ブランチ: cloudflare-workers-migration / feature/planet-phase3-contributions-20261121
 
 この文書は、CampusSync内に個人の惑星を持ち、CampusSync内で確認できる学習・学校への貢献・知識習得・学習継続に応じて、惑星の自然と文明が成長する仕組みを定義する。PlanetubeやYouTubeの利用履歴には依存しない。フェーズを順番に進め、既存機能を壊さず、小さく動作確認しながら拡張する。
 
@@ -392,7 +392,7 @@ CampusSync内に次の画面を分けて設ける。
 
 **完了条件:** タイマーの集中・休憩・一時停止・再開・途中終了・完了の秒数を分け、保存時間とXPが一致する。API一時失敗後の再読み込みでも未反映IDを復旧し、同一session IDの再試行で二重付与が発生しない。GitHub ActionsのモックWorker/Chromium E2Eで確認済み。実アカウントを用いたライブE2Eは別途の受け入れ確認として残る。
 
-**追加改善（Phase 2完了後）:** 途中中断の記録を保存した後も、残り時間・教科・課題を保持し、別の学習区間として再開できるUXを追加中。これはPhase 2の元の完了条件に含まれない追加改善。
+**追加改善（PR #40・本番ブランチ統合済み）:** 「中断して記録」後の残り時間・教科・課題の保持と、再開後の区間分割、通知曲再生を本番ブランチへ統合済み。
 
 ### Phase 3 — 学校貢献XPとAdmin承認
 
@@ -407,6 +407,10 @@ CampusSync内に次の画面を分けて設ける。
 - 既存の貢献スコアとは独立した文明XPとして扱う。
 
 **完了条件:** 申請者・承認者・付与量・理由を追跡でき、却下申請からXPが増えない。
+
+**実装状況（PR #41）:** 生徒の申請・履歴・取り下げ・差し戻し後の再提出、Admin審査UI/API、10 / 25 / 50 XPの固定値、却下・差し戻し理由必須、監査イベント、重複申請・二重XP防止RPC、RLS・権限設定、入力検証テストを実装済み。PR CIでNext.js build・Worker build・Wrangler dry-run・Planetブラウザスモークまで成功。
+
+**本番受け入れ待ち:** PRの最新本番ブランチへの統合、Supabase本番マイグレーション適用、Cloudflare本番デプロイ、実Supabase認証アカウントでの申請→承認→XP反映→履歴再読込→二重付与防止テスト。これらを確認するまではPhase 3完了としない。
 
 ### Phase 4 — 知識XPと理解度の確認
 

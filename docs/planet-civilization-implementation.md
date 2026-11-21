@@ -1,13 +1,13 @@
 # CampusSync 惑星・文明システム 実装記録
 
-- 対象ブランチ: cloudflare-workers-migration / feature/pomodoro-saba-audio-resume-20261121
+- 対象ブランチ: cloudflare-workers-migration / feature/planet-phase3-contributions-20261121
 - 基準ブランチ: cloudflare-workers-migration
 - 更新日: 2026-11-21
-- 状態: Phase 0完了 / Phase 1基盤は本番反映済み / Phase 2のPomodoro→XP連携・未反映XP復旧・元学習記録の履歴表示は本番反映済み（PR #39、CI #766・本番CI #767成功） / 実認証ライブE2E・学校機能全体の広範な回帰は未完了
+- 状態: Phase 0〜2の基盤・Pomodoro改善は本番ブランチ統合済み / Phase 3の学校貢献XP申請・Admin審査コードとCIテストは実装済み / Supabase本番マイグレーション・Phase 3本番API確認は未完了 / 実認証ライブE2E・学校機能全体回帰は別途未完了
 - 設計書: docs/planet-civilization-roadmap-ja.md
 - Phase 1基盤: PR #36（マージ済み）
 - Phase 2本体・信頼性強化: PR #39（マージ済み）
-- 追加改善: PR準備中（途中中断後の再開、通知曲再生）
+- Phase 2追加改善: PR #40の中断再開・通知曲再生は本番ブランチへ統合済み
 
 ## Phase 0で確定した方針
 
@@ -105,14 +105,14 @@
 - E2Eでは集中・休憩・一時停止・再開・途中終了、XP履歴の学習根拠表示、API一時失敗、再読み込み後の復旧、再試行後のキュー削除を確認した。
 - GitHub Actions PR #39のCI #766、本番ブランチCI #767は成功し、Worker本番反映済み。
 
-### 追加改善（今回の依頼・PR準備中）
+### 追加改善（PR #40・本番ブランチ統合済み）
 
-- 「中断して記録」後に課題・教科・残り時間を保持し、保存済みの区間は別の学習記録としてXP計上する。再開後の区間と前回区間を分け、同じ時間を二重計上しない。
-- 通知曲テストと集中/休憩終了音を、添付された「鯖の味噌煮と牛乳」へ切り替えるコードを追加中。静的MP3ファイルを `public/audio/x005_saba.mp3` に格納する作業は未完了のため、現時点では本番に出せない。
+- 「中断して記録」後も課題・教科・残り時間を保持し、再開後の区間を別の学習記録としてXP計上する改善を統合。
+- 通知曲テストと集中/休憩終了音の再生機能、および `public/audio/x005_saba.mp3` を本番ブランチへ統合。
 
 ## 今回は対象外
 
-- 学校貢献XPの申請・Admin承認UI（Phase 3）。
+- 知識XPの練習問題連携（Phase 4）。
 - 知識XPの練習問題連携（Phase 4）。
 - 建物・技術・景観を自動解放するルールエンジン（Phase 5）。Phase 1では保存テーブルだけを用意。
 - 他人の惑星公開、ランキング、共同ミッション、資源管理、建築配置、惑星間移動。
@@ -126,4 +126,23 @@
 - [x] 惑星画面・更新操作・390px幅の表示・Pomodoro保存からXP APIへのsession ID引き渡しをモックE2Eで確認。
 - [ ] 実Supabase認証アカウントを使ったライブE2Eと実アカウントA/Bの画面レベル相互アクセス拒否を確認。
 - [ ] 時間割・課題・授業連絡・通知など学校機能全体の広範な回帰を確認。
-- [ ] Phase 2 PR #39のCI成功後、レビュー・マージ・Cloudflare本番デプロイを確認。
+- [x] Phase 2 PR #39とPR #40の実装を本番ブランチへ統合し、Cloudflare本番デプロイをCIで確認。
+- [ ] 実Supabase認証を使ったライブE2Eと学校機能全体の広範な回帰を実施。
+
+## Phase 3 — 学校貢献XPとAdmin承認
+
+### 実装済みコード
+
+- 生徒向け貢献活動申請フォーム、申請履歴、審査状態表示を追加。
+- 審査待ち申請の取り下げ、差し戻し後の修正・再提出を追加。
+- Admin画面に承認・却下・差し戻しの審査UIを追加。承認XPは10 / 25 / 50に限定し、却下・差し戻しは理由必須。
+- 学校メールの本人確認後にAPIを利用し、申請と履歴は本人のuser_idで限定。Admin APIは既存のAdminセッション／パスワード認証を使用。
+- `campus_contribution_submissions` と `campus_contribution_review_events` を作成するマイグレーションを追加。両テーブルRLS、本人SELECTのみ、直接書き込み不可、service_role RPC限定。
+- 承認RPCは申請行ロック・XP台帳の発生元一意制約・同一トランザクションでの惑星成長再計算により二重付与と部分反映を防止する設計。
+- 入力検証テスト、Next.js build、Worker build、Wrangler dry-run、PlanetブラウザスモークがPR CIで成功。
+
+### 本番反映待ち
+
+- Supabase本番マイグレーション適用と権限・RLS・関数の確認。
+- PR #41の最新本番ブランチとの統合、Cloudflare本番デプロイ。
+- 実Supabase認証アカウントで申請→Admin審査→10 / 25 / 50 XP反映→再読込→二重付与防止を確認。
