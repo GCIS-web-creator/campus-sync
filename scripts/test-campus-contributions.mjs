@@ -19,7 +19,7 @@ test('accepts a well-formed contribution submission', () => {
 
 test('rejects short and oversized contribution fields', () => {
   assert.match(validateContributionSubmission({
-    activity_title: '手伝い',
+    activity_title: '準備',
     activity_date: '2026-11-20',
     description: '十分な説明があります。',
   }).error || '', /活動名/);
