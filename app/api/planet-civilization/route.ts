@@ -85,13 +85,42 @@ export async function GET(request: NextRequest) {
 
     const { planet, growth } = await ensurePlanet(owner.admin, owner.user.id);
     const { data: recentLedger, error: ledgerError } = await owner.admin.from('campus_xp_ledger')
-      .select('id,xp_type,amount,entry_kind,adjustment_direction,source_type,source_date,reason,rule_version,created_at')
+      .select('id,xp_type,amount,entry_kind,adjustment_direction,source_type,source_id,source_date,reason,rule_version,created_at')
       .eq('user_id', owner.user.id)
       .order('created_at', { ascending: false })
       .limit(12);
     if (ledgerError) throw ledgerError;
 
-    return json({ success: true, planet, growth, recentLedger: recentLedger || [] });
+    const ledger = recentLedger || [];
+    const learningSessionIds = [...new Set(ledger
+      .filter(entry => entry.xp_type === 'learning' && entry.source_type === 'student_study_session' && UUID.test(String(entry.source_id || '')))
+      .map(entry => String(entry.source_id)))];
+
+    let learningSessionsById = new Map<string, {
+      id: string;
+      subject_name: string;
+      task_title: string;
+      focus_seconds: number;
+      break_seconds: number;
+      started_at: string;
+      finish_kind: 'completed' | 'stopped';
+    }>();
+
+    if (learningSessionIds.length) {
+      const { data: learningSessions, error: sessionsError } = await owner.admin.from('student_study_sessions')
+        .select('id,subject_name,task_title,focus_seconds,break_seconds,started_at,finish_kind')
+        .eq('user_id', owner.user.id)
+        .in('id', learningSessionIds);
+      if (sessionsError) throw sessionsError;
+      learningSessionsById = new Map((learningSessions || []).map(session => [session.id, session]));
+    }
+
+    const recentLedgerWithSources = ledger.map(entry => ({
+      ...entry,
+      source_session: learningSessionsById.get(String(entry.source_id || '')) || null,
+    }));
+
+    return json({ success: true, planet, growth, recentLedger: recentLedgerWithSources });
   } catch (error) {
     console.error('[planet-civilization] GET failed:', error);
     return json({ success: false, message: '惑星データを読み込めませんでした。' }, 500);
