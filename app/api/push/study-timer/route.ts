@@ -63,8 +63,8 @@ export async function POST(request: Request) {
     const { data: preference, error: preferenceError } = await admin
       .from('push_reminder_preferences').select('notification_settings').eq('user_id', user.id).maybeSingle();
     if (preferenceError) throw preferenceError;
-    if (preference?.notification_settings?.todo_reminders === false) {
-      return json({ success: false, message: '通知設定で提出期限リマインダーがOFFです。プロフィールの通知設定を確認してください。' }, 409);
+    if (preference?.notification_settings?.study_timer === false) {
+      return json({ success: false, message: '通知設定でポモドーロ終了通知がOFFです。プロフィールの通知設定を確認してください。' }, 409);
     }
 
     const studentId = String(user.email).split('@')[0];
