@@ -148,6 +148,8 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
     }
   }, [page, subjectFilter, unitFilter, difficultyFilter]);
 
+  // Load the first page once; subsequent loads are explicit filter/page actions.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load({ page: 1 }); }, []);
 
   const selected = useMemo(
