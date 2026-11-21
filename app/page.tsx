@@ -10,6 +10,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
+import MathPracticeHub from '@/components/MathPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import LineAccountLinkCard from '@/components/LineAccountLinkCard';
@@ -4513,6 +4514,11 @@ Supabaseの設定を確認してください。
           ? <StudentLearningHub userId={String(authUser.id)} userEmail={String(authUser.email || '')} userClass={userClass} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習機能はログイン後に利用できます</h2></div>;
 
+      case 'math-practice':
+        return authUser?.id && !isGuestMode
+          ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">数学演習はログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、問題演習や学習履歴を利用できます。</p></div>;
+
       case 'planet':
         return authUser?.id && !isGuestMode
           ? <PlanetCivilization isDarkMode={isDarkMode} />
@@ -6184,6 +6190,12 @@ Supabaseの設定を確認してください。
           key: 'planet', label: '惑星・文明', icon: <Orbit size={17} />,
           isActive: activeTab === 'planet', keywords: ['惑星', '文明', '成長', 'Learning XP'],
           onSelect: () => setActiveTab('planet'),
+        }] : []),
+        ...(authUser?.id ? [{
+          key: 'math-practice', label: '数学演習', icon: <BookOpenCheck size={17} />,
+          isActive: activeTab === 'math-practice',
+          keywords: ['数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
+          onSelect: () => setActiveTab('math-practice'),
         }] : []),
         {
           key: 'timetable', label: '時間割表', icon: <Calendar size={17} />,
