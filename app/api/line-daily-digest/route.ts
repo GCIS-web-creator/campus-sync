@@ -72,10 +72,10 @@ function upcomingWeatherDays(value: unknown, startDate: string): WeatherDayForec
 }
 
 async function fetchDigestWeatherForecast(
-  admin: ReturnType<typeof createClient>,
+  admin: WeatherCacheTableClient,
   startDate: string,
 ): Promise<DigestWeatherResult> {
-  const weatherCache = (admin as unknown as WeatherCacheTableClient).from('campussync_weather_forecast_cache');
+  const weatherCache = admin.from('campussync_weather_forecast_cache');
 
   try {
     const freshForecast = await fetchSchoolWeatherForecast(5);
@@ -874,7 +874,7 @@ export async function POST(request: Request) {
       .select('group_name,day_key,period,subject,teacher')
       .order('group_name', { ascending: true }).order('day_key', { ascending: true }).order('period', { ascending: true }),
     // 今日を除外しても明日から3日分を確保できるよう、5日分の予報を取得する。
-    fetchDigestWeatherForecast(admin, tomorrow.dateKey),
+    fetchDigestWeatherForecast(admin as unknown as WeatherCacheTableClient, tomorrow.dateKey),
     admin.from('assignments')
       .select('id,title,details,subject,subject_option,target_class,due_at,is_active')
       .eq('is_active', true)
