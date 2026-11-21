@@ -214,10 +214,12 @@ try {
   await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '休憩に切り替える' }).click();
   await page.getByText('休憩時間', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '集中に戻る' }).click();
   await page.getByText('集中時間', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '一時停止' }).click();
   await page.getByText('一時停止中', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(1300);
   await page.getByRole('button', { name: '再開' }).click();
   await page.getByRole('button', { name: '途中終了' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(1300);
@@ -226,7 +228,9 @@ try {
   await page.getByLabel('次にやること').fill('次回も続ける');
   await page.getByRole('button', { name: '記録を保存' }).click();
   await page.getByText('学習記録を保存しました。学習XP +1 を獲得しました。', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
-  assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 1, 'Pomodoro should save a positive focus duration');
+  assert.ok(savedStudySession && Number(savedStudySession.focus_seconds) >= 2, 'Pomodoro should save positive focus time including the resumed segment');
+  assert.ok(Number(savedStudySession.focus_seconds) <= 5, 'Break and paused time must not be added to focus duration');
+  assert.ok(Number(savedStudySession.break_seconds) >= 1, 'Break time should be stored separately from focus time');
   assert.equal(xpAwardPayload?.action, 'award-learning-xp', 'Saved session should call the learning XP endpoint');
   assert.equal(xpAwardPayload?.session_id, '44444444-4444-4444-8444-000000000001', 'Learning XP request should reference the saved session ID');
 
