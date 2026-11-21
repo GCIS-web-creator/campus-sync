@@ -54,7 +54,7 @@ export function validateKnowledgeQuestion(input: unknown):
   const question_type = (input.question_type === undefined ? 'multiple_choice' : input.question_type) as KnowledgeQuestionType;
   const difficulty = input.difficulty;
   const status = input.status === 'published' ? 'published' : input.status === 'draft' || input.status === undefined ? 'draft' : null;
-  const target_class = readString(input.target_class, 'all') || 'all';
+  const target_class = input.target_class === undefined ? 'all' : readString(input.target_class);
   const source_name = readString(input.source_name, 'CampusSyncオリジナル') || 'CampusSyncオリジナル';
   const source_url = readString(input.source_url) || null;
   const source_license = readString(input.source_license) || null;
