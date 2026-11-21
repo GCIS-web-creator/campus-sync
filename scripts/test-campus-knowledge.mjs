@@ -84,6 +84,6 @@ test('rejects malformed question, attempt, and option identifiers', () => {
     question_id: questionId, attempt_id: 'not-a-uuid', selected_option_id: 'a',
   }).error || '', /回答ID/);
   assert.match(validateKnowledgeAttempt({
-    question_id: questionId, attempt_id: attemptId, selected_option_id: 'correct',
+    question_id: questionId, attempt_id: attemptId, selected_option_id: 'bad option!',
   }).error || '', /選択肢/);
 });
