@@ -301,6 +301,10 @@ try {
   assert.equal(retriedRequests.length, 2, 'Pending XP request should be retried with the same session ID');
   const persistedAfterRetry = await page.evaluate(key => localStorage.getItem(key), pendingStorageKey);
   assert.equal(persistedAfterRetry, null, 'Successfully retried XP session should be removed from local storage');
+  // The page reload resets the learning-hub subtab to Overview; reopen Focus
+  // before asserting the restored paused timer controls.
+  await page.getByRole('button', { name: '集中', exact: true }).click();
+  await page.getByRole('button', { name: 'この勉強を終了', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByRole('button', { name: 'この勉強を終了', exact: true }).click();
   await page.getByRole('button', { name: '開始', exact: true }).waitFor({ state: 'visible' });
 
