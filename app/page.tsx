@@ -10,6 +10,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
+import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import LineAccountLinkCard from '@/components/LineAccountLinkCard';
 import StudentAttendance from '@/components/StudentAttendance';
@@ -31,7 +32,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit
 } from 'lucide-react';
 import {
   AnimatedAsset,
@@ -443,6 +444,7 @@ type StudentNavigationGroup = {
 const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'tools'] as const;
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
+  planet: 'learning',
   materials: 'learning',
   timetable: 'learning',
   'school-schedule': 'learning',
@@ -1020,6 +1022,7 @@ export default function CampusSyncApp() {
       notices: { tab: 'notifications' },
       notes: { tab: 'notes' },
       study: { tab: 'study' },
+      planet: { tab: 'planet' },
       card: { tab: 'student-card' },
       'student-card': { tab: 'student-card' },
       calculator: { tab: 'calculator' },
@@ -1061,6 +1064,7 @@ export default function CampusSyncApp() {
       ai: 'ai',
       notes: 'notes',
       study: 'study',
+      planet: 'planet',
       'student-card': 'student-card',
       calculator: 'calculator',
       bus: 'transit',
@@ -4504,6 +4508,11 @@ Supabaseの設定を確認してください。
           ? <StudentLearningHub userId={String(authUser.id)} userEmail={String(authUser.email || '')} userClass={userClass} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習機能はログイン後に利用できます</h2></div>;
 
+      case 'planet':
+        return authUser?.id && !isGuestMode
+          ? <PlanetCivilization isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Orbit size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">惑星・文明はログイン後に利用できます</h2></div>;
+
       case 'student-card':
         return authUser?.id && !isGuestMode
           ? <DigitalStudentCard studentName={studentName} studentId={studentId} userClass={userClass} isDarkMode={isDarkMode} onOpen={() => { void handleActivateStudentCard(); }} />
@@ -6165,6 +6174,10 @@ Supabaseの設定を確認してください。
           key: 'study', label: '学習・テスト対策', icon: <BookOpenCheck size={17} />,
           isActive: activeTab === 'study', keywords: ['勉強', '小テスト', '定期試験', '学習記録'],
           onSelect: () => setActiveTab('study'),
+        }, {
+          key: 'planet', label: '惑星・文明', icon: <Orbit size={17} />,
+          isActive: activeTab === 'planet', keywords: ['惑星', '文明', '成長', 'Learning XP'],
+          onSelect: () => setActiveTab('planet'),
         }] : []),
         {
           key: 'timetable', label: '時間割表', icon: <Calendar size={17} />,
