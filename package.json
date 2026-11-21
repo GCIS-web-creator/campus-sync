@@ -14,7 +14,8 @@
     "cloudflare:build": "npm run cloudflare:install && npx opennextjs-cloudflare build",
     "cloudflare:preview": "npm run cloudflare:build && npx wrangler dev",
     "cloudflare:deploy": "npm run cloudflare:build && npx opennextjs-cloudflare deploy",
-    "test:contributions": "node --experimental-strip-types --test scripts/test-campus-contributions.mjs"
+    "test:contributions": "node --experimental-strip-types --test scripts/test-campus-contributions.mjs",
+    "test:knowledge": "node --experimental-strip-types --test scripts/test-campus-knowledge.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
