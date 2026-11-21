@@ -1,7 +1,7 @@
 # CampusSync 惑星・文明システム ロードマップ
 
 - 最終更新: 2026-11-21
-- Phase 3実装ブランチ: feature/planet-phase3-contributions-20261121（PR作成前・CI検証中）
+- Phase 3実装ブランチ: feature/planet-phase3-contributions-20261121（PR #41 Draft作成済み・CI検証中）
 - 対象: CampusSync 本体
 - 状態: Phase 0完了 / Phase 1のDB・RLS・XP台帳・惑星画面・SQLテスト・ローカルWorkerスモークは本番反映済み / 実認証ライブE2E・全学校機能回帰は未完了 / Phase 2の復旧強化をPR #39で検証中
 - 対象ブランチ: cloudflare-workers-migration / feature/planet-civilization-phase2-reliability-20261121
