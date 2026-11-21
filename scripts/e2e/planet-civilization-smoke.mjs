@@ -57,6 +57,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({
     viewport: { width: 1365, height: 900 },
+    locale: 'ja-JP',
     reducedMotion: 'reduce',
   });
   const pageErrors = [];
@@ -169,7 +170,7 @@ try {
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
-  const refreshButton = planetHeader.locator('button').filter({ hasText: '更新' }).first();
+  const refreshButton = planetHeader.locator('button').filter({ hasText: /更新|Refresh/ }).first();
   const refreshCount = await refreshButton.count();
   if (refreshCount !== 1) {
     const visibleButtons = await page.locator('button').allTextContents();
