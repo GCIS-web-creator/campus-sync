@@ -56,6 +56,14 @@ function readTimerSnapshot(userId: string): TimerSnapshot | null {
 }
 const STATUS: Record<Range['status'], string> = { not_started: '未着手', in_progress: '勉強中', completed: '一通り完了', reviewed: '復習済み' };
 
+// 日程データと公開範囲データで使われている科目名の違いを吸収する。
+// 複合科目は構成科目ごとに照合し、一部だけ公開されている状態も判定する。
+const SCHOOL_RANGE_SUBJECT_ALIASES: Record<string, string[]> = {
+  '英コミュⅡ': ['英コミュ'],
+  '論理表現Ⅱ（30分）': ['論表'],
+  '物理・生物': ['物理', '生物'],
+};
+
 const dayKey = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const duration = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -328,10 +336,25 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const isVisibleSchoolRange = (item: SchoolExamRange) => item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass);
   const getPublishedRangeProgress = (targetExamId: string, subjectName: string) => {
-    const rows = schoolRanges.filter(item => item.exam_id === targetExamId && item.subject === subjectName && isVisibleSchoolRange(item));
+    const expectedSubjects = SCHOOL_RANGE_SUBJECT_ALIASES[subjectName] || [subjectName];
+    const rows = schoolRanges.filter(item =>
+      item.exam_id === targetExamId &&
+      isVisibleSchoolRange(item) &&
+      expectedSubjects.some(expected => item.subject === expected || item.display_subject === expected)
+    );
+    const registeredSubjects = expectedSubjects.filter(expected =>
+      rows.some(item => item.subject === expected || item.display_subject === expected)
+    );
+    const missingSubjects = expectedSubjects.filter(expected => !registeredSubjects.includes(expected));
     const sections = rows.flatMap(row => (row.range_sections || []).filter(section => section.kind !== 'notice').map(section => ({ row, section })));
     const completed = sections.filter(({ row, section }) => publishedRangeProgress.some(progress => progress.school_test_range_id === row.id && progress.section_id === section.section_id && progress.completed)).length;
-    return { total: sections.length, completed, percent: sections.length ? Math.round(completed / sections.length * 100) : 0 };
+    return {
+      total: sections.length,
+      completed,
+      percent: sections.length ? Math.round(completed / sections.length * 100) : 0,
+      registeredSubjects,
+      missingSubjects,
+    };
   };
 
   const setPublishedRangeCompleted = async (range: SchoolExamRange, section: SchoolRangeSection, completed: boolean) => {
@@ -452,12 +475,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     const done = list.filter(item => item.status === 'completed' || item.status === 'reviewed').length;
     return { count: list.length, percent: list.length ? Math.round(done / list.length * 100) : 0 };
   };
-  const scopeColor = (percent: number, total: number) => !total
-    ? dark ? 'border-slate-600 bg-slate-800 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
-    : percent === 100 ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
-    : percent >= 50 ? 'border-cyan-300 bg-cyan-100 text-cyan-900'
-    : percent > 0 ? 'border-amber-300 bg-amber-100 text-amber-900'
-    : 'border-rose-200 bg-rose-50 text-rose-800';
+  const scopeColor = (percent: number, total: number, partial = false) => partial
+    ? 'border-amber-300 bg-amber-100 text-amber-900'
+    : !total
+      ? dark ? 'border-slate-600 bg-slate-800 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
+      : percent === 100 ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+      : percent >= 50 ? 'border-cyan-300 bg-cyan-100 text-cyan-900'
+      : percent > 0 ? 'border-amber-300 bg-amber-100 text-amber-900'
+      : 'border-rose-200 bg-rose-50 text-rose-800';
   const timeText = String(Math.floor(remaining / 60)).padStart(2, '0') + ':' + String(remaining % 60).padStart(2, '0');
 
   if (loading) return <div className={panel + ' mx-auto max-w-3xl text-center'}><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent"/><p className={'mt-3 text-sm ' + muted}>学習データを読み込んでいます…</p></div>;
@@ -482,7 +507,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     {tab === 'tests' && <div className="space-y-4">
       <section className={panel}>
         <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-black">学校公式の考査日程</h2><span className="rounded-full bg-cyan-50 px-3 py-1 text-[10px] font-black text-cyan-800">閲覧専用</span></div>
-        <p className={'mb-3 text-xs leading-5 '+muted}>考査の予定・実施教科はAdmin・先生が登録します。生徒は日程を確認し、自分用のテスト範囲と進捗を管理できます。</p>
+        <p className={'mb-2 text-xs leading-5 '+muted}>考査の予定・実施教科はAdmin・先生が登録します。生徒は日程を確認し、自分用のテスト範囲と進捗を管理できます。</p>
+        <p className={'mb-3 text-[10px] leading-5 '+muted}>表示の意味：0%＝公開範囲は登録済みで、履修チェックがまだ0件。「一部登録」＝複数科目のうち一部だけ公開。「範囲未登録」＝対応する学校公開範囲データがありません。0%はテストの点数ではありません。</p>
         {exams.length ? exams.map(exam => {
           const examSubjects = subjects.filter(item => item.exam_id === exam.id).slice().sort((a,b)=>a.exam_date.localeCompare(b.exam_date)||a.sort_order-b.sort_order);
           return <article key={exam.id} className={'mb-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
@@ -493,9 +519,9 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
                     setExamId(exam.id);
                     setShowRangeManager(true);
                     window.setTimeout(() => document.getElementById('subject-range-'+item.id)?.scrollIntoView({behavior:'smooth',block:'start'}), 80);
-                  }} className={'flex min-w-[112px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black shadow-sm transition hover:-translate-y-0.5 '+scopeColor(scope.percent, scope.total)}>
+                  }} title={scope.missingSubjects.length ? '公開済み: '+scope.registeredSubjects.join('・')+' / 未登録: '+scope.missingSubjects.join('・') : scope.total ? '登録済み範囲の履修チェック率' : '学校公開の出題範囲は未登録です'} className={'flex min-w-[112px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black shadow-sm transition hover:-translate-y-0.5 '+scopeColor(scope.percent, scope.total, scope.total > 0 && scope.missingSubjects.length > 0)}>
                     <span>{item.sort_order} ・ {item.subject}</span>
-                    <span className="shrink-0 text-[10px] tabular-nums">{scope.total ? scope.percent+'%' : '未登録'}</span>
+                    <span className="shrink-0 text-[10px] tabular-nums">{scope.total ? scope.missingSubjects.length ? '一部登録' : scope.percent+'%' : '範囲未登録'}</span>
                   </button>;
                 })}</div></div>)}
             {!examSubjects.length&&<p className={'text-xs '+muted}>実施教科・日ごとの日程は調整中です。確定後にここへ表示されます。</p>}</div>
@@ -561,8 +587,10 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
             const official=getPublishedRangeProgress(examId,subject.subject);
             const pct=official.percent;
             return <section id={'subject-range-'+subject.id} key={subject.id} className={panel+' scroll-mt-24'}>
-              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className={'rounded-full border px-3 py-1 text-xs '+scopeColor(official.percent,official.total)}>{official.total ? official.percent + '% 履修済み' : '範囲未登録'}</b></div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className={'rounded-full border px-3 py-1 text-xs '+scopeColor(official.percent,official.total,official.total > 0 && official.missingSubjects.length > 0)}>{official.total ? official.missingSubjects.length ? '一部登録' : official.percent + '% 履修済み' : '範囲未登録'}</b></div>
               {official.total>0 && <><div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:pct+'%'}}/></div><p className={'mt-1 text-[10px] '+muted}>学校公開の出題範囲 {official.completed}/{official.total} 項目完了。上の「学校公開の試験範囲」でチェックできます。</p></>}
+              {official.missingSubjects.length > 0 && <p className={'mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-5 text-amber-900'}>公開されている範囲：{official.registeredSubjects.join('・') || 'なし'}。未登録の範囲：{official.missingSubjects.join('・')}。登録済みの科目分だけ進捗に計上しています。</p>}
+              {official.total === 0 && <p className={'mt-2 text-[10px] leading-5 '+muted}>学校公開の出題範囲データがまだ紐づいていません。Admin・先生側での登録が必要です。</p>}
               <div className="mt-4 border-t border-slate-200/60 pt-3">
                 <h4 className="mb-2 text-xs font-black">自分用の学習メモ</h4>
                 <div className="space-y-2">{list.map(item=>{
