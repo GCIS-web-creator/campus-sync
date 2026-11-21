@@ -3,6 +3,7 @@
 
 import CafeteriaMenuImport, { type CafeteriaMenuImportRow } from '@/components/CafeteriaMenuImport';
 import { ContributionRankAdminGuide } from '@/components/ContributionRanks';
+import ContributionApprovalAdmin from '@/components/ContributionApprovalAdmin';
 import { CampusSyncLogo } from '@/components/CampusSyncLogo';
 import ChatModerationAdmin from '@/components/ChatModerationAdmin';
 import StudentProfileExportAdmin from '@/components/StudentProfileExportAdmin';
@@ -2547,6 +2548,7 @@ export default function CampusSyncAdmin() {
             <div className="mb-4 min-w-0">
               <ContributionRankAdminGuide />
             </div>
+            <ContributionApprovalAdmin adminPassword={adminApiPassword} />
             <div className="grid grid-cols-1 gap-6">
               {/* エアコン不満リアルタイムアラート */}
               <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800">

@@ -38,6 +38,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/test-school-range-matching.mjs
       - name: Test study timer Push request validation
         run: node --experimental-strip-types --test scripts/test-study-timer-push.mjs
+      - name: Test contribution submission and review validation
+        run: npm run test:contributions
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime and Playwright for browser smoke tests
@@ -77,8 +79,9 @@ jobs:
             exit 1
           fi
           node scripts/e2e/planet-civilization-smoke.mjs
-      # Build-time public Supabase config must be real for the production Worker.
-      # The service_role key remains a Cloudflare secret and is never bundled.
+      # PR/test builds keep the safe placeholder config above. Rebuild the production
+      # artifact with the real public Supabase URL and publishable key before deployment.
+      # The service_role key remains a Cloudflare secret and is never embedded in the bundle.
       - name: Build production Worker with Supabase public config
         if: github.ref == 'refs/heads/cloudflare-workers-migration'
         env:
