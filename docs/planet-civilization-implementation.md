@@ -3,7 +3,7 @@
 - 対象ブランチ: feature/planet-civilization-phase1-2-20261120
 - 基準ブランチ: cloudflare-workers-migration
 - 更新日: 2026-11-21
-- 状態: Phase 0仕様確定 / Phase 1のDB初版実装・SQL検証済み / CI・画面スモーク確認中
+- 状態: Phase 0仕様確定 / Phase 1 DB・SQL・Cloudflare Worker CI・モックブラウザスモーク完了 / 実アカウントを使う全機能回帰は未実施
 - 設計書: docs/planet-civilization-roadmap-ja.md
 - Phase 1 DB設計: docs/planet-civilization-phase1-database-design-ja.md
 - PR: #36（Draft、未マージ）
@@ -62,14 +62,25 @@
 - 文明段階アップイベントが同一Stageで重複作成されないこと。
 - テスト用の惑星・学習記録・XP台帳行はROLLBACK済みで、DBに残していない。
 
-**テスト範囲の注意:** これはSupabaseのSQLトランザクション内でAuthユーザーA/BのID・JWT claim相当のDBコンテキストを設定して行った権限テストであり、別ブラウザでの実ログイン・実HTTP同時アクセス試験ではない。CIと本番画面スモークも別途確認する。
+**DBテスト範囲の注意:** これはSupabaseのSQLトランザクション内でAuthユーザーA/BのID・JWT claim相当のDBコンテキストを設定して行った権限テストであり、別ブラウザでの実ログイン試験や、実HTTP経由での二人のユーザーの同時アクセス試験ではない。
+
+### CI・ブラウザスモーク確認済み
+
+- GitHub Actions [Run #729](https://github.com/GCIS-web-creator/campus-sync/actions/runs/44851577269) が成功。`npm ci`、i18n、Next.js本番ビルド、Cloudflare Worker build、Wrangler dry-runがすべて成功。
+- `scripts/e2e/planet-civilization-smoke.mjs` を追加。ローカルCloudflare Workerを起動し、Chromiumでモック認証・モックAPIによる画面テストを実行する。
+- 惑星名「わたしの惑星」・非公開表示・文明スコア・4軸・履歴・Stage画像を表示できることを確認。
+- 更新ボタンから惑星APIを再取得できることを確認。
+- 390px幅で横スクロールが発生しないことを確認。
+- 集中モードで学習記録を保存し、保存後に返ったセッションIDを `award-learning-xp` APIへ送ることを確認。
+- Planetubeのログイン画面へ遷移できることを確認。別サービスの認証・DBアクセスは行っていない。
+- すべて架空のテストアカウントとモックレスポンスで動作し、実SupabaseユーザーデータやPlanetubeデータは変更しない。
 
 ### リリース前に残っている確認
 
-- GitHub Actionsのi18n / Next.js build / OpenNext / Cloudflare Worker build / Wrangler dry-run CI。
-- ブラウザで自分の惑星GET、Pomodoro保存後のXP反映、再読み込み後の値維持を確認。
-- 既存Planetube、認証、Pomodoro、学習管理などの回帰確認。
-- すべて確認するまではPR #36をDraft維持。マージ・Cloudflareデプロイは行わない。
+- 実Supabase認証アカウントを使ったライブE2E（惑星GET・保存後の実XP反映・再読み込み後の値維持）。
+- 実アカウントA/Bを別ブラウザで使った画面レベルの相互アクセス拒否確認。
+- 今回の自動テスト対象外である時間割・課題・授業連絡・通知など学校機能全体の回帰確認。
+- これらの確認とマージ判断まではPR #36をDraft維持。本番アプリへのマージ・Cloudflareデプロイは行わない。
 
 ## Phase 2 — Pomodoro連携の初回実装
 
@@ -90,9 +101,11 @@
 
 ## 非破壊リリース条件
 
-- Feature branchで実装し、cloudflare-workers-migration向けPRのCIを通す。
-- Next.js build、Cloudflare OpenNext build、Wrangler dry-runを確認する。
-- 既存Planetubeの読み取り専用画面、認証、Pomodoroの開始・一時停止・終了・保存、主要タブ遷移を回帰確認する。
-- 2つ以上のテストアカウントで他人の惑星・XP台帳にアクセスできないことを確認する。
-- 同じ送信の再試行・二重クリック・再読み込みでXPが二重に増えないことを確認する。
-- CI・回帰確認が完了するまで本番ブランチへマージ・デプロイしない。
+- [x] Feature branchで実装し、cloudflare-workers-migration向けPR #36をDraftで維持。
+- [x] Next.js build、Cloudflare OpenNext build、Wrangler dry-runをCIで確認。
+- [x] ローカルWorkerで惑星画面・更新操作・390px幅の表示をChromiumで確認。
+- [x] モック学習記録を保存し、保存されたsession IDでXP付与APIを呼ぶフローを確認。
+- [x] Planetubeログイン画面への遷移を確認し、Planetubeデータにはアクセスしない。
+- [x] DBトランザクションで二重付与・日次上限・A/B相互閲覧拒否を確認。
+- [ ] 実ユーザー認証・実DBを使ったブラウザE2Eと、全学校機能の広範な回帰確認を行う。
+- [ ] これらが終わってからPRレビューとマージ可否を判断する。本番マージ・デプロイは未実施。
