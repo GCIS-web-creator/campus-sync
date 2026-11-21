@@ -27,6 +27,9 @@ create index if not exists campus_contribution_submissions_user_created_idx
   on public.campus_contribution_submissions(user_id, created_at desc);
 create index if not exists campus_contribution_submissions_status_created_idx
   on public.campus_contribution_submissions(status, created_at asc);
+create unique index if not exists campus_contribution_submissions_active_activity_unique
+  on public.campus_contribution_submissions(user_id, activity_date, lower(trim(activity_title)))
+  where status in ('pending', 'approved', 'returned');
 
 create table if not exists public.campus_contribution_review_events (
   id uuid primary key default gen_random_uuid(),
