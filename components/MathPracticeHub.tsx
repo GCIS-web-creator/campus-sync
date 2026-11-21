@@ -55,14 +55,102 @@ const shuffle = <T,>(items: T[]) => {
 const clock = (seconds: number) => String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, '0') + ':' + String(Math.max(0, seconds) % 60).padStart(2, '0');
 const percent = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
 function parseNumber(value: string): number | null {
-  const v = value.trim().normalize('NFKC').replace(/[−ー]/g, '-').replace(/,/g, '').replace(/\s/g, '');
-  const fraction = v.match(/^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/);
-  if (fraction) {
-    const denominator = Number(fraction[2]);
-    return denominator ? Number(fraction[1]) / denominator : null;
+  // 数式入力は安全なパーサーで数値に変換し、eval / Function は使用しない。
+  let source = value.trim().normalize('NFKC')
+    .replace(/[−ー]/g, '-')
+    .replace(/[×·⋅]/g, '*')
+    .replace(/[÷]/g, '/')
+    .replace(/\\left|\\right/g, '')
+    .replace(/\\times|\\cdot/g, '*')
+    .replace(/\\div/g, '/')
+    .replace(/\\pi/g, 'pi')
+    .replace(/π/g, 'pi')
+    .replace(/\\sqrt\{([^{}]+)\}/g, 'sqrt($1)')
+    .replace(/\\d?frac\{([^{}]+)\}\{([^{}]+)\}/g, '(($1)/($2))')
+    .replace(/√\s*(?=\()/g, 'sqrt')
+    .replace(/√\s*(\d+(?:\.\d+)?)/g, 'sqrt($1)')
+    .replace(/[°º]/g, '')
+    .replace(/,/g, '')
+    .replace(/\s+/g, '');
+
+  const tokens: string[] = [];
+  const tokenPattern = /(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[a-zA-Z]+|[()+\-*/^]/g;
+  let cursor = 0;
+  for (const match of source.matchAll(tokenPattern)) {
+    if (match.index !== cursor) return null;
+    tokens.push(match[0].toLowerCase());
+    cursor += match[0].length;
   }
-  if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
-  return null;
+  if (cursor !== source.length || tokens.length === 0) return null;
+
+  // 2π、3(1+2)、(1+2)(3+4) のような省略された乗算を補う。
+  const expanded: string[] = [];
+  const canEnd = (token: string) => token === ')' || /^(?:\d|\.)/.test(token) || token === 'pi' || token === 'e';
+  const canStart = (token: string) => token === '(' || /^(?:\d|\.)/.test(token) || token === 'pi' || token === 'e' || token === 'sqrt';
+  for (const token of tokens) {
+    const previous = expanded[expanded.length - 1];
+    if (previous && canEnd(previous) && canStart(token)) expanded.push('*');
+    expanded.push(token);
+  }
+
+  let index = 0;
+  function parseExpression(): number {
+    let result = parseTerm();
+    while (expanded[index] === '+' || expanded[index] === '-') {
+      const operator = expanded[index++];
+      const right = parseTerm();
+      result = operator === '+' ? result + right : result - right;
+    }
+    return result;
+  }
+  function parseTerm(): number {
+    let result = parseUnary();
+    while (expanded[index] === '*' || expanded[index] === '/') {
+      const operator = expanded[index++];
+      const right = parseUnary();
+      result = operator === '*' ? result * right : result / right;
+    }
+    return result;
+  }
+  function parseUnary(): number {
+    if (expanded[index] === '+') { index += 1; return parseUnary(); }
+    if (expanded[index] === '-') { index += 1; return -parseUnary(); }
+    return parsePower();
+  }
+  function parsePower(): number {
+    const base = parsePrimary();
+    if (expanded[index] === '^') {
+      index += 1;
+      return Math.pow(base, parseUnary());
+    }
+    return base;
+  }
+  function parsePrimary(): number {
+    const token = expanded[index++];
+    if (token === '(') {
+      const result = parseExpression();
+      if (expanded[index++] !== ')') throw new Error('括弧が対応していません');
+      return result;
+    }
+    if (token === 'sqrt') {
+      if (expanded[index++] !== '(') throw new Error('平方根の形式が不正です');
+      const operand = parseExpression();
+      if (expanded[index++] !== ')') throw new Error('平方根の括弧が対応していません');
+      if (operand < 0) throw new Error('負数の平方根は入力できません');
+      return Math.sqrt(operand);
+    }
+    if (token === 'pi') return Math.PI;
+    if (token === 'e') return Math.E;
+    if (/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(token)) return Number(token);
+    throw new Error('数値式ではない文字が含まれています');
+  }
+
+  try {
+    const result = parseExpression();
+    return index === expanded.length && Number.isFinite(result) ? result : null;
+  } catch {
+    return null;
+  }
 }
 function isCorrectAnswer(question: MathQuestion, value: string) {
   if (question.question_type === 'multiple_choice') return value === question.correct_option_id;
@@ -77,6 +165,26 @@ function correctAnswerLabel(question: MathQuestion) {
     return question.options?.find(option => option.id === question.correct_option_id)?.text || '正答データを確認できません';
   }
   return question.correct_answer ?? '正答データを確認できません';
+}
+
+// PostgREST の応答上限に達しても問題が欠けないよう、500件ずつ取得する。
+const QUESTION_PAGE_SIZE = 500;
+async function loadPublishedQuestionBank(): Promise<MathQuestion[]> {
+  const bank: MathQuestion[] = [];
+  for (let offset = 0; ; offset += QUESTION_PAGE_SIZE) {
+    const { data, error } = await supabase.from('campus_knowledge_questions')
+      .select('id,subject,subject_code,unit,title,prompt,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,question_type,source_name,source_url,source_license,source_attribution')
+      .eq('status', 'published')
+      .order('subject', { ascending: true })
+      .order('unit', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + QUESTION_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as MathQuestion[];
+    bank.push(...page);
+    if (page.length < QUESTION_PAGE_SIZE) break;
+  }
+  return bank;
 }
 
 export default function MathPracticeHub({ userId, isDarkMode = false }: { userId: string; isDarkMode?: boolean }) {
@@ -118,21 +226,15 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
     setLoading(true);
     setError('');
     try {
-      const [q, a] = await Promise.all([
-        supabase.from('campus_knowledge_questions')
-          .select('id,subject,subject_code,unit,title,prompt,options,correct_option_id,correct_answer,answer_tolerance,explanation,difficulty,question_type,source_name,source_url,source_license,source_attribution')
-          .eq('status', 'published')
-          .order('subject', { ascending: true })
-          .order('unit', { ascending: true }),
+      const [bank, a] = await Promise.all([
+        loadPublishedQuestionBank(),
         supabase.from('math_practice_attempts')
           .select('id,question_id,course,unit,is_correct,answer_text,mode,time_spent_seconds,created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(1000),
       ]);
-      if (q.error) throw q.error;
       if (a.error) throw a.error;
-      const bank = (q.data || []) as MathQuestion[];
       setQuestions(bank);
       setAttempts((a.data || []) as Attempt[]);
       setCurrent(previous => previous && bank.some(item => item.id === previous.id)
@@ -445,7 +547,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   <div className="mt-5 grid gap-2 sm:grid-cols-2">
                     {(current.options || []).map((option, index) => {
                       const selected = answer === option.id;
-                      return <button key={option.id} type="button" disabled={showResult} onClick={() => setAnswer(option.id)}
+                      return <button key={option.id} type="button" disabled={showResult || timedExpired} onClick={() => setAnswer(option.id)}
                         className={'rounded-xl border p-3 text-left text-sm font-bold transition ' + (selected ? 'border-cyan-600 bg-cyan-50 text-cyan-900 ring-2 ring-cyan-500/20' : (dark ? 'border-slate-700 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-700'))}>
                         <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-200/70 text-xs">{String.fromCharCode(65 + index)}</span>{option.text}
                       </button>;
@@ -453,9 +555,10 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   </div>
                 ) : (
                   <label className="mt-6 block"><span className="mb-2 block text-sm font-black">あなたの解答</span>
-                    <input type="text" inputMode="decimal" value={answer} onChange={e => setAnswer(e.target.value)} disabled={showResult || timedExpired}
-                      placeholder="答えを入力（整数・小数・分数）"
+                    <input type="text" inputMode="text" value={answer} onChange={e => setAnswer(e.target.value)} disabled={showResult || timedExpired} autoComplete="off" spellCheck={false}
+                      placeholder="答えを入力（例：1/2、2^3、√2、π）"
                       className={'w-full rounded-2xl px-4 py-3 text-base outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 ' + field} />
+                    <span className={'mt-2 block text-xs ' + muted}>整数・小数・分数のほか、累乗（2^3）、平方根（√2）、π、括弧を使った計算式に対応しています。</span>
                   </label>
                 )}
 
