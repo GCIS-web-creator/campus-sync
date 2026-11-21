@@ -40,6 +40,8 @@ jobs:
         run: node --experimental-strip-types --test scripts/test-study-timer-push.mjs
       - name: Test contribution submission and review validation
         run: npm run test:contributions
+      - name: Test knowledge question and attempt validation
+        run: npm run test:knowledge
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime and Playwright for browser smoke tests
