@@ -139,7 +139,7 @@ function expectedAnswer(question) {
   if ((match = p.match(/f\(x\)=(\d+)sin x とする。x=π\/3/))) {
     return Number(match[1]) / 2;
   }
-  if ((match = p.match(/f\(x\)=ln x \+ (\d*)x とする。f'\(1\)/))) {
+  if ((match = p.match(/f\(x\)=ln x \+\s*(\d*)x とする。f'\(1\)/))) {
     return coefficient(match[1]) + 1;
   }
   if ((match = p.match(/ベクトル a=\( (\d+), (\d+) \)、b=\( (\d+), (\d+) \)/))) {
