@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { matchSchoolRangeSubjects } from '../lib/school-range-matching.mts';
 
-const makeRange = (id, subject, display_subject = subject) => ({
+const makeRange = (id: string, subject: string, display_subject: string = subject) => ({
   id,
   subject,
   display_subject,
