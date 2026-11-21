@@ -136,7 +136,7 @@ begin
       raise exception '数値の解答を入力してください。';
     end if;
     v_answer_normalized := replace(replace(trim(p_selected_answer), '−', '-'), '，', ',');
-    if v_answer_normalized !~ '^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$' then
+    if v_answer_normalized !~ '^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)$' then
       raise exception '数値として読み取れる形式で入力してください。';
     end if;
     if v_question.correct_answer !~ '^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$' then
