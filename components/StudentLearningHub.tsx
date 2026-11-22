@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
+import { formatStudyDurationInput, parseStudyDurationInput, toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/study-session-edit';
 import { advancePomodoroTimeline, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
 import { supabase } from '@/lib/supabase';
 import StudentLearningAnalytics from '@/components/StudentLearningAnalytics';
-import { BarChart3, BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
+import { BarChart3, BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info, Pencil } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
@@ -20,7 +21,7 @@ type PublishedRangeProgress = { school_test_range_id: string; section_id: string
 type PersonalTask = { id: string; title: string; details: string; subject: string; source: string; type: string; due: string; due_at: string | null; completed: boolean; created_at: string };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
-type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
+type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; ended_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
 type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
   publisher: string | null; published_date: string | null; description: string | null;
@@ -145,6 +146,13 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [personalTaskDueAt, setPersonalTaskDueAt] = useState('');
 
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [editStartedAt, setEditStartedAt] = useState('');
+  const [editFocusDuration, setEditFocusDuration] = useState('00:25:00');
+  const [editBreakDuration, setEditBreakDuration] = useState('00:05:00');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [historyLimit, setHistoryLimit] = useState(20);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [miniTests, setMiniTests] = useState<MiniTestEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -462,6 +470,79 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const input = 'w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/15 ' + (dark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
   const primary = 'inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-black text-white hover:bg-cyan-600 disabled:opacity-50';
   const secondary = 'inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ' + (dark ? 'border-slate-600 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-700');
+
+  const openSessionEditor = (session: Session) => {
+    setEditingSession(session);
+    setEditStartedAt(toLocalDateTimeInput(session.started_at));
+    setEditFocusDuration(formatStudyDurationInput(session.focus_seconds));
+    setEditBreakDuration(formatStudyDurationInput(session.break_seconds || 0));
+    setEditError('');
+  };
+
+  const closeSessionEditor = () => {
+    if (editSaving) return;
+    setEditingSession(null);
+    setEditError('');
+  };
+
+  const saveSessionEdits = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingSession || editSaving) return;
+
+    const focusSecondsValue = parseStudyDurationInput(editFocusDuration);
+    const breakSecondsValue = parseStudyDurationInput(editBreakDuration);
+    const startedAtValue = fromLocalDateTimeInput(editStartedAt);
+
+    if (focusSecondsValue === null || focusSecondsValue < 1) {
+      setEditError('集中時間は00:00:01〜24:00:00の範囲で入力してください。');
+      return;
+    }
+    if (breakSecondsValue === null) {
+      setEditError('休憩時間は00:00:00〜24:00:00の形式で入力してください。');
+      return;
+    }
+    if (!startedAtValue) {
+      setEditError('開始日時を正しく入力してください。');
+      return;
+    }
+
+    const startedAtDate = new Date(startedAtValue);
+    const endedAtDate = new Date(startedAtDate.getTime() + (focusSecondsValue + breakSecondsValue) * 1000);
+    if (Number.isNaN(endedAtDate.getTime())) {
+      setEditError('日時を計算できませんでした。入力内容を確認してください。');
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const { data: updatedSession, error: updateError } = await supabase
+        .from('student_study_sessions')
+        .update({
+          started_at: startedAtDate.toISOString(),
+          ended_at: endedAtDate.toISOString(),
+          focus_seconds: focusSecondsValue,
+          break_seconds: breakSecondsValue,
+        })
+        .eq('id', editingSession.id)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
+
+      if (updateError) throw updateError;
+      if (!updatedSession) throw new Error('更新された学習記録を取得できませんでした。');
+
+      setSessions(previous => previous
+        .map(item => item.id === editingSession.id ? updatedSession as Session : item)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()));
+      setEditingSession(null);
+      setMessage('学習記録を更新しました。日別・週別・科目別・カレンダーの集計にも反映されています。');
+    } catch (cause) {
+      setEditError(cause instanceof Error ? cause.message : '学習記録を更新できませんでした。');
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -1309,9 +1390,50 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     </div>}
 
     {tab === 'history' && <div className="space-y-4">
+      {editingSession && <section className={panel}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div><p className="text-[10px] font-black tracking-widest text-cyan-600">EDIT STUDY LOG</p><h2 className="mt-1 text-base font-black">学習記録を編集</h2><p className={'mt-1 text-[10px] ' + muted}>{editingSession.subject_name} ・ {editingSession.task_title || '学習'}</p></div>
+          <button type="button" onClick={closeSessionEditor} disabled={editSaving} aria-label="編集を閉じる" className={secondary}><X size={15}/></button>
+        </div>
+        <form onSubmit={saveSessionEdits} className="space-y-3">
+          <label className="block space-y-1 text-xs font-bold">開始日時
+            <input className={input} type="datetime-local" value={editStartedAt} onChange={event => setEditStartedAt(event.target.value)} required/>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1 text-xs font-bold">集中時間（時:分:秒）
+              <input className={input + ' font-mono tabular-nums'} type="text" inputMode="numeric" pattern="[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]" maxLength={8} value={editFocusDuration} onChange={event => setEditFocusDuration(event.target.value)} placeholder="00:25:00" required/>
+            </label>
+            <label className="block space-y-1 text-xs font-bold">休憩時間（時:分:秒）
+              <input className={input + ' font-mono tabular-nums'} type="text" inputMode="numeric" pattern="[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]" maxLength={8} value={editBreakDuration} onChange={event => setEditBreakDuration(event.target.value)} placeholder="00:05:00" required/>
+            </label>
+          </div>
+          <div className={'rounded-xl border p-3 text-[10px] leading-5 ' + (dark ? 'border-slate-700 bg-slate-900 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-600')}>
+            秒単位で編集できます。開始日時を変更すると、その記録の日付・曜日・時間帯の分析先も変更されます。学習時間の集計は更新されますが、過去に付与された学習XPは再計算されません。
+          </div>
+          {editError && <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-600">{editError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={closeSessionEditor} disabled={editSaving} className={secondary}>キャンセル</button>
+            <button type="submit" disabled={editSaving} className={primary}><CheckCircle2 size={15}/>{editSaving ? '保存中…' : '変更を保存'}</button>
+          </div>
+        </form>
+      </section>}
       <section className={panel}><div className="mb-3 flex items-center gap-2"><CalendarDays size={18} className="text-cyan-600"/><h2 className="font-black">日・週ごとの学習時間</h2></div><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-cyan-50 p-3 text-cyan-950"><p className="text-[10px] font-bold">今日</p><p className="mt-1 text-xl font-black">{duration(todaySeconds)}</p></div><div className="rounded-xl bg-blue-50 p-3 text-blue-950"><p className="text-[10px] font-bold">今週（月〜日）</p><p className="mt-1 text-xl font-black">{duration(weekSeconds)}</p></div></div><div className="mt-4 grid grid-cols-7 items-end gap-2">{weekData.map(day=><div key={day.key} className="flex flex-col items-center gap-1"><div className={'flex h-20 w-full items-end overflow-hidden rounded-md '+(dark?'bg-slate-900':'bg-slate-100')}><div className="w-full rounded-md bg-cyan-600" style={{height:Math.max(day.seconds?5:0,day.seconds/maxDay*100)+'%'}}/></div><span className={'text-[10px] '+muted}>{day.label}</span></div>)}</div></section>
       <section className={panel}><h2 className="mb-3 font-black">教科別の累計（直近120日）</h2>{subjectTotals.length?<div className="space-y-3">{subjectTotals.map(([name,seconds])=><div key={name}><div className="mb-1 flex justify-between text-xs"><b>{name}</b><span className={muted}>{duration(seconds)}</span></div><div className={'h-2 rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:Math.max(2,seconds/Math.max(...subjectTotals.map(item=>item[1]))*100)+'%'}}/></div></div>)}</div>:<p className={'text-sm '+muted}>まだ記録がありません。</p>}</section>
-      <section className={panel}><h2 className="mb-3 font-black">最近の学習記録</h2><div className="space-y-2">{sessions.slice(0,20).map(item=><article key={item.id} className={'rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm">{item.subject_name} ・ {item.task_title}</b><b className="text-xs text-cyan-600">{duration(item.focus_seconds)}</b></div><p className={'mt-1 text-[10px] '+muted}>{new Date(item.started_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} ・ 休憩 {duration(item.break_seconds)} ・ {item.finish_kind==='stopped'?'途中終了':'完了'}</p><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.reflection}</p><p className={'mt-2 whitespace-pre-wrap text-xs '+muted}>次：{item.next_action}</p></article>)}{!sessions.length&&<p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>学習記録はまだありません。</p>}</div></section>
+      <section className={panel}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black">最近の学習記録</h2><p className={'mt-1 text-[10px] ' + muted}>記録の時間は後から編集できます。</p></div><span className={'text-[10px] ' + muted}>{sessions.length.toLocaleString('ja-JP')}件</span></div>
+        <div className="space-y-2">
+          {sessions.slice(0, historyLimit).map(item=><article key={item.id} className={'rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0"><b className="text-sm">{item.subject_name} ・ {item.task_title || '学習'}</b><p className={'mt-1 text-[10px] ' + muted}>{new Date(item.started_at).toLocaleString('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} ・ {item.finish_kind==='stopped'?'途中終了':'完了'}</p></div>
+              <div className="flex shrink-0 flex-col items-end gap-2"><b className="text-xs text-cyan-600">集中 {duration(item.focus_seconds)}</b><span className={'text-[10px] ' + muted}>休憩 {duration(item.break_seconds || 0)}</span><button type="button" onClick={()=>openSessionEditor(item)} className={secondary}><Pencil size={13}/>時間を編集</button></div>
+            </div>
+            {item.reflection && <p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.reflection}</p>}
+            {item.next_action && <p className={'mt-2 whitespace-pre-wrap text-xs ' + muted}>次：{item.next_action}</p>}
+          </article>)}
+          {!sessions.length&&<p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>学習記録はまだありません。</p>}
+          {sessions.length > historyLimit && <button type="button" onClick={() => setHistoryLimit(current => current + 20)} className={secondary + ' w-full'}>さらに{Math.min(20, sessions.length - historyLimit)}件表示</button>}
+        </div>
+      </section>
     </div>}
     {tab === 'analysis' && <StudentLearningAnalytics sessions={sessions} isDarkMode={dark} />}
     {tab === 'contribution' && <ContributionActivityPanel userId={userId} isDarkMode={isDarkMode} />}
