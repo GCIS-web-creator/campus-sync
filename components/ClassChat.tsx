@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { AlertCircle, Check, Flag, LoaderCircle, MessageCircle, Paperclip, Pencil, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import ChatMessageContent, { ChatFormattingToolbar } from '@/components/ChatMessageContent';
 import { supabase } from '@/lib/supabase';
+import { compressImageFile } from '@/lib/compress-image-file';
 import GradeSchoolChat from '@/components/GradeSchoolChat';
 
 type ChatUser = { id: string; email?: string | null };
@@ -78,7 +79,6 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
   }, [reactions]);
 
   const loadMessages = useCallback(async (isStillActive?: () => boolean) => {
-    if (selectedFile && (selectedFile.size > 10 * 1024 * 1024 || !['application/pdf','image/jpeg','image/png','image/webp','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(selectedFile.type))) { setError('添付はPDF・画像・テキスト・Word（10MB以内）に対応しています。'); return; }
     if (!profileReady || !authUser?.id) {
       setLoading(false);
       return;
@@ -185,6 +185,10 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
       setError('プロフィールの氏名・クラス情報を読み込めません。プロフィール設定を確認してください。');
       return;
     }
+    if (selectedFile && !['application/pdf','image/jpeg','image/png','image/webp','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(selectedFile.type)) {
+      setError('添付はPDF・画像・テキスト・Wordに対応しています。');
+      return;
+    }
     setSending(true);
     setError('');
     setNotice('');
@@ -205,12 +209,15 @@ function ClassChatPanel({ authUser, studentId, studentName, userClass, unreadCou
         let uploadedPath: string | null = null;
         let attachmentFields: { attachment_path: string | null; attachment_name: string | null; attachment_mime: string | null } = { attachment_path: null, attachment_name: null, attachment_mime: null };
         if (selectedFile) {
+          const uploadFile = await compressImageFile(selectedFile);
+          if (uploadFile.size > 10 * 1024 * 1024) throw new Error('圧縮後も添付ファイルは10MB以下にしてください。');
           const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'attachment';
-          const path = authUser.id + '/' + crypto.randomUUID() + '-' + safeName;
-          const upload = await supabase.storage.from('chat-attachments').upload(path, selectedFile, { contentType: selectedFile.type, upsert: false });
+          const storedName = uploadFile.type === 'image/webp' ? safeName.replace(/\.[^.]+$/, '') + '.webp' : safeName;
+          const path = authUser.id + '/' + crypto.randomUUID() + '-' + storedName;
+          const upload = await supabase.storage.from('chat-attachments').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false });
           if (upload.error) throw upload.error;
           uploadedPath = path;
-          attachmentFields = { attachment_path: path, attachment_name: selectedFile.name, attachment_mime: selectedFile.type };
+          attachmentFields = { attachment_path: path, attachment_name: selectedFile.name, attachment_mime: uploadFile.type };
         }
         const { data, error: insertError } = await supabase.from('class_chat_messages').insert({ user_id: authUser.id, student_id: studentId, student_name: studentName.trim(), class_name: userClass, body, ...attachmentFields }).select('id,user_id,student_id,student_name,class_name,body,created_at,updated_at,attachment_path,attachment_name,attachment_mime').single();
         if (insertError) { if (uploadedPath) await supabase.storage.from('chat-attachments').remove([uploadedPath]); throw insertError; }

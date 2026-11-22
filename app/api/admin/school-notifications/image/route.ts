@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import sharp from 'sharp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,14 +29,24 @@ export async function POST(request: Request) {
   }
   const file = form.get('file');
   if (!(file instanceof File)) return NextResponse.json({ message: 'アップロードする画像を選択してください。' }, { status: 400 });
-  if (!['image/jpeg', 'image/png'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
-    return NextResponse.json({ message: '画像はJPGまたはPNG形式、5MB以下のものを選んでください。' }, { status: 400 });
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
+    return NextResponse.json({ message: '画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。' }, { status: 400 });
   }
 
   const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const path = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${file.type === 'image/png' ? 'png' : 'jpg'}`;
+  let compressed: Buffer;
+  try {
+    compressed = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer();
+  } catch {
+    return NextResponse.json({ message: '画像を圧縮できませんでした。別の画像を選んでください。' }, { status: 400 });
+  }
+  const path = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}.webp`;
   const { error } = await admin.storage.from('school-notification-images').upload(
-    path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, cacheControl: '3600', upsert: false },
+    path, compressed, { contentType: 'image/webp', cacheControl: '3600', upsert: false },
   );
   if (error) {
     console.error('学園総合通知の画像アップロード失敗:', error.message);

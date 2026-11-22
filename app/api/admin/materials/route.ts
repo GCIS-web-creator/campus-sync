@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   const fileSize = Number(body.file_size);
   if (!isValidMaterialStoragePath(storagePath)) return fail('アップロード済みファイルの識別情報が正しくありません。');
   if (!fileName || fileName.length > 240) return fail('元のファイル名を確認してください。');
-  if (!['application/pdf', 'image/png', 'image/jpeg'].includes(mimeType)) return fail('ファイル形式が正しくありません。');
+  if (!['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) return fail('ファイル形式が正しくありません。');
   if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > 20 * 1024 * 1024) return fail('ファイルサイズが正しくありません。');
 
   try {

@@ -88,7 +88,7 @@ type BookResult = {
   cover_urls: string[];
   info_url: string | null;
   page_count: number | null;
-  source: 'openbd' | 'google-books' | 'openlibrary' | 'kirihara' | 'ndl' | 'keirinkan' | 'manual';
+  source: 'openbd' | 'google-books' | 'openlibrary' | 'kirihara' | 'ndl' | 'keirinkan' | 'kenkyusha' | 'manual';
 };
 
 const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_urls'>> = {
@@ -113,6 +113,17 @@ const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_u
     info_url: 'https://www.kirihara.co.jp/files/user/images/tenbai/20240612_Kiso_Eibun_kaishaku_POP_W115_H80.pdf',
     page_count: 312,
     source: 'kirihara',
+  },
+  '9784327764951': {
+    title: '入試英語 正誤問題スピードチェック550',
+    authors: ['米山達郎', '増見誠一', '藤木克哉'],
+    publisher: '研究社',
+    published_date: '2022-07-25',
+    description: '入試英語の正誤問題に特化した550題の問題集。日英対照方式で英文構造を確認しながら学習できます。',
+    thumbnail_url: 'https://hondana-image.s3.amazonaws.com/book/image/10091785/74d348dd-ce80-4e61-aad9-5989bb663cdb.jpg',
+    info_url: 'https://www.kenkyusha.co.jp/book/b10091785.html',
+    page_count: 246,
+    source: 'kenkyusha',
   },
   '9784402262914': {
     title: 'フォーカスゴールド6th Edition 数学Ⅱ+B+ベクトル（数学C）',

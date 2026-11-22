@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { compressImageFile } from '@/lib/compress-image-file';
 import { FileText, FileImage, UploadCloud, RefreshCw, Eye, Download, Trash2, Globe, Users, GraduationCap, Search, X, CheckCircle2, Folder, FolderOpen, ChevronRight, FolderPlus, Pencil, ArrowUp } from 'lucide-react';
 
 type StudyMaterial = {
@@ -116,7 +117,7 @@ export default function StudyMaterialsAdmin() {
     const selected = nextFiles.slice(0, 20);
     if (nextFiles.length > 20) setMessage('一度に選択できるのは20ファイルまでです。');
     const invalid = selected.find(nextFile =>
-      !['application/pdf', 'image/png', 'image/jpeg'].includes(nextFile.type)
+      !['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(nextFile.type)
       || nextFile.size < 1 || nextFile.size > 20 * 1024 * 1024,
     );
     if (invalid) {
@@ -150,11 +151,12 @@ export default function StudyMaterialsAdmin() {
         let uploadedPath: string | null = null;
         try {
           setMessage((succeeded + 1) + ' / ' + files.length + ' 件目をアップロードしています…');
+          const uploadFile = await compressImageFile(selectedFile);
           const signedResponse = await fetch('/api/admin/materials/upload-url', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: selectedFile.name, mimeType: selectedFile.type, size: selectedFile.size }),
+            body: JSON.stringify({ fileName: selectedFile.name, mimeType: uploadFile.type, size: uploadFile.size }),
             cache: 'no-store',
           });
           const signedResult = await signedResponse.json().catch(() => null);
@@ -163,7 +165,7 @@ export default function StudyMaterialsAdmin() {
           }
           uploadedPath = signedResult.path;
           const { error: uploadError } = await supabase.storage.from('study-materials')
-            .uploadToSignedUrl(signedResult.path, signedResult.token, selectedFile, { contentType: selectedFile.type });
+            .uploadToSignedUrl(signedResult.path, signedResult.token, uploadFile, { contentType: uploadFile.type });
           if (uploadError) throw new Error('ファイルのアップロードに失敗しました: ' + uploadError.message);
 
           const baseName = selectedFile.name.replace(/\.[^.]+$/, '').trim() || '学校資料';
@@ -183,8 +185,8 @@ export default function StudyMaterialsAdmin() {
               target_value: targetScope === 'all' ? null : targetValue,
               storage_path: signedResult.path,
               file_name: selectedFile.name,
-              mime_type: selectedFile.type,
-              file_size: selectedFile.size,
+              mime_type: uploadFile.type,
+              file_size: uploadFile.size,
               is_published: publishImmediately,
               folder_id: folderId,
             }),
@@ -503,7 +505,7 @@ export default function StudyMaterialsAdmin() {
             <UploadCloud size={26} className="text-cyan-400" />
             <span className="mt-2 text-sm font-black text-white">{files.length ? files.length + '件のファイルを選択中' : 'PDF・PNG・JPGをまとめて選択'}</span>
             <span className="mt-1 text-[11px] text-slate-500">最大20件・1ファイル20MBまで</span>
-            <input id="study-material-files" type="file" multiple accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" onChange={event => { handleFileChange(Array.from(event.target.files || [])); event.target.value = ''; }} className="sr-only" />
+            <input id="study-material-files" type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp" onChange={event => { handleFileChange(Array.from(event.target.files || [])); event.target.value = ''; }} className="sr-only" />
           </label>
           {files.length > 0 && <div className="max-h-48 space-y-1.5 overflow-y-auto">
             {files.map((selectedFile, index) => <div key={selectedFile.name + ':' + selectedFile.size + ':' + index} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs">

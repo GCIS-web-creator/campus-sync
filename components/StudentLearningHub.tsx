@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import { formatStudyDurationInput, parseStudyDurationInput, toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/study-session-edit';
 import { classifyBookBarcode } from '@/lib/book-isbn';
-import { buildBookCoverCandidates } from '@/lib/book-catalog';
+import { buildBookCoverCandidates, toBookCoverProxyUrl } from '@/lib/book-catalog';
 import { advancePomodoroTimeline, calculateCountUpSeconds, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
@@ -28,7 +28,7 @@ type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
   publisher: string | null; published_date: string | null; description: string | null;
   thumbnail_url: string | null; info_url: string | null; page_count: number | null;
-  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'ndl' | 'keirinkan' | 'manual'; created_at: string;
+  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'ndl' | 'keirinkan' | 'kenkyusha' | 'manual'; created_at: string;
   cover_urls?: string[];
 };
 type BookMetadata = Omit<MyBook, 'id' | 'user_id' | 'created_at'>;
@@ -208,7 +208,7 @@ function BookCover({ src, alt, isbn, candidates = [], className = '' }: { src?: 
   return (
     <div className={'flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white ' + className}>
       {activeImage
-        ? <img src={activeImage} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={handleImageError} className="h-full w-full object-contain"/>
+        ? <img src={toBookCoverProxyUrl(activeImage)} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={handleImageError} className="h-full w-full object-contain"/>
         : <div role="img" aria-label={alt + '（表紙画像なし）'} className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-cyan-50 to-slate-100 text-cyan-700"><BookOpenCheck size={25}/><span className="text-[8px] font-bold">CAMPUS BOOK</span></div>}
     </div>
   );
@@ -244,7 +244,7 @@ function CoverCandidateStrip({
               : dark ? 'border-slate-700 bg-slate-950 hover:border-cyan-400' : 'border-slate-200 bg-white hover:border-cyan-400')}
           >
             <img
-              src={url}
+              src={toBookCoverProxyUrl(url)}
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
@@ -293,6 +293,42 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [examId, setExamId] = useState('');
   const [rangeInput, setRangeInput] = useState('');
   const [rangeTarget, setRangeTarget] = useState('');
+  const [scienceTrack, setScienceTrack] = useState<'physics' | 'biology' | null>(null);
+  const [scienceTrackSaving, setScienceTrackSaving] = useState(false);
+
+  const displaySubjectName = (value: string): string => {
+    if (!scienceTrack || !value.includes('物理・生物')) return value;
+    return value.replace(/物理・生物/g, scienceTrack === 'physics' ? '物理' : '生物');
+  };
+
+  const saveScienceTrack = async (value: 'physics' | 'biology') => {
+    setScienceTrackSaving(true);
+    const { error: preferenceError } = await supabase
+      .from('student_learning_preferences')
+      .upsert({ user_id: userId, science_track: value, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (preferenceError) {
+      setError('理科選択を保存できませんでした。もう一度お試しください。');
+    } else {
+      setScienceTrack(value);
+      setMessage('理科選択を「' + (value === 'physics' ? '物理' : '生物') + '」に設定しました。');
+    }
+    setScienceTrackSaving(false);
+  };
+
+  useEffect(() => {
+    let active = true;
+    void supabase.from('student_learning_preferences')
+      .select('science_track')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data, error: preferenceError }) => {
+        if (!active || preferenceError) return;
+        if (data?.science_track === 'physics' || data?.science_track === 'biology') {
+          setScienceTrack(data.science_track);
+        }
+      });
+    return () => { active = false; };
+  }, [userId]);
 
   const [focusSubject, setFocusSubject] = useState<Subject>('国語演習');
   const [focusSubjectId, setFocusSubjectId] = useState('');
@@ -1492,7 +1528,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     try {
       const { data: savedSession, error: insertError } = await supabase.from('student_study_sessions').insert({
         user_id: userId, test_subject_id: null,
-        subject_name: focusSubject, task_title: task.trim(),
+        subject_name: displaySubjectName(focusSubject) as Subject, task_title: task.trim(),
         test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
         started_at: startedAt.current || new Date().toISOString(), ended_at: new Date().toISOString(),
@@ -1668,19 +1704,29 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       <section className={panel}>
         <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-black">学校公式の考査日程</h2><span className="rounded-full bg-cyan-50 px-3 py-1 text-[10px] font-black text-cyan-800">閲覧専用</span></div>
         <p className={'mb-2 text-xs leading-5 '+muted}>考査の予定・実施教科はAdmin・先生が登録します。生徒は日程を確認し、自分用のテスト範囲と進捗を管理できます。</p>
+        <div className={'mb-3 rounded-xl border p-3 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50')}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><p className="text-xs font-black">理科の選択科目</p><p className={'mt-1 text-[10px] ' + muted}>「物理・生物」として登録された科目・範囲を、あなたの選択に合わせて表示します。</p></div>
+            <div className="flex gap-2">
+              <button type="button" disabled={scienceTrackSaving} onClick={() => void saveScienceTrack('physics')} aria-pressed={scienceTrack === 'physics'} className={'rounded-lg border px-3 py-2 text-xs font-black ' + (scienceTrack === 'physics' ? 'border-cyan-500 bg-cyan-500 text-white' : dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white')}>物理選択</button>
+              <button type="button" disabled={scienceTrackSaving} onClick={() => void saveScienceTrack('biology')} aria-pressed={scienceTrack === 'biology'} className={'rounded-lg border px-3 py-2 text-xs font-black ' + (scienceTrack === 'biology' ? 'border-cyan-500 bg-cyan-500 text-white' : dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white')}>生物選択</button>
+            </div>
+          </div>
+          {!scienceTrack && <p className="mt-2 text-[10px] font-bold text-amber-600">理科選択を設定すると、該当する科目名に切り替わります。</p>}
+        </div>
         <p className={'mb-3 text-[10px] leading-5 '+muted}>表示の意味：0%＝公開範囲は登録済みで、履修チェックがまだ0件。「一部登録」＝複数科目のうち一部だけ公開。「範囲未登録」＝対応する学校公開範囲データがありません。0%はテストの点数ではありません。</p>
         {exams.length ? exams.map(exam => {
           const examSubjects = subjects.filter(item => item.exam_id === exam.id).slice().sort((a,b)=>a.exam_date.localeCompare(b.exam_date)||a.sort_order-b.sort_order);
           return <article key={exam.id} className={'mb-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
             <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=>{
-                  const scope = getPublishedRangeProgress(exam.id, item.subject);
+                  const scope = getPublishedRangeProgress(exam.id, displaySubjectName(item.subject));
                   return <button key={item.id} type="button" onClick={() => {
                     setExamId(exam.id);
                     setShowRangeManager(true);
                     window.setTimeout(() => document.getElementById('subject-range-'+item.id)?.scrollIntoView({behavior:'smooth',block:'start'}), 80);
                   }} title={scope.missingSubjects.length ? '公開済み: '+scope.registeredSubjects.join('・')+' / 未登録: '+scope.missingSubjects.join('・') : scope.total ? '登録済み範囲の履修チェック率' : '学校公開の出題範囲は未登録です'} className={'flex min-w-[112px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black shadow-sm transition hover:-translate-y-0.5 '+scopeColor(scope.percent, scope.total, scope.total > 0 && scope.missingSubjects.length > 0)}>
-                    <span>{item.sort_order} ・ {item.subject}</span>
+                    <span>{item.sort_order} ・ {displaySubjectName(item.subject)}</span>
                     <span className="shrink-0 text-[10px] tabular-nums">{scope.total ? scope.missingSubjects.length ? '一部登録' : scope.percent+'%' : '範囲未登録'}</span>
                   </button>;
                 })}</div></div>)}
@@ -1700,7 +1746,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
                    const completedCount = rangeSections.filter(section => publishedRangeProgress.some(progress => progress.school_test_range_id === item.id && progress.section_id === section.section_id && progress.completed)).length;
                    return <article key={item.id} className={'overflow-hidden rounded-xl border '+(dark?'border-slate-700 bg-slate-900':'border-white bg-white')}>
                      <button type="button" aria-expanded={expanded} aria-controls={'school-range-'+item.id} onClick={() => setExpandedSchoolRangeIds(current => expanded ? current.filter(id => id !== item.id) : [...current, item.id])} className={'flex w-full items-center justify-between gap-3 p-3 text-left '+(dark?'hover:bg-slate-800':'hover:bg-slate-50')}>
-                       <span className="min-w-0"><span className="block text-sm font-black">{item.display_subject}</span><span className={'mt-1 block text-[10px] font-bold '+muted}>{item.audience} ・ 範囲 {completedCount}/{rangeSections.length} 完了 ・ お知らせ {noticeSections.length}件</span></span>
+                       <span className="min-w-0"><span className="block text-sm font-black">{displaySubjectName(item.display_subject)}</span><span className={'mt-1 block text-[10px] font-bold '+muted}>{item.audience} ・ 範囲 {completedCount}/{rangeSections.length} 完了 ・ お知らせ {noticeSections.length}件</span></span>
                        <span className="flex shrink-0 items-center gap-2 text-cyan-600"><span className="text-[10px] font-bold">{expanded ? '閉じる' : '範囲を見る'}</span><span className={'text-lg transition-transform '+(expanded?'rotate-90':'')}>›</span></span>
                      </button>
                      {expanded && <div id={'school-range-'+item.id} className={'space-y-3 border-t p-3 '+(dark?'border-slate-700':'border-slate-100')}>
@@ -1747,7 +1793,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
             const official=getPublishedRangeProgress(examId,subject.subject);
             const pct=official.percent;
             return <section id={'subject-range-'+subject.id} key={subject.id} className={panel+' scroll-mt-24'}>
-              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{subject.subject}</h3></div><b className={'rounded-full border px-3 py-1 text-xs '+scopeColor(official.percent,official.total,official.total > 0 && official.missingSubjects.length > 0)}>{official.total ? official.missingSubjects.length ? '一部登録' : official.percent + '% 履修済み' : '範囲未登録'}</b></div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{dateLabel(subject.exam_date)}</p><h3 className="text-lg font-black">{displaySubjectName(subject.subject)}</h3></div><b className={'rounded-full border px-3 py-1 text-xs '+scopeColor(official.percent,official.total,official.total > 0 && official.missingSubjects.length > 0)}>{official.total ? official.missingSubjects.length ? '一部登録' : official.percent + '% 履修済み' : '範囲未登録'}</b></div>
               {official.total>0 && <><div className={'mt-3 h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:pct+'%'}}/></div><p className={'mt-1 text-[10px] '+muted}>学校公開の出題範囲 {official.completed}/{official.total} 項目完了。上の「学校公開の試験範囲」でチェックできます。</p></>}
               {official.missingSubjects.length > 0 && <p className={'mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-5 text-amber-900'}>公開されている範囲：{official.registeredSubjects.join('・') || 'なし'}。未登録の範囲：{official.missingSubjects.join('・')}。登録済みの科目分だけ進捗に計上しています。</p>}
               {official.total === 0 && <p className={'mt-2 text-[10px] leading-5 '+muted}>学校公開の出題範囲データがまだ紐づいていません。Admin・先生側での登録が必要です。</p>}
@@ -1799,7 +1845,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         <form onSubmit={addPersonalTask} className="space-y-3">
           <label className="block space-y-1 text-xs font-bold">課題名<input className={input} value={personalTaskTitle} onChange={e=>setPersonalTaskTitle(e.target.value)} maxLength={200} placeholder="例：数学の問題集 P30〜35" required/></label>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block space-y-1 text-xs font-bold">教科<select className={input} value={personalTaskSubject} onChange={e=>setPersonalTaskSubject(e.target.value)}><option value="その他">その他</option>{SUBJECTS.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select></label>
+            <label className="block space-y-1 text-xs font-bold">教科<select className={input} value={personalTaskSubject} onChange={e=>setPersonalTaskSubject(e.target.value)}><option value="その他">その他</option>{SUBJECTS.map(subject=><option key={subject} value={subject}>{displaySubjectName(subject)}</option>)}</select></label>
             <label className="block space-y-1 text-xs font-bold">課題の種類<select className={input} value={personalTaskType} onChange={e=>setPersonalTaskType(e.target.value as 'paper'|'classroom'|'other')}><option value="paper">紙プリント・ノート</option><option value="classroom">Classroom</option><option value="other">その他・授業内指示</option></select></label>
             <label className="block space-y-1 text-xs font-bold sm:col-span-2">提出期限（任意）<input className={input} type="datetime-local" value={personalTaskDueAt} onChange={e=>setPersonalTaskDueAt(e.target.value)}/></label>
           </div>
@@ -1873,7 +1919,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button>{focusSeconds>0?<button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button>:<button type="button" onClick={discardPausedContinuation} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">この勉強を終了</button>}</>}{timerState==='running'&&<button type="button" onClick={()=>finish(timerMode==='countup'?'completed':'stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">{timerMode==='countup'?'終了して記録':'中断して記録'}</button>}</div>
           {timerMode==='pomodoro'&&timerState==='running'&&<button type="button" onClick={switchTimerPhase} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">{task && focusSeconds===0 ? '中断した勉強を保存済みです。残り時間から再開できます。' : '一時停止中'}</p>}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s} value={s}>{displaySubjectName(s)}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(displaySubjectName(found.subject) as Subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {displaySubjectName(s.subject)}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
       </section>
       <section className={panel}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

@@ -637,6 +637,16 @@ body {
   .campus-student-shell .campus-student-main svg {
     max-width: 100%;
   }
+  .campus-student-shell button > svg,
+  .campus-student-shell nav svg,
+  .campus-student-shell [role="tab"] svg,
+  .campus-student-shell .campus-nav-icon-motion > svg,
+  .campus-student-shell .campus-theme-mobile-header svg {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    max-width: none !important;
+    vertical-align: middle;
+  }
 }
 
 /* Global localization behavior: retain predictable layout for Arabic RTL. */

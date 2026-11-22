@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   if (description.length > 2000) return fail('説明は2000文字以内にしてください。');
   if (!SUBJECTS.includes(subject)) return fail('教科を選択してください。');
   if (!MATERIAL_TYPES.includes(materialType)) return fail('資料の種類を選択してください。');
-  if (!/^submissions\/[0-9a-f-]{36}\.(pdf|png|jpg|jpeg)$/i.test(storagePath)) return fail('投稿ファイルの識別情報が正しくありません。');
+  if (!/^submissions\/[0-9a-f-]{36}\.(pdf|png|jpg|jpeg|webp)$/i.test(storagePath)) return fail('投稿ファイルの識別情報が正しくありません。');
   if (!fileName || fileName.length > 240) return fail('ファイル名を確認してください。');
   if (!STUDY_MATERIAL_MIME_TYPES.includes(mimeType as typeof STUDY_MATERIAL_MIME_TYPES[number])) return fail('ファイル形式が正しくありません。');
   if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > STUDY_MATERIAL_MAX_BYTES) return fail('ファイルサイズは20MB以下にしてください。');

@@ -6,6 +6,7 @@ export const STUDY_MATERIAL_MIME_TYPES = [
   'application/pdf',
   'image/png',
   'image/jpeg',
+  'image/webp',
 ] as const;
 
 const SCHOOL_EMAIL_PATTERN = /^[0-9]{6}@tokyo\.soka\.ed\.jp$/i;
@@ -25,14 +26,12 @@ export async function ensureStudyMaterialsBucket() {
 
   const { data, error } = await admin.storage.getBucket(STUDY_MATERIAL_BUCKET);
   if (data && !error) {
-    if (data.public) {
-      const { error: updateError } = await admin.storage.updateBucket(STUDY_MATERIAL_BUCKET, {
-        public: false,
-        fileSizeLimit: STUDY_MATERIAL_MAX_BYTES,
-        allowedMimeTypes: [...STUDY_MATERIAL_MIME_TYPES],
-      });
-      if (updateError) throw updateError;
-    }
+    const { error: updateError } = await admin.storage.updateBucket(STUDY_MATERIAL_BUCKET, {
+      public: false,
+      fileSizeLimit: STUDY_MATERIAL_MAX_BYTES,
+      allowedMimeTypes: [...STUDY_MATERIAL_MIME_TYPES],
+    });
+    if (updateError) throw updateError;
     return admin;
   }
 
@@ -124,5 +123,5 @@ export function canStudentViewMaterial(
 
 export function isValidMaterialStoragePath(value: unknown): value is string {
   return typeof value === 'string'
-    && /^(?:uploads|submissions)\/[0-9a-f-]{36}\.(?:pdf|png|jpg|jpeg)$/i.test(value);
+    && /^(?:uploads|submissions)\/[0-9a-f-]{36}\.(?:pdf|png|jpg|jpeg|webp)$/i.test(value);
 }

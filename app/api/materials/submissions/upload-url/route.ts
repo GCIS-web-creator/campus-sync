@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   try {
     const admin = await ensureStudyMaterialsBucket();
-    const extension = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : 'jpg';
+    const extension = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
     const path = 'submissions/' + randomUUID() + '.' + extension;
     const { data, error } = await admin.storage.from(STUDY_MATERIAL_BUCKET).createSignedUploadUrl(path);
     if (error || !data?.token) {

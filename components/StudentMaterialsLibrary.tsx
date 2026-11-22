@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { compressImageFile } from '@/lib/compress-image-file';
 import {
   Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X, UploadCloud,
   Folder, FolderOpen, ChevronRight, ArrowUp,
@@ -141,7 +142,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       return;
     }
     const invalid = studentFiles.find(file =>
-      !['application/pdf', 'image/png', 'image/jpeg'].includes(file.type)
+      !['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.type)
       || file.size < 1 || file.size > 20 * 1024 * 1024,
     );
     if (invalid) {
@@ -160,10 +161,11 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
 
       for (const file of studentFiles) {
         try {
+          const uploadFile = await compressImageFile(file);
           const uploadUrlResponse = await fetch('/api/materials/submissions/upload-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ fileName: file.name, mimeType: file.type, size: file.size }),
+            body: JSON.stringify({ fileName: file.name, mimeType: uploadFile.type, size: uploadFile.size }),
             cache: 'no-store',
           });
           const uploadUrl = await uploadUrlResponse.json().catch(() => null);
@@ -172,7 +174,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
           }
 
           const { error: uploadError } = await supabase.storage.from('study-materials')
-            .uploadToSignedUrl(uploadUrl.path, uploadUrl.token, file, { contentType: file.type });
+            .uploadToSignedUrl(uploadUrl.path, uploadUrl.token, uploadFile, { contentType: uploadFile.type });
           if (uploadError) throw new Error(uploadError.message);
 
           const baseName = file.name.replace(/\.[^.]+$/, '').trim() || '生徒投稿資料';
@@ -186,8 +188,8 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
               material_type: studentUploadType,
               storage_path: uploadUrl.path,
               file_name: file.name,
-              mime_type: file.type,
-              file_size: file.size,
+              mime_type: uploadFile.type,
+              file_size: uploadFile.size,
             }),
             cache: 'no-store',
           });
@@ -330,7 +332,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
           <UploadCloud size={24} className="text-cyan-600" />
           <span className="mt-2 text-xs font-black">{studentFiles.length ? studentFiles.length + '件のファイルを選択中' : 'PDF・PNG・JPGをまとめて選択'}</span>
           <span className={'mt-1 text-[10px] ' + muted}>最大10ファイル・各20MBまで</span>
-          <input type="file" multiple accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" onChange={event => {
+          <input type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp" onChange={event => {
             const selected = Array.from(event.target.files || []);
             setStudentFiles(selected.slice(0, 10));
             setStudentUploadMessage(selected.length > 10 ? '最初の10ファイルを選択しました。残りは次回投稿してください。' : '');

@@ -72,11 +72,21 @@ export function buildBookCoverCandidates(
   isbn13: string,
   sources: Array<string | null | undefined> = [],
 ): string[] {
+  const encodedIsbn = encodeURIComponent(isbn13);
   const generated = [
-    'https://ndlsearch.ndl.go.jp/thumbnail/' + encodeURIComponent(isbn13) + '.jpg',
-    'https://covers.openlibrary.org/b/isbn/' + encodeURIComponent(isbn13) + '-L.jpg?default=false',
+    'https://thumbnail-s.images.books.or.jp/' + encodedIsbn + '.jpg',
+    'https://ndlsearch.ndl.go.jp/thumbnail/' + encodedIsbn + '.jpg',
+    'https://covers.openlibrary.org/b/isbn/' + encodedIsbn + '-L.jpg?default=false',
   ];
   return [...new Set([...sources, ...generated].filter((value): value is string =>
     typeof value === 'string' && /^https:\/\//i.test(value.trim()),
   ).map(value => value.trim()))];
+}
+
+
+/** Display external book-cover URLs through CampusSync so mobile clients avoid third-party hotlink failures. */
+export function toBookCoverProxyUrl(value: string | null | undefined): string {
+  const url = typeof value === 'string' ? value.trim() : '';
+  if (!/^https:\/\//i.test(url)) return '';
+  return '/api/books/cover?url=' + encodeURIComponent(url);
 }

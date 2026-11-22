@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
   const extension = mimeType === 'application/pdf'
     ? 'pdf'
-    : mimeType === 'image/png' ? 'png' : 'jpg';
+    : mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
   try {
     const admin = await ensureStudyMaterialsBucket();
     const path = 'uploads/' + randomUUID() + '.' + extension;
