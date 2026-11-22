@@ -47,8 +47,8 @@ test('repeated synchronization does not double-count elapsed seconds', () => {
 });
 
 test('validates ISBN-13 and ISBN-10 including checksum', () => {
-  assert.equal(normalizeIsbn13('978-4-06-515090-6'), '9784065150906');
+  assert.equal(normalizeIsbn13('978-4-06-515090-0'), '9784065150900');
   assert.equal(normalizeIsbn13('0-306-40615-2'), '9780306406157');
-  assert.equal(normalizeIsbn13('9784065150900'), null);
+  assert.equal(normalizeIsbn13('9784065150906'), null);
   assert.equal(normalizeIsbn13('4901234567890'), null);
 });
