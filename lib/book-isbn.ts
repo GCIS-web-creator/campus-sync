@@ -1,4 +1,4 @@
-import { normalizeIsbn13 } from '@/lib/pomodoro-timeline';
+import { normalizeIsbn13 } from './pomodoro-timeline';
 
 export type BookBarcodeResult =
   | { type: 'isbn'; isbn13: string }
