@@ -30,18 +30,23 @@ export async function GET(request: Request) {
   }
 
   const userIds = [...new Set((data || []).map(item => item.user_id))];
-  const { data: profiles, error: profilesError } = userIds.length
-    ? await admin.from('profiles').select('auth_user_id,verified_class').in('auth_user_id', userIds)
+  const studentIds = [...new Set((data || []).map(item => item.student_id))];
+  const profilesByUser = userIds.length
+    ? await admin.from('profiles').select('auth_user_id,student_id,verified_class').in('auth_user_id', userIds)
     : { data: [], error: null };
-  if (profilesError) return fail('投稿者の所属クラスを確認できませんでした。', 500);
-  const verifiedByUser = new Map((profiles || []).map(profile => [profile.auth_user_id, profile.verified_class]));
-  const submissions = (data || []).map(item => ({
-    ...item,
-    verified_class: typeof verifiedByUser.get(item.user_id) === 'string'
-      && /^[1-3]-[1-8]$/.test(verifiedByUser.get(item.user_id) as string)
-      ? verifiedByUser.get(item.user_id) as string
-      : null,
-  }));
+  const profilesByStudent = studentIds.length
+    ? await admin.from('profiles').select('auth_user_id,student_id,verified_class').in('student_id', studentIds)
+    : { data: [], error: null };
+  if (profilesByUser.error || profilesByStudent.error) return fail('投稿者の所属クラスを確認できませんでした。', 500);
+  const verifiedByUser = new Map((profilesByUser.data || []).map(profile => [profile.auth_user_id, profile.verified_class]));
+  const verifiedByStudent = new Map((profilesByStudent.data || []).map(profile => [profile.student_id, profile.verified_class]));
+  const submissions = (data || []).map(item => {
+    const candidate = verifiedByUser.get(item.user_id) ?? verifiedByStudent.get(item.student_id);
+    return {
+      ...item,
+      verified_class: typeof candidate === 'string' && /^[1-3]-[1-8]$/.test(candidate) ? candidate : null,
+    };
+  });
   return NextResponse.json({ success: true, submissions }, { headers: noStore });
 }
 
@@ -82,14 +87,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { data: profile, error: profileError } = await admin.from('profiles')
+    const profileByUser = await admin.from('profiles')
       .select('verified_class')
       .eq('auth_user_id', claimed.user_id)
       .maybeSingle();
+    const profileByStudent = !profileByUser.error && !profileByUser.data
+      ? await admin.from('profiles').select('verified_class').eq('student_id', claimed.student_id).maybeSingle()
+      : { data: null, error: null };
+    const profile = profileByUser.data || profileByStudent.data;
     const verifiedClass = typeof profile?.verified_class === 'string' && /^[1-3]-[1-8]$/.test(profile.verified_class)
       ? profile.verified_class
       : null;
-    if (profileError || !verifiedClass) {
+    if (profileByUser.error || profileByStudent.error || !verifiedClass) {
       await admin.from('study_material_submissions').update({ status: 'pending', updated_at: new Date().toISOString() })
         .eq('id', id).eq('status', 'reviewing');
       return fail('投稿した生徒の所属クラスが未確認です。プロフィールのクラスを確認してから再度承認してください。', 409);
