@@ -510,7 +510,7 @@ export default function StudyMaterialsAdmin() {
               <FileText size={14} className="shrink-0 text-cyan-400" /><span className="min-w-0 flex-1 truncate text-slate-200">{selectedFile.name}</span><span className="shrink-0 text-slate-500">{fileSizeLabel(selectedFile.size)}</span>
               <button type="button" disabled={saving} onClick={() => setFiles(previous => previous.filter((_, itemIndex) => itemIndex !== index))} aria-label={selectedFile.name + 'を選択解除'} className="text-slate-400 hover:text-rose-300"><X size={14}/></button>
             </div>)}
-          </div>
+          </div>}
 
           <label className="flex items-center gap-2 text-xs text-slate-300">
             <input type="checkbox" checked={publishImmediately} onChange={event => setPublishImmediately(event.target.checked)} className="h-4 w-4 accent-cyan-500" />
