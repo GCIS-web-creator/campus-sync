@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, RefreshCw, Timer, TrendingUp, UserRound, X } from 'lucide-react';
+import StudentLearningAnalytics from '@/components/StudentLearningAnalytics';
+import { BarChart3, BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, RefreshCw, Timer, TrendingUp, UserRound, X } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
@@ -65,7 +66,7 @@ const duration = (seconds: number) => {
 const dateLabel = (value: string) => new Date(value + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
 
 export default function StudentLearningHub({ userId, userClass = '', isDarkMode = false }: { userId: string; userClass?: string; isDarkMode?: boolean }) {
-  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history'>('overview');
+  const [tab, setTab] = useState<'overview' | 'analysis' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
@@ -116,20 +117,36 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
     if (!userId) return;
     setLoading(true); setError('');
     try {
-      const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e, f, g] = await Promise.all([
+      const [a, b, c, e, f, g] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
-        supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
         supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
         supabase.from('campus_planet_growth').select('learning_xp,technical_level').eq('user_id', userId).maybeSingle(),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error;
+      const issue = a.error || b.error || c.error || e.error || f.error || g.error;
       if (issue) throw issue;
+
+      // Supabase returns a limited number of rows per request. Fetch ordered pages so long-term
+      // analytics can compare the complete personal learning history without dropping old sessions.
+      const allSessions: Session[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data: page, error: pageError } = await supabase
+          .from('student_study_sessions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('started_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(offset, offset + 999);
+        if (pageError) throw pageError;
+        const rows = (page || []) as Session[];
+        allSessions.push(...rows);
+        if (rows.length < 1000) break;
+      }
+
       const newExams = (a.data || []) as Exam[];
-      setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions((d.data || []) as Session[]);
+      setExams(newExams); setSubjects((b.data || []) as ExamSubject[]); setRanges((c.data || []) as Range[]); setSessions(allSessions);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
       setPlanetGrowth(g.data ? { learning_xp: Number(g.data.learning_xp || 0), technical_level: Number(g.data.technical_level || 0) } : null);
@@ -390,8 +407,8 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC LEARNING</p><h1 className={'mt-1 text-2xl font-black ' + (dark ? 'text-white' : 'text-slate-900')}>学習・テスト対策</h1><p className={'mt-1 text-xs ' + muted}>考査の予定、集中時間、勉強の記録をまとめて管理。</p></div><div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-cyan-950"><p className="text-[9px] font-bold">今週の勉強時間</p><p className="text-sm font-black">{duration(weekSeconds)}</p></div></header>
-    <nav className={'grid grid-cols-6 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
-      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
+    <nav className={'grid grid-cols-7 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'analysis',label:'分析',icon:BarChart3},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{message}</div>}
@@ -457,6 +474,8 @@ export default function StudentLearningHub({ userId, userClass = '', isDarkMode 
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">次の考査</h2><button type="button" onClick={() => setTab('tests')} className="text-xs font-bold text-cyan-600">日程を見る</button></div>{exams.length ? exams.slice().sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,1).map(exam => <div key={exam.id} className="rounded-xl bg-gradient-to-r from-cyan-800 to-blue-700 p-4 text-white"><p className="text-xs text-cyan-100">{exam.school_year}年度・{exam.term}学期</p><p className="mt-1 text-xl font-black">{exam.exam_type}</p><p className="mt-2 text-xs">{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p><p className="mt-2 text-[11px] text-white/80">{subjects.filter(item=>item.exam_id===exam.id).length}教科登録</p></div>) : <p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>考査日程はAdmin・先生が登録するとここに表示されます。</p>}</section>
       <section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">教科別の集中時間</h2><button type="button" onClick={() => setTab('focus')} className="text-xs font-bold text-cyan-600">勉強を始める</button></div>{subjectTotals.length ? <div className="space-y-3">{subjectTotals.slice(0,5).map(([name,seconds])=><div key={name}><div className="mb-1 flex justify-between text-xs"><b>{name}</b><span className={muted}>{duration(seconds)}</span></div><div className={'h-2 overflow-hidden rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:Math.max(2,seconds/Math.max(...subjectTotals.map(item=>item[1]))*100)+'%'}}/></div></div>)}</div> : <p className={'text-sm '+muted}>勉強記録を保存すると集計が表示されます。</p>}</section>
     </div>}
+
+    {tab === 'analysis' && <StudentLearningAnalytics sessions={sessions} isDarkMode={dark} />}
 
     {tab === 'tests' && <div className="space-y-4">
       <section className={panel}>
