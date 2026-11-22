@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
+import { advancePomodoroTimeline, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
 import { supabase } from '@/lib/supabase';
@@ -20,8 +21,15 @@ type PersonalTask = { id: string; title: string; details: string; subject: strin
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
 type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
+type MyBook = {
+  id: string; user_id: string; isbn13: string; title: string; authors: string[];
+  publisher: string | null; published_date: string | null; description: string | null;
+  thumbnail_url: string | null; info_url: string | null; page_count: number | null;
+  source: 'openlibrary' | 'google-books' | 'manual'; created_at: string;
+};
+type BookMetadata = Omit<MyBook, 'id' | 'user_id' | 'created_at'>;
 type TimerSnapshot = {
-  version: 1;
+  version: 1 | 2;
   savedAt: number;
   phase: 'focus' | 'break';
   timerState: 'running' | 'paused' | 'idle';
@@ -35,6 +43,8 @@ type TimerSnapshot = {
   task: string;
   rangeId: string;
   startedAt: string | null;
+  phaseStartedAt: number | null;
+  phaseEndsAt: number | null;
   showRecord: boolean;
   reflection: string;
   nextAction: string;
@@ -47,7 +57,7 @@ function readTimerSnapshot(userId: string): TimerSnapshot | null {
     const raw = window.localStorage.getItem('campus-sync-study-timer:' + userId);
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<TimerSnapshot>;
-    if (value.version !== 1 || !Number.isFinite(value.savedAt) ||
+    if (![1, 2].includes(Number(value.version)) || !Number.isFinite(value.savedAt) ||
         (value.phase !== 'focus' && value.phase !== 'break') ||
         !['running', 'paused', 'idle'].includes(String(value.timerState)) ||
         !Number.isFinite(value.remaining) || !Number.isFinite(value.focusSeconds) ||
@@ -171,9 +181,24 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [timerSongStatus, setTimerSongStatus] = useState('');
   const needsTimerPushRefresh = useRef(false);
   const startedAt = useRef<string | null>(null);
-  const lastTick = useRef(Date.now());
-  const remainingRef = useRef(1500);
-  const setTimerRemaining = (value: number) => { remainingRef.current = value; setRemaining(value); };
+  const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
+  const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
+  const [myBooks, setMyBooks] = useState<MyBook[]>([]);
+  const [myBooksLoading, setMyBooksLoading] = useState(true);
+  const [bookScannerOpen, setBookScannerOpen] = useState(false);
+  const [bookIsbnInput, setBookIsbnInput] = useState('');
+  const [bookLookupLoading, setBookLookupLoading] = useState(false);
+  const [bookLookupMessage, setBookLookupMessage] = useState('');
+  const [bookPreview, setBookPreview] = useState<BookMetadata | null>(null);
+  const [bookManualEntry, setBookManualEntry] = useState(false);
+  const [manualBookTitle, setManualBookTitle] = useState('');
+  const [manualBookAuthor, setManualBookAuthor] = useState('');
+  const [bookSaving, setBookSaving] = useState(false);
+  const [bookStudySelection, setBookStudySelection] = useState('');
+  const bookScannerRef = useRef<import('html5-qrcode').Html5Qrcode | null>(null);
+  const bookScanHandledRef = useRef(false);
+  const bookScannerElementId = 'campus-sync-isbn-scanner-' + userId.replace(/[^a-zA-Z0-9_-]/g, '');
+  const setTimerRemaining = (value: number) => { setRemaining(value); };
 
   const cancelTimerPush = useCallback(async (scheduleId = timerScheduleId): Promise<boolean> => {
     if (!scheduleId) return true;
@@ -282,6 +307,154 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setTimerSongStatus('曲を停止しました。');
   }, []);
 
+  const loadMyBooks = useCallback(async () => {
+    setMyBooksLoading(true);
+    const { data, error: booksError } = await supabase
+      .from('student_my_books')
+      .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,info_url,page_count,source,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (booksError) {
+      setBookLookupMessage('マイブックを読み込めませんでした。ページを再読み込みしてください。');
+    } else {
+      setMyBooks((data || []) as MyBook[]);
+    }
+    setMyBooksLoading(false);
+  }, [userId]);
+
+  useEffect(() => { void loadMyBooks(); }, [loadMyBooks]);
+
+  const lookupBookIsbn = async (rawValue: string) => {
+    const isbn = normalizeIsbn13(rawValue);
+    if (!isbn) {
+      setBookLookupMessage('有効なISBN-13またはISBN-10を入力してください。');
+      setBookManualEntry(false);
+      return;
+    }
+    setBookIsbnInput(isbn);
+    setBookLookupLoading(true);
+    setBookLookupMessage('ISBNから書誌情報を検索しています…');
+    setBookPreview(null);
+    setBookManualEntry(false);
+    try {
+      const response = await fetch('/api/books/isbn?isbn=' + encodeURIComponent(isbn), {
+        method: 'GET', cache: 'no-store', credentials: 'same-origin',
+      });
+      const payload = await response.json().catch(() => null) as { success?: boolean; book?: BookMetadata; message?: string } | null;
+      if (!response.ok || !payload?.success || !payload.book) {
+        setBookLookupMessage(payload?.message || '書誌情報が見つかりませんでした。タイトルを手入力して登録できます。');
+        setBookManualEntry(true);
+        return;
+      }
+      setBookLookupMessage(myBooks.some(item => item.isbn13 === payload.book!.isbn13)
+        ? 'この本はすでにマイブックに登録されています。'
+        : '書誌情報を取得しました。内容を確認して登録してください。');
+      setBookPreview(payload.book);
+    } catch (cause) {
+      setBookLookupMessage(cause instanceof Error ? cause.message : '書誌情報を取得できませんでした。');
+      setBookManualEntry(true);
+    } finally {
+      setBookLookupLoading(false);
+    }
+  };
+
+  const saveMyBook = async (book: BookMetadata) => {
+    if (myBooks.some(item => item.isbn13 === book.isbn13)) {
+      setBookLookupMessage('この本はすでにマイブックに登録されています。');
+      return;
+    }
+    setBookSaving(true);
+    setBookLookupMessage('');
+    try {
+      const { data, error: insertError } = await supabase
+        .from('student_my_books')
+        .insert({ ...book, user_id: userId })
+        .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,info_url,page_count,source,created_at')
+        .single();
+      if (insertError) {
+        if (insertError.code === '23505') throw new Error('この本はすでに登録されています。');
+        throw insertError;
+      }
+      setMyBooks(current => [data as MyBook, ...current]);
+      setBookPreview(null);
+      setBookManualEntry(false);
+      setManualBookTitle('');
+      setManualBookAuthor('');
+      setBookLookupMessage('「' + book.title + '」をマイブックに登録しました。勉強内容から選べます。');
+    } catch (cause) {
+      setBookLookupMessage(cause instanceof Error ? cause.message : '本を登録できませんでした。');
+    } finally {
+      setBookSaving(false);
+    }
+  };
+
+  const deleteMyBook = async (book: MyBook) => {
+    const { error: deleteError } = await supabase.from('student_my_books').delete().eq('id', book.id).eq('user_id', userId);
+    if (deleteError) {
+      setBookLookupMessage('本を削除できませんでした。');
+      return;
+    }
+    setMyBooks(current => current.filter(item => item.id !== book.id));
+    setBookLookupMessage('「' + book.title + '」をマイブックから削除しました。');
+  };
+
+  const stopBookScanner = async () => {
+    const scanner = bookScannerRef.current;
+    bookScannerRef.current = null;
+    if (scanner) {
+      try { await scanner.stop(); } catch { /* camera already stopped */ }
+      try { scanner.clear(); } catch { /* DOM already removed */ }
+    }
+    setBookScannerOpen(false);
+  };
+
+  const startBookScanner = async () => {
+    setBookLookupMessage('');
+    bookScanHandledRef.current = false;
+    setBookScannerOpen(true);
+    try {
+      await new Promise(resolve => window.setTimeout(resolve, 180));
+      if (!document.getElementById(bookScannerElementId)) {
+        throw new Error('バーコード読み取り画面を準備できませんでした。');
+      }
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
+      const scanner = new Html5Qrcode(bookScannerElementId, {
+        verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+        ],
+      });
+      bookScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 130 }, aspectRatio: 2 },
+        async decodedText => {
+          if (bookScanHandledRef.current) return;
+          const isbn = normalizeIsbn13(decodedText);
+          if (!isbn) return;
+          bookScanHandledRef.current = true;
+          await stopBookScanner();
+          setBookIsbnInput(isbn);
+          void lookupBookIsbn(isbn);
+        },
+        () => undefined,
+      );
+    } catch {
+      await stopBookScanner();
+      setBookLookupMessage('カメラを起動できませんでした。ブラウザーのカメラ権限とHTTPS接続を確認してください。');
+    }
+  };
+
+  useEffect(() => () => {
+    const scanner = bookScannerRef.current;
+    bookScannerRef.current = null;
+    if (scanner) void scanner.stop().catch(() => undefined).finally(() => {
+      try { scanner.clear(); } catch { /* unmount cleanup */ }
+    });
+  }, []);
+
   const studentIdentifier = (userEmail || '').trim().toLowerCase().split('@')[0];
   const dark = isDarkMode;
   const panel = 'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-900');
@@ -368,7 +541,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setPendingXpSessionIds(previous => previous.filter(id => id !== sessionId));
   };
 
-  // 集中モードを別タブへ移動したり、ページを再読み込みしても同じ端末で復元する。
+  // フェーズの終了予定時刻を基準に復元する。タイムゾーンや画面の開閉に依存しない。
   useEffect(() => {
     const snapshot = readTimerSnapshot(userId);
     if (!snapshot) {
@@ -385,8 +558,6 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setFocusSubjectId(snapshot.focusSubjectId || '');
     setTask(snapshot.task || '');
     setRangeId(snapshot.rangeId || '');
-    setFocusSeconds(snapshot.focusSeconds);
-    setBreakSeconds(snapshot.breakSeconds);
     setShowRecord(snapshot.showRecord);
     setReflection(snapshot.reflection || '');
     setNextAction(snapshot.nextAction || '');
@@ -394,50 +565,44 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setTimerScheduleId(snapshot.scheduleId || null);
     startedAt.current = snapshot.startedAt;
 
-    let restoredPhase = snapshot.phase;
-    let restoredRemaining = Math.max(0, Math.floor(snapshot.remaining));
-    let restoredFocus = Math.max(0, Math.floor(snapshot.focusSeconds));
-    let restoredBreak = Math.max(0, Math.floor(snapshot.breakSeconds));
-    let elapsed = snapshot.timerState === 'running'
-      ? Math.max(0, Math.floor((Date.now() - snapshot.savedAt) / 1000))
-      : 0;
-    let phaseChanges = 0;
+    if (snapshot.timerState === 'running') {
+      const phaseStart = snapshot.version === 2 && Number.isFinite(snapshot.phaseStartedAt)
+        ? Number(snapshot.phaseStartedAt)
+        : snapshot.savedAt;
+      const phaseEnd = snapshot.version === 2 && Number.isFinite(snapshot.phaseEndsAt)
+        ? Number(snapshot.phaseEndsAt)
+        : phaseStart + Math.max(0, snapshot.remaining) * 1000;
+      const restored = advancePomodoroTimeline({
+        phase: snapshot.phase,
+        phaseStartedAt: phaseStart,
+        phaseEndsAt: phaseEnd,
+        focusMinutes: snapshot.focusMinutes,
+        breakMinutes: snapshot.breakMinutes,
+        focusSeconds: Math.max(0, Math.floor(snapshot.focusSeconds)),
+        breakSeconds: Math.max(0, Math.floor(snapshot.breakSeconds)),
+      }, Date.now());
 
-    // 非表示中も実時間で進める。休憩0分なら休憩フェーズを作らず次の集中へ進む。
-    while (elapsed > 0 && phaseChanges < 10000) {
-      if (restoredRemaining <= 0) {
-        if (restoredPhase === 'focus' && snapshot.breakMinutes <= 0) {
-          restoredPhase = 'focus';
-          restoredRemaining = snapshot.focusMinutes * 60;
-        } else {
-          restoredPhase = restoredPhase === 'focus' ? 'break' : 'focus';
-          restoredRemaining = (restoredPhase === 'focus' ? snapshot.focusMinutes : snapshot.breakMinutes) * 60;
-        }
-        phaseChanges += 1;
-        continue;
+      setPhase(restored.phase);
+      setTimerRemaining(restored.remaining);
+      setFocusSeconds(restored.focusSeconds);
+      setBreakSeconds(restored.breakSeconds);
+      setPhaseStartedAt(restored.phaseStartedAt);
+      setPhaseEndsAt(restored.phaseEndsAt);
+      setTimerState('running');
+      if (!snapshot.scheduleId || restored.transitionCount > 0) {
+        setTimerScheduleId(null);
+        needsTimerPushRefresh.current = true;
       }
-      const consumed = Math.min(elapsed, restoredRemaining);
-      if (restoredPhase === 'focus') restoredFocus += consumed;
-      else restoredBreak += consumed;
-      elapsed -= consumed;
-      restoredRemaining -= consumed;
-    }
-
-    setFocusSeconds(restoredFocus);
-    setBreakSeconds(restoredBreak);
-    setPhase(restoredPhase);
-    setTimerRemaining(restoredRemaining);
-    setTimerState(phaseChanges >= 10000 ? 'paused' : snapshot.timerState);
-    if (snapshot.timerState === 'running' && (
-      !snapshot.scheduleId ||
-      phaseChanges >= 2 ||
-      (snapshot.breakMinutes <= 0 && phaseChanges >= 1)
-    )) {
-      setTimerScheduleId(null);
-      needsTimerPushRefresh.current = true;
-    }
-    if (snapshot.timerState === 'running' && Date.now() - snapshot.savedAt > 1000) {
-      setMessage('集中モードを前回の状態から復元しました。');
+      if (Date.now() - snapshot.savedAt > 1000) {
+        setMessage('実際の経過時刻からタイマーを同期しました。');
+      }
+    } else {
+      setTimerRemaining(Math.max(0, Math.floor(snapshot.remaining)));
+      setFocusSeconds(Math.max(0, Math.floor(snapshot.focusSeconds)));
+      setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds)));
+      setPhaseStartedAt(null);
+      setPhaseEndsAt(null);
+      setTimerState(snapshot.timerState);
     }
     setTimerReady(true);
   }, [userId]);
@@ -450,7 +615,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       return;
     }
     const snapshot: TimerSnapshot = {
-      version: 1,
+      version: 2,
       savedAt: Date.now(),
       phase,
       timerState,
@@ -464,6 +629,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       task,
       rangeId,
       startedAt: startedAt.current,
+      phaseStartedAt,
+      phaseEndsAt,
       showRecord,
       reflection,
       nextAction,
@@ -471,7 +638,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       scheduleId: timerScheduleId,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
-  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   useEffect(() => {
     if (!timerReady || !needsTimerPushRefresh.current || timerState !== 'running') return;
@@ -480,42 +647,31 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   }, [timerReady, timerState, phase, remaining, scheduleTimerPush]);
 
   useEffect(() => {
-    if (timerState !== 'running') return;
-    lastTick.current = Date.now();
+    if (timerState !== 'running' || phaseStartedAt === null || phaseEndsAt === null) return;
     const timer = window.setInterval(() => {
-      const now = Date.now();
-      const elapsed = Math.floor((now - lastTick.current) / 1000);
-      if (elapsed < 1) return;
-      lastTick.current += elapsed * 1000;
-      const counted = Math.min(elapsed, Math.max(0, remainingRef.current));
-      setTimerRemaining(Math.max(0, remainingRef.current - elapsed));
-      if (counted > 0 && phase === 'focus') setFocusSeconds(value => value + counted);
-      else if (counted > 0) setBreakSeconds(value => value + counted);
+      const advanced = advancePomodoroTimeline({
+        phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds,
+      }, Date.now());
+      setPhase(advanced.phase);
+      setPhaseStartedAt(advanced.phaseStartedAt);
+      setPhaseEndsAt(advanced.phaseEndsAt);
+      setTimerRemaining(advanced.remaining);
+      setFocusSeconds(advanced.focusSeconds);
+      setBreakSeconds(advanced.breakSeconds);
+
+      if (advanced.transitionCount > 0) {
+        playTimerSong();
+        setMessage(advanced.phase === 'break'
+          ? '集中時間が終了しました。休憩に切り替わりました。'
+          : breakMinutes <= 0
+            ? '集中時間が終了しました。休憩なしで次の集中セットに進みました。'
+            : '休憩が終了しました。次の集中セットを開始しました。');
+        void scheduleTimerPush(advanced.phase, advanced.remaining);
+      }
     }, 250);
     return () => window.clearInterval(timer);
-  }, [timerState, phase]);
+  }, [timerState, phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds, playTimerSong, scheduleTimerPush]);
 
-  useEffect(() => {
-    if (timerState !== 'running' || remaining > 0) return;
-    playTimerSong();
-    if (phase === 'focus') {
-      if (breakMinutes <= 0) {
-        setPhase('focus');
-        setTimerRemaining(focusMinutes * 60);
-        setMessage('集中時間が終了しました。休憩なしで次の集中セットを開始します。');
-        void scheduleTimerPush('focus', focusMinutes * 60);
-      } else {
-        setPhase('break');
-        setTimerRemaining(breakMinutes * 60);
-        setMessage('集中時間が終了しました。休憩に切り替わりました。');
-      }
-    } else {
-      setPhase('focus');
-      setTimerRemaining(focusMinutes * 60);
-      setMessage('休憩が終了しました。次の集中セットを始められます。');
-      void scheduleTimerPush('focus', focusMinutes * 60);
-    }
-  }, [timerState, remaining, phase, breakMinutes, focusMinutes, playTimerSong, scheduleTimerPush]);
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
@@ -630,7 +786,10 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const setPreset = (focus: number, rest: number) => {
     setFocusMinutes(focus); setBreakMinutes(rest); setCustomFocus(String(focus)); setCustomBreak(String(rest));
-    if (timerState === 'idle') { setPhase('focus'); setTimerRemaining(focus * 60); }
+    if (timerState === 'idle') {
+      setPhase('focus'); setTimerRemaining(focus * 60);
+      setPhaseStartedAt(null); setPhaseEndsAt(null);
+    }
   };
   const begin = async () => {
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
@@ -642,12 +801,28 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       return;
     }
     if (timerState === 'idle') {
-      startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
+      const now = Date.now();
+      startedAt.current = new Date(now).toISOString();
+      setFocusSeconds(0); setBreakSeconds(0); setPhase('focus');
+      setTimerRemaining(focusMinutes * 60);
+      setPhaseStartedAt(now);
+      setPhaseEndsAt(now + focusMinutes * 60 * 1000);
     }
     setShowRecord(false); setTimerState('running');
     prepareTimerSong();
   };
   const pauseTimer = () => {
+    if (phaseStartedAt !== null && phaseEndsAt !== null) {
+      const current = advancePomodoroTimeline({
+        phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds,
+      }, Date.now());
+      setPhase(current.phase);
+      setTimerRemaining(current.remaining);
+      setFocusSeconds(current.focusSeconds);
+      setBreakSeconds(current.breakSeconds);
+    }
+    setPhaseStartedAt(null);
+    setPhaseEndsAt(null);
     setTimerState('paused');
     void cancelTimerPush();
   };
@@ -657,19 +832,31 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setError('終了通知を再予約できなかったため、タイマーを再開しませんでした。通信状態を確認してください。');
       return;
     }
+    const now = Date.now();
+    setPhaseStartedAt(now);
+    setPhaseEndsAt(now + Math.max(1, remaining) * 1000);
     setTimerState('running');
     prepareTimerSong();
   };
   const switchTimerPhase = async () => {
-    const nextPhase = phase === 'focus' ? 'break' : 'focus';
+    const now = Date.now();
+    const current = phaseStartedAt !== null && phaseEndsAt !== null
+      ? advancePomodoroTimeline({ phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds }, now)
+      : { phase, remaining, focusSeconds, breakSeconds };
+    setFocusSeconds(current.focusSeconds);
+    setBreakSeconds(current.breakSeconds);
+    const nextPhase = current.phase === 'focus' ? 'break' : 'focus';
     if (nextPhase === 'break' && breakMinutes <= 0) {
       const reserved = await scheduleTimerPush('focus', focusMinutes * 60);
       if (!reserved) {
         setError('次の集中時間の通知を予約できませんでした。通信状態を確認してください。');
         return;
       }
+      const phaseStart = Date.now();
       setPhase('focus');
       setTimerRemaining(focusMinutes * 60);
+      setPhaseStartedAt(phaseStart);
+      setPhaseEndsAt(phaseStart + focusMinutes * 60 * 1000);
       setMessage('休憩時間は0分です。休憩を挟まず次の集中セットに進みます。');
       return;
     }
@@ -679,10 +866,22 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setError('フェーズ変更の通知を予約できませんでした。通信状態を確認してください。');
       return;
     }
+    const phaseStart = Date.now();
     setPhase(nextPhase);
     setTimerRemaining(nextSeconds);
+    setPhaseStartedAt(phaseStart);
+    setPhaseEndsAt(phaseStart + nextSeconds * 1000);
   };
   const finish = (kind: 'completed' | 'stopped') => {
+    if (timerState === 'running' && phaseStartedAt !== null && phaseEndsAt !== null) {
+      const current = advancePomodoroTimeline({ phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds }, Date.now());
+      setPhase(current.phase);
+      setTimerRemaining(current.remaining);
+      setFocusSeconds(current.focusSeconds);
+      setBreakSeconds(current.breakSeconds);
+    }
+    setPhaseStartedAt(null);
+    setPhaseEndsAt(null);
     void cancelTimerPush();
     setTimerState('idle'); setFinishKind(kind); setShowRecord(true); setReflection(''); setNextAction('');
   };
@@ -694,6 +893,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setFocusSeconds(0);
     setBreakSeconds(0);
     setTimerRemaining(focusMinutes * 60);
+    setPhaseStartedAt(null);
+    setPhaseEndsAt(null);
     setTask('');
     setRangeId('');
     setReflection('');
@@ -747,6 +948,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         // The stopped segment is now saved and XP-accounted. Keep its remaining time
         // and task as a paused continuation; the next resume creates a new DB segment.
         setTimerState('paused');
+        setPhaseStartedAt(null);
+        setPhaseEndsAt(null);
         setFocusSeconds(0);
         setBreakSeconds(0);
         startedAt.current = new Date().toISOString();
@@ -1067,7 +1270,40 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button>{focusSeconds>0?<button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button>:<button type="button" onClick={discardPausedContinuation} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">この勉強を終了</button>}</>}{timerState==='running'&&<button type="button" onClick={()=>finish('stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">中断して記録</button>}</div>
           {timerState==='running'&&<button type="button" onClick={switchTimerPhase} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">{task && focusSeconds===0 ? '中断した勉強を保存済みです。残り時間から再開できます。' : '一時停止中'}</p>}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(found.subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {s.subject}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
+      </section>
+      <section className={panel}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="flex items-center gap-2 font-black"><BookOpenCheck size={18} className="text-cyan-600"/>マイブック</h2><p className={'mt-1 text-[11px] '+muted}>本の裏面のISBNバーコードを読み取り、個人の本棚に登録します。</p></div>
+          <button type="button" onClick={()=>void startBookScanner()} className={primary}><QrCode size={15}/>カメラで読み取る</button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <label className="space-y-1 text-xs font-bold">ISBN（手入力も可能）<input className={input} value={bookIsbnInput} onChange={e=>setBookIsbnInput(e.target.value)} placeholder="978XXXXXXXXXX / ISBN-10" inputMode="numeric" maxLength={20}/></label>
+          <button type="button" onClick={()=>void lookupBookIsbn(bookIsbnInput)} disabled={bookLookupLoading||!bookIsbnInput.trim()} className={secondary+' self-end'}>{bookLookupLoading?'検索中…':'ISBNを検索'}</button>
+        </div>
+        {bookScannerOpen&&<div className={'mt-3 rounded-2xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
+          <div className="mb-2 flex items-center justify-between gap-2"><p className="text-xs font-black">バーコードを枠内に合わせてください</p><button type="button" onClick={()=>void stopBookScanner()} className={secondary}>読み取り終了</button></div>
+          <div id={bookScannerElementId} className="mx-auto min-h-32 w-full max-w-md overflow-hidden rounded-xl bg-black"/>
+          <p className={'mt-2 text-[10px] '+muted}>カメラの使用許可が必要です。ISBNのEAN-13（978 / 979）を読み取ります。</p>
+        </div>}
+        {bookLookupMessage&&<p role="status" className={'mt-3 rounded-xl border px-3 py-2 text-xs leading-5 '+(dark?'border-slate-700 bg-slate-900 text-slate-200':'border-slate-200 bg-slate-50 text-slate-700')}>{bookLookupMessage}</p>}
+        {bookPreview&&<article className={'mt-3 flex flex-wrap gap-3 rounded-xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
+          {bookPreview.thumbnail_url&&<img src={bookPreview.thumbnail_url} alt="" className="h-28 w-20 rounded-lg bg-white object-contain"/>}
+          <div className="min-w-0 flex-1"><p className="text-sm font-black">{bookPreview.title}</p>{bookPreview.authors.length>0&&<p className={'mt-1 text-xs '+muted}>{bookPreview.authors.join('・')}</p>}<p className={'mt-1 text-[10px] '+muted}>{bookPreview.publisher||'出版社不明'} ・ ISBN {bookPreview.isbn13}</p><p className={'mt-2 line-clamp-3 text-xs leading-5 '+muted}>{bookPreview.description||'説明情報はありません。'}</p></div>
+          <button type="button" disabled={bookSaving||myBooks.some(item=>item.isbn13===bookPreview.isbn13)} onClick={()=>void saveMyBook(bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':myBooks.some(item=>item.isbn13===bookPreview.isbn13)?'登録済み':'マイブックに登録'}</button>
+        </article>}
+        {bookManualEntry&&<div className={'mt-3 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
+          <p className="text-xs font-black sm:col-span-2">書誌情報が見つからない本は、タイトルを手入力してISBN付きで登録できます。</p>
+          <label className="space-y-1 text-xs font-bold">本のタイトル<input className={input} value={manualBookTitle} onChange={e=>setManualBookTitle(e.target.value)} maxLength={500}/></label>
+          <label className="space-y-1 text-xs font-bold">著者（任意）<input className={input} value={manualBookAuthor} onChange={e=>setManualBookAuthor(e.target.value)} maxLength={200}/></label>
+          <button type="button" disabled={bookSaving||!manualBookTitle.trim()} onClick={()=>{const isbn=normalizeIsbn13(bookIsbnInput);if(!isbn){setBookLookupMessage('有効なISBNを入力してください。');return;}void saveMyBook({isbn13:isbn,title:manualBookTitle.trim(),authors:manualBookAuthor.trim()?[manualBookAuthor.trim()]:[],publisher:null,published_date:null,description:null,thumbnail_url:null,info_url:null,page_count:null,source:'manual'});}} className={primary+' sm:col-span-2'}>{bookSaving?'登録中…':'手入力で登録'}</button>
+        </div>}
+        <div className="mt-4 flex items-center justify-between gap-2"><h3 className="text-xs font-black">登録済みの本</h3><span className={'text-[10px] '+muted}>{myBooksLoading?'読み込み中…':myBooks.length+'冊'}</span></div>
+        {myBooks.length===0&&!myBooksLoading?<p className={'mt-2 rounded-xl border border-dashed p-4 text-center text-xs '+muted}>まだ本は登録されていません。</p>:<div className="mt-2 grid gap-2 sm:grid-cols-2">{myBooks.map(book=><article key={book.id} className={'flex min-w-0 items-center gap-3 rounded-xl border p-2.5 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
+          {book.thumbnail_url?<img src={book.thumbnail_url} alt="" className="h-16 w-11 shrink-0 rounded bg-white object-contain"/>:<span className="flex h-16 w-11 shrink-0 items-center justify-center rounded bg-cyan-50 text-cyan-700"><BookOpenCheck size={20}/></span>}
+          <div className="min-w-0 flex-1"><p className="line-clamp-2 text-xs font-black">{book.title}</p><p className={'mt-1 truncate text-[10px] '+muted}>{book.authors.join('・')||'著者情報なし'} ・ {book.isbn13}</p></div>
+          <button type="button" onClick={()=>void deleteMyBook(book)} aria-label={book.title+'を削除'} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15}/></button>
+        </article>)}</div>}
       </section>
       {showRecord&&<section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">勉強内容を記録</h2><button type="button" onClick={()=>{setShowRecord(false);setTimerState("paused")}} aria-label="閉じる"><X size={18}/></button></div><p className={'mb-3 text-xs '+muted}>集中 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p><form onSubmit={saveSession} className="space-y-3"><label className="block space-y-1 text-xs font-bold">勉強した内容<textarea className={input} value={reflection} onChange={e=>setReflection(e.target.value)} rows={3} placeholder="どこまで進んだか、何を理解できたか…" maxLength={2000} required/></label><label className="block space-y-1 text-xs font-bold">次にやること<textarea className={input} value={nextAction} onChange={e=>setNextAction(e.target.value)} rows={2} placeholder="次回は何から始めるか…" maxLength={1000} required/></label><div className="flex justify-end gap-2"><button type="button" onClick={()=>{setShowRecord(false);setTimerState('paused')}} className={secondary}>戻る</button><button className={primary} disabled={saving||focusSeconds<1}><CheckCircle2 size={15}/>記録を保存</button></div></form></section>}
     </div>}

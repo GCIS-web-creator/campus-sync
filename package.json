@@ -16,7 +16,8 @@
     "cloudflare:deploy": "npm run cloudflare:build && npx opennextjs-cloudflare deploy",
     "test:contributions": "node --experimental-strip-types --test scripts/test-campus-contributions.mjs",
     "test:knowledge": "node --experimental-strip-types --test scripts/test-campus-knowledge.mjs scripts/test-math-question-bank.mjs scripts/test-math-question-bank-answers.mjs scripts/test-math-question-bank-choices.mjs",
-    "test:planet-tree": "node --experimental-strip-types --test scripts/test-planet-technology-tree.mjs"
+    "test:planet-tree": "node --experimental-strip-types --test scripts/test-planet-technology-tree.mjs",
+    "test:pomodoro": "node --experimental-strip-types --test scripts/test-pomodoro-timeline.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
