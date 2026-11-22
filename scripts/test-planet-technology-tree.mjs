@@ -26,7 +26,7 @@ test('catalog contains more than one thousand stable, unique nodes', () => {
 });
 
 test('the foundation research is the only available starting node', () => {
-  const empty = new Set<string>();
+  const empty = new Set();
   const root = getPlanetTechnologyNode(PLANET_TECHNOLOGY_ROOT_ID);
   assert.ok(root);
   assert.equal(getPlanetTechnologyNodeState(root, 0, empty), 'available');
