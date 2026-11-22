@@ -1102,7 +1102,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   }, [timerReady, timerState, phase, remaining, scheduleTimerPush]);
 
   useEffect(() => {
-    if (timerState !== 'running' || phaseStartedAt === null || phaseEndsAt === null) return;
+    if (timerMode !== 'pomodoro' || timerState !== 'running' || phaseStartedAt === null || phaseEndsAt === null) return;
     const timer = window.setInterval(() => {
       const advanced = advancePomodoroTimeline({
         phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds,
@@ -1125,7 +1125,17 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       }
     }, 250);
     return () => window.clearInterval(timer);
-  }, [timerState, phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds, playTimerSong, scheduleTimerPush]);
+  }, [timerMode, timerState, phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds, playTimerSong, scheduleTimerPush]);
+
+  useEffect(() => {
+    if (timerMode !== 'countup' || timerState !== 'running' || phaseStartedAt === null) return;
+    const baseSeconds = timerBaseFocusSecondsRef.current;
+    const anchor = phaseStartedAt;
+    const timer = window.setInterval(() => {
+      setFocusSeconds(calculateCountUpSeconds(baseSeconds, anchor, Date.now()));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [timerMode, timerState, phaseStartedAt]);
 
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
@@ -1241,7 +1251,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const setPreset = (focus: number, rest: number) => {
     setFocusMinutes(focus); setBreakMinutes(rest); setCustomFocus(String(focus)); setCustomBreak(String(rest));
-    if (timerState === 'idle') {
+    if (timerState === 'idle' && timerMode === 'pomodoro') {
       setPhase('focus'); setTimerRemaining(focus * 60);
       setPhaseStartedAt(null); setPhaseEndsAt(null);
     }
@@ -1249,25 +1259,38 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const begin = async () => {
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
     setError(''); setMessage('');
-    const startSeconds = timerState === 'idle' ? focusMinutes * 60 : remaining;
-    const reserved = await scheduleTimerPush('focus', startSeconds);
-    if (!reserved) {
-      setError('終了通知をサーバーに予約できなかったため、タイマーを開始しませんでした。通知設定と通信状態を確認して、もう一度開始してください。');
-      return;
+    if (timerMode === 'pomodoro') {
+      const startSeconds = timerState === 'idle' ? focusMinutes * 60 : remaining;
+      const reserved = await scheduleTimerPush('focus', startSeconds);
+      if (!reserved) {
+        setError('終了通知をサーバーに予約できなかったため、タイマーを開始しませんでした。通知設定と通信状態を確認して、もう一度開始してください。');
+        return;
+      }
     }
     if (timerState === 'idle') {
       const now = Date.now();
       startedAt.current = new Date(now).toISOString();
       setFocusSeconds(0); setBreakSeconds(0); setPhase('focus');
-      setTimerRemaining(focusMinutes * 60);
-      setPhaseStartedAt(now);
-      setPhaseEndsAt(now + focusMinutes * 60 * 1000);
+      timerBaseFocusSecondsRef.current = 0;
+      if (timerMode === 'countup') {
+        setTimerRemaining(0);
+        setPhaseStartedAt(now);
+        setPhaseEndsAt(null);
+      } else {
+        setTimerRemaining(focusMinutes * 60);
+        setPhaseStartedAt(now);
+        setPhaseEndsAt(now + focusMinutes * 60 * 1000);
+      }
     }
     setShowRecord(false); setTimerState('running');
     prepareTimerSong();
   };
   const pauseTimer = () => {
-    if (phaseStartedAt !== null && phaseEndsAt !== null) {
+    if (timerMode === 'countup' && phaseStartedAt !== null) {
+      const elapsed = calculateCountUpSeconds(timerBaseFocusSecondsRef.current, phaseStartedAt, Date.now());
+      timerBaseFocusSecondsRef.current = elapsed;
+      setFocusSeconds(elapsed);
+    } else if (timerMode === 'pomodoro' && phaseStartedAt !== null && phaseEndsAt !== null) {
       const current = advancePomodoroTimeline({
         phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds,
       }, Date.now());
@@ -1275,25 +1298,35 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setTimerRemaining(current.remaining);
       setFocusSeconds(current.focusSeconds);
       setBreakSeconds(current.breakSeconds);
+      timerBaseFocusSecondsRef.current = current.focusSeconds;
     }
     setPhaseStartedAt(null);
     setPhaseEndsAt(null);
     setTimerState('paused');
-    void cancelTimerPush();
+    if (timerMode === 'pomodoro') void cancelTimerPush();
   };
   const resumeTimer = async () => {
-    const reserved = await scheduleTimerPush(phase, remaining);
-    if (!reserved) {
-      setError('終了通知を再予約できなかったため、タイマーを再開しませんでした。通信状態を確認してください。');
-      return;
+    if (timerMode === 'pomodoro') {
+      const reserved = await scheduleTimerPush(phase, remaining);
+      if (!reserved) {
+        setError('終了通知を再予約できなかったため、タイマーを再開しませんでした。通信状態を確認してください。');
+        return;
+      }
     }
     const now = Date.now();
-    setPhaseStartedAt(now);
-    setPhaseEndsAt(now + Math.max(1, remaining) * 1000);
+    if (timerMode === 'countup') {
+      timerBaseFocusSecondsRef.current = focusSeconds;
+      setPhaseStartedAt(now);
+      setPhaseEndsAt(null);
+    } else {
+      setPhaseStartedAt(now);
+      setPhaseEndsAt(now + Math.max(1, remaining) * 1000);
+    }
     setTimerState('running');
     prepareTimerSong();
   };
   const switchTimerPhase = async () => {
+    if (timerMode !== 'pomodoro') return;
     const now = Date.now();
     const current = phaseStartedAt !== null && phaseEndsAt !== null
       ? advancePomodoroTimeline({ phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds }, now)
@@ -1328,26 +1361,34 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setPhaseEndsAt(phaseStart + nextSeconds * 1000);
   };
   const finish = (kind: 'completed' | 'stopped') => {
-    if (timerState === 'running' && phaseStartedAt !== null && phaseEndsAt !== null) {
-      const current = advancePomodoroTimeline({ phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds }, Date.now());
-      setPhase(current.phase);
-      setTimerRemaining(current.remaining);
-      setFocusSeconds(current.focusSeconds);
-      setBreakSeconds(current.breakSeconds);
+    if (timerState === 'running' && phaseStartedAt !== null) {
+      if (timerMode === 'countup') {
+        const elapsed = calculateCountUpSeconds(timerBaseFocusSecondsRef.current, phaseStartedAt, Date.now());
+        timerBaseFocusSecondsRef.current = elapsed;
+        setFocusSeconds(elapsed);
+      } else if (phaseEndsAt !== null) {
+        const current = advancePomodoroTimeline({ phase, phaseStartedAt, phaseEndsAt, focusMinutes, breakMinutes, focusSeconds, breakSeconds }, Date.now());
+        setPhase(current.phase);
+        setTimerRemaining(current.remaining);
+        setFocusSeconds(current.focusSeconds);
+        setBreakSeconds(current.breakSeconds);
+        timerBaseFocusSecondsRef.current = current.focusSeconds;
+      }
     }
     setPhaseStartedAt(null);
     setPhaseEndsAt(null);
-    void cancelTimerPush();
+    if (timerMode === 'pomodoro') void cancelTimerPush();
     setTimerState('idle'); setFinishKind(kind); setShowRecord(true); setReflection(''); setNextAction('');
   };
   const discardPausedContinuation = () => {
-    void cancelTimerPush();
+    if (timerMode === 'pomodoro') void cancelTimerPush();
     setTimerState('idle');
     setShowRecord(false);
     setPhase('focus');
     setFocusSeconds(0);
     setBreakSeconds(0);
-    setTimerRemaining(focusMinutes * 60);
+    timerBaseFocusSecondsRef.current = 0;
+    setTimerRemaining(timerMode === 'countup' ? 0 : focusMinutes * 60);
     setPhaseStartedAt(null);
     setPhaseEndsAt(null);
     setTask('');
@@ -1407,6 +1448,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         setPhaseEndsAt(null);
         setFocusSeconds(0);
         setBreakSeconds(0);
+        timerBaseFocusSecondsRef.current = 0;
+        setTimerRemaining(timerMode === 'countup' ? 0 : remaining);
         startedAt.current = new Date().toISOString();
         setReflection('');
         setNextAction('');
@@ -1416,7 +1459,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         setPhase('focus');
         setFocusSeconds(0);
         setBreakSeconds(0);
-        setTimerRemaining(focusMinutes * 60);
+        timerBaseFocusSecondsRef.current = 0;
+        setTimerRemaining(timerMode === 'countup' ? 0 : focusMinutes * 60);
         startedAt.current = null;
         setTask('');
         setRangeId('');
