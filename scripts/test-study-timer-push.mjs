@@ -28,9 +28,9 @@ test('remaining time must be within six hours', () => {
     /残り時間/
   );
 });
-test('focus schedule requires a positive break', () => assert.throws(
-  () => parseStudyTimerPushRequest({ action:'schedule', schedule_id:id, phase:'focus', remaining_seconds:1500, break_seconds:0 }),
-  /休憩時間/
+test('focus schedule supports a zero-minute break', () => assert.deepEqual(
+  parseStudyTimerPushRequest({ action:'schedule', schedule_id:id, phase:'focus', remaining_seconds:1500, break_seconds:0 }),
+  { action:'schedule', scheduleId:id, phase:'focus', remainingSeconds:1500, breakSeconds:0 }
 ));
 test('break schedule cannot include a second break', () => assert.throws(
   () => parseStudyTimerPushRequest({ action:'schedule', schedule_id:id, phase:'break', remaining_seconds:180, break_seconds:60 }),

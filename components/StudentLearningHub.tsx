@@ -196,11 +196,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     }
   }, [timerScheduleId]);
 
-  const scheduleTimerPush = useCallback(async (phaseValue: 'focus' | 'break', seconds: number) => {
+  const scheduleTimerPush = useCallback(async (phaseValue: 'focus' | 'break', seconds: number): Promise<boolean> => {
     const cleared = await cancelTimerPush();
     if (!cleared) {
-      setTimerPushStatus('以前の通知予約を取り消せなかったため、新しい予約は作成していません。通信状態を確認して再開してください。');
-      return;
+      setTimerPushStatus('以前の通知予約を取り消せなかったため、新しい予約は作成していません。通信状態を確認してください。');
+      return false;
     }
     try {
       const { data: authData, error: authError } = await supabase.auth.getSession();
@@ -221,10 +221,12 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       });
       const payload = await response.json().catch(() => ({})) as { success?: boolean; message?: string; scheduled_count?: number };
       if (!response.ok || !payload.success) throw new Error(payload.message || 'タイマー通知を予約できませんでした。');
-      setTimerPushStatus('ロック中の終了通知を予約しました。');
+      setTimerPushStatus('端末を閉じていても届く終了通知を予約しました。');
+      return true;
     } catch (cause) {
       setTimerScheduleId(null);
       setTimerPushStatus(cause instanceof Error ? cause.message : 'タイマー通知を予約できませんでした。');
+      return false;
     }
   }, [breakMinutes, cancelTimerPush]);
 
@@ -401,12 +403,18 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       : 0;
     let phaseChanges = 0;
 
-    // 非表示中の経過も実際の集中・休憩時間に振り分ける。長期間放置時は安全のため一時停止する。
+    // 非表示中も実時間で進める。休憩0分なら休憩フェーズを作らず次の集中へ進む。
     while (elapsed > 0 && phaseChanges < 10000) {
       if (restoredRemaining <= 0) {
-        restoredPhase = restoredPhase === 'focus' ? 'break' : 'focus';
-        restoredRemaining = (restoredPhase === 'focus' ? snapshot.focusMinutes : snapshot.breakMinutes) * 60;
+        if (restoredPhase === 'focus' && snapshot.breakMinutes <= 0) {
+          restoredPhase = 'focus';
+          restoredRemaining = snapshot.focusMinutes * 60;
+        } else {
+          restoredPhase = restoredPhase === 'focus' ? 'break' : 'focus';
+          restoredRemaining = (restoredPhase === 'focus' ? snapshot.focusMinutes : snapshot.breakMinutes) * 60;
+        }
         phaseChanges += 1;
+        continue;
       }
       const consumed = Math.min(elapsed, restoredRemaining);
       if (restoredPhase === 'focus') restoredFocus += consumed;
@@ -420,7 +428,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setPhase(restoredPhase);
     setTimerRemaining(restoredRemaining);
     setTimerState(phaseChanges >= 10000 ? 'paused' : snapshot.timerState);
-    if (snapshot.timerState === 'running' && (!snapshot.scheduleId || phaseChanges >= 2)) {
+    if (snapshot.timerState === 'running' && (
+      !snapshot.scheduleId ||
+      phaseChanges >= 2 ||
+      (snapshot.breakMinutes <= 0 && phaseChanges >= 1)
+    )) {
       setTimerScheduleId(null);
       needsTimerPushRefresh.current = true;
     }
@@ -487,9 +499,20 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     if (timerState !== 'running' || remaining > 0) return;
     playTimerSong();
     if (phase === 'focus') {
-      setPhase('break'); setTimerRemaining(breakMinutes * 60); setMessage('集中時間が終了しました。休憩に切り替わりました。');
+      if (breakMinutes <= 0) {
+        setPhase('focus');
+        setTimerRemaining(focusMinutes * 60);
+        setMessage('集中時間が終了しました。休憩なしで次の集中セットを開始します。');
+        void scheduleTimerPush('focus', focusMinutes * 60);
+      } else {
+        setPhase('break');
+        setTimerRemaining(breakMinutes * 60);
+        setMessage('集中時間が終了しました。休憩に切り替わりました。');
+      }
     } else {
-      setPhase('focus'); setTimerRemaining(focusMinutes * 60); setMessage('休憩が終了しました。次の集中セットを始められます。');
+      setPhase('focus');
+      setTimerRemaining(focusMinutes * 60);
+      setMessage('休憩が終了しました。次の集中セットを始められます。');
       void scheduleTimerPush('focus', focusMinutes * 60);
     }
   }, [timerState, remaining, phase, breakMinutes, focusMinutes, playTimerSong, scheduleTimerPush]);
@@ -609,31 +632,55 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setFocusMinutes(focus); setBreakMinutes(rest); setCustomFocus(String(focus)); setCustomBreak(String(rest));
     if (timerState === 'idle') { setPhase('focus'); setTimerRemaining(focus * 60); }
   };
-  const begin = () => {
+  const begin = async () => {
     if (!task.trim()) { setError('取り組む課題・内容を入力してください。'); return; }
     setError(''); setMessage('');
+    const startSeconds = timerState === 'idle' ? focusMinutes * 60 : remaining;
+    const reserved = await scheduleTimerPush('focus', startSeconds);
+    if (!reserved) {
+      setError('終了通知をサーバーに予約できなかったため、タイマーを開始しませんでした。通知設定と通信状態を確認して、もう一度開始してください。');
+      return;
+    }
     if (timerState === 'idle') {
       startedAt.current = new Date().toISOString(); setFocusSeconds(0); setBreakSeconds(0); setPhase('focus'); setTimerRemaining(focusMinutes * 60);
     }
     setShowRecord(false); setTimerState('running');
     prepareTimerSong();
-    void scheduleTimerPush('focus', timerState === 'idle' ? focusMinutes * 60 : remaining);
   };
   const pauseTimer = () => {
     setTimerState('paused');
     void cancelTimerPush();
   };
-  const resumeTimer = () => {
+  const resumeTimer = async () => {
+    const reserved = await scheduleTimerPush(phase, remaining);
+    if (!reserved) {
+      setError('終了通知を再予約できなかったため、タイマーを再開しませんでした。通信状態を確認してください。');
+      return;
+    }
     setTimerState('running');
     prepareTimerSong();
-    void scheduleTimerPush(phase, remaining);
   };
-  const switchTimerPhase = () => {
+  const switchTimerPhase = async () => {
     const nextPhase = phase === 'focus' ? 'break' : 'focus';
+    if (nextPhase === 'break' && breakMinutes <= 0) {
+      const reserved = await scheduleTimerPush('focus', focusMinutes * 60);
+      if (!reserved) {
+        setError('次の集中時間の通知を予約できませんでした。通信状態を確認してください。');
+        return;
+      }
+      setPhase('focus');
+      setTimerRemaining(focusMinutes * 60);
+      setMessage('休憩時間は0分です。休憩を挟まず次の集中セットに進みます。');
+      return;
+    }
     const nextSeconds = (nextPhase === 'focus' ? focusMinutes : breakMinutes) * 60;
+    const reserved = await scheduleTimerPush(nextPhase, nextSeconds);
+    if (!reserved) {
+      setError('フェーズ変更の通知を予約できませんでした。通信状態を確認してください。');
+      return;
+    }
     setPhase(nextPhase);
     setTimerRemaining(nextSeconds);
-    void scheduleTimerPush(nextPhase, nextSeconds);
   };
   const finish = (kind: 'completed' | 'stopped') => {
     void cancelTimerPush();
@@ -1004,7 +1051,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
     {tab === 'focus' && <div className="space-y-4">
       <section className={panel}><div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-cyan-600"/><h2 className="font-black">ポモドーロ設定</h2></div>
-        <p className={'mb-3 text-xs leading-5 '+muted}>集中終了・休憩終了時は、添付曲「鯖の味噌煮と牛乳」を再生します。画面ロック中のWeb PushはOS既定の通知音になります。</p><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="1" max="60" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(1,Number(e.target.value)||1)))}}/></label></div></section>
+        <p className={'mb-3 text-xs leading-5 '+muted}>集中終了・休憩終了時は、添付曲「鯖の味噌煮と牛乳」を再生します。画面ロック中のWeb PushはOS既定の通知音になります。</p><div className="grid grid-cols-3 gap-2">{[{f:25,b:5,label:'25 + 5'},{f:50,b:10,label:'50 + 10'},{f:45,b:15,label:'45 + 15'}].map(p=> <button key={p.label} type="button" onClick={()=>setPreset(p.f,p.b)} className={'rounded-xl border p-3 text-center '+(focusMinutes===p.f&&breakMinutes===p.b?'border-cyan-500 bg-cyan-50 text-cyan-900':dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-white')}><b className="block text-sm">{p.label}</b><span className="text-[10px]">分</span></button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="space-y-1 text-xs font-bold">集中時間（分）<input className={input} type="number" min="1" max="180" value={customFocus} onChange={e=>{setCustomFocus(e.target.value);const v=Math.min(180,Math.max(1,Number(e.target.value)||1));setFocusMinutes(v);if(timerState==='idle'&&phase==='focus')setTimerRemaining(v*60)}}/></label><label className="space-y-1 text-xs font-bold">休憩時間（分）<input className={input} type="number" min="0" max="60" step="1" value={customBreak} onChange={e=>{setCustomBreak(e.target.value);setBreakMinutes(Math.min(60,Math.max(0,Number(e.target.value)||0)))}}/></label></div></section>
       <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">FOCUS SESSION</p><h2 className="mt-1 text-lg font-black">今日の自習</h2></div><span className={'rounded-full px-3 py-1.5 text-[10px] font-black '+(phase==='focus'?'bg-cyan-100 text-cyan-900':'bg-amber-100 text-amber-900')}>{phase==='focus'?'集中時間':'休憩時間'}</span></div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
           <div className="flex min-w-0 flex-col gap-1">

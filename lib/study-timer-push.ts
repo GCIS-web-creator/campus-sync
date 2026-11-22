@@ -28,9 +28,7 @@ export function parseStudyTimerPushRequest(value: unknown): StudyTimerPushReques
   if (!Number.isSafeInteger(parsedBreakSeconds) || parsedBreakSeconds < 0 || parsedBreakSeconds > 10800) {
     throw new Error('休憩時間が正しくありません。');
   }
-  if (phase === 'focus' && parsedBreakSeconds < 1) {
-    throw new Error('集中終了後の休憩時間を指定してください。');
-  }
+
   if (phase === 'break' && parsedBreakSeconds !== 0) {
     throw new Error('休憩中の予約では追加の休憩時間を指定できません。');
   }
