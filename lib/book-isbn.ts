@@ -81,9 +81,8 @@ export function classifyBookBarcode(value: string): BookBarcodeResult {
     };
   }
 
-  const isbn10Match = raw.match(/\d{9}[\dX]/);
-  if (isbn10Match) {
-    const isbn13 = isbn10ToIsbn13(isbn10Match[0]);
+  if (raw.length === 10) {
+    const isbn13 = isbn10ToIsbn13(raw);
     if (isbn13) return { type: 'isbn', isbn13 };
   }
 
