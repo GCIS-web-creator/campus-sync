@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X,
+  Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X, UploadCloud,
   Folder, FolderOpen, ChevronRight, ArrowUp,
 } from 'lucide-react';
 
@@ -28,6 +28,11 @@ type MaterialFolder = {
   name: string;
   parent_id: string | null;
   sort_order: number;
+};
+type MaterialSubmission = {
+  id: string; title: string; subject: string; material_type: string;
+  file_name: string; mime_type: string; file_size: number; status: 'pending' | 'reviewing' | 'approved' | 'rejected';
+  review_note: string | null; created_at: string; reviewed_at: string | null;
 };
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健', 'その他'];
@@ -62,6 +67,13 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
   const [preview, setPreview] = useState<{ item: StudyMaterial; url: string } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [verifiedClass, setVerifiedClass] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<MaterialSubmission[]>([]);
+  const [studentFiles, setStudentFiles] = useState<File[]>([]);
+  const [studentUploadSubject, setStudentUploadSubject] = useState('その他');
+  const [studentUploadType, setStudentUploadType] = useState('lesson');
+  const [studentUploadDescription, setStudentUploadDescription] = useState('');
+  const [studentUploading, setStudentUploading] = useState(false);
+  const [studentUploadMessage, setStudentUploadMessage] = useState('');
 
   const rootFolder = folders.find(folder => folder.parent_id === null && folder.name === '学校資料') || null;
   const activeFolderId = currentFolderId || rootFolder?.id || null;
@@ -87,6 +99,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       if (!response.ok || !result?.success) throw new Error(result?.message || '資料一覧を取得できませんでした。');
       setMaterials((result.materials || []) as StudyMaterial[]);
       setFolders((result.folders || []) as MaterialFolder[]);
+      setSubmissions((result.submissions || []) as MaterialSubmission[]);
       setVerifiedClass(typeof result.verifiedClass === 'string' ? result.verifiedClass : null);
       setMessage('');
     } catch (error) {
@@ -119,6 +132,93 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
     } finally {
       setOpeningId(null);
     }
+  };
+
+  const handleStudentUpload = async () => {
+    if (!studentFiles.length || studentUploading) return;
+    if (studentFiles.length > 10) {
+      setStudentUploadMessage('一度に登録できるのは10ファイルまでです。');
+      return;
+    }
+    const invalid = studentFiles.find(file =>
+      !['application/pdf', 'image/png', 'image/jpeg'].includes(file.type)
+      || file.size < 1 || file.size > 20 * 1024 * 1024,
+    );
+    if (invalid) {
+      setStudentUploadMessage('PDF・PNG・JPG形式、1ファイル20MB以下のファイルだけを選択してください。');
+      return;
+    }
+    setStudentUploading(true);
+    setStudentUploadMessage('資料を安全にアップロードしています…');
+    const failed: File[] = [];
+    let succeeded = 0;
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('学校アカウントでログインしてください。');
+
+      for (const file of studentFiles) {
+        try {
+          const uploadUrlResponse = await fetch('/api/materials/submissions/upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ fileName: file.name, mimeType: file.type, size: file.size }),
+            cache: 'no-store',
+          });
+          const uploadUrl = await uploadUrlResponse.json().catch(() => null);
+          if (!uploadUrlResponse.ok || !uploadUrl?.success || !uploadUrl.path || !uploadUrl.token) {
+            throw new Error(uploadUrl?.message || 'アップロードURLを取得できませんでした。');
+          }
+
+          const { error: uploadError } = await supabase.storage.from('study-materials')
+            .uploadToSignedUrl(uploadUrl.path, uploadUrl.token, file, { contentType: file.type });
+          if (uploadError) throw new Error(uploadError.message);
+
+          const baseName = file.name.replace(/\.[^.]+$/, '').trim() || '生徒投稿資料';
+          const saveResponse = await fetch('/api/materials/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({
+              title: baseName.slice(0, 160),
+              description: studentUploadDescription.trim(),
+              subject: studentUploadSubject,
+              material_type: studentUploadType,
+              storage_path: uploadUrl.path,
+              file_name: file.name,
+              mime_type: file.type,
+              file_size: file.size,
+            }),
+            cache: 'no-store',
+          });
+          const saved = await saveResponse.json().catch(() => null);
+          if (!saveResponse.ok || !saved?.success) throw new Error(saved?.message || '投稿情報を保存できませんでした。');
+          succeeded += 1;
+        } catch (error) {
+          failed.push(file);
+          setStudentUploadMessage(error instanceof Error ? error.message : '資料を投稿できませんでした。');
+        }
+      }
+
+      setStudentFiles(failed);
+      if (succeeded > 0) {
+        setStudentUploadMessage(succeeded + '件を管理者確認待ちとして投稿しました。' + (failed.length ? ' ' + failed.length + '件は未完了のため選択状態を残しています。' : ''));
+        await loadMaterials();
+      } else if (!failed.length) {
+        setStudentUploadMessage('投稿する資料を選択してください。');
+      }
+    } catch (error) {
+      setStudentUploadMessage(error instanceof Error ? error.message : '資料を投稿できませんでした。');
+    } finally {
+      setStudentUploading(false);
+    }
+  };
+
+  const submissionStatusLabel: Record<MaterialSubmission['status'], string> = {
+    pending: '確認待ち',
+    reviewing: '確認中',
+    approved: '公開済み',
+    rejected: '差し戻し',
   };
 
   const folderPath = (folderId: string | null) => {
@@ -202,6 +302,65 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
           現在は全校公開資料を表示しています。学年・クラス限定資料は、管理者が所属クラスを確認すると表示されます。
         </p>
       )}
+
+      <section className={'rounded-2xl border p-4 sm:p-5 ' + panel}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black">資料を投稿する</h3>
+            <p className={'mt-1 text-xs leading-5 ' + muted}>授業プリントや解答資料などを複数まとめて提出できます。投稿は管理者の確認後に公開されます。</p>
+          </div>
+          <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-[10px] font-black text-amber-600">管理者の承認制</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-xs font-bold">教科
+            <select value={studentUploadSubject} onChange={event => setStudentUploadSubject(event.target.value)} className={'w-full rounded-xl border px-3 py-2.5 ' + (isDarkMode ? 'border-slate-600 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-800')}>
+              {SUBJECTS.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-bold">資料の種類
+            <select value={studentUploadType} onChange={event => setStudentUploadType(event.target.value)} className={'w-full rounded-xl border px-3 py-2.5 ' + (isDarkMode ? 'border-slate-600 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-800')}>
+              {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="mt-3 block space-y-1 text-xs font-bold">説明・補足（任意）
+          <textarea value={studentUploadDescription} onChange={event => setStudentUploadDescription(event.target.value)} rows={2} maxLength={2000} placeholder="単元、授業日、資料の補足など" className={'w-full rounded-xl border px-3 py-2.5 text-sm ' + (isDarkMode ? 'border-slate-600 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-800')} />
+        </label>
+        <label className={'mt-3 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-5 text-center ' + (isDarkMode ? 'border-slate-600 bg-slate-900/70 hover:border-cyan-500' : 'border-slate-300 bg-slate-50 hover:border-cyan-500')}>
+          <UploadCloud size={24} className="text-cyan-600" />
+          <span className="mt-2 text-xs font-black">{studentFiles.length ? studentFiles.length + '件のファイルを選択中' : 'PDF・PNG・JPGをまとめて選択'}</span>
+          <span className={'mt-1 text-[10px] ' + muted}>最大10ファイル・各20MBまで</span>
+          <input type="file" multiple accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" onChange={event => {
+            const selected = Array.from(event.target.files || []);
+            setStudentFiles(selected.slice(0, 10));
+            setStudentUploadMessage(selected.length > 10 ? '最初の10ファイルを選択しました。残りは次回投稿してください。' : '');
+            event.target.value = '';
+          }} className="sr-only" />
+        </label>
+        {studentFiles.length > 0 && <div className="mt-3 space-y-1.5">
+          {studentFiles.map((file, index) => <div key={file.name + ':' + file.size + ':' + index} className={'flex items-center gap-2 rounded-lg px-3 py-2 text-xs ' + (isDarkMode ? 'bg-slate-900' : 'bg-slate-50')}>
+            <FileText size={14} className="shrink-0 text-cyan-600" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className={muted}>{sizeLabel(file.size)}</span>
+            <button type="button" disabled={studentUploading} onClick={() => setStudentFiles(previous => previous.filter((_, itemIndex) => itemIndex !== index))} aria-label={file.name + 'を選択解除'} className="text-slate-400 hover:text-rose-500"><X size={14} /></button>
+          </div>)}
+        </div>}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className={'text-[10px] ' + muted}>{verifiedClass === null ? '所属クラスの確認後に投稿できます。' : '投稿した資料は確認済みの ' + verifiedClass + ' クラス向けとして審査されます。'}</p>
+          <button type="button" disabled={studentUploading || !studentFiles.length || verifiedClass === null} onClick={() => void handleStudentUpload()} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+            <UploadCloud size={15} /> {studentUploading ? '投稿中…' : verifiedClass === null ? 'クラス確認後に投稿可能' : '選択した資料を投稿'}
+          </button>
+        </div>
+        {studentUploadMessage && <p role="status" className={'mt-3 rounded-xl border px-3 py-2 text-xs leading-5 ' + (isDarkMode ? 'border-slate-700 bg-slate-900 text-cyan-200' : 'border-slate-200 bg-slate-50 text-slate-700')}>{studentUploadMessage}</p>}
+        <div className={'mt-4 border-t pt-3 ' + (isDarkMode ? 'border-slate-700' : 'border-slate-200')}>
+          <div className="flex items-center justify-between gap-2"><h4 className="text-xs font-black">自分の投稿履歴</h4><span className={'text-[10px] ' + muted}>{submissions.length}件</span></div>
+          {submissions.length === 0 ? <p className={'mt-2 text-xs ' + muted}>まだ投稿はありません。</p> : <div className="mt-2 space-y-2">
+            {submissions.map(item => <div key={item.id} className={'flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 ' + (isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50')}>
+              <FileText size={15} className="shrink-0 text-cyan-600" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{item.title}</p><p className={'mt-1 text-[10px] ' + muted}>{item.subject}・{dateLabel(item.created_at)}</p></div>
+              <span className={'rounded-full px-2.5 py-1 text-[10px] font-black ' + (item.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600' : item.status === 'rejected' ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-600')}>{submissionStatusLabel[item.status]}</span>
+              {item.review_note && <p className="basis-full text-[11px] text-rose-500">{item.review_note}</p>}
+            </div>)}
+          </div>}
+        </div>
+      </section>
 
       <div className={'rounded-2xl border p-3 sm:p-4 ' + panel}>
         <div className="flex flex-wrap items-center gap-2 text-xs">

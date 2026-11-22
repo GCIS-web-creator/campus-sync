@@ -124,5 +124,5 @@ export function canStudentViewMaterial(
 
 export function isValidMaterialStoragePath(value: unknown): value is string {
   return typeof value === 'string'
-    && /^uploads\/[0-9a-f-]{36}\.(?:pdf|png|jpg|jpeg)$/i.test(value);
+    && /^(?:uploads|submissions)\/[0-9a-f-]{36}\.(?:pdf|png|jpg|jpeg)$/i.test(value);
 }

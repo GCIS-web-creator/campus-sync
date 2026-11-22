@@ -214,6 +214,50 @@ function BookCover({ src, alt, isbn, candidates = [], className = '' }: { src?: 
   );
 }
 
+
+function CoverCandidateStrip({
+  candidates = [],
+  selectedUrl,
+  dark = false,
+  onSelect,
+}: {
+  candidates?: string[];
+  selectedUrl?: string | null;
+  dark?: boolean;
+  onSelect: (url: string) => void;
+}) {
+  const sources = [...new Set(candidates.filter(value => typeof value === 'string' && /^https:\/\//i.test(value)))].slice(0, 8);
+  if (!sources.length) return null;
+  return (
+    <div className="mt-2 basis-full min-w-0">
+      <p className={'mb-1.5 text-[10px] font-bold ' + (dark ? 'text-slate-400' : 'text-slate-500')}>表紙候補（タップして選択）</p>
+      <div className="flex flex-wrap items-end gap-2">
+        {sources.map((url, index) => (
+          <button
+            key={url}
+            type="button"
+            title={'表紙候補 ' + (index + 1) + ' を選択'}
+            aria-label={'表紙候補 ' + (index + 1) + ' を選択'}
+            onClick={() => onSelect(url)}
+            className={'rounded-lg border p-1 transition ' + (selectedUrl === url
+              ? 'border-cyan-500 bg-cyan-50 ring-2 ring-cyan-500/30'
+              : dark ? 'border-slate-700 bg-slate-950 hover:border-cyan-400' : 'border-slate-200 bg-white hover:border-cyan-400')}
+          >
+            <img
+              src={url}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={event => { event.currentTarget.parentElement?.classList.add('hidden'); }}
+              className="h-14 w-10 rounded object-contain"
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StudentLearningHub({ userId, userEmail = '', userClass = '', isDarkMode = false }: { userId: string; userEmail?: string; userClass?: string; isDarkMode?: boolean }) {
   const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history' | 'analysis' | 'planetube' | 'contribution'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
@@ -412,7 +456,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setMyBooksLoading(true);
     const { data, error: booksError } = await supabase
       .from('student_my_books')
-      .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,info_url,page_count,source,created_at')
+      .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,cover_urls,info_url,page_count,source,created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     if (booksError) {
@@ -428,7 +472,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   useEffect(() => {
     const missingCovers = myBooks
-      .filter(book => !book.thumbnail_url && !attemptedBookCoverRefreshIdsRef.current.has(book.id))
+      .filter(book => (!book.thumbnail_url || !book.cover_urls?.length) && !attemptedBookCoverRefreshIdsRef.current.has(book.id))
       .slice(0, 4);
     if (!missingCovers.length) return;
     missingCovers.forEach(book => attemptedBookCoverRefreshIdsRef.current.add(book.id));
@@ -441,31 +485,38 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         });
         const payload = await response.json().catch(() => null) as { success?: boolean; book?: BookMetadata } | null;
         const coverUrl = payload?.success ? payload.book?.thumbnail_url : null;
-        if (!response.ok || !coverUrl) return null;
+        const coverUrls = payload?.success ? payload.book?.cover_urls || [] : [];
+        if (!response.ok || (!coverUrl && !coverUrls.length)) return null;
 
+        const updates: Record<string, unknown> = {
+          cover_urls: buildBookCoverCandidates(book.isbn13, [book.thumbnail_url, ...coverUrls]),
+          info_url: book.info_url || payload?.book?.info_url || null,
+        };
+        if (!book.thumbnail_url && coverUrl) updates.thumbnail_url = coverUrl;
         const { data, error: updateError } = await supabase
           .from('student_my_books')
-          .update({ thumbnail_url: coverUrl, info_url: book.info_url || payload?.book?.info_url || null })
+          .update(updates)
           .eq('id', book.id)
           .eq('user_id', userId)
-          .is('thumbnail_url', null)
-          .select('id,thumbnail_url,info_url')
+          .select('id,thumbnail_url,cover_urls,info_url')
           .maybeSingle();
         if (updateError || !data) return null;
-        return { id: book.id, thumbnail_url: data.thumbnail_url as string, info_url: data.info_url as string | null };
+        return {
+          id: book.id,
+          thumbnail_url: data.thumbnail_url as string | null,
+          cover_urls: (data.cover_urls || []) as string[],
+          info_url: data.info_url as string | null,
+        };
       } catch {
         return null;
       }
     })).then(updated => {
       if (cancelled) return;
-      const byId = new Map<string, { thumbnail_url: string; info_url: string | null }>();
-      for (const item of updated) {
-        if (item) byId.set(item.id, { thumbnail_url: item.thumbnail_url, info_url: item.info_url });
-      }
+      const byId = new Map(updated.filter((item): item is NonNullable<typeof item> => !!item).map(item => [item.id, item]));
       if (!byId.size) return;
       setMyBooks(previous => previous.map(book => {
         const value = byId.get(book.id);
-        return value ? { ...book, thumbnail_url: value.thumbnail_url, info_url: value.info_url } : book;
+        return value ? { ...book, thumbnail_url: value.thumbnail_url, cover_urls: value.cover_urls, info_url: value.info_url } : book;
       }));
     });
 
@@ -523,8 +574,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     try {
       const { data, error: insertError } = await supabase
         .from('student_my_books')
-        .insert((({ cover_urls: _coverUrls, ...bookFields }) => ({ ...bookFields, user_id: userId }))(book))
-        .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,info_url,page_count,source,created_at')
+        .insert({ ...book, user_id: userId })
+        .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,cover_urls,info_url,page_count,source,created_at')
         .single();
       if (insertError) {
         if (insertError.code === '23505') throw new Error('この本はすでに登録されています。');
@@ -541,6 +592,28 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     } finally {
       setBookSaving(false);
     }
+  };
+
+
+  const updateSavedBookCover = async (book: MyBook, thumbnailUrl: string, candidateUrls: string[] = []) => {
+    if (!thumbnailUrl) return;
+    const coverUrls = buildBookCoverCandidates(book.isbn13, [thumbnailUrl, ...candidateUrls]);
+    const { data, error } = await supabase
+      .from('student_my_books')
+      .update({ thumbnail_url: thumbnailUrl, cover_urls: coverUrls })
+      .eq('id', book.id)
+      .eq('user_id', userId)
+      .select('id,thumbnail_url,cover_urls')
+      .single();
+    if (error || !data) {
+      setBookLookupMessage('選択した表紙を保存できませんでした。もう一度お試しください。');
+      return;
+    }
+    setMyBooks(previous => previous.map(item => item.id === book.id
+      ? { ...item, thumbnail_url: data.thumbnail_url as string, cover_urls: (data.cover_urls || []) as string[] }
+      : item));
+    setBookPreview(null);
+    setBookLookupMessage('「' + book.title + '」の表紙を変更しました。');
   };
 
   const deleteMyBook = async (book: MyBook) => {
@@ -1813,7 +1886,15 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         {bookPreview&&<article className={'mt-3 flex flex-wrap gap-3 rounded-xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <BookCover src={bookPreview.thumbnail_url} alt={bookPreview.title + 'の表紙'} isbn={bookPreview.isbn13} candidates={bookPreview.cover_urls || []} className="h-36 w-24"/>
           <div className="min-w-0 flex-1"><p className="text-sm font-black">{bookPreview.title}</p>{bookPreview.authors.length>0&&<p className={'mt-1 text-xs '+muted}>{bookPreview.authors.join('・')}</p>}<p className={'mt-1 text-[10px] '+muted}>{bookPreview.publisher||'出版社不明'} ・ ISBN {bookPreview.isbn13}</p><p className={'mt-2 line-clamp-3 text-xs leading-5 '+muted}>{bookPreview.description||'説明情報はありません。'}</p></div>
-          <button type="button" disabled={bookSaving||myBooks.some(item=>item.isbn13===bookPreview.isbn13)} onClick={()=>void saveMyBook(bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':myBooks.some(item=>item.isbn13===bookPreview.isbn13)?'登録済み':'マイブックに登録'}</button>
+          <CoverCandidateStrip
+            candidates={buildBookCoverCandidates(bookPreview.isbn13, [bookPreview.thumbnail_url, ...(bookPreview.cover_urls || [])])}
+            selectedUrl={bookPreview.thumbnail_url}
+            dark={dark}
+            onSelect={url => setBookPreview(current => current ? { ...current, thumbnail_url: url } : current)}
+          />
+          {myBooks.some(item=>item.isbn13===bookPreview.isbn13)
+            ? <button type="button" disabled={bookSaving||!bookPreview.thumbnail_url} onClick={()=>{const existing=myBooks.find(item=>item.isbn13===bookPreview.isbn13);if(existing)void updateSavedBookCover(existing,bookPreview.thumbnail_url!,bookPreview.cover_urls||[])}} className={primary+' self-end'}>選択した表紙を登録済みの本に反映</button>
+            : <button type="button" disabled={bookSaving} onClick={()=>void saveMyBook(bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':'マイブックに登録'}</button>}
         </article>}
         {bookManualEntry&&<div className={'mt-3 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <p className="text-xs font-black sm:col-span-2">書誌情報が見つからない本は、タイトルを手入力してISBN付きで登録できます。</p>
@@ -1822,10 +1903,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <button type="button" disabled={bookSaving||!manualBookTitle.trim()} onClick={()=>{const isbn=normalizeIsbn13(bookIsbnInput);if(!isbn){setBookLookupMessage('有効なISBNを入力してください。');return;}void saveMyBook({isbn13:isbn,title:manualBookTitle.trim(),authors:manualBookAuthor.trim()?[manualBookAuthor.trim()]:[],publisher:null,published_date:null,description:null,thumbnail_url:null,info_url:null,page_count:null,source:'manual'});}} className={primary+' sm:col-span-2'}>{bookSaving?'登録中…':'手入力で登録'}</button>
         </div>}
         <div className="mt-4 flex items-center justify-between gap-2"><h3 className="text-xs font-black">登録済みの本</h3><span className={'text-[10px] '+muted}>{myBooksLoading?'読み込み中…':myBooks.length+'冊'}</span></div>
-        {myBooks.length===0&&!myBooksLoading?<p className={'mt-2 rounded-xl border border-dashed p-4 text-center text-xs '+muted}>まだ本は登録されていません。</p>:<div className="mt-2 grid gap-2 sm:grid-cols-2">{myBooks.map(book=><article key={book.id} className={'flex min-w-0 items-center gap-3 rounded-xl border p-2.5 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
+        {myBooks.length===0&&!myBooksLoading?<p className={'mt-2 rounded-xl border border-dashed p-4 text-center text-xs '+muted}>まだ本は登録されていません。</p>:<div className="mt-2 grid gap-2 sm:grid-cols-2">{myBooks.map(book=><article key={book.id} className={'flex min-w-0 flex-wrap items-center gap-3 rounded-xl border p-2.5 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <BookCover src={book.thumbnail_url} alt={book.title + 'の表紙'} isbn={book.isbn13} candidates={book.cover_urls || []} className="h-28 w-20"/>
           <div className="min-w-0 flex-1"><p className="line-clamp-2 text-xs font-black">{book.title}</p><p className={'mt-1 truncate text-[10px] '+muted}>{book.authors.join('・')||'著者情報なし'} ・ {book.isbn13}</p></div>
           <button type="button" onClick={()=>void deleteMyBook(book)} aria-label={book.title+'を削除'} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15}/></button>
+          {book.cover_urls?.length ? <CoverCandidateStrip candidates={buildBookCoverCandidates(book.isbn13, [book.thumbnail_url, ...book.cover_urls])} selectedUrl={book.thumbnail_url} dark={dark} onSelect={url => void updateSavedBookCover(book, url, book.cover_urls || [])}/> : null}
         </article>)}</div>}
       </section>
       {showRecord&&<section className={panel}><div className="mb-3 flex items-center justify-between"><h2 className="font-black">勉強内容を記録</h2><button type="button" onClick={()=>{setShowRecord(false);setTimerState("paused")}} aria-label="閉じる"><X size={18}/></button></div><p className={'mb-3 text-xs '+muted}>集中 {duration(focusSeconds)} ・ 休憩 {duration(breakSeconds)}</p><form onSubmit={saveSession} className="space-y-3"><label className="block space-y-1 text-xs font-bold">勉強した内容<textarea className={input} value={reflection} onChange={e=>setReflection(e.target.value)} rows={3} placeholder="どこまで進んだか、何を理解できたか…" maxLength={2000} required/></label><label className="block space-y-1 text-xs font-bold">次にやること<textarea className={input} value={nextAction} onChange={e=>setNextAction(e.target.value)} rows={2} placeholder="次回は何から始めるか…" maxLength={1000} required/></label><div className="flex justify-end gap-2"><button type="button" onClick={()=>{setShowRecord(false);setTimerState('paused')}} className={secondary}>戻る</button><button className={primary} disabled={saving||focusSeconds<1}><CheckCircle2 size={15}/>記録を保存</button></div></form></section>}

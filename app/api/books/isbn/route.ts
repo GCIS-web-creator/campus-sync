@@ -103,6 +103,17 @@ const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_u
     page_count: 320,
     source: 'kirihara',
   },
+  '9784342210112': {
+    title: '基礎 英文解釈の技術100 音声オンライン提供版',
+    authors: ['桑原信淑', '杉野隆'],
+    publisher: '桐原書店',
+    published_date: '2024-05-08',
+    description: '入試英文を読み解くための100のテクニックを図解と音声で学び、演習問題100題で定着を図る英文解釈教材です。',
+    thumbnail_url: 'https://item-shopping.c.yimg.jp/i/n/honyaclubbook_9784342210112',
+    info_url: 'https://www.kirihara.co.jp/files/user/images/tenbai/20240612_Kiso_Eibun_kaishaku_POP_W115_H80.pdf',
+    page_count: 312,
+    source: 'kirihara',
+  },
 };
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, {
