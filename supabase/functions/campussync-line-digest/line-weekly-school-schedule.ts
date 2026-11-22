@@ -81,7 +81,8 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
 type WeeklyEventRow = { id: string; title: string; summary?: string | null; event_date: string };
 type WeeklyAssignmentRow = { id: string; title: string; details?: string | null; subject?: string | null; subject_option?: string | null; target_class?: string | null; due_at?: string | null; priority?: string | null };
 type WeeklyChangeRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string; digest_sent_at: string | null };
-type WeeklyExamSubjectRow = { exam_date: string; subject: string; sort_order: number };\ntype WeeklyExamDefinitionRow = { id: string; target_classes: string[] | null };
+type WeeklyExamSubjectRow = { exam_date: string; subject: string; sort_order: number };
+type WeeklyExamDefinitionRow = { id: string; target_classes: string[] | null };
 
 function getTokyoTodayKey(): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -296,7 +297,8 @@ function buildFallbackWeekDays(weekStart: string, events: WeeklyEventRow[]) {
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; weekStart?: unknown; probe?: unknown };
   const manualRequest = payload.mode === 'manual';
-  const probeRequest = payload.probe === true;\n  const groupOnlyRequest = payload.groupOnly === true;
+  const probeRequest = payload.probe === true;
+  const groupOnlyRequest = payload.groupOnly === true;
   if (manualRequest) {
     const expectedPassword = Deno.env.get('CAMPUS_SYNC_ADMIN_PASSWORD') || '';
     const receivedPassword = request.headers.get('x-admin-password') || '';
