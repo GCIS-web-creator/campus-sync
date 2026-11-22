@@ -13,7 +13,7 @@ export function formatStudyDurationInput(totalSeconds: number): string {
 
 /** Parse HH:MM:SS into seconds. Returns null for invalid or >24-hour values. */
 export function parseStudyDurationInput(value: string): number | null {
-  const match = /^(\\d{1,2}):([0-5]\\d):([0-5]\\d)$/.exec(value.trim());
+  const match = /^(\d{1,2}):([0-5]\d):([0-5]\d)$/.exec(value.trim());
   if (!match) return null;
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
