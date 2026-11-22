@@ -110,6 +110,19 @@ function hasMatchingVapidKey(subscription: PushSubscription, publicKey: string):
   return expected.every((value, index) => actualBytes[index] === value);
 }
 
+async function fetchActiveVapidPublicKey(): Promise<string> {
+  const response = await fetch('/api/push/vapid-public-key', {
+    method: 'GET',
+    cache: 'no-store',
+    credentials: 'same-origin',
+  });
+  const payload = await response.json().catch(() => null) as { success?: boolean; publicKey?: string; message?: string } | null;
+  if (!response.ok || !payload?.success || typeof payload.publicKey !== 'string' || !payload.publicKey) {
+    throw new Error(payload?.message || '通知用の公開鍵を取得できませんでした。');
+  }
+  return payload.publicKey;
+}
+
 function getSchoolRoomDisplay(room: string, className: string): string {
   const roomName = (room || '').trim();
   if (/化学実験室/.test(roomName)) return '化学実験室';
@@ -1381,12 +1394,7 @@ export default function CampusSyncApp() {
           if (!cancelled) setPushReady(false);
           return;
         }
-        const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-        if (!publicKey) {
-          if (!cancelled) setPushStatus('プッシュ通知の公開鍵が未設定です。');
-          if (!cancelled) setPushReady(false);
-          return;
-        }
+        const publicKey = await fetchActiveVapidPublicKey();
         if (Notification.permission !== 'granted') {
           if (!cancelled) setPushReady(false);
           return;
@@ -3742,11 +3750,6 @@ Supabaseの設定を確認してください。
       setPushStatus('このブラウザーはプッシュ通知に対応していません。Chrome / Edge / Safariの最新版で試してください。');
       return;
     }
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) {
-      setPushStatus('NEXT_PUBLIC_VAPID_PUBLIC_KEY が未設定です。セットアップ手順を確認してください。');
-      return;
-    }
     setPushBusy(true);
     setPushStatus('この端末の通知を設定しています…');
     try {
@@ -3754,6 +3757,7 @@ Supabaseの設定を確認してください。
         ? 'granted'
         : await Notification.requestPermission();
       if (permission !== 'granted') throw new Error('ブラウザーの通知を許可してください。ブラウザー設定でブロックされている場合はサイト設定も確認してください。');
+      const publicKey = await fetchActiveVapidPublicKey();
 
       const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       await navigator.serviceWorker.ready;

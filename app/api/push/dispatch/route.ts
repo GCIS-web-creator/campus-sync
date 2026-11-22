@@ -307,7 +307,7 @@ export async function POST(request: Request) {
       hasPublicKey: Boolean(vapidPublicKey),
       hasPrivateKey: Boolean(vapidPrivateKey),
       hasSubject: Boolean(vapidSubject),
-      browserAndSenderPublicKeysMatch: Boolean(vapidPublicKey && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY === vapidPublicKey),
+      clientKeyServedFromSameVaultCredential: Boolean(vapidPublicKey),
       derivedPublicKeyMatches,
       credentialReadSucceeded: !credentialError,
     }, { headers: { 'Cache-Control': 'no-store' } });
