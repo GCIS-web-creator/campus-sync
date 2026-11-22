@@ -80,7 +80,8 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
 
 type WeeklyEventRow = { id: string; title: string; summary?: string | null; event_date: string };
 type WeeklyAssignmentRow = { id: string; title: string; details?: string | null; subject?: string | null; subject_option?: string | null; target_class?: string | null; due_at?: string | null; priority?: string | null };
-type WeeklyChangeRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string; digest_sent_at: string | null };\ntype WeeklyExamSubjectRow = { exam_date: string; subject: string; sort_order: number };\ntype WeeklyExamDefinitionRow = { id: string; target_classes: string[] | null };
+type WeeklyChangeRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string; digest_sent_at: string | null };
+type WeeklyExamSubjectRow = { exam_date: string; subject: string; sort_order: number };\ntype WeeklyExamDefinitionRow = { id: string; target_classes: string[] | null };
 
 function getTokyoTodayKey(): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -362,7 +363,8 @@ export async function POST(request: Request) {
   if (weeklyEventsResult.error) console.error('週間予定表：学校行事の取得に失敗:', weeklyEventsResult.error.message);
   if (countdownResult.error) console.error('週間予定表：カウントダウン取得に失敗:', countdownResult.error.message);
   if (assignmentResult.error) console.error('週間予定表：課題取得に失敗:', assignmentResult.error.message);
-  if (changeResult.error) console.error('週間予定表：日程変更取得に失敗:', changeResult.error.message);\n  if (examScheduleResult.error) console.error('週間予定表：定期考査日程の取得に失敗:', examScheduleResult.error.message);
+  if (changeResult.error) console.error('週間予定表：日程変更取得に失敗:', changeResult.error.message);
+  if (examScheduleResult.error) console.error('週間予定表：定期考査日程の取得に失敗:', examScheduleResult.error.message);
   if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
   if (weatherCacheResult.error) console.error('週間学校予定表：天気キャッシュの取得に失敗:', weatherCacheResult.error.message);
 
