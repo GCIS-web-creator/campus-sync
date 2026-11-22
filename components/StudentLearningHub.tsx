@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import { formatStudyDurationInput, parseStudyDurationInput, toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/study-session-edit';
 import { classifyBookBarcode } from '@/lib/book-isbn';
+import { buildBookCoverCandidates } from '@/lib/book-catalog';
 import { advancePomodoroTimeline, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
@@ -27,7 +28,8 @@ type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
   publisher: string | null; published_date: string | null; description: string | null;
   thumbnail_url: string | null; info_url: string | null; page_count: number | null;
-  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'manual'; created_at: string;
+  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'ndl' | 'manual'; created_at: string;
+  cover_urls?: string[];
 };
 type BookMetadata = Omit<MyBook, 'id' | 'user_id' | 'created_at'>;
 type TimerSnapshot = {
@@ -131,13 +133,48 @@ const deadlineStatus = (value: string | null) => {
 };
 
 
-function BookCover({ src, alt, className = '' }: { src?: string | null; alt: string; className?: string }) {
-  const [imageFailed, setImageFailed] = useState(false);
-  useEffect(() => { setImageFailed(false); }, [src]);
+function BookCover({ src, alt, isbn, candidates = [], className = '' }: { src?: string | null; alt: string; isbn?: string; candidates?: string[]; className?: string }) {
+  const [remoteSources, setRemoteSources] = useState<string[]>([]);
+  const [imageIndex, setImageIndex] = useState(0);
+  const [remoteRetryStarted, setRemoteRetryStarted] = useState(false);
+  const sourceKey = [isbn || '', src || '', ...candidates].join('|');
+  const imageSources = buildBookCoverCandidates(isbn || '', [src, ...candidates, ...remoteSources]);
+  const activeImage = imageSources[imageIndex];
+
+  useEffect(() => {
+    setImageIndex(0);
+    setRemoteSources([]);
+    setRemoteRetryStarted(false);
+  }, [sourceKey]);
+
+  const handleImageError = () => {
+    if (imageIndex + 1 < imageSources.length) {
+      setImageIndex(imageIndex + 1);
+      return;
+    }
+    if (isbn && !remoteRetryStarted) {
+      setRemoteRetryStarted(true);
+      void fetch('/api/books/isbn?isbn=' + encodeURIComponent(isbn), {
+        method: 'GET', cache: 'force-cache', credentials: 'same-origin',
+      }).then(async response => {
+        const payload = await response.json().catch(() => null) as { success?: boolean; book?: BookMetadata } | null;
+        const sources = payload?.success ? (payload.book?.cover_urls || []) : [];
+        if (response.ok && sources.length) {
+          setRemoteSources(sources);
+          setImageIndex(0);
+        } else {
+          setImageIndex(imageSources.length);
+        }
+      }).catch(() => setImageIndex(imageSources.length));
+      return;
+    }
+    setImageIndex(imageSources.length);
+  };
+
   return (
     <div className={'flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white ' + className}>
-      {src && !imageFailed
-        ? <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} className="h-full w-full object-contain"/>
+      {activeImage
+        ? <img src={activeImage} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={handleImageError} className="h-full w-full object-contain"/>
         : <div role="img" aria-label={alt + '（表紙画像なし）'} className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-cyan-50 to-slate-100 text-cyan-700"><BookOpenCheck size={25}/><span className="text-[8px] font-bold">CAMPUS BOOK</span></div>}
     </div>
   );
@@ -446,14 +483,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     try {
       const { data, error: insertError } = await supabase
         .from('student_my_books')
-        .insert({ ...book, user_id: userId })
+        .insert((({ cover_urls: _coverUrls, ...bookFields }) => ({ ...bookFields, user_id: userId }))(book))
         .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,info_url,page_count,source,created_at')
         .single();
       if (insertError) {
         if (insertError.code === '23505') throw new Error('この本はすでに登録されています。');
         throw insertError;
       }
-      setMyBooks(current => [data as MyBook, ...current]);
+      setMyBooks(current => [{ ...(data as MyBook), cover_urls: book.cover_urls || [] }, ...current]);
       setBookPreview(null);
       setBookManualEntry(false);
       setManualBookTitle('');
@@ -503,12 +540,16 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.ITF,
         ],
       });
       bookScannerRef.current = scanner;
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 280, height: 130 }, aspectRatio: 2 },
+        { fps: 15, qrbox: (viewfinderWidth, viewfinderHeight) => ({ width: Math.max(180, Math.min(520, viewfinderWidth - 24)), height: Math.max(110, Math.min(220, Math.floor(viewfinderHeight * 0.58))) }), aspectRatio: 1.7777777778 },
         async decodedText => {
           if (bookScanHandledRef.current) return;
           const barcode = classifyBookBarcode(decodedText);
@@ -1445,11 +1486,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         {bookScannerOpen&&<div className={'mt-3 rounded-2xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <div className="mb-2 flex items-center justify-between gap-2"><p className="text-xs font-black">バーコードを枠内に合わせてください</p><button type="button" onClick={()=>void stopBookScanner()} className={secondary}>読み取り終了</button></div>
           <div id={bookScannerElementId} className="mx-auto min-h-32 w-full max-w-md overflow-hidden rounded-xl bg-black"/>
-          <p className={'mt-2 text-[10px] leading-5 '+muted}>本にはバーコードが2つ付いている場合があります。978 / 979から始まるISBN側を読み取ってください。192から始まるコードは価格・分類用の補助コードです。</p>
+          <p className={'mt-2 text-[10px] leading-5 '+muted}>本にはバーコードが2つ付いている場合があります。978 / 979のISBNを読み取ってください。192の補助コードにも対応しています。カメラ枠はバーコード全体が入るように調整してください。</p>
         </div>}
         {bookLookupMessage&&<p role="status" className={'mt-3 rounded-xl border px-3 py-2 text-xs leading-5 '+(dark?'border-slate-700 bg-slate-900 text-slate-200':'border-slate-200 bg-slate-50 text-slate-700')}>{bookLookupMessage}</p>}
         {bookPreview&&<article className={'mt-3 flex flex-wrap gap-3 rounded-xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
-          <BookCover src={bookPreview.thumbnail_url} alt={bookPreview.title + 'の表紙'} className="h-36 w-24"/>
+          <BookCover src={bookPreview.thumbnail_url} alt={bookPreview.title + 'の表紙'} isbn={bookPreview.isbn13} candidates={bookPreview.cover_urls || []} className="h-36 w-24"/>
           <div className="min-w-0 flex-1"><p className="text-sm font-black">{bookPreview.title}</p>{bookPreview.authors.length>0&&<p className={'mt-1 text-xs '+muted}>{bookPreview.authors.join('・')}</p>}<p className={'mt-1 text-[10px] '+muted}>{bookPreview.publisher||'出版社不明'} ・ ISBN {bookPreview.isbn13}</p><p className={'mt-2 line-clamp-3 text-xs leading-5 '+muted}>{bookPreview.description||'説明情報はありません。'}</p></div>
           <button type="button" disabled={bookSaving||myBooks.some(item=>item.isbn13===bookPreview.isbn13)} onClick={()=>void saveMyBook(bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':myBooks.some(item=>item.isbn13===bookPreview.isbn13)?'登録済み':'マイブックに登録'}</button>
         </article>}
@@ -1461,7 +1502,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         </div>}
         <div className="mt-4 flex items-center justify-between gap-2"><h3 className="text-xs font-black">登録済みの本</h3><span className={'text-[10px] '+muted}>{myBooksLoading?'読み込み中…':myBooks.length+'冊'}</span></div>
         {myBooks.length===0&&!myBooksLoading?<p className={'mt-2 rounded-xl border border-dashed p-4 text-center text-xs '+muted}>まだ本は登録されていません。</p>:<div className="mt-2 grid gap-2 sm:grid-cols-2">{myBooks.map(book=><article key={book.id} className={'flex min-w-0 items-center gap-3 rounded-xl border p-2.5 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
-          <BookCover src={book.thumbnail_url} alt={book.title + 'の表紙'} className="h-28 w-20"/>
+          <BookCover src={book.thumbnail_url} alt={book.title + 'の表紙'} isbn={book.isbn13} candidates={book.cover_urls || []} className="h-28 w-20"/>
           <div className="min-w-0 flex-1"><p className="line-clamp-2 text-xs font-black">{book.title}</p><p className={'mt-1 truncate text-[10px] '+muted}>{book.authors.join('・')||'著者情報なし'} ・ {book.isbn13}</p></div>
           <button type="button" onClick={()=>void deleteMyBook(book)} aria-label={book.title+'を削除'} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15}/></button>
         </article>)}</div>}
