@@ -103,7 +103,7 @@ const ROOT_NODE: PlanetTechnologyNode = {
   title: '基礎研究の確立',
   description: '研究記録、実験方法、知識の共有を整え、13分野へ枝分かれする最初の研究基盤を築く。',
   costMp: 25,
-  requiredStage: 1,
+  requiredStage: 0,
   parentNodeId: null,
 };
 
@@ -154,7 +154,7 @@ export const PLANET_TECHNOLOGY_CATALOG: readonly PlanetTechnologyNode[] = [
   ...TECHNOLOGY_NODES,
 ];
 
-const NODE_BY_ID = new Map(PLANET_TECHNOLOGY_CATALOG.map(node => [node.id, node]));
+const NODE_BY_ID = new Map<string, PlanetTechnologyNode>(PLANET_TECHNOLOGY_CATALOG.map(node => [node.id, node] as const));
 
 export function getPlanetTechnologyNode(nodeId: string) {
   return NODE_BY_ID.get(nodeId) ?? null;

@@ -52,6 +52,7 @@ export default function PlanetTechnologyTree({ isDarkMode = false }: Props) {
   const [stage, setStage] = useState(0);
   const [purchasedIds, setPurchasedIds] = useState<string[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [showBranchList, setShowBranchList] = useState(true);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
@@ -95,21 +96,12 @@ export default function PlanetTechnologyTree({ isDarkMode = false }: Props) {
 
   const catalogCount = getPlanetTechnologyCatalogCount();
   const rootNode = getPlanetTechnologyNode(PLANET_TECHNOLOGY_ROOT_ID)!;
-  const rootState = getPlanetTechnologyNodeState(rootNode, stage, purchased);
   const branchNodes = getPlanetTechnologyBranchNodes();
   const purchasedBranches = branchNodes.filter(node => purchased.has(node.id));
   const visibleBranches = branchNodes;
 
-  useEffect(() => {
-    if (selectedBranchId && purchasedBranches.some(node => node.branchId === selectedBranchId)) return;
-    if (!selectedBranchId && purchasedBranches.length) {
-      setSelectedBranchId(purchasedBranches[0].branchId);
-    }
-  }, [selectedBranchId, purchasedBranches.map(node => node.branchId).join('|')]);
-
-  const selectedBranch = PLANET_TECHNOLOGY_BRANCHES.find(branch => branch.id === selectedBranchId) || null;
-  const selectedBranchNode = selectedBranchId
-    ? branchNodes.find(node => node.branchId === selectedBranchId) || null
+  const selectedBranch = !showBranchList
+    ? PLANET_TECHNOLOGY_BRANCHES.find(branch => branch.id === selectedBranchId) || null
     : null;
 
   const purchase = async (node: PlanetTechnologyNode) => {
@@ -136,7 +128,10 @@ export default function PlanetTechnologyTree({ isDarkMode = false }: Props) {
       }
       setFeedback('「' + node.title + '」を解放しました。残り ' + number(Number(payload.balance || 0)) + ' MP');
       await load(true);
-      if (node.nodeType === 'branch') setSelectedBranchId(node.branchId);
+      if (node.nodeType === 'branch') {
+        setSelectedBranchId(node.branchId);
+        setShowBranchList(false);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '研究を解放できませんでした。');
     } finally {
@@ -231,7 +226,7 @@ export default function PlanetTechnologyTree({ isDarkMode = false }: Props) {
           {selectedBranch ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <button type="button" onClick={() => setSelectedBranchId(null)} className="inline-flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10"><ArrowLeft size={14}/>分野一覧へ</button>
+                <button type="button" onClick={() => { setShowBranchList(true); setSelectedBranchId(null); }} className="inline-flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10"><ArrowLeft size={14}/>分野一覧へ</button>
                 <span className={'text-[10px] font-bold ' + muted}>文明 Stage {stage}</span>
               </div>
               <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
@@ -308,7 +303,7 @@ export default function PlanetTechnologyTree({ isDarkMode = false }: Props) {
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <span className={'text-[10px] font-bold ' + muted}>{number(node.costMp)} MP · Stage {node.requiredStage}</span>
                         {isPurchased ? (
-                          <button type="button" onClick={() => setSelectedBranchId(node.branchId)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-500">研究を進める</button>
+                          <button type="button" onClick={() => { setSelectedBranchId(node.branchId); setShowBranchList(false); }} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-500">研究を進める</button>
                         ) : renderPurchaseButton(node)}
                       </div>
                     </article>

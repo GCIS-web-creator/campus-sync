@@ -13,7 +13,7 @@ test('catalog contains more than one thousand stable, unique nodes', () => {
   assert.equal(getPlanetTechnologyCatalogCount(), 1314);
   const branches = getPlanetTechnologyBranchNodes();
   assert.equal(branches.length, 13);
-  const ids = new Set<string>();
+  const ids = new Set();
   for (const branch of branches) {
     const nodes = getPlanetTechnologyNodesForBranch(branch.branchId);
     assert.equal(nodes.length, 100);
@@ -29,7 +29,7 @@ test('the foundation research is the only available starting node', () => {
   const empty = new Set<string>();
   const root = getPlanetTechnologyNode(PLANET_TECHNOLOGY_ROOT_ID);
   assert.ok(root);
-  assert.equal(getPlanetTechnologyNodeState(root, 1, empty), 'available');
+  assert.equal(getPlanetTechnologyNodeState(root, 0, empty), 'available');
   const branchStates = getPlanetTechnologyBranchNodes().map(node =>
     getPlanetTechnologyNodeState(node, 1, empty),
   );
