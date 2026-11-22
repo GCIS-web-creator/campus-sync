@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { verifyAdminSessionRequest } from '@/lib/admin-auth';
-import sharp from 'sharp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,20 +82,11 @@ export async function POST(request: Request) {
     if (!ALLOWED_IMAGE_TYPES.has(file.type) || file.size < 1 || file.size > MAX_IMAGE_BYTES) {
       return jsonError('画像はJPG・PNG・WebP形式、5MB以下のものを選んでください。', 400);
     }
-    let compressed: Buffer;
-    try {
-      compressed = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: 40_000_000 })
-        .rotate()
-        .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 82, effort: 4 })
-        .toBuffer();
-    } catch {
-      return jsonError('画像を圧縮できませんでした。別の画像を選んでください。', 400);
-    }
-    const path = `${Date.now()}-${randomUUID()}.webp`;
-    const { error } = await admin.storage.from('library-covers').upload(path, compressed, {
+    const extension = file.type === 'image/webp' ? 'webp' : file.type === 'image/png' ? 'png' : 'jpg';
+    const path = `${Date.now()}-${randomUUID()}.${extension}`;
+    const { error } = await admin.storage.from('library-covers').upload(path, Buffer.from(await file.arrayBuffer()), {
       cacheControl: '3600',
-      contentType: 'image/webp',
+      contentType: file.type,
       upsert: false,
     });
     if (error) {

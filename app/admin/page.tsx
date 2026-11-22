@@ -23,6 +23,7 @@ import AttendanceReportsAdmin from '@/components/AttendanceReportsAdmin';
 import AdminWorkspaces from '@/components/AdminWorkspaces';
 import EarthquakeAdmin from '@/components/EarthquakeAdmin';
 import React, { useEffect, useState } from 'react';
+import { compressImageFile } from '@/lib/compress-image-file';
 import {
   supabase } from '@/lib/supabase';
 import { 
@@ -353,9 +354,10 @@ const postAdminData = async <T,>(action: string, payload: Record<string, unknown
 };
 
 const uploadLibraryCoverImage = async (file: File): Promise<string> => {
+  const compressedFile = await compressImageFile(file);
   const form = new FormData();
   form.set('action', 'upload-library-cover');
-  form.set('file', file);
+  form.set('file', compressedFile);
   const response = await fetch('/api/admin/data', {
     method: 'POST',
     credentials: 'same-origin',
@@ -1210,8 +1212,9 @@ export default function CampusSyncAdmin() {
     try {
       let imageUrl: string | null = null;
       if (schoolNotificationImage) {
+        const compressedImage = await compressImageFile(schoolNotificationImage);
         const imageForm = new FormData();
-        imageForm.append('file', schoolNotificationImage);
+        imageForm.append('file', compressedImage);
         const imageResponse = await fetch('/api/admin/school-notifications/image', {
           method: 'POST',
           headers: { 'x-admin-password': adminApiPassword },
