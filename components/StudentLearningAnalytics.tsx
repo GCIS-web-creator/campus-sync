@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock3, TrendingDown, TrendingUp } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Clock3, TrendingDown, TrendingUp } from 'lucide-react';
 
 export type LearningAnalyticsSession = {
   id: string;
@@ -65,7 +65,6 @@ export default function StudentLearningAnalytics({ sessions, isDarkMode = false 
   const softBorder = dark ? 'border-slate-700' : 'border-slate-200';
   const field = 'min-w-0 rounded-xl border px-3 py-2 text-xs font-semibold outline-none focus:border-cyan-500 ' + (dark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-800');
 
-  const todayKey = dateKey(new Date());
   const filteredSessions = useMemo(() => sessions.filter(item => subjectFilter === 'all' || item.subject_name === subjectFilter), [sessions, subjectFilter]);
   const range = useMemo(() => {
     const today = new Date();
