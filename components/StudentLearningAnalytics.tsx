@@ -207,8 +207,10 @@ export default function StudentLearningAnalytics({ sessions, isDarkMode = false 
   const selectedSeconds = sessionsTotal(selectedSessions);
   const year = calendarMonth.getFullYear();
   const yearStart = new Date(year, 0, 1);
-  const heatmapStart = addDays(yearStart, -((yearStart.getDay() + 6) % 7));
-  const yearDays = Array.from({ length: 53 * 7 }, (_, index) => {
+  const yearDayCount = new Date(year, 1, 29).getMonth() === 1 ? 366 : 365;
+  const yearOffset = (yearStart.getDay() + 6) % 7;
+  const heatmapStart = addDays(yearStart, -yearOffset);
+  const yearDays = Array.from({ length: Math.ceil((yearOffset + yearDayCount) / 7) * 7 }, (_, index) => {
     const date = addDays(heatmapStart, index);
     const key = dateKey(date);
     return { key, date, active: date.getFullYear() === year, seconds: dayTotals.get(key) || 0 };
@@ -262,14 +264,14 @@ export default function StudentLearningAnalytics({ sessions, isDarkMode = false 
     <section className={panel}>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><p className="text-[10px] font-black tracking-widest text-cyan-600">TIME TREND</p><h3 className={'mt-1 text-base font-black ' + text}>学習時間の推移</h3></div><span className={'text-[10px] ' + muted}>{period === 'year' || daysInRange > 180 ? '月別' : period === '90days' || daysInRange > 42 ? '週別' : '日別'}</span></div>
       {trend.length ? <div className="overflow-x-auto pb-1"><div className="flex h-48 min-w-full items-end gap-1.5" style={{ minWidth: trend.length > 14 ? trend.length * 28 + 'px' : '100%' }}>
-        {trend.map((item, index) => <div key={item.startKey} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+        {trend.map(item => <div key={item.startKey} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
           <span className={'whitespace-nowrap text-[8px] font-bold ' + muted}>{item.seconds > 0 ? formatCompact(item.seconds) : '—'}</span>
           <div className={'flex h-32 w-full items-end overflow-hidden rounded-t-md ' + (dark ? 'bg-slate-900' : 'bg-slate-100')} title={item.label + ' ' + formatDuration(item.seconds)}>
             <div className="w-full rounded-t-md bg-gradient-to-t from-cyan-700 via-cyan-500 to-sky-300 transition-all" style={{ height: (item.seconds > 0 ? Math.max(4, item.seconds / trendMax * 100) : 0) + '%' }}/>
           </div><span className={'whitespace-nowrap text-[8px] font-semibold ' + muted}>{item.label}</span>
         </div>)}
       </div></div> : <p className={'py-8 text-center text-xs ' + muted}>この期間の記録はありません。</p>}
-      <div className={'mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-[10px] ' + softBorder + ' ' + muted}><span>選択期間：{formatDuration(currentTotal)}</span><span>直前期間：{formatDuration(previousTotal)}</span><span>差：{delta > 0 ? '+' : ''}{formatDuration(Math.abs(delta))}</span></div>
+      <div className={'mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-[10px] ' + softBorder + ' ' + muted}><span>選択期間：{formatDuration(currentTotal)}</span><span>直前期間：{formatDuration(previousTotal)}</span><span>差：{delta > 0 ? '+' : delta < 0 ? '−' : ''}{formatDuration(Math.abs(delta))}</span></div>
     </section>
 
     <div className="grid gap-4 lg:grid-cols-2">
