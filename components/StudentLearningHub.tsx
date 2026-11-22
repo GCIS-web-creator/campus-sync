@@ -958,21 +958,28 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     const signature = timerSnapshotSignature(snapshot);
     if (signature === cloudTimerSignatureRef.current || cloudTimerSavingRef.current) return;
     cloudTimerSavingRef.current = true;
-    void supabase.from('student_pomodoro_states').upsert({
-      user_id: userId,
-      state: snapshot,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' }).select('updated_at').single().then(({ data, error: saveError }) => {
-      if (saveError) throw saveError;
-      cloudTimerSignatureRef.current = signature;
-      remoteTimerUpdatedAtRef.current = (data?.updated_at as string) || new Date().toISOString();
-      setTimerSyncStatus('他の端末と同期済み');
-    }).catch(cause => {
-      setTimerSyncStatus('クラウド同期に失敗しました。接続を確認してください。');
-      console.error('ポモドーロ状態の同期に失敗しました:', cause);
-    }).finally(() => {
-      cloudTimerSavingRef.current = false;
-    });
+    void (async () => {
+      try {
+        const { data, error: saveError } = await supabase
+          .from('student_pomodoro_states')
+          .upsert({
+            user_id: userId,
+            state: snapshot,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+          .select('updated_at')
+          .single();
+        if (saveError) throw saveError;
+        cloudTimerSignatureRef.current = signature;
+        remoteTimerUpdatedAtRef.current = (data?.updated_at as string) || new Date().toISOString();
+        setTimerSyncStatus('他の端末と同期済み');
+      } catch (cause: unknown) {
+        setTimerSyncStatus('クラウド同期に失敗しました。接続を確認してください。');
+        console.error('ポモドーロ状態の同期に失敗しました:', cause);
+      } finally {
+        cloudTimerSavingRef.current = false;
+      }
+    })();
   }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   // Supabase Realtime delivers immediate updates; polling/visibility refresh is the
