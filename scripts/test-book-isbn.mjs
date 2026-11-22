@@ -69,6 +69,7 @@ test('cover candidates include NDL and Open Library and remove duplicate/insecur
     'https://cdn.example.jp/cover.jpg',
   ]), [
     'https://cdn.example.jp/cover.jpg',
+    'https://thumbnail-s.images.books.or.jp/9784342353093.jpg',
     'https://ndlsearch.ndl.go.jp/thumbnail/9784342353093.jpg',
     'https://covers.openlibrary.org/b/isbn/9784342353093-L.jpg?default=false',
   ]);
@@ -80,4 +81,11 @@ test('recognizes ISBN for Focus Gold 6th Edition Mathematics II+B+Vector', () =>
   assert.deepEqual(classifyBookBarcode('9784402262914'), {
     type: 'isbn', isbn13: '9784402262914',
   });
+});
+
+
+test('includes the Japanese Books.or.jp cover endpoint for a new ISBN', () => {
+  assert.ok(buildBookCoverCandidates('9784327764951').includes(
+    'https://thumbnail-s.images.books.or.jp/9784327764951.jpg',
+  ));
 });
