@@ -68,3 +68,11 @@ export function normalizeIsbn13(value: string): string | null {
   }
   return null;
 }
+
+
+/** Return elapsed stopwatch time from a saved base and an absolute start timestamp. */
+export function calculateCountUpSeconds(baseSeconds: number, startedAt: number | null, now: number): number {
+  const base = Number.isFinite(baseSeconds) ? Math.max(0, Math.floor(baseSeconds)) : 0;
+  if (startedAt === null || !Number.isFinite(startedAt) || !Number.isFinite(now)) return base;
+  return base + Math.max(0, Math.floor((now - startedAt) / 1000));
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advancePomodoroTimeline, normalizeIsbn13 } from '../lib/pomodoro-timeline.ts';
+import { advancePomodoroTimeline, calculateCountUpSeconds, normalizeIsbn13 } from '../lib/pomodoro-timeline.ts';
 
 test('absolute time decrements focus independent of throttled ticks', () => {
   const result = advancePomodoroTimeline({
@@ -51,4 +51,17 @@ test('validates ISBN-13 and ISBN-10 including checksum', () => {
   assert.equal(normalizeIsbn13('0-306-40615-2'), '9780306406157');
   assert.equal(normalizeIsbn13('9784065150906'), null);
   assert.equal(normalizeIsbn13('4901234567890'), null);
+});
+
+
+test('count-up is reconstructed from absolute timestamps on another device', () => {
+  const base = 125;
+  const startedAt = Date.UTC(2026, 10, 22, 10, 0, 0);
+  const elapsedOnDeviceB = calculateCountUpSeconds(base, startedAt, startedAt + 65_000);
+  assert.equal(elapsedOnDeviceB, 190);
+  assert.equal(calculateCountUpSeconds(elapsedOnDeviceB, null, startedAt + 90_000), 190);
+});
+
+test('count-up never moves backwards when system timestamps are earlier', () => {
+  assert.equal(calculateCountUpSeconds(42, 100_000, 90_000), 42);
 });
