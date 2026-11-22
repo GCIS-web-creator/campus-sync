@@ -120,7 +120,7 @@ const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_u
     publisher: '研究社',
     published_date: '2022-07-25',
     description: '入試英語の正誤問題に特化した550題の問題集。日英対照方式で英文構造を確認しながら学習できます。',
-    thumbnail_url: 'https://hondana-image.s3.amazonaws.com/book/image/10091785/74d348dd-ce80-4e61-aad9-5989bb663cdb.jpg',
+    thumbnail_url: 'https://image.maruzenjunkudo.co.jp/item/1/324/3178/2029/31782029_01.jpg',
     info_url: 'https://www.kenkyusha.co.jp/book/b10091785.html',
     page_count: 246,
     source: 'kenkyusha',
@@ -217,6 +217,49 @@ async function getText(url: string, timeout = 5000): Promise<string | null> {
   }
 }
 
+async function getHtml(url: string, timeout = 3500): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      next: { revalidate: 86_400 },
+      signal: AbortSignal.timeout(timeout),
+      headers: {
+        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (compatible; CampusSyncBookCatalog/1.0)',
+      },
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function parseMaruzenCover(html: string | null, isbn13: string): string | null {
+  if (!html || !html.includes(isbn13)) return null;
+  const matches: string[] = [];
+  const metaTags = html.match(/<meta\\b[^>]*>/gi) || [];
+  for (const tag of metaTags) {
+    if (!/property=["']og:image["']/i.test(tag)) continue;
+    const content = /content=["']([^"']+)["']/i.exec(tag)?.[1];
+    if (content) matches.push(content);
+  }
+  const imageAttributes = html.matchAll(/(?:src|data-src|content)=["']([^"']+)["']/gi);
+  for (const match of imageAttributes) matches.push(match[1]);
+  for (const raw of matches) {
+    const candidate = secureUrl(raw.replace(/&amp;/g, '&').replace(/\\\\\\//g, '/'));
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.hostname === 'image.maruzenjunkudo.co.jp' && /\\.(?:jpe?g|png|webp)(?:$|\\?)/i.test(parsed.href)) {
+        return parsed.toString();
+      }
+    } catch {
+      // Continue through other image references from the product page.
+    }
+  }
+  return null;
+}
+
 function mapGoogleVolume(volume: GoogleVolume | undefined, isbn13: string): Omit<BookResult, 'isbn13' | 'cover_urls'> | null {
   const info = volume?.volumeInfo;
   if (!info?.title) return null;
@@ -303,6 +346,7 @@ export async function GET(request: Request) {
   );
   const openBdUrl = 'https://api.openbd.jp/v1/get?isbn=' + encodeURIComponent(isbnTerms.join(','));
   const ndlUrl = 'https://ndlsearch.ndl.go.jp/api/opensearch?isbn=' + encodeURIComponent(isbn13) + '&cnt=5';
+  const maruzenUrl = 'https://www.maruzenjunkudo.co.jp/products/' + encodeURIComponent(isbn13);
 
   try {
     const [
@@ -311,12 +355,14 @@ export async function GET(request: Request) {
       openLibraryPayloads,
       openLibraryEditionPayloads,
       ndlXml,
+      maruzenHtml,
     ] = await Promise.all([
       getJson<OpenBdRecord[]>(openBdUrl, 5000),
       Promise.all(googleQueries),
       Promise.all(openLibraryQueries),
       Promise.all(openLibraryEditions),
       getText(ndlUrl, 6000),
+      getHtml(maruzenUrl, 3500),
     ]);
 
     const openBdRecord = (openBdPayload || []).find(record =>
@@ -354,6 +400,7 @@ export async function GET(request: Request) {
     } : null;
 
     const publisherFallback = KNOWN_PUBLISHER_BOOKS[isbn13] || null;
+    const maruzenCoverUrl = parseMaruzenCover(maruzenHtml, isbn13);
     // A valid ISBN remains useful even when the book is school-adoption-only
     // and absent from public metadata catalogs. Return a saveable draft instead
     // of treating a missing catalog record as an invalid barcode.
@@ -375,6 +422,7 @@ export async function GET(request: Request) {
       openBdBook?.thumbnail_url,
       googleBook?.thumbnail_url,
       openLibraryBook?.thumbnail_url,
+      maruzenCoverUrl,
     ]);
     const book: BookResult = {
       isbn13,

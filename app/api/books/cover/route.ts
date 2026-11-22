@@ -12,6 +12,7 @@ const ALLOWED_HOSTS = new Set([
   'item-shopping.c.yimg.jp',
   'www.kirihara.co.jp',
   'cover.openbd.jp',
+  'image.maruzenjunkudo.co.jp',
 ]);
 
 function isAllowedHost(hostname: string) {
