@@ -158,10 +158,12 @@ function BookCover({ src, alt, isbn, candidates = [], className = '' }: { src?: 
         method: 'GET', cache: 'force-cache', credentials: 'same-origin',
       }).then(async response => {
         const payload = await response.json().catch(() => null) as { success?: boolean; book?: BookMetadata } | null;
-        const sources = payload?.success ? (payload.book?.cover_urls || []) : [];
+        const returnedSources = payload?.success ? (payload.book?.cover_urls || []) : [];
+        const triedSources = new Set(imageSources);
+        const sources = returnedSources.filter(value => !triedSources.has(value));
         if (response.ok && sources.length) {
           setRemoteSources(sources);
-          setImageIndex(0);
+          setImageIndex(imageSources.length);
         } else {
           setImageIndex(imageSources.length);
         }

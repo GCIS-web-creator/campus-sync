@@ -301,12 +301,11 @@ export async function GET(request: Request) {
     const openLibraryDocs = openLibraryPayloads.flatMap(payload => payload?.docs || []);
     const openLibraryDoc = openLibraryDocs.find(doc =>
       (doc.isbn || []).some(value => normalizeBookIsbn(value) === isbn13),
-    ) || openLibraryDocs[0];
+    );
     const openLibraryEdition = openLibraryEditionPayloads
       .map(mapOpenLibraryEdition)
       .find((item): item is NonNullable<typeof item> => !!item);
-    const openLibraryBook = mapOpenLibraryDoc(openLibraryDoc)
-      || openLibraryBookFromEdition(openLibraryEdition);
+    const openLibraryBook = mapOpenLibraryDoc(openLibraryDoc) || openLibraryEdition;
 
     const ndlMetadata = ndlXml ? parseNdlOpenSearch(ndlXml, isbn13, isbn10) : null;
     const ndlBook: Omit<BookResult, 'isbn13' | 'cover_urls'> | null = ndlMetadata ? {
@@ -350,8 +349,3 @@ export async function GET(request: Request) {
   }
 }
 
-function openLibraryBookFromEdition(
-  edition: Omit<BookResult, 'isbn13' | 'cover_urls'> | null,
-): Omit<BookResult, 'isbn13' | 'cover_urls'> | null {
-  return edition;
-}
