@@ -107,7 +107,7 @@ const ROOT_NODE: PlanetTechnologyNode = {
   parentNodeId: null,
 };
 
-const BRANCH_NODES: PlanetTechnologyNode[] = BRANCHES.map((branch, index) => ({
+const BRANCH_NODES: PlanetTechnologyNode[] = BRANCHES.map((branch, index): PlanetTechnologyNode => ({
   id: 'branch.' + branch.id,
   branchId: branch.id,
   nodeType: 'branch',
