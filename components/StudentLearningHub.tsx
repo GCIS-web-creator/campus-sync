@@ -5,7 +5,7 @@ import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import { formatStudyDurationInput, parseStudyDurationInput, toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/study-session-edit';
 import { classifyBookBarcode } from '@/lib/book-isbn';
 import { buildBookCoverCandidates } from '@/lib/book-catalog';
-import { advancePomodoroTimeline, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
+import { advancePomodoroTimeline, calculateCountUpSeconds, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
 import { supabase } from '@/lib/supabase';
@@ -32,8 +32,10 @@ type MyBook = {
   cover_urls?: string[];
 };
 type BookMetadata = Omit<MyBook, 'id' | 'user_id' | 'created_at'>;
+type TimerMode = 'pomodoro' | 'countup';
 type TimerSnapshot = {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
+  timerMode?: TimerMode;
   savedAt: number;
   phase: 'focus' | 'break';
   timerState: 'running' | 'paused' | 'idle';
@@ -55,22 +57,52 @@ type TimerSnapshot = {
   finishKind: 'completed' | 'stopped';
   scheduleId: string | null;
 };
+function parseTimerSnapshot(raw: unknown): TimerSnapshot | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = raw as Partial<TimerSnapshot>;
+  if (![1, 2, 3].includes(Number(value.version)) || !Number.isFinite(value.savedAt) ||
+      (value.phase !== 'focus' && value.phase !== 'break') ||
+      !['running', 'paused', 'idle'].includes(String(value.timerState)) ||
+      !Number.isFinite(value.remaining) || !Number.isFinite(value.focusSeconds) ||
+      !Number.isFinite(value.breakSeconds) || !Number.isFinite(value.focusMinutes) ||
+      !Number.isFinite(value.breakMinutes) || !SUBJECTS.includes(value.focusSubject as Subject)) return null;
+  return { ...value, timerMode: value.timerMode === 'countup' ? 'countup' : 'pomodoro' } as TimerSnapshot;
+}
+
 function readTimerSnapshot(userId: string): TimerSnapshot | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem('campus-sync-study-timer:' + userId);
     if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<TimerSnapshot>;
-    if (![1, 2].includes(Number(value.version)) || !Number.isFinite(value.savedAt) ||
-        (value.phase !== 'focus' && value.phase !== 'break') ||
-        !['running', 'paused', 'idle'].includes(String(value.timerState)) ||
-        !Number.isFinite(value.remaining) || !Number.isFinite(value.focusSeconds) ||
-        !Number.isFinite(value.breakSeconds) || !Number.isFinite(value.focusMinutes) ||
-        !Number.isFinite(value.breakMinutes) || !SUBJECTS.includes(value.focusSubject as Subject)) return null;
-    return value as TimerSnapshot;
+    return parseTimerSnapshot(JSON.parse(raw));
   } catch {
     return null;
   }
+}
+
+function timerSnapshotSignature(snapshot: TimerSnapshot): string {
+  const running = snapshot.timerState === 'running';
+  return JSON.stringify({
+    timerMode: snapshot.timerMode || 'pomodoro',
+    timerState: snapshot.timerState,
+    phase: snapshot.phase,
+    focusMinutes: snapshot.focusMinutes,
+    breakMinutes: snapshot.breakMinutes,
+    focusSubject: snapshot.focusSubject,
+    focusSubjectId: snapshot.focusSubjectId,
+    task: snapshot.task,
+    rangeId: snapshot.rangeId,
+    startedAt: snapshot.startedAt,
+    phaseEndsAt: running ? snapshot.phaseEndsAt : null,
+    remaining: running ? null : snapshot.remaining,
+    focusSeconds: running ? null : snapshot.focusSeconds,
+    breakSeconds: running ? null : snapshot.breakSeconds,
+    showRecord: snapshot.showRecord,
+    reflection: snapshot.reflection,
+    nextAction: snapshot.nextAction,
+    finishKind: snapshot.finishKind,
+    scheduleId: snapshot.scheduleId,
+  });
 }
 
 const PENDING_PLANET_XP_KEY = 'campus-sync-pending-planet-xp:';
@@ -224,6 +256,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [rangeId, setRangeId] = useState('');
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
+  const [timerMode, setTimerMode] = useState<TimerMode>('pomodoro');
   const [customFocus, setCustomFocus] = useState('25');
   const [customBreak, setCustomBreak] = useState('5');
   const [phase, setPhase] = useState<'focus' | 'break'>('focus');
@@ -244,6 +277,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const startedAt = useRef<string | null>(null);
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
+  const timerBaseFocusSecondsRef = useRef(0);
+  const remoteTimerUpdatedAtRef = useRef<string | null>(null);
+  const cloudTimerSignatureRef = useRef<string | null>(null);
+  const cloudTimerSavingRef = useRef(false);
+  const [timerSyncStatus, setTimerSyncStatus] = useState('');
   const [myBooks, setMyBooks] = useState<MyBook[]>([]);
   const [myBooksLoading, setMyBooksLoading] = useState(true);
   const [bookScannerOpen, setBookScannerOpen] = useState(false);
@@ -745,86 +783,130 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setPendingXpSessionIds(previous => previous.filter(id => id !== sessionId));
   };
 
-  // フェーズの終了予定時刻を基準に復元する。タイムゾーンや画面の開閉に依存しない。
+  // Restore the most recent timer saved in Supabase first so every signed-in device
+  // starts from the same absolute timestamps. Local storage remains an offline fallback.
   useEffect(() => {
-    const snapshot = readTimerSnapshot(userId);
-    if (!snapshot) {
-      setTimerReady(true);
-      return;
-    }
+    let cancelled = false;
+    const applySnapshot = (snapshot: TimerSnapshot, remoteUpdatedAt: string | null = null) => {
+      const mode: TimerMode = snapshot.timerMode === 'countup' ? 'countup' : 'pomodoro';
+      setTimerMode(mode);
+      setPhase(snapshot.phase);
+      setFocusMinutes(snapshot.focusMinutes);
+      setBreakMinutes(snapshot.breakMinutes);
+      setCustomFocus(String(snapshot.focusMinutes));
+      setCustomBreak(String(snapshot.breakMinutes));
+      setFocusSubject(snapshot.focusSubject);
+      setFocusSubjectId(snapshot.focusSubjectId || '');
+      setTask(snapshot.task || '');
+      setRangeId(snapshot.rangeId || '');
+      setShowRecord(snapshot.showRecord);
+      setReflection(snapshot.reflection || '');
+      setNextAction(snapshot.nextAction || '');
+      setFinishKind(snapshot.finishKind || 'completed');
+      setTimerScheduleId(snapshot.scheduleId || null);
+      startedAt.current = snapshot.startedAt;
+      timerBaseFocusSecondsRef.current = Math.max(0, Math.floor(snapshot.focusSeconds || 0));
+      cloudTimerSignatureRef.current = remoteUpdatedAt ? timerSnapshotSignature(snapshot) : null;
+      if (remoteUpdatedAt) remoteTimerUpdatedAtRef.current = remoteUpdatedAt;
 
-    setPhase(snapshot.phase);
-    setFocusMinutes(snapshot.focusMinutes);
-    setBreakMinutes(snapshot.breakMinutes);
-    setCustomFocus(String(snapshot.focusMinutes));
-    setCustomBreak(String(snapshot.breakMinutes));
-    setFocusSubject(snapshot.focusSubject);
-    setFocusSubjectId(snapshot.focusSubjectId || '');
-    setTask(snapshot.task || '');
-    setRangeId(snapshot.rangeId || '');
-    setShowRecord(snapshot.showRecord);
-    setReflection(snapshot.reflection || '');
-    setNextAction(snapshot.nextAction || '');
-    setFinishKind(snapshot.finishKind || 'completed');
-    setTimerScheduleId(snapshot.scheduleId || null);
-    startedAt.current = snapshot.startedAt;
-
-    if (snapshot.timerState === 'running') {
-      const phaseStart = snapshot.version === 2 && Number.isFinite(snapshot.phaseStartedAt)
-        ? Number(snapshot.phaseStartedAt)
-        : snapshot.savedAt;
-      const phaseEnd = snapshot.version === 2 && Number.isFinite(snapshot.phaseEndsAt)
-        ? Number(snapshot.phaseEndsAt)
-        : phaseStart + Math.max(0, snapshot.remaining) * 1000;
-      const restored = advancePomodoroTimeline({
-        phase: snapshot.phase,
-        phaseStartedAt: phaseStart,
-        phaseEndsAt: phaseEnd,
-        focusMinutes: snapshot.focusMinutes,
-        breakMinutes: snapshot.breakMinutes,
-        focusSeconds: Math.max(0, Math.floor(snapshot.focusSeconds)),
-        breakSeconds: Math.max(0, Math.floor(snapshot.breakSeconds)),
-      }, Date.now());
-
-      setPhase(restored.phase);
-      setTimerRemaining(restored.remaining);
-      setFocusSeconds(restored.focusSeconds);
-      setBreakSeconds(restored.breakSeconds);
-      setPhaseStartedAt(restored.phaseStartedAt);
-      setPhaseEndsAt(restored.phaseEndsAt);
-      setTimerState('running');
-      if (!snapshot.scheduleId || restored.transitionCount > 0) {
-        setTimerScheduleId(null);
-        needsTimerPushRefresh.current = true;
+      if (snapshot.timerState === 'running' && mode === 'countup') {
+        const phaseStart = Number.isFinite(snapshot.phaseStartedAt) && snapshot.phaseStartedAt !== null
+          ? Number(snapshot.phaseStartedAt)
+          : snapshot.savedAt;
+        const baseSeconds = Math.max(0, Math.floor(snapshot.focusSeconds || 0));
+        timerBaseFocusSecondsRef.current = baseSeconds;
+        setFocusSeconds(calculateCountUpSeconds(baseSeconds, phaseStart, Date.now()));
+        setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds || 0)));
+        setTimerRemaining(0);
+        setPhaseStartedAt(phaseStart);
+        setPhaseEndsAt(null);
+        setTimerState('running');
+      } else if (snapshot.timerState === 'running') {
+        const phaseStart = snapshot.version >= 2 && Number.isFinite(snapshot.phaseStartedAt)
+          ? Number(snapshot.phaseStartedAt)
+          : snapshot.savedAt;
+        const phaseEnd = snapshot.version >= 2 && Number.isFinite(snapshot.phaseEndsAt)
+          ? Number(snapshot.phaseEndsAt)
+          : phaseStart + Math.max(0, snapshot.remaining) * 1000;
+        const restored = advancePomodoroTimeline({
+          phase: snapshot.phase,
+          phaseStartedAt: phaseStart,
+          phaseEndsAt: phaseEnd,
+          focusMinutes: snapshot.focusMinutes,
+          breakMinutes: snapshot.breakMinutes,
+          focusSeconds: Math.max(0, Math.floor(snapshot.focusSeconds)),
+          breakSeconds: Math.max(0, Math.floor(snapshot.breakSeconds)),
+        }, Date.now());
+        timerBaseFocusSecondsRef.current = restored.focusSeconds;
+        setPhase(restored.phase);
+        setTimerRemaining(restored.remaining);
+        setFocusSeconds(restored.focusSeconds);
+        setBreakSeconds(restored.breakSeconds);
+        setPhaseStartedAt(restored.phaseStartedAt);
+        setPhaseEndsAt(restored.phaseEndsAt);
+        setTimerState('running');
+        if (!snapshot.scheduleId || restored.transitionCount > 0) {
+          setTimerScheduleId(null);
+          needsTimerPushRefresh.current = true;
+        }
+        if (Date.now() - snapshot.savedAt > 1000) {
+          setMessage('実際の経過時刻からタイマーを同期しました。');
+        }
+      } else {
+        setTimerRemaining(Math.max(0, Math.floor(snapshot.remaining)));
+        setFocusSeconds(Math.max(0, Math.floor(snapshot.focusSeconds)));
+        setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds)));
+        timerBaseFocusSecondsRef.current = Math.max(0, Math.floor(snapshot.focusSeconds));
+        setPhaseStartedAt(null);
+        setPhaseEndsAt(null);
+        setTimerState(snapshot.timerState);
       }
-      if (Date.now() - snapshot.savedAt > 1000) {
-        setMessage('実際の経過時刻からタイマーを同期しました。');
+      if (remoteUpdatedAt) setTimerSyncStatus('他の端末と同期済み');
+    };
+
+    const restore = async () => {
+      try {
+        const { data, error: remoteError } = await supabase
+          .from('student_pomodoro_states')
+          .select('state,updated_at')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (remoteError) throw remoteError;
+        const remoteSnapshot = data ? parseTimerSnapshot(data.state) : null;
+        if (remoteSnapshot && data?.updated_at) {
+          applySnapshot(remoteSnapshot, data.updated_at as string);
+        } else {
+          const localSnapshot = readTimerSnapshot(userId);
+          if (localSnapshot) applySnapshot(localSnapshot);
+          setTimerSyncStatus('この端末のタイマーを同期しています');
+        }
+      } catch (cause) {
+        if (cancelled) return;
+        const localSnapshot = readTimerSnapshot(userId);
+        if (localSnapshot) applySnapshot(localSnapshot);
+        setTimerSyncStatus('クラウド同期を再試行中（タイマーはこの端末で継続）');
+        console.warn('ポモドーロ状態をクラウドから取得できませんでした:', cause);
+      } finally {
+        if (!cancelled) setTimerReady(true);
       }
-    } else {
-      setTimerRemaining(Math.max(0, Math.floor(snapshot.remaining)));
-      setFocusSeconds(Math.max(0, Math.floor(snapshot.focusSeconds)));
-      setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds)));
-      setPhaseStartedAt(null);
-      setPhaseEndsAt(null);
-      setTimerState(snapshot.timerState);
-    }
-    setTimerReady(true);
+    };
+    void restore();
+    return () => { cancelled = true; };
   }, [userId]);
 
   useEffect(() => {
     if (!timerReady) return;
     const key = 'campus-sync-study-timer:' + userId;
-    if (timerState === 'idle' && !showRecord) {
-      try { window.localStorage.removeItem(key); } catch {}
-      return;
-    }
     const snapshot: TimerSnapshot = {
-      version: 2,
+      version: 3,
+      timerMode,
       savedAt: Date.now(),
       phase,
       timerState,
       remaining,
-      focusSeconds,
+      focusSeconds: timerState === 'running' && timerMode === 'countup'
+        ? timerBaseFocusSecondsRef.current : focusSeconds,
       breakSeconds,
       focusMinutes,
       breakMinutes,
@@ -842,7 +924,176 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       scheduleId: timerScheduleId,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
-  }, [timerReady, userId, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+
+  // Persist only meaningful timer state changes; ticking seconds are reconstructed
+  // from the absolute timestamps, so we do not write to Postgres every second.
+  useEffect(() => {
+    if (!timerReady) return;
+    const snapshot: TimerSnapshot = {
+      version: 3,
+      timerMode,
+      savedAt: Date.now(),
+      phase,
+      timerState,
+      remaining,
+      focusSeconds: timerState === 'running' && timerMode === 'countup'
+        ? timerBaseFocusSecondsRef.current : focusSeconds,
+      breakSeconds,
+      focusMinutes,
+      breakMinutes,
+      focusSubject,
+      focusSubjectId,
+      task,
+      rangeId,
+      startedAt: startedAt.current,
+      phaseStartedAt,
+      phaseEndsAt,
+      showRecord,
+      reflection,
+      nextAction,
+      finishKind,
+      scheduleId: timerScheduleId,
+    };
+    const signature = timerSnapshotSignature(snapshot);
+    if (signature === cloudTimerSignatureRef.current || cloudTimerSavingRef.current) return;
+    cloudTimerSavingRef.current = true;
+    void supabase.from('student_pomodoro_states').upsert({
+      user_id: userId,
+      state: snapshot,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' }).select('updated_at').single().then(({ data, error: saveError }) => {
+      if (saveError) throw saveError;
+      cloudTimerSignatureRef.current = signature;
+      remoteTimerUpdatedAtRef.current = (data?.updated_at as string) || new Date().toISOString();
+      setTimerSyncStatus('他の端末と同期済み');
+    }).catch(cause => {
+      setTimerSyncStatus('クラウド同期に失敗しました。接続を確認してください。');
+      console.error('ポモドーロ状態の同期に失敗しました:', cause);
+    }).finally(() => {
+      cloudTimerSavingRef.current = false;
+    });
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+
+  // Supabase Realtime delivers immediate updates; polling/visibility refresh is the
+  // fallback so a device still catches up after sleeping or temporarily disconnecting.
+  useEffect(() => {
+    if (!timerReady) return;
+    let cancelled = false;
+    const applyRemoteRow = (row: { state?: unknown; updated_at?: string | null }) => {
+      if (!row.updated_at || !row.state) return;
+      const stamp = new Date(row.updated_at).getTime();
+      const currentStamp = remoteTimerUpdatedAtRef.current ? new Date(remoteTimerUpdatedAtRef.current).getTime() : 0;
+      if (!Number.isFinite(stamp) || stamp <= currentStamp) return;
+      const snapshot = parseTimerSnapshot(row.state);
+      if (!snapshot) return;
+      cloudTimerSignatureRef.current = timerSnapshotSignature(snapshot);
+      remoteTimerUpdatedAtRef.current = row.updated_at;
+      const mode: TimerMode = snapshot.timerMode === 'countup' ? 'countup' : 'pomodoro';
+      setTimerMode(mode);
+      setPhase(snapshot.phase);
+      setFocusMinutes(snapshot.focusMinutes);
+      setBreakMinutes(snapshot.breakMinutes);
+      setCustomFocus(String(snapshot.focusMinutes));
+      setCustomBreak(String(snapshot.breakMinutes));
+      setFocusSubject(snapshot.focusSubject);
+      setFocusSubjectId(snapshot.focusSubjectId || '');
+      setTask(snapshot.task || '');
+      setRangeId(snapshot.rangeId || '');
+      setShowRecord(snapshot.showRecord);
+      setReflection(snapshot.reflection || '');
+      setNextAction(snapshot.nextAction || '');
+      setFinishKind(snapshot.finishKind || 'completed');
+      setTimerScheduleId(snapshot.scheduleId || null);
+      startedAt.current = snapshot.startedAt;
+      timerBaseFocusSecondsRef.current = Math.max(0, Math.floor(snapshot.focusSeconds || 0));
+      if (snapshot.timerState === 'running' && mode === 'countup') {
+        const phaseStart = Number.isFinite(snapshot.phaseStartedAt) && snapshot.phaseStartedAt !== null
+          ? Number(snapshot.phaseStartedAt) : snapshot.savedAt;
+        const baseSeconds = Math.max(0, Math.floor(snapshot.focusSeconds || 0));
+        timerBaseFocusSecondsRef.current = baseSeconds;
+        setFocusSeconds(calculateCountUpSeconds(baseSeconds, phaseStart, Date.now()));
+        setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds || 0)));
+        setTimerRemaining(0);
+        setPhaseStartedAt(phaseStart);
+        setPhaseEndsAt(null);
+        setTimerState('running');
+      } else if (snapshot.timerState === 'running') {
+        const phaseStart = snapshot.version >= 2 && Number.isFinite(snapshot.phaseStartedAt)
+          ? Number(snapshot.phaseStartedAt) : snapshot.savedAt;
+        const phaseEnd = snapshot.version >= 2 && Number.isFinite(snapshot.phaseEndsAt)
+          ? Number(snapshot.phaseEndsAt) : phaseStart + Math.max(0, snapshot.remaining) * 1000;
+        const restored = advancePomodoroTimeline({
+          phase: snapshot.phase, phaseStartedAt: phaseStart, phaseEndsAt: phaseEnd,
+          focusMinutes: snapshot.focusMinutes, breakMinutes: snapshot.breakMinutes,
+          focusSeconds: snapshot.focusSeconds, breakSeconds: snapshot.breakSeconds,
+        }, Date.now());
+        timerBaseFocusSecondsRef.current = restored.focusSeconds;
+        setPhase(restored.phase);
+        setTimerRemaining(restored.remaining);
+        setFocusSeconds(restored.focusSeconds);
+        setBreakSeconds(restored.breakSeconds);
+        setPhaseStartedAt(restored.phaseStartedAt);
+        setPhaseEndsAt(restored.phaseEndsAt);
+        setTimerState('running');
+        if (!snapshot.scheduleId || restored.transitionCount > 0) needsTimerPushRefresh.current = true;
+      } else {
+        setTimerRemaining(Math.max(0, Math.floor(snapshot.remaining)));
+        setFocusSeconds(Math.max(0, Math.floor(snapshot.focusSeconds)));
+        setBreakSeconds(Math.max(0, Math.floor(snapshot.breakSeconds)));
+        timerBaseFocusSecondsRef.current = Math.max(0, Math.floor(snapshot.focusSeconds));
+        setPhaseStartedAt(null);
+        setPhaseEndsAt(null);
+        setTimerState(snapshot.timerState);
+      }
+      setTimerSyncStatus('他の端末からタイマー状態を受信しました');
+    };
+
+    const syncLatest = async () => {
+      const { data, error: readError } = await supabase
+        .from('student_pomodoro_states')
+        .select('state,updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (readError) {
+        setTimerSyncStatus('クラウド同期を再試行中');
+        return;
+      }
+      if (data) applyRemoteRow(data as { state?: unknown; updated_at?: string | null });
+    };
+
+    const channel = supabase
+      .channel('student-pomodoro-state-' + userId)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'student_pomodoro_states',
+        filter: 'user_id=eq.' + userId,
+      }, payload => {
+        if (payload.eventType !== 'DELETE') {
+          applyRemoteRow(payload.new as { state?: unknown; updated_at?: string | null });
+        }
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') setTimerSyncStatus('他の端末と同期済み');
+      });
+
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void syncLatest();
+    }, 4000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void syncLatest();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    void syncLatest();
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [timerReady, userId]);
 
   useEffect(() => {
     if (!timerReady || !needsTimerPushRefresh.current || timerState !== 'running') return;
