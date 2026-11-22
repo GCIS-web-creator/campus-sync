@@ -101,6 +101,15 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+function hasMatchingVapidKey(subscription: PushSubscription, publicKey: string): boolean {
+  const actual = subscription.options.applicationServerKey;
+  if (!actual) return false;
+  const expected = urlBase64ToUint8Array(publicKey);
+  if (actual.byteLength !== expected.byteLength) return false;
+  const actualBytes = new Uint8Array(actual);
+  return expected.every((value, index) => actualBytes[index] === value);
+}
+
 function getSchoolRoomDisplay(room: string, className: string): string {
   const roomName = (room || '').trim();
   if (/化学実験室/.test(roomName)) return '化学実験室';
@@ -1372,26 +1381,54 @@ export default function CampusSyncApp() {
           if (!cancelled) setPushReady(false);
           return;
         }
-        const registration = await navigator.serviceWorker.getRegistration('/');
-        const subscription = await registration?.pushManager.getSubscription();
-        if (!subscription || Notification.permission !== 'granted') {
+        const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!publicKey) {
+          if (!cancelled) setPushStatus('プッシュ通知の公開鍵が未設定です。');
           if (!cancelled) setPushReady(false);
           return;
         }
-        const { data: row, error } = await supabase
-          .from('push_subscriptions')
-          .select('endpoint')
-          .eq('user_id', authUser.id)
-          .eq('endpoint', subscription.endpoint)
-          .maybeSingle();
-        if (cancelled) return;
-        if (error) {
-          console.warn('通知登録状態の確認に失敗:', error.message);
-          setPushReady(false);
+        if (Notification.permission !== 'granted') {
+          if (!cancelled) setPushReady(false);
           return;
         }
-        setPushReady(Boolean(row));
-        if (row) setPushStatus('この端末のプッシュ通知は有効です。');
+        const registration = await navigator.serviceWorker.getRegistration('/')
+          || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+        let renewed = false;
+        if (subscription && !hasMatchingVapidKey(subscription, publicKey)) {
+          const oldEndpoint = subscription.endpoint;
+          await subscription.unsubscribe();
+          if (cancelled) return;
+          const { error: deleteError } = await supabase.from('push_subscriptions')
+            .delete().eq('user_id', authUser.id).eq('endpoint', oldEndpoint);
+          if (deleteError) throw deleteError;
+          subscription = null;
+          renewed = true;
+        }
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+          });
+          renewed = true;
+        }
+        const { error: upsertError } = await supabase.from('push_subscriptions').upsert({
+          endpoint: subscription.endpoint,
+          user_id: authUser.id,
+          student_id: studentId,
+          subscription: subscription.toJSON(),
+          device_name: getPushDeviceName(),
+          user_agent: navigator.userAgent.slice(0, 500),
+          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'endpoint' });
+        if (cancelled) return;
+        if (upsertError) throw upsertError;
+        setPushReady(true);
+        setPushStatus(renewed
+          ? '通知鍵を更新して、この端末を再登録しました。'
+          : 'この端末のプッシュ通知は有効です。');
       } catch (error) {
         if (!cancelled) console.warn('通知登録状態の確認に失敗:', error);
       }
@@ -3722,6 +3759,14 @@ Supabaseの設定を確認してください。
       await navigator.serviceWorker.ready;
       await registration.update().catch(() => undefined);
       let subscription = await registration.pushManager.getSubscription();
+      if (subscription && !hasMatchingVapidKey(subscription, publicKey)) {
+        const oldEndpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        const { error: deleteError } = await supabase.from('push_subscriptions')
+          .delete().eq('user_id', authUser.id).eq('endpoint', oldEndpoint);
+        if (deleteError) throw deleteError;
+        subscription = null;
+      }
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
