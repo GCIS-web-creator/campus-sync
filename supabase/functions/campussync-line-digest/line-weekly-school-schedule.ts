@@ -80,7 +80,7 @@ function buildMondayClassBubble(group: '7組' | '8組', dateLabel: string, timet
 
 type WeeklyEventRow = { id: string; title: string; summary?: string | null; event_date: string };
 type WeeklyAssignmentRow = { id: string; title: string; details?: string | null; subject?: string | null; subject_option?: string | null; target_class?: string | null; due_at?: string | null; priority?: string | null };
-type WeeklyChangeRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string; digest_sent_at: string | null };
+type WeeklyChangeRow = { id: string; entity_type: string; entity_id: string; action: string; title: string; subject: string | null; priority: string; summary: string; previous_value: Record<string, unknown> | null; next_value: Record<string, unknown> | null; reason: string | null; created_at: string; digest_sent_at: string | null };\ntype WeeklyExamSubjectRow = { exam_date: string; subject: string; sort_order: number };\ntype WeeklyExamDefinitionRow = { id: string; target_classes: string[] | null };
 
 function getTokyoTodayKey(): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -192,40 +192,86 @@ function buildWeeklyAssignmentsBubble(today: string, assignments: WeeklyAssignme
 }
 
 function buildCountdownBubble(today: string, events: WeeklyEventRow[], failed: boolean) {
-  const contents: Record<string, unknown>[] = [];
+  const bodyContents: Record<string, unknown>[] = [];
   if (failed) {
-    contents.push({ type: 'text', text: 'カウントダウン情報を取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true });
+    bodyContents.push({
+      type: 'text', text: 'カウントダウン情報を取得できませんでした。', size: 'sm', color: '#B91C1C', wrap: true,
+    });
   } else if (!events.length) {
-    contents.push({ type: 'text', text: '現在登録されている今後のカウントダウンはありません。', size: 'sm', color: '#64748B', wrap: true });
+    bodyContents.push({
+      type: 'box', layout: 'vertical', paddingAll: '14px', cornerRadius: '12px', backgroundColor: '#EAF2F1',
+      contents: [{
+        type: 'text', text: '現在、登録されている今後の学校行事はありません。',
+        size: 'sm', color: '#315B59', weight: 'bold', wrap: true,
+      }],
+    });
   } else {
     for (const event of events.slice(0, 6)) {
       const remaining = daysUntil(today, event.event_date);
-      const label = remaining === 0 ? '本日' : remaining === 1 ? 'あと1日' : 'あと' + remaining + '日';
-      const dateLabel = event.event_date.slice(5).replace('-', '/');
-      contents.push({
-        type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'md', paddingAll: '10px',
-        backgroundColor: '#F8FAFC', cornerRadius: '10px',
-        contents: [
-          { type: 'box', layout: 'vertical', width: '66px', paddingAll: '8px', backgroundColor: '#163A40', cornerRadius: '9px', justifyContent: 'center', alignItems: 'center', spacing: 'xs',
-            contents: [
-              { type: 'text', text: dateLabel, size: 'md', color: '#FFFFFF', weight: 'bold', align: 'center' },
-              { type: 'text', text: label, size: 'xxs', color: '#A7D3CD', weight: 'bold', align: 'center', wrap: true },
-            ],
-          },
-          { type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', contents: [
-            { type: 'text', text: event.title, size: 'sm', color: '#0F172A', weight: 'bold', wrap: true },
-            ...(event.summary ? [{ type: 'text', text: event.summary.slice(0, 120), size: 'xs', color: '#64748B', wrap: true }] : []),
-          ] },
-        ],
+      const remainingText = remaining === 0 ? '本日' : remaining === 1 ? 'あと1日' : 'あと' + remaining + '日';
+      const countdownBackground = remaining <= 3 ? '#FCE8E7' : '#E2EFED';
+      const countdownColor = remaining <= 3 ? '#B42318' : '#376C69';
+      const eventDetails: Record<string, unknown>[] = [
+        { type: 'text', text: String(event.title || '学校行事').slice(0, 70), size: 'md', color: '#0F172A', weight: 'bold', wrap: true },
+      ];
+      if (event.summary) eventDetails.push({
+        type: 'text', text: String(event.summary).slice(0, 100), size: 'xs', color: '#64748B', wrap: true,
+      });
+
+      bodyContents.push({
+        type: 'box', layout: 'vertical', paddingAll: '2px', cornerRadius: '14px', backgroundColor: '#C6D6D6',
+        contents: [{
+          type: 'box', layout: 'vertical', paddingAll: '12px', cornerRadius: '12px',
+          backgroundColor: '#F8FAFC', spacing: 'sm',
+          contents: [
+            { type: 'box', layout: 'vertical', height: '3px', cornerRadius: '2px', backgroundColor: '#5C9291', contents: [{ type: 'filler' }] },
+            {
+              type: 'box', layout: 'horizontal', alignItems: 'center',
+              contents: [
+                { type: 'text', text: 'SCHOOL CALENDAR', size: 'xxs', color: '#5C9291', weight: 'bold', flex: 1 },
+                {
+                  type: 'box', layout: 'vertical', paddingAll: '6px', cornerRadius: '18px', backgroundColor: countdownBackground,
+                  contents: [{ type: 'text', text: remainingText, size: 'xs', color: countdownColor, weight: 'bold', align: 'center' }],
+                },
+              ],
+            },
+            {
+              type: 'box', layout: 'horizontal', alignItems: 'center', spacing: 'md',
+              contents: [
+                {
+                  type: 'box', layout: 'vertical', width: '72px', paddingAll: '10px', cornerRadius: '10px',
+                  backgroundColor: '#163A40', justifyContent: 'center', alignItems: 'center', spacing: 'xs',
+                  contents: [
+                    { type: 'text', text: event.event_date.slice(5).replace('-', '/'), size: 'lg', color: '#FFFFFF', weight: 'bold', align: 'center' },
+                    { type: 'text', text: 'EVENT', size: 'xxs', color: '#A7D3CD', weight: 'bold', align: 'center' },
+                  ],
+                },
+                { type: 'box', layout: 'vertical', flex: 1, spacing: 'xs', contents: eventDetails },
+              ],
+            },
+          ],
+        }],
       });
     }
   }
-  return buildWeeklyInfoBubble({
-    eyebrow: 'CAMPUSSYNC  /  COUNTDOWN',
-    title: '学校イベント・カウントダウン',
-    subtitle: 'COMING UP  •  開催日までの日数',
-    contents,
-  });
+
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box', layout: 'vertical', backgroundColor: '#0F172A', paddingAll: '18px', spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC  /  SCHOOL EVENTS', size: 'xs', color: '#67E8F9', weight: 'bold' },
+        { type: 'text', text: '学校イベント・カウントダウン', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+        { type: 'text', text: 'UPCOMING EVENTS  •  COUNTDOWN', size: 'xs', color: '#CBD5E1', wrap: true },
+      ],
+    },
+    body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'md', contents: bodyContents },
+    footer: {
+      type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: '#F8FAFC', spacing: 'xs',
+      contents: [{ type: 'text', text: 'CAMPUSSYNC・SOKA HIGH SCHOOL', size: 'xs', color: '#64748B', align: 'center', wrap: true }],
+    },
+  };
 }
 
 function buildFallbackWeekDays(weekStart: string, events: WeeklyEventRow[]) {
@@ -249,7 +295,7 @@ function buildFallbackWeekDays(weekStart: string, events: WeeklyEventRow[]) {
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({})) as { mode?: unknown; weekStart?: unknown; probe?: unknown };
   const manualRequest = payload.mode === 'manual';
-  const probeRequest = payload.probe === true;
+  const probeRequest = payload.probe === true;\n  const groupOnlyRequest = payload.groupOnly === true;
   if (manualRequest) {
     const expectedPassword = Deno.env.get('CAMPUS_SYNC_ADMIN_PASSWORD') || '';
     const receivedPassword = request.headers.get('x-admin-password') || '';
@@ -279,7 +325,7 @@ export async function POST(request: Request) {
 
   const today = getTokyoTodayKey();
   const weekEnd = addDays(weekStart, 6);
-  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, weatherCacheResult, changeResult] = await Promise.all([
+  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, weatherCacheResult, changeResult, examScheduleResult] = await Promise.all([
     supabase.from('school_weekly_schedules')
       .select('week_start,title,days').eq('week_start', weekStart).maybeSingle(),
     supabase.from('school_event_countdowns')
@@ -304,12 +350,19 @@ export async function POST(request: Request) {
       .is('digest_sent_at', null)
       .order('created_at', { ascending: true })
       .limit(8),
+    supabase.from('school_test_exams')
+      .select('id,target_classes')
+      .eq('school_year', Number(weekStart.slice(0, 4)))
+      .eq('term', 2)
+      .eq('exam_type', '期末考査')
+      .lte('start_date', weekEnd)
+      .gte('end_date', weekStart),
   ]);
   if (scheduleResult.error) console.error('週間予定表の取得に失敗（行事情報で代替）:', scheduleResult.error.message);
   if (weeklyEventsResult.error) console.error('週間予定表：学校行事の取得に失敗:', weeklyEventsResult.error.message);
   if (countdownResult.error) console.error('週間予定表：カウントダウン取得に失敗:', countdownResult.error.message);
   if (assignmentResult.error) console.error('週間予定表：課題取得に失敗:', assignmentResult.error.message);
-  if (changeResult.error) console.error('週間予定表：日程変更取得に失敗:', changeResult.error.message);
+  if (changeResult.error) console.error('週間予定表：日程変更取得に失敗:', changeResult.error.message);\n  if (examScheduleResult.error) console.error('週間予定表：定期考査日程の取得に失敗:', examScheduleResult.error.message);
   if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
   if (weatherCacheResult.error) console.error('週間学校予定表：天気キャッシュの取得に失敗:', weatherCacheResult.error.message);
 
@@ -321,7 +374,39 @@ export async function POST(request: Request) {
   const savedDays = Array.isArray(schedule?.days) ? schedule.days as Array<any> : [];
   const hasSavedSchedule = Boolean(schedule && savedDays.length > 0);
   // 次週の週間予定表が未登録でも、登録済みの学校行事を日付別にまとめて配信を継続する。
-  const days = hasSavedSchedule ? savedDays : buildFallbackWeekDays(weekStart, weeklyEvents);
+  const baseDays = hasSavedSchedule ? savedDays : buildFallbackWeekDays(weekStart, weeklyEvents);
+  const matchingExamIds = ((examScheduleResult.data || []) as WeeklyExamDefinitionRow[])
+    .filter(exam => Array.isArray(exam.target_classes) && exam.target_classes.includes('2-7') && exam.target_classes.includes('2-8'))
+    .map(exam => exam.id);
+  let examSubjects: WeeklyExamSubjectRow[] = [];
+  if (matchingExamIds.length) {
+    const examSubjectsResult = await supabase.from('school_test_subjects')
+      .select('exam_date,subject,sort_order')
+      .in('exam_id', matchingExamIds)
+      .gte('exam_date', weekStart)
+      .lte('exam_date', weekEnd)
+      .order('exam_date', { ascending: true })
+      .order('sort_order', { ascending: true });
+    if (examSubjectsResult.error) {
+      console.error('週間予定表：定期考査の教科取得に失敗:', examSubjectsResult.error.message);
+    } else {
+      examSubjects = (examSubjectsResult.data || []) as WeeklyExamSubjectRow[];
+    }
+  }
+  const days = baseDays.map((day: any) => {
+    const subjects = examSubjects.filter(row => row.exam_date === day.date);
+    if (!subjects.length) return day;
+    const existingItems = Array.isArray(day.items) ? [...day.items] : [];
+    if (!existingItems.some((item: any) => String(item?.id || '') === 'exam-schedule-' + day.date)) {
+      existingItems.push({
+        id: 'exam-schedule-' + day.date,
+        title: '定期考査',
+        details: '教科：' + subjects.map(row => row.subject).join('・'),
+      });
+    }
+    return { ...day, items: existingItems };
+  });
+  const examScheduleDays = examSubjects.reduce((dates: Set<string>, row) => dates.add(row.exam_date), new Set<string>());
   if (manualRequest && !days.some(day => day?.isHoliday || String(day?.holidayName || '').trim() || (Array.isArray(day?.items) && day.items.some((item: any) => String(item?.title || item?.details || item?.time || item?.location || '').trim())))) {
     return jsonError('予定または祝日設定がないため、配信できません。', 400);
   }
@@ -387,6 +472,37 @@ export async function POST(request: Request) {
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
+  if (groupOnlyRequest) {
+    const retryKey = retryKeyForWeek(weekStart);
+    const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken, [flex], retryKey, 'school_schedule', retryKey);
+    if (changeEvents.length && !groupDelivery.lookupError && groupDelivery.registered > 0 && groupDelivery.failed === 0) {
+      const { error: markChangesError } = await supabase.from('campussync_schedule_change_events')
+        .update({ digest_sent_at: new Date().toISOString() })
+        .in('id', changeEvents.map(item => item.id))
+        .is('digest_sent_at', null);
+      if (markChangesError) console.error('週間予定表のグループ再送に含めた日程変更の処理済み記録に失敗:', markChangesError.message);
+    }
+    const succeeded = groupDelivery.registered > 0 && groupDelivery.sent === groupDelivery.registered && groupDelivery.failed === 0 && !groupDelivery.lookupError;
+    return Response.json({
+      success: succeeded,
+      groupOnlyReplay: true,
+      broadcastSkipped: true,
+      weekStart,
+      groupDelivery,
+      content: {
+        weeklySchedule: hasSavedSchedule,
+        weeklyEventFallback: !hasSavedSchedule,
+        examScheduleDays: examScheduleDays.size,
+        examSubjects: examSubjects.length,
+        countdowns: countdownEvents.length,
+        weather: weeklyWeather.length,
+      },
+      message: succeeded
+        ? weekStart + '〜' + weekEnd + 'の週間予定をLINEグループへ再送しました。公式アカウントへの重複配信は行っていません。'
+        : 'グループ再送に失敗しました：' + summarizeLineGroupDelivery(groupDelivery),
+    }, { status: succeeded ? 200 : 502, headers: { 'Cache-Control': 'no-store' } });
+  }
+
   const retryKey = manualRequest ? randomUUID() : retryKeyForWeek(weekStart);
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -431,6 +547,6 @@ export async function POST(request: Request) {
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('学校予定表のLINE配信通信エラー:', error instanceof Error ? error.message : 'unknown error');
-    return jsonError('LINEへの学校予定表配信に失敗しました。Vercelのログを確認してください。', 502);
+    return jsonError('LINEへの学校予定表配信に失敗しました。Supabase Edge Functionのログを確認してください。', 502);
   }
 }
