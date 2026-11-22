@@ -96,7 +96,7 @@ jobs:
           npx opennextjs-cloudflare build
           npx wrangler deploy --dry-run
       - name: Deploy Cloudflare Worker to production
-        if: github.ref == 'refs/heads/cloudflare-workers-migration'
+        if: github.ref == 'refs/heads/cloudflare-workers-migration' && github.event_name == 'workflow_dispatch'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
