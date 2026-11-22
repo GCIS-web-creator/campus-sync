@@ -5,7 +5,8 @@ import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
 import { supabase } from '@/lib/supabase';
-import { BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
+import StudentLearningAnalytics from '@/components/StudentLearningAnalytics';
+import { BarChart3, BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info } from 'lucide-react';
 
 const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
 type Subject = typeof SUBJECTS[number];
@@ -118,7 +119,7 @@ const deadlineStatus = (value: string | null) => {
 };
 
 export default function StudentLearningHub({ userId, userEmail = '', userClass = '', isDarkMode = false }: { userId: string; userEmail?: string; userClass?: string; isDarkMode?: boolean }) {
-  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history' | 'planetube' | 'contribution'>('overview');
+  const [tab, setTab] = useState<'overview' | 'tests' | 'mini-tests' | 'assignments' | 'focus' | 'history' | 'analysis' | 'planetube' | 'contribution'>('overview');
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
   const [ranges, setRanges] = useState<Range[]>([]);
@@ -291,27 +292,41 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     if (!userId) return;
     setLoading(true); setError('');
     try {
-      const since = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [a, b, c, d, e, f, g, h, i] = await Promise.all([
+      const [a, b, c, e, f, g, h, i] = await Promise.all([
         supabase.from('school_test_exams').select('*').order('start_date', { ascending: false }),
         supabase.from('school_test_subjects').select('*').order('exam_date').order('sort_order'),
         supabase.from('student_test_ranges').select('*').eq('user_id', userId).order('created_at'),
-        supabase.from('student_study_sessions').select('*').eq('user_id', userId).gte('started_at', since).order('started_at', { ascending: false }).limit(250),
         supabase.from('assignments').select('id,title,details,subject,subject_option,target_class,source,due_at,type').eq('is_active', true).order('due_at', { ascending: true, nullsFirst: false }),
         supabase.from('mini_test_events').select('id,subject,title,test_date,scope,notes,period,start_note,duration_minutes,question_count,full_score,target_class').eq('audience', 'school').eq('status', 'published').gte('test_date', dayKey(new Date())).order('test_date').limit(40),
         supabase.from('school_test_ranges').select('id,exam_id,subject,display_subject,audience,range_sections,sort_order').order('sort_order', { ascending: true }),
         supabase.from('student_school_range_progress').select('school_test_range_id,section_id,completed').eq('user_id', userId),
         supabase.from('todos').select('id,title,details,subject,source,type,due,due_at,completed,created_at').eq('student_id', studentIdentifier).order('created_at', { ascending: false }),
       ]);
-      const issue = a.error || b.error || c.error || d.error || e.error || f.error || g.error || h.error || i.error;
+      const issue = a.error || b.error || c.error || e.error || f.error || g.error || h.error || i.error;
       if (issue) throw issue;
+
+      // Load the complete personal study history in ordered pages for long-range analytics.
+      const allSessions: Session[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data: page, error: pageError } = await supabase
+          .from('student_study_sessions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('started_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(offset, offset + 999);
+        if (pageError) throw pageError;
+        const rows = (page || []) as Session[];
+        allSessions.push(...rows);
+        if (rows.length < 1000) break;
+      }
       const newExams = ((a.data || []) as Exam[]).filter(exam => {
         const targetClasses = Array.isArray(exam.target_classes) ? exam.target_classes : [];
         return targetClasses.length === 0 || targetClasses.includes(userClass);
       });
       const visibleExamIds = new Set(newExams.map(exam => exam.id));
       const newSubjects = ((b.data || []) as ExamSubject[]).filter(subject => visibleExamIds.has(subject.exam_id));
-      setExams(newExams); setSubjects(newSubjects); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions((d.data || []) as Session[]);
+      setExams(newExams); setSubjects(newSubjects); setRanges((c.data || []) as Range[]); setSchoolRanges((g.data || []) as SchoolExamRange[]); setSessions(allSessions);
       setAssignments((e.data || []) as Assignment[]);
       setMiniTests((f.data || []) as MiniTestEvent[]);
       setPublishedRangeProgress((h.data || []) as PublishedRangeProgress[]);
@@ -792,8 +807,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-black tracking-[.22em] text-cyan-600">CAMPUSSYNC LEARNING</p><h1 className={'mt-1 text-2xl font-black ' + (dark ? 'text-white' : 'text-slate-900')}>学習・テスト対策</h1><p className={'mt-1 text-xs ' + muted}>考査の予定、集中時間、勉強の記録をまとめて管理。</p></div><div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-cyan-950"><p className="text-[9px] font-bold">今週の勉強時間</p><p className="text-sm font-black">{duration(weekSeconds)}</p></div></header>
-    <nav className={'grid grid-cols-4 sm:grid-cols-8 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
-      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History},{id:'planetube',label:'Planetube',icon:Globe2},{id:'contribution',label:'貢献申請',icon:Plus}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
+    <nav className={'grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-1 rounded-2xl border p-1 ' + (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white')}>
+      {[{id:'overview',label:'概要',icon:TrendingUp},{id:'tests',label:'テスト対策',icon:GraduationCap},{id:'mini-tests',label:'小テスト',icon:CalendarDays},{id:'assignments',label:'課題一覧',icon:BookOpenCheck},{id:'focus',label:'集中',icon:Timer},{id:'history',label:'記録',icon:History},{id:'analysis',label:'分析',icon:BarChart3},{id:'planetube',label:'Planetube',icon:Globe2},{id:'contribution',label:'貢献申請',icon:Plus}].map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id as typeof tab)} className={'flex flex-col sm:flex-row items-center justify-center gap-1 rounded-xl px-1 py-3 text-[9px] font-black sm:text-xs ' + (tab === item.id ? 'bg-cyan-700 text-white' : muted)}><Icon size={15}/>{item.label}</button>; })}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{error}</div>}
     {message && <div role="status" className={'flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs font-bold ' + (pendingXpSessionIds.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}><span>{message}</span>{pendingXpSessionIds.length > 0 && <button type="button" onClick={() => void retryLearningXp()} disabled={saving} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-black text-amber-900 disabled:opacity-50">{saving ? '再試行中…' : 'XPを再試行（' + pendingXpSessionIds.length + '件）'}</button>}</div>}
@@ -1015,6 +1030,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       <section className={panel}><h2 className="mb-3 font-black">教科別の累計（直近120日）</h2>{subjectTotals.length?<div className="space-y-3">{subjectTotals.map(([name,seconds])=><div key={name}><div className="mb-1 flex justify-between text-xs"><b>{name}</b><span className={muted}>{duration(seconds)}</span></div><div className={'h-2 rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:Math.max(2,seconds/Math.max(...subjectTotals.map(item=>item[1]))*100)+'%'}}/></div></div>)}</div>:<p className={'text-sm '+muted}>まだ記録がありません。</p>}</section>
       <section className={panel}><h2 className="mb-3 font-black">最近の学習記録</h2><div className="space-y-2">{sessions.slice(0,20).map(item=><article key={item.id} className={'rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm">{item.subject_name} ・ {item.task_title}</b><b className="text-xs text-cyan-600">{duration(item.focus_seconds)}</b></div><p className={'mt-1 text-[10px] '+muted}>{new Date(item.started_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} ・ 休憩 {duration(item.break_seconds)} ・ {item.finish_kind==='stopped'?'途中終了':'完了'}</p><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.reflection}</p><p className={'mt-2 whitespace-pre-wrap text-xs '+muted}>次：{item.next_action}</p></article>)}{!sessions.length&&<p className={'rounded-xl border border-dashed p-4 text-sm '+muted}>学習記録はまだありません。</p>}</div></section>
     </div>}
+    {tab === 'analysis' && <StudentLearningAnalytics sessions={sessions} isDarkMode={dark} />}
     {tab === 'contribution' && <ContributionActivityPanel userId={userId} isDarkMode={isDarkMode} />}
   </div>;
 }
