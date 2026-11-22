@@ -30,10 +30,16 @@ const REQUIRED_SUBJECT_GROUPS: Record<string, RequiredSubjectGroup[]> = {
 export function matchSchoolRangeSubjects<T extends SchoolRangeSubjectRow>(
   subjectName: string,
   ranges: readonly T[],
+  scienceTrack?: 'physics' | 'biology' | null,
 ) {
-  const requiredGroups = REQUIRED_SUBJECT_GROUPS[subjectName] || [
-    { label: subjectName, acceptedNames: [subjectName] },
-  ];
+  const requiredGroups = subjectName === '物理・生物' && scienceTrack
+    ? [{
+      label: scienceTrack === 'physics' ? '物理' : '生物',
+      acceptedNames: [scienceTrack === 'physics' ? '物理' : '生物', '物理・生物'],
+    }]
+    : REQUIRED_SUBJECT_GROUPS[subjectName] || [
+      { label: subjectName, acceptedNames: [subjectName] },
+    ];
 
   const registeredGroups = requiredGroups.filter(group =>
     ranges.some(row => group.acceptedNames.some(name =>

@@ -1298,7 +1298,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const isVisibleSchoolRange = (item: SchoolExamRange) => item.audience !== '2年理系' || ['2-7', '2-8'].includes(userClass);
   const getPublishedRangeProgress = (targetExamId: string, subjectName: string) => {
     const visibleRows = schoolRanges.filter(item => item.exam_id === targetExamId && isVisibleSchoolRange(item));
-    const matched = matchSchoolRangeSubjects(subjectName, visibleRows);
+    const matched = matchSchoolRangeSubjects(subjectName, visibleRows, scienceTrack);
     const sections = matched.rows.flatMap(row => (row.range_sections || []).filter(section => section.kind !== 'notice').map(section => ({ row, section })));
     const completed = sections.filter(({ row, section }) => publishedRangeProgress.some(progress => progress.school_test_range_id === row.id && progress.section_id === section.section_id && progress.completed)).length;
     return {
@@ -1344,7 +1344,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         student_id: studentIdentifier,
         title: personalTaskTitle.trim(),
         details: personalTaskDetails.trim(),
-        subject: personalTaskSubject,
+        subject: displaySubjectName(personalTaskSubject),
         source: '自分で追加',
         type: personalTaskType,
         due: dueAt ? dueAt.toLocaleString('ja-JP') : '期限なし',
@@ -1720,7 +1720,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           return <article key={exam.id} className={'mb-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-900':'border-slate-200 bg-slate-50')}>
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold text-cyan-600">{exam.school_year}年度・{exam.term}学期</p><h3 className="text-lg font-black">{exam.exam_type}</h3></div><p className={'text-xs font-bold '+muted}>{dateLabel(exam.start_date)}〜{dateLabel(exam.end_date)}</p></div>
             <div className="mt-3 space-y-2">{Array.from(new Set(examSubjects.map(item=>item.exam_date))).sort().map(date=><div key={date}><p className={'mb-1 text-xs font-black '+muted}>{dateLabel(date)}</p><div className="flex flex-wrap gap-2">{examSubjects.filter(item=>item.exam_date===date).map(item=>{
-                  const scope = getPublishedRangeProgress(exam.id, displaySubjectName(item.subject));
+                  const scope = getPublishedRangeProgress(exam.id, item.subject);
                   return <button key={item.id} type="button" onClick={() => {
                     setExamId(exam.id);
                     setShowRangeManager(true);
@@ -1845,7 +1845,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         <form onSubmit={addPersonalTask} className="space-y-3">
           <label className="block space-y-1 text-xs font-bold">課題名<input className={input} value={personalTaskTitle} onChange={e=>setPersonalTaskTitle(e.target.value)} maxLength={200} placeholder="例：数学の問題集 P30〜35" required/></label>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block space-y-1 text-xs font-bold">教科<select className={input} value={personalTaskSubject} onChange={e=>setPersonalTaskSubject(e.target.value)}><option value="その他">その他</option>{SUBJECTS.map(subject=><option key={subject} value={subject}>{displaySubjectName(subject)}</option>)}</select></label>
+            <label className="block space-y-1 text-xs font-bold">教科<select className={input} value={personalTaskSubject} onChange={e=>setPersonalTaskSubject(displaySubjectName(e.target.value))}><option value="その他">その他</option>{SUBJECTS.map(subject=><option key={subject} value={subject}>{displaySubjectName(subject)}</option>)}</select></label>
             <label className="block space-y-1 text-xs font-bold">課題の種類<select className={input} value={personalTaskType} onChange={e=>setPersonalTaskType(e.target.value as 'paper'|'classroom'|'other')}><option value="paper">紙プリント・ノート</option><option value="classroom">Classroom</option><option value="other">その他・授業内指示</option></select></label>
             <label className="block space-y-1 text-xs font-bold sm:col-span-2">提出期限（任意）<input className={input} type="datetime-local" value={personalTaskDueAt} onChange={e=>setPersonalTaskDueAt(e.target.value)}/></label>
           </div>
