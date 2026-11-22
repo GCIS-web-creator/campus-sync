@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getPlanetTechnologyBranchNodes,
+  getPlanetTechnologyCatalog,
   getPlanetTechnologyCatalogCount,
   getPlanetTechnologyNode,
   getPlanetTechnologyNodeState,
@@ -30,10 +31,15 @@ test('the foundation research is the only available starting node', () => {
   const root = getPlanetTechnologyNode(PLANET_TECHNOLOGY_ROOT_ID);
   assert.ok(root);
   assert.equal(getPlanetTechnologyNodeState(root, 0, empty), 'available');
+  const states = getPlanetTechnologyCatalog().map(node =>
+    getPlanetTechnologyNodeState(node, 1, empty),
+  );
+  assert.deepEqual(states.filter(state => state === 'available'), ['available']);
   const branchStates = getPlanetTechnologyBranchNodes().map(node =>
     getPlanetTechnologyNodeState(node, 1, empty),
   );
-  assert.ok(branchStates.every(state => state === 'parent_locked'));
+  assert.equal(branchStates.filter(state => state === 'parent_locked').length, 3);
+  assert.equal(branchStates.filter(state => state === 'stage_locked').length, 10);
 });
 
 test('branches become researchable only after the foundation and civilization gate', () => {
