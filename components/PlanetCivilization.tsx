@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import PlanetTechnologyTree from '@/components/PlanetTechnologyTree';
 import { RefreshCw, Sparkles, Orbit, BookOpen, Users, Brain, Leaf, ArrowUpRight } from 'lucide-react';
 
 type Planet = {
@@ -168,6 +169,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [recalculatingXp, setRecalculatingXp] = useState(false);
   const [xpFeedback, setXpFeedback] = useState('');
+  const [activePanel, setActivePanel] = useState<'planet' | 'technology'>('planet');
   const [error, setError] = useState('');
 
   const load = useCallback(async (quiet = false) => {
@@ -261,6 +263,11 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
       {error && <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs text-rose-800">{error}<button type="button" onClick={() => void load()} className="ml-3 font-black underline">再読み込み</button></div>}
 
       {planet && growth && <>
+        <div className={`flex gap-2 rounded-2xl border p-1 ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+          <button type="button" onClick={() => setActivePanel('planet')} className={`flex-1 rounded-xl px-4 py-2.5 text-xs font-black transition ${activePanel === 'planet' ? 'bg-cyan-700 text-white' : subText}`}>惑星の状態</button>
+          <button type="button" onClick={() => setActivePanel('technology')} className={`flex-1 rounded-xl px-4 py-2.5 text-xs font-black transition ${activePanel === 'technology' ? 'bg-cyan-700 text-white' : subText}`}>MP・技術ツリー</button>
+        </div>
+        {activePanel === 'technology' ? <PlanetTechnologyTree isDarkMode={isDarkMode}/> : <>
         <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
           <PlanetArtwork stage={stage}/>
           <section className={`rounded-[26px] border p-4 sm:p-5 ${panel}`}>
@@ -328,6 +335,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
           })}</div> : <div className={`rounded-xl border border-dashed p-5 text-center text-xs ${subText}`}>学習記録を保存すると、ここに惑星の成長履歴が表示されます。</div>}
         </section>
       </>}
+        </>}
 
       <p className={`text-[10px] leading-5 ${subText}`}>この惑星はCampusSync専用です。Planetubeの惑星・XP・封印記録とは独立して管理され、既存のPlanetube機能には影響しません。</p>
     </div>
