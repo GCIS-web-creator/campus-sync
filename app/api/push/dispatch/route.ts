@@ -4,7 +4,7 @@ import { getLineWebhookCredentials } from '@/lib/line-bot-rotation';
 import { applyCampusSyncFlexFooters } from '@/lib/line-flex-footer';
 import { buildCampusAiFlexMessage } from '@/lib/line-flex';
 import { recordLineDeliveryResponse } from '@/lib/line-delivery-audit';
-import { timingSafeEqual } from 'node:crypto';
+import { createECDH, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 
@@ -272,6 +272,32 @@ async function finish(
 export async function POST(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ success: false, message: '許可されていないリクエストです。' }, { status: 401 });
+  }
+
+  // Cron-secret protected diagnostics. Only booleans are returned; key material is never exposed.
+  if (new URL(request.url).searchParams.get('diagnostics') === '1') {
+    const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    const privateKey = process.env.VAPID_PRIVATE_KEY || '';
+    const browserPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    let derivedPublicKeyMatches = false;
+    try {
+      if (publicKey && privateKey) {
+        const ecdh = createECDH('prime256v1');
+        ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'));
+        const derived = ecdh.getPublicKey(undefined, 'uncompressed').toString('base64url');
+        derivedPublicKeyMatches = derived === publicKey;
+      }
+    } catch {
+      derivedPublicKeyMatches = false;
+    }
+    return NextResponse.json({
+      success: true,
+      hasPublicKey: Boolean(publicKey),
+      hasPrivateKey: Boolean(privateKey),
+      hasSubject: Boolean(process.env.VAPID_SUBJECT),
+      browserAndSenderPublicKeysMatch: Boolean(publicKey && browserPublicKey && publicKey === browserPublicKey),
+      derivedPublicKeyMatches,
+    }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
