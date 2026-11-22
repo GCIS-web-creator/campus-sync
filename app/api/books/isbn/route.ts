@@ -236,17 +236,19 @@ async function getHtml(url: string, timeout = 3500): Promise<string | null> {
 
 function parseMaruzenCover(html: string | null, isbn13: string): string | null {
   if (!html || !html.includes(isbn13)) return null;
+  // Shopify pages sometimes JSON-escape slashes inside embedded product data.
+  const normalizedHtml = html.replace(/\\\//g, '/');
   const matches: string[] = [];
-  const metaTags = html.match(/<meta\\b[^>]*>/gi) || [];
+  const metaTags = normalizedHtml.match(/<meta\\b[^>]*>/gi) || [];
   for (const tag of metaTags) {
     if (!/property=["']og:image["']/i.test(tag)) continue;
     const content = /content=["']([^"']+)["']/i.exec(tag)?.[1];
     if (content) matches.push(content);
   }
-  const imageAttributes = html.matchAll(/(?:src|data-src|content)=["']([^"']+)["']/gi);
+  const imageAttributes = normalizedHtml.matchAll(/(?:src|data-src|content)=["']([^"']+)["']/gi);
   for (const match of imageAttributes) matches.push(match[1]);
   for (const raw of matches) {
-    const candidate = secureUrl(raw.replace(/&amp;/g, '&').replace(/\\\\\\//g, '/'));
+    const candidate = secureUrl(raw.replace(/&amp;/g, '&'));
     if (!candidate) continue;
     try {
       const parsed = new URL(candidate);
