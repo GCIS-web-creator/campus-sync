@@ -36,6 +36,8 @@ jobs:
       - run: npm run check:i18n
       - name: Test school exam range subject matching
         run: node --experimental-strip-types --test scripts/test-school-range-matching.mjs
+      - name: Test book barcode classification
+        run: npm run test:book-isbn
       - name: Test study timer Push request validation
         run: node --experimental-strip-types --test scripts/test-study-timer-push.mjs
       - name: Test contribution submission and review validation
