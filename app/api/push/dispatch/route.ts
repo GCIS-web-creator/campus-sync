@@ -274,37 +274,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: '許可されていないリクエストです。' }, { status: 401 });
   }
 
-  // Cron-secret protected diagnostics. Only booleans are returned; key material is never exposed.
-  if (new URL(request.url).searchParams.get('diagnostics') === '1') {
-    const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-    const privateKey = process.env.VAPID_PRIVATE_KEY || '';
-    const browserPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-    let derivedPublicKeyMatches = false;
-    try {
-      if (publicKey && privateKey) {
-        const ecdh = createECDH('prime256v1');
-        ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'));
-        const derived = ecdh.getPublicKey(undefined, 'uncompressed').toString('base64url');
-        derivedPublicKeyMatches = derived === publicKey;
-      }
-    } catch {
-      derivedPublicKeyMatches = false;
-    }
-    return NextResponse.json({
-      success: true,
-      hasPublicKey: Boolean(publicKey),
-      hasPrivateKey: Boolean(privateKey),
-      hasSubject: Boolean(process.env.VAPID_SUBJECT),
-      browserAndSenderPublicKeysMatch: Boolean(publicKey && browserPublicKey && publicKey === browserPublicKey),
-      derivedPublicKeyMatches,
-    }, { headers: { 'Cache-Control': 'no-store' } });
-  }
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-  const vapidSubject = process.env.VAPID_SUBJECT;
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ success: false, message: 'Supabaseのサーバー設定が不足しています。' }, { status: 503 });
   }
@@ -312,6 +283,35 @@ export async function POST(request: Request) {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+  const { data: credentialData, error: credentialError } = await admin.rpc('campussync_get_vapid_credentials');
+  const credentials = credentialData as { public_key?: string; private_key?: string; subject?: string } | null;
+  const vapidPublicKey = credentials?.public_key || '';
+  const vapidPrivateKey = credentials?.private_key || '';
+  const vapidSubject = credentials?.subject || '';
+
+  // Cron-secret protected diagnostics. Only booleans are returned; key material is never exposed.
+  if (new URL(request.url).searchParams.get('diagnostics') === '1') {
+    let derivedPublicKeyMatches = false;
+    try {
+      if (vapidPublicKey && vapidPrivateKey) {
+        const ecdh = createECDH('prime256v1');
+        ecdh.setPrivateKey(Buffer.from(vapidPrivateKey, 'base64url'));
+        const derived = ecdh.getPublicKey(undefined, 'uncompressed').toString('base64url');
+        derivedPublicKeyMatches = derived === vapidPublicKey;
+      }
+    } catch {
+      derivedPublicKeyMatches = false;
+    }
+    return NextResponse.json({
+      success: true,
+      hasPublicKey: Boolean(vapidPublicKey),
+      hasPrivateKey: Boolean(vapidPrivateKey),
+      hasSubject: Boolean(vapidSubject),
+      browserAndSenderPublicKeysMatch: Boolean(vapidPublicKey && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY === vapidPublicKey),
+      derivedPublicKeyMatches,
+      credentialReadSucceeded: !credentialError,
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 
   // LINEの予約通知はVAPID/Web Push設定に依存させず、既存の30秒Cronから先に処理する。
   let lineScheduled = { checked: 0, sent: 0, retrying: 0, failed: 0 };
@@ -321,10 +321,11 @@ export async function POST(request: Request) {
     console.error('LINE予約通知のディスパッチに失敗:', lineError instanceof Error ? lineError.message : 'unknown error');
   }
 
-  if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
+  if (credentialError || !vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
+    console.error('VAPID credentials unavailable from Supabase Vault:', credentialError?.message || 'missing key');
     return NextResponse.json({
       success: false,
-      message: 'VAPID設定が不足しています。LINE予約通知の処理結果は lineScheduled を確認してください。',
+      message: 'Push通知のサーバー鍵を取得できません。LINE予約通知の処理結果は lineScheduled を確認してください。',
       lineScheduled,
     }, { status: 503 });
   }

@@ -35,17 +35,11 @@ export async function POST(request: Request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-    const vapidSubject = process.env.VAPID_SUBJECT;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !publishableKey) {
+    if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
       return NextResponse.json({ success: false, message: 'SupabaseのURL / Publishable Keyがサーバー環境変数にありません。' }, { status: 500 });
     }
-    if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
-      return NextResponse.json({ success: false, message: 'VAPIDキー設定が不足しています。VAPID_PUBLIC_KEY、VAPID_PRIVATE_KEY、VAPID_SUBJECTを設定してください。' }, { status: 500 });
-    }
-
     // AuthorizationヘッダーをユーザーJWTに固定し、RLSを保ったまま本人の購読だけ取得する。
     const supabase = createClient(supabaseUrl, publishableKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -69,7 +63,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: 'この端末の通知登録が見つかりません。「この端末の通知を有効化」を先に押してください。' }, { status: 404 });
     }
 
-    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { data: credentialData, error: credentialError } = await admin.rpc('campussync_get_vapid_credentials');
+    const credentials = credentialData as { public_key?: string; private_key?: string; subject?: string } | null;
+    if (credentialError || !credentials?.public_key || !credentials.private_key || !credentials.subject) {
+      return NextResponse.json({ success: false, message: '通知サーバーの鍵設定を読み取れません。' }, { status: 503 });
+    }
+    webpush.setVapidDetails(credentials.subject, credentials.public_key, credentials.private_key);
     const results = await Promise.allSettled((rows as StoredSubscription[]).map((row) =>
       webpush.sendNotification(row.subscription, JSON.stringify({
         title: 'CampusSync テスト通知',

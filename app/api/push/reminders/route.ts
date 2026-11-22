@@ -144,20 +144,23 @@ export async function POST(request: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-    const vapidSubject = process.env.VAPID_SUBJECT;
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json({ success: false, message: 'SUPABASE_SERVICE_ROLE_KEYまたはSupabase URLが未設定です。' }, { status: 500 });
-    }
-    if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
-      return NextResponse.json({ success: false, message: 'VAPIDキーが未設定です。' }, { status: 500 });
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
+    const { data: credentialData, error: credentialError } = await admin.rpc('campussync_get_vapid_credentials');
+    const credentials = credentialData as { public_key?: string; private_key?: string; subject?: string } | null;
+    if (credentialError || !credentials?.public_key || !credentials.private_key || !credentials.subject) {
+      return NextResponse.json({ success: false, message: 'VAPIDキーがSupabase Vaultに設定されていません。' }, { status: 503 });
+    }
+    const vapidPublicKey = credentials.public_key;
+    const vapidPrivateKey = credentials.private_key;
+    const vapidSubject = credentials.subject;
     const now = new Date();
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
     const { data: todos, error: todoError } = await admin
       .from('todos')
       .select('id, student_id, title, due_at, completed')
