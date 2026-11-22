@@ -28,7 +28,7 @@ type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
   publisher: string | null; published_date: string | null; description: string | null;
   thumbnail_url: string | null; info_url: string | null; page_count: number | null;
-  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'ndl' | 'manual'; created_at: string;
+  source: 'openlibrary' | 'google-books' | 'openbd' | 'kirihara' | 'ndl' | 'keirinkan' | 'manual'; created_at: string;
   cover_urls?: string[];
 };
 type BookMetadata = Omit<MyBook, 'id' | 'user_id' | 'created_at'>;
@@ -552,9 +552,16 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         setBookManualEntry(true);
         return;
       }
-      setBookLookupMessage(myBooks.some(item => item.isbn13 === payload.book!.isbn13)
-        ? (payload.book.thumbnail_url ? '書誌情報と表紙を取得しました。この本はすでに登録されています。' : '書誌情報を取得しました。この本はすでに登録されています。')
-        : (payload.book.thumbnail_url ? '書誌情報と表紙画像を取得しました。内容を確認して登録してください。' : '書誌情報を取得しました。表紙画像は見つからなかったため、後から再取得します。'));
+      if (payload.book.source === 'manual') {
+        setManualBookTitle('');
+        setManualBookAuthor('');
+        setBookManualEntry(true);
+        setBookLookupMessage('ISBNは読み取れました。書誌データが見つからない本も登録できます。書名を入力してください。');
+      } else {
+        setBookLookupMessage(myBooks.some(item => item.isbn13 === payload.book!.isbn13)
+          ? (payload.book.thumbnail_url ? '書誌情報と表紙を取得しました。この本はすでに登録されています。' : '書誌情報を取得しました。この本はすでに登録されています。')
+          : (payload.book.thumbnail_url ? '書誌情報と表紙画像を取得しました。内容を確認して登録してください。' : '書誌情報を取得しました。表紙画像は見つからなかったため、後から再取得します。'));
+      }
       setBookPreview(payload.book);
     } catch (cause) {
       setBookLookupMessage(cause instanceof Error ? cause.message : '書誌情報を取得できませんでした。');
@@ -1886,6 +1893,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         {bookPreview&&<article className={'mt-3 flex flex-wrap gap-3 rounded-xl border p-3 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <BookCover src={bookPreview.thumbnail_url} alt={bookPreview.title + 'の表紙'} isbn={bookPreview.isbn13} candidates={bookPreview.cover_urls || []} className="h-36 w-24"/>
           <div className="min-w-0 flex-1"><p className="text-sm font-black">{bookPreview.title}</p>{bookPreview.authors.length>0&&<p className={'mt-1 text-xs '+muted}>{bookPreview.authors.join('・')}</p>}<p className={'mt-1 text-[10px] '+muted}>{bookPreview.publisher||'出版社不明'} ・ ISBN {bookPreview.isbn13}</p><p className={'mt-2 line-clamp-3 text-xs leading-5 '+muted}>{bookPreview.description||'説明情報はありません。'}</p></div>
+          {bookPreview.source === 'manual' && <div className="grid basis-full gap-2 sm:grid-cols-2">
+            <label className="space-y-1 text-xs font-bold">本のタイトル（必須）
+              <input className={input} value={manualBookTitle} onChange={event => setManualBookTitle(event.target.value)} maxLength={500} placeholder="参考書名・版・科目など"/>
+            </label>
+            <label className="space-y-1 text-xs font-bold">著者（任意）
+              <input className={input} value={manualBookAuthor} onChange={event => setManualBookAuthor(event.target.value)} maxLength={200} placeholder="著者名"/>
+            </label>
+          </div>}
           <CoverCandidateStrip
             candidates={buildBookCoverCandidates(bookPreview.isbn13, [bookPreview.thumbnail_url, ...(bookPreview.cover_urls || [])])}
             selectedUrl={bookPreview.thumbnail_url}
@@ -1894,9 +1909,9 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           />
           {myBooks.some(item=>item.isbn13===bookPreview.isbn13)
             ? <button type="button" disabled={bookSaving||!bookPreview.thumbnail_url} onClick={()=>{const existing=myBooks.find(item=>item.isbn13===bookPreview.isbn13);if(existing)void updateSavedBookCover(existing,bookPreview.thumbnail_url!,bookPreview.cover_urls||[])}} className={primary+' self-end'}>選択した表紙を登録済みの本に反映</button>
-            : <button type="button" disabled={bookSaving} onClick={()=>void saveMyBook(bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':'マイブックに登録'}</button>}
+            : <button type="button" disabled={bookSaving || (bookPreview.source === 'manual' && !manualBookTitle.trim())} onClick={()=>void saveMyBook(bookPreview.source === 'manual' ? { ...bookPreview, title: manualBookTitle.trim(), authors: manualBookAuthor.trim() ? [manualBookAuthor.trim()] : [] } : bookPreview)} className={primary+' self-end'}>{bookSaving?'登録中…':bookPreview.source === 'manual' ? '入力した書名でマイブックに登録' : 'マイブックに登録'}</button>}
         </article>}
-        {bookManualEntry&&<div className={'mt-3 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
+        {bookManualEntry&&!bookPreview&&<div className={'mt-3 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 '+(dark?'border-slate-600 bg-slate-900':'border-slate-200 bg-slate-50')}>
           <p className="text-xs font-black sm:col-span-2">書誌情報が見つからない本は、タイトルを手入力してISBN付きで登録できます。</p>
           <label className="space-y-1 text-xs font-bold">本のタイトル<input className={input} value={manualBookTitle} onChange={e=>setManualBookTitle(e.target.value)} maxLength={500}/></label>
           <label className="space-y-1 text-xs font-bold">著者（任意）<input className={input} value={manualBookAuthor} onChange={e=>setManualBookAuthor(e.target.value)} maxLength={200}/></label>

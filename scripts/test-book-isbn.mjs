@@ -73,3 +73,11 @@ test('cover candidates include NDL and Open Library and remove duplicate/insecur
     'https://covers.openlibrary.org/b/isbn/9784342353093-L.jpg?default=false',
   ]);
 });
+
+
+test('recognizes ISBN for Focus Gold 6th Edition Mathematics II+B+Vector', () => {
+  assert.equal(normalizeBookIsbn('978-4-402-26291-4'), '9784402262914');
+  assert.deepEqual(classifyBookBarcode('9784402262914'), {
+    type: 'isbn', isbn13: '9784402262914',
+  });
+});

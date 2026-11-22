@@ -88,7 +88,7 @@ type BookResult = {
   cover_urls: string[];
   info_url: string | null;
   page_count: number | null;
-  source: 'openbd' | 'google-books' | 'openlibrary' | 'kirihara' | 'ndl';
+  source: 'openbd' | 'google-books' | 'openlibrary' | 'kirihara' | 'ndl' | 'keirinkan' | 'manual';
 };
 
 const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_urls'>> = {
@@ -113,6 +113,17 @@ const KNOWN_PUBLISHER_BOOKS: Record<string, Omit<BookResult, 'isbn13' | 'cover_u
     info_url: 'https://www.kirihara.co.jp/files/user/images/tenbai/20240612_Kiso_Eibun_kaishaku_POP_W115_H80.pdf',
     page_count: 312,
     source: 'kirihara',
+  },
+  '9784402262914': {
+    title: 'フォーカスゴールド6th Edition 数学Ⅱ+B+ベクトル（数学C）',
+    authors: [],
+    publisher: '新興出版社啓林館',
+    published_date: '2026-03-01',
+    description: '学校採用専用書籍。A5判・3色刷、992ページ。本冊のほか別冊解答768ページが付属します。',
+    thumbnail_url: 'https://baseec-img-mng.akamaized.net/images/item/origin/e8a68d32e07f6ef7138c10f136113de0.jpg?im=Resize%2Cwidth%3D1200%2Ctype%3Dnormal&imformat=generic&q=90',
+    info_url: 'https://www.shinko-keirin.co.jp/keirinkan/kou/math/subtext-2026/focus-6th/',
+    page_count: 992,
+    source: 'keirinkan',
   },
 };
 
@@ -332,13 +343,21 @@ export async function GET(request: Request) {
     } : null;
 
     const publisherFallback = KNOWN_PUBLISHER_BOOKS[isbn13] || null;
-    const primary = openBdBook || googleBook || ndlBook || openLibraryBook || publisherFallback;
-    if (!primary) {
-      return json({
-        success: false,
-        message: '書誌情報が見つかりませんでした。ISBNをもう一度確認してください。表紙だけ見つかる場合は、タイトルを手入力して登録することもできます。',
-      }, 404);
-    }
+    // A valid ISBN remains useful even when the book is school-adoption-only
+    // and absent from public metadata catalogs. Return a saveable draft instead
+    // of treating a missing catalog record as an invalid barcode.
+    const isbnOnlyFallback: Omit<BookResult, 'isbn13' | 'cover_urls'> = {
+      title: 'ISBN ' + isbn13,
+      authors: [],
+      publisher: null,
+      published_date: null,
+      description: 'ISBNは正常に読み取れましたが、公開書誌データベースに登録がありません。書名を入力して登録できます。',
+      thumbnail_url: null,
+      info_url: null,
+      page_count: null,
+      source: 'manual',
+    };
+    const primary = openBdBook || googleBook || ndlBook || openLibraryBook || publisherFallback || isbnOnlyFallback;
 
     const coverUrls = buildBookCoverCandidates(isbn13, [
       publisherFallback?.thumbnail_url,
