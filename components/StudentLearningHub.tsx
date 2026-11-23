@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { matchSchoolRangeSubjects } from '@/lib/school-range-matching';
 import { formatStudyDurationInput, parseStudyDurationInput, toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/study-session-edit';
 import { classifyBookBarcode } from '@/lib/book-isbn';
-import { buildBookCoverCandidates, toBookCoverProxyUrl } from '@/lib/book-catalog';
+import { buildBookCoverCandidates, normalizeBookCoverUrl, toBookCoverProxyUrl } from '@/lib/book-catalog';
 import { advancePomodoroTimeline, calculateCountUpSeconds, normalizeIsbn13 } from '@/lib/pomodoro-timeline';
 import PlanetubeDashboard from '@/components/PlanetubeDashboard';
 import ContributionActivityPanel from '@/components/ContributionActivityPanel';
@@ -369,6 +369,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [bookLookupLoading, setBookLookupLoading] = useState(false);
   const [bookLookupMessage, setBookLookupMessage] = useState('');
   const [bookPreview, setBookPreview] = useState<BookMetadata | null>(null);
+  const [bookCoverUrlDraft, setBookCoverUrlDraft] = useState('');
   const [bookManualEntry, setBookManualEntry] = useState(false);
   const [manualBookTitle, setManualBookTitle] = useState('');
   const [manualBookAuthor, setManualBookAuthor] = useState('');
@@ -577,6 +578,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setBookLookupLoading(true);
     setBookLookupMessage('日本の書籍情報・表紙画像を検索しています…');
     setBookPreview(null);
+    setBookCoverUrlDraft('');
     setBookManualEntry(false);
     try {
       const response = await fetch('/api/books/isbn?isbn=' + encodeURIComponent(isbn), {
@@ -599,6 +601,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           : (payload.book.thumbnail_url ? '書誌情報と表紙画像を取得しました。内容を確認して登録してください。' : '書誌情報を取得しました。表紙画像は見つからなかったため、後から再取得します。'));
       }
       setBookPreview(payload.book);
+      setBookCoverUrlDraft(payload.book.thumbnail_url || '');
     } catch (cause) {
       setBookLookupMessage(cause instanceof Error ? cause.message : '書誌情報を取得できませんでした。');
       setBookManualEntry(true);
@@ -608,6 +611,14 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   };
 
   const saveMyBook = async (book: BookMetadata) => {
+    const pastedCoverUrl = normalizeBookCoverUrl(bookCoverUrlDraft);
+    const bookToSave: BookMetadata = pastedCoverUrl
+      ? {
+          ...book,
+          thumbnail_url: pastedCoverUrl,
+          cover_urls: buildBookCoverCandidates(book.isbn13, [pastedCoverUrl, ...(book.cover_urls || [])]),
+        }
+      : book;
     if (myBooks.some(item => item.isbn13 === book.isbn13)) {
       setBookLookupMessage('この本はすでにマイブックに登録されています。');
       return;
@@ -617,15 +628,16 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     try {
       const { data, error: insertError } = await supabase
         .from('student_my_books')
-        .insert({ ...book, user_id: userId })
+        .insert({ ...bookToSave, user_id: userId })
         .select('id,user_id,isbn13,title,authors,publisher,published_date,description,thumbnail_url,cover_urls,info_url,page_count,source,created_at')
         .single();
       if (insertError) {
         if (insertError.code === '23505') throw new Error('この本はすでに登録されています。');
         throw insertError;
       }
-      setMyBooks(current => [{ ...(data as MyBook), cover_urls: book.cover_urls || [] }, ...current]);
+      setMyBooks(current => [{ ...(data as MyBook), cover_urls: bookToSave.cover_urls || [] }, ...current]);
       setBookPreview(null);
+      setBookCoverUrlDraft('');
       setBookManualEntry(false);
       setManualBookTitle('');
       setManualBookAuthor('');
@@ -1947,6 +1959,33 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
               <input className={input} value={manualBookAuthor} onChange={event => setManualBookAuthor(event.target.value)} maxLength={200} placeholder="著者名"/>
             </label>
           </div>}
+          <div className="grid basis-full gap-2">
+            <label className="space-y-1 text-xs font-bold">
+              表紙画像のURL（ここに貼り付け）
+              <input
+                className={input}
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                value={bookCoverUrlDraft}
+                onChange={event => {
+                  const value = event.target.value;
+                  setBookCoverUrlDraft(value);
+                  const normalized = normalizeBookCoverUrl(value);
+                  if (normalized) {
+                    setBookPreview(current => current ? {
+                      ...current,
+                      thumbnail_url: normalized,
+                      cover_urls: buildBookCoverCandidates(current.isbn13, [normalized, ...(current.cover_urls || [])]),
+                    } : current);
+                  }
+                }}
+                placeholder="https://example.com/book-cover.jpg"
+                maxLength={2048}
+              />
+            </label>
+            <p className={'text-[10px] leading-5 ' + muted}>書店・出版社などの表紙画像URLを貼り付けてください。プレビューに反映されたら、そのまま登録できます。画像ファイルはアップロードせず、URLだけを保存します。</p>
+          </div>
           <CoverCandidateStrip
             candidates={buildBookCoverCandidates(bookPreview.isbn13, [bookPreview.thumbnail_url, ...(bookPreview.cover_urls || [])])}
             selectedUrl={bookPreview.thumbnail_url}
