@@ -54,11 +54,51 @@ while (offset + 512 <= tar.length) {
   offset = dataStart + Math.ceil(size / 512) * 512;
 }
 
+
+const addonArchivePath = resolve(root, 'assets', 'planet-assets-011-020.tar.gz');
+if (!existsSync(addonArchivePath)) throw new Error('追加惑星アセットのアーカイブが見つかりません。');
+const addonCompressed = readFileSync(addonArchivePath);
+const addonTar = gunzipSync(addonCompressed, { maxOutputLength: 8 * 1024 * 1024 });
+let addonOffset = 0;
+let addonCount = 0;
+while (addonOffset + 512 <= addonTar.length) {
+  const header = addonTar.subarray(addonOffset, addonOffset + 512);
+  if (header.every((byte) => byte === 0)) break;
+  const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '');
+  const prefix = header.subarray(345, 500).toString('utf8').replace(/\0.*$/, '');
+  const archiveName = prefix ? prefix + '/' + name : name;
+  const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim();
+  const size = Number.parseInt(sizeText || '0', 8);
+  const type = header[156];
+  const dataStart = addonOffset + 512;
+  const dataEnd = dataStart + size;
+  if (!Number.isSafeInteger(size) || size < 0 || dataEnd > addonTar.length) {
+    throw new Error('不正な追加惑星アセットです: ' + archiveName);
+  }
+  if (type === 0 || type === 48) {
+    if (!/^public\/planet-assets\/planets\/planet-(01[1-9]|020)\/surface\.webp$/.test(archiveName)) {
+      throw new Error('追加アーカイブに許可されていないファイルがあります: ' + archiveName);
+    }
+    const target = resolve(root, archiveName);
+    const rel = relative(root, target);
+    if (!rel || rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) {
+      throw new Error('許可されていない追加アセットのパスです: ' + archiveName);
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, addonTar.subarray(dataStart, dataEnd));
+    addonCount += 1;
+  }
+  addonOffset = dataStart + Math.ceil(size / 512) * 512;
+}
+if (addonCount !== 10) throw new Error('追加惑星アセットの数が不正です: ' + addonCount + '/10');
+
 const requiredFiles = [
   resolve(root, 'lib', 'planet-kit', 'react', 'PlanetCanvas.tsx'),
   resolve(root, 'components', 'Planet3DPanel.tsx'),
   resolve(publicPlanetAssets, 'manifest.json'),
   resolve(publicPlanetAssets, 'planets', 'planet-001', 'surface.jpg'),
+  resolve(publicPlanetAssets, 'planets', 'planet-011', 'surface.webp'),
+  resolve(publicPlanetAssets, 'planets', 'planet-020', 'surface.webp'),
 ];
 if (requiredFiles.some((path) => !existsSync(path))) throw new Error('惑星キットの展開結果が不完全です。');
 console.log('惑星キットを展開しました: ' + extracted + ' ファイル (' + extractedBytes.toLocaleString('ja-JP') + ' bytes)');

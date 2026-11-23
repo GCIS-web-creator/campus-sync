@@ -60,7 +60,7 @@ async function ensurePlanet(admin: ReturnType<typeof getAdminClient>, userId: st
   if (createError) throw createError;
 
   const { data: planet, error: planetError } = await admin.from('campus_planets')
-    .select('id,user_id,planet_name,civilization_stage,is_public,created_at,updated_at')
+    .select('id,user_id,planet_name,planet_asset_id,civilization_stage,is_public,created_at,updated_at')
     .eq('user_id', userId)
     .single();
   if (planetError || !planet) throw planetError || new Error('惑星データを取得できません。');

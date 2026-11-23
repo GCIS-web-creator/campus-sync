@@ -9,6 +9,7 @@ import { RefreshCw, Sparkles, Orbit, BookOpen, Users, Brain, Leaf, ArrowUpRight 
 type Planet = {
   id: string;
   planet_name: string;
+  planet_asset_id: string;
   civilization_stage: number;
   is_public: boolean;
   created_at: string;
@@ -189,7 +190,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
         </div>
         {activePanel === 'technology' ? <PlanetTechnologyTree isDarkMode={isDarkMode}/> : <>
         <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
-          <Planet3DPanel stage={stage}/>
+          <Planet3DPanel stage={stage} planetAssetId={planet.planet_asset_id}/>
           <section className={`rounded-[26px] border p-4 sm:p-5 ${panel}`}>
             <div className="flex items-start justify-between gap-3"><div><p className={`text-[9px] font-black tracking-[.2em] ${subText}`}>CIVILIZATION</p><h2 className="mt-1 text-xl font-black">{STAGES[stage].name}</h2><p className={`mt-2 text-xs leading-5 ${subText}`}>{STAGES[stage].description}</p></div><span className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-500"><Orbit size={23}/></span></div>
             <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">文明発展スコア</span><span className="text-xs font-black tabular-nums">{formatNumber(civilizationScore)}</span></div><div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-700" style={{ width: progress + '%' }}/></div><p className={`mt-2 text-[10px] ${subText}`}>{stage >= 5 ? '現在の最終段階に到達しています。' : `次の段階「${nextStage.name}」まであと ${formatNumber(Math.max(0, nextStage.required - civilizationScore))} ポイント`}</p><p className={`mt-1 text-[9px] ${subText}`}>XP合計 {formatNumber(totalXp)} + 自然成長値 {formatNumber(growth.nature_growth)} × 5</p></div>

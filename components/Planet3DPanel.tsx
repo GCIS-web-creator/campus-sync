@@ -335,7 +335,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
     const fallbackTexture = createFallbackSurfaceTexture(numericId, spec.atmosphereColor);
     let surfaceMaterial: THREE.MeshStandardMaterial;
     const surfaceTexture = loader.load(
-      '/planet-assets/planets/' + spec.id + '/surface.jpg',
+      '/planet-assets/planets/' + spec.id + (numericId >= 11 && numericId <= 20 ? '/surface.webp' : '/surface.jpg'),
       (loaded) => {
         loaded.colorSpace = THREE.SRGBColorSpace;
         loaded.wrapS = THREE.RepeatWrapping;

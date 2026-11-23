@@ -102,6 +102,101 @@ export async function POST(request: Request) {
 
   try {
     switch (payload.action) {
+      case 'list-planet-assignments': {
+        const profiles: Array<{
+          auth_user_id: string;
+          student_id: string;
+          student_name: string;
+          user_class: string | null;
+        }> = [];
+        for (let offset = 0; offset < 10000; offset += 500) {
+          const { data, error } = await admin.from('profiles')
+            .select('auth_user_id,student_id,student_name,user_class')
+            .not('auth_user_id', 'is', null)
+            .order('student_id', { ascending: true })
+            .range(offset, offset + 499);
+          if (error) {
+            console.error('Admin planet profile list failed:', error.message);
+            return jsonError('生徒一覧を取得できませんでした。', 500);
+          }
+          const batch = (data || []) as Array<{
+            auth_user_id: string | null;
+            student_id: string | null;
+            student_name: string | null;
+            user_class: string | null;
+          }>;
+          profiles.push(...batch.filter((row): row is {
+            auth_user_id: string;
+            student_id: string;
+            student_name: string;
+            user_class: string | null;
+          } => Boolean(row.auth_user_id)).map(row => ({
+            auth_user_id: row.auth_user_id,
+            student_id: row.student_id || '',
+            student_name: row.student_name || '',
+            user_class: row.user_class,
+          })));
+          if (batch.length < 500) break;
+        }
+
+        const planetByUserId = new Map<string, {
+          id: string;
+          user_id: string;
+          planet_asset_id: string;
+          planet_name: string;
+          civilization_stage: number;
+          updated_at: string;
+        }>();
+        const userIds = [...new Set(profiles.map(profile => profile.auth_user_id))];
+        for (let offset = 0; offset < userIds.length; offset += 200) {
+          const ids = userIds.slice(offset, offset + 200);
+          const { data, error } = await admin.from('campus_planets')
+            .select('id,user_id,planet_asset_id,planet_name,civilization_stage,updated_at')
+            .in('user_id', ids);
+          if (error) {
+            console.error('Admin planet assignment list failed:', error.message);
+            return jsonError('惑星割り当て一覧を取得できませんでした。', 500);
+          }
+          for (const planet of data || []) {
+            planetByUserId.set(planet.user_id, planet);
+          }
+        }
+
+        const users = profiles.map(profile => ({
+          ...profile,
+          planet: planetByUserId.get(profile.auth_user_id) || null,
+        }));
+        return NextResponse.json({
+          success: true,
+          users,
+          truncated: profiles.length >= 10000,
+        }, { headers: noStore });
+      }
+
+      case 'set-user-planet': {
+        const userId = typeof payload.userId === 'string' ? payload.userId.trim() : '';
+        const planetAssetId = typeof payload.planetAssetId === 'string' ? payload.planetAssetId.trim() : '';
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+          return jsonError('対象ユーザーを確認してください。', 400);
+        }
+        if (!/^planet-(00[1-9]|01[0-9]|020)$/.test(planetAssetId)) {
+          return jsonError('惑星は001〜020から選択してください。', 400);
+        }
+        const { data, error } = await admin.from('campus_planets')
+          .upsert({
+            user_id: userId,
+            planet_asset_id: planetAssetId,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+          .select('id,user_id,planet_asset_id,planet_name,civilization_stage,updated_at')
+          .single();
+        if (error) {
+          console.error('Admin planet assignment update failed:', error.message);
+          return jsonError('ユーザーの惑星を変更できませんでした。', 500);
+        }
+        return NextResponse.json({ success: true, planet: data }, { headers: noStore });
+      }
+
       case 'save-monthly-menus': {
         if (!Array.isArray(payload.rows) || payload.rows.length < 1 || payload.rows.length > 31) {
           return jsonError('保存する献立データを確認してください。', 400);

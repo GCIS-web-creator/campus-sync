@@ -22,6 +22,7 @@ import TeacherAccessCodesAdmin from '@/components/TeacherAccessCodesAdmin';
 import StudyMaterialsAdmin from '@/components/StudyMaterialsAdmin';
 import AttendanceReportsAdmin from '@/components/AttendanceReportsAdmin';
 import AdminWorkspaces from '@/components/AdminWorkspaces';
+import AdminPlanetManagement from '@/components/AdminPlanetManagement';
 import EarthquakeAdmin from '@/components/EarthquakeAdmin';
 import React, { useEffect, useState } from 'react';
 import { compressImageFile } from '@/lib/compress-image-file';
@@ -31,7 +32,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users, Activity, Newspaper
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users, Activity, Newspaper, Orbit
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -2074,7 +2075,7 @@ export default function CampusSyncAdmin() {
                 </button>
               </div>
             </details>
-            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["teacher-access-codes","student-profile-export"].includes(activeTab)}>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["teacher-access-codes","student-profile-export","planet-management"].includes(activeTab)}>
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
                 <span>生徒・権限管理</span>
                 <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
@@ -2082,6 +2083,9 @@ export default function CampusSyncAdmin() {
               <div className="space-y-1 px-1 pb-1">
                 <button aria-label="先生用アクセスコード管理" title="先生用アクセスコード管理" onClick={() => setActiveTab('teacher-access-codes')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'teacher-access-codes' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
                 <UserCheck size={18} /><span className="sr-only md:not-sr-only">先生用アクセスコード</span>
+                </button>
+                <button aria-label="ユーザー惑星管理" title="ユーザー惑星管理" onClick={() => setActiveTab('planet-management')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'planet-management' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                  <Orbit size={18} /><span className="sr-only md:not-sr-only">ユーザー惑星管理</span>
                 </button>
                 <button aria-label="生徒プロフィール書き出し" title="生徒プロフィール書き出し" onClick={() => setActiveTab('student-profile-export')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'student-profile-export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
                 <FilePlus size={18} /><span className="sr-only md:not-sr-only">生徒プロフィール書き出し</span>
@@ -2104,6 +2108,7 @@ export default function CampusSyncAdmin() {
       {/* 🚀 メインコンテンツ */}
       <main className="campus-admin-main min-w-0 flex-1 bg-slate-900 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-auto">
         
+        {activeTab === 'planet-management' && <AdminPlanetManagement />}
         {activeTab === 'study-materials' && <StudyMaterialsAdmin />}
         {activeTab === 'attendance-reports' && <AttendanceReportsAdmin />}
         {activeTab === 'workspaces' && <AdminWorkspaces />}
