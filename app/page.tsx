@@ -36,7 +36,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, Globe2
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, FlaskConical, Globe2
 } from 'lucide-react';
 import {
   AnimatedAsset,
