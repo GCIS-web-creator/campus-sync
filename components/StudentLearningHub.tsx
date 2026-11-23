@@ -1990,7 +1990,10 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
             candidates={buildBookCoverCandidates(bookPreview.isbn13, [bookPreview.thumbnail_url, ...(bookPreview.cover_urls || [])])}
             selectedUrl={bookPreview.thumbnail_url}
             dark={dark}
-            onSelect={url => setBookPreview(current => current ? { ...current, thumbnail_url: url } : current)}
+            onSelect={url => {
+              setBookCoverUrlDraft(url);
+              setBookPreview(current => current ? { ...current, thumbnail_url: url } : current);
+            }}
           />
           {myBooks.some(item=>item.isbn13===bookPreview.isbn13)
             ? <button type="button" disabled={bookSaving||!bookPreview.thumbnail_url} onClick={()=>{const existing=myBooks.find(item=>item.isbn13===bookPreview.isbn13);if(existing)void updateSavedBookCover(existing,bookPreview.thumbnail_url!,bookPreview.cover_urls||[])}} className={primary+' self-end'}>選択した表紙を登録済みの本に反映</button>
