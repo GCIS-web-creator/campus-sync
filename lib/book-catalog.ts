@@ -84,9 +84,38 @@ export function buildBookCoverCandidates(
 }
 
 
-/** Display external book-cover URLs through CampusSync so mobile clients avoid third-party hotlink failures. */
+/** Accept only absolute HTTPS cover URLs; store the URL text, never the image bytes. */
+export function normalizeBookCoverUrl(value: string | null | undefined): string | null {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || raw.length > 2048) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Proxy known catalogue hosts; load user-pasted unknown image hosts directly in the browser. */
 export function toBookCoverProxyUrl(value: string | null | undefined): string {
-  const url = typeof value === 'string' ? value.trim() : '';
-  if (!/^https:\/\//i.test(url)) return '';
-  return '/api/books/cover?url=' + encodeURIComponent(url);
+  const normalized = normalizeBookCoverUrl(value);
+  if (!normalized) return '';
+  const hostname = new URL(normalized).hostname.toLowerCase();
+  const proxyHosts = new Set([
+    'thumbnail-s.images.books.or.jp',
+    'ndlsearch.ndl.go.jp',
+    'covers.openlibrary.org',
+    'hondana-image.s3.amazonaws.com',
+    'baseec-img-mng.akamaized.net',
+    'item-shopping.c.yimg.jp',
+    'www.kirihara.co.jp',
+    'cover.openbd.jp',
+    'image.maruzenjunkudo.co.jp',
+    'books.google.com',
+  ]);
+  const shouldProxy = proxyHosts.has(hostname)
+    || hostname === 'books.googleusercontent.com'
+    || hostname.endsWith('.googleusercontent.com');
+  return shouldProxy ? '/api/books/cover?url=' + encodeURIComponent(normalized) : normalized;
 }
