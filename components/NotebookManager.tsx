@@ -5,6 +5,7 @@ import {
   AlertTriangle, BookMarked, Camera, CheckCircle2, ClipboardList,
   Edit3, History, MapPin, Plus, Search, Trash2, X,
 } from 'lucide-react';
+import NotebookCoverScanner from '@/components/NotebookCoverScanner';
 import { supabase } from '@/lib/supabase';
 import { compressImageFile } from '@/lib/compress-image-file';
 import {
@@ -61,6 +62,7 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
   const [form, setForm] = useState<NotebookForm>(() => createEmptyForm());
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState('');
+  const [showCoverScanner, setShowCoverScanner] = useState(false);
   const [preferredScienceSubject, setPreferredScienceSubject] = useState('');
   const [recordingNotebook, setRecordingNotebook] = useState<NotebookRow | null>(null);
   const [recordStart, setRecordStart] = useState('1');
@@ -386,7 +388,11 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
             <label className="block text-xs font-bold">表紙写真（任意）</label>
             <div className="flex flex-wrap items-center gap-3">
               {coverPreview?<img src={coverPreview} alt="ノート表紙プレビュー" className="h-28 w-20 rounded-xl border border-slate-300 bg-white object-cover"/>:<div className={'flex h-28 w-20 flex-col items-center justify-center rounded-xl border border-dashed '+(dark?'border-slate-700 bg-slate-950':'border-slate-300 bg-slate-50')}><Camera size={22} className={muted}/><span className={'mt-1 text-[9px] '+muted}>写真なし</span></div>}
-              <div className="flex flex-col gap-2"><label className={secondary+' cursor-pointer'}><Camera size={14}/>写真を撮影・選択<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={event=>void chooseCover(event.target.files?.[0]||null)}/></label>{coverPreview&&<button type="button" className={secondary} onClick={()=>{setCoverFile(null);setCoverPreview('');setForm(current=>({...current,cover_image_path:null}));}}><Trash2 size={14}/>写真を外す</button>}<p className={'max-w-md text-[10px] leading-5 '+muted}>写真はアップロード前にWebP圧縮し、あなた専用の非公開ストレージに保存します。</p></div>
+              <div className="flex flex-col gap-2">
+                <button type="button" className={secondary} onClick={()=>setShowCoverScanner(true)}><ScanLine size={14}/>スキャンして撮影</button>
+                {coverPreview&&<button type="button" className={secondary} onClick={()=>{setCoverFile(null);setCoverPreview('');setForm(current=>({...current,cover_image_path:null}));}}><Trash2 size={14}/>写真を外す</button>}
+                <p className={'max-w-md text-[10px] leading-5 '+muted}>表紙の四隅を自動検出し、台形補正してから保存します。必要に応じて角を指で調整できます。</p>
+              </div>
             </div>
           </div>
           <label className="space-y-1 text-xs font-bold sm:col-span-2">メモ（任意）<textarea className={input+' min-h-20 resize-y'} value={form.notes} onChange={event=>setForm(current=>({...current,notes:event.target.value}))} maxLength={1000} placeholder="どの課題に使っているか、どこまで進んだかなど"/></label>
@@ -447,6 +453,12 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
       })}</div>}
 
       <div className={'rounded-2xl border p-3 text-[10px] leading-5 '+panel}><p className="font-black">ノートの管理について</p><p className={'mt-1 '+muted}>「未使用」「使用中」「保管中」「使用終了」を使い分けられます。教科と用途が一致し、未終了でページが残っているノートは、新しいノートの登録時に候補として表示されます。登録自体を禁止することはありません。</p><p className={'mt-1 '+muted}>残りページ合計：{stats.remaining.toLocaleString('ja-JP')}ページ</p></div>
+
+      {showCoverScanner&&<NotebookCoverScanner
+        isDarkMode={dark}
+        onClose={()=>setShowCoverScanner(false)}
+        onSelect={async file=>{await chooseCover(file);setShowCoverScanner(false);}}
+      />}
 
       {deleteTarget&&<div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/60 p-4"><div className={'w-full max-w-sm rounded-2xl border p-4 shadow-2xl '+panel}><h2 className="font-black">ノートを削除しますか？</h2><p className={'mt-2 text-xs leading-5 '+muted}>「{deleteTarget.name}」と、その使用履歴を削除します。この操作は取り消せません。</p><div className="mt-4 flex justify-end gap-2"><button className={secondary} type="button" onClick={()=>setDeleteTarget(null)}>キャンセル</button><button className="rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50" type="button" disabled={saving} onClick={()=>void confirmDelete()}>{saving?'削除中…':'削除する'}</button></div></div></div>}
     </div>
