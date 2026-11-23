@@ -13,6 +13,7 @@ import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLear
 import MathPracticeHub from '@/components/MathPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
+import NotebookManager from '@/components/NotebookManager';
 import LineAccountLinkCard from '@/components/LineAccountLinkCard';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
@@ -32,7 +33,7 @@ import {
   ThermometerSun, Info, Users, Check, X,
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
-  Heart, ThumbsUp, ChevronLeft, BookOpenCheck, ShieldAlert,
+  Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
   Volume2, Coffee, Moon, Sun, HelpCircle, Orbit
 } from 'lucide-react';
 import {
@@ -467,6 +468,7 @@ type StudentNavigationGroup = {
 const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'tools'] as const;
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
+  notebooks: 'learning',
   planet: 'learning',
   materials: 'learning',
   timetable: 'learning',
@@ -1045,6 +1047,7 @@ export default function CampusSyncApp() {
       notices: { tab: 'notifications' },
       notes: { tab: 'notes' },
       study: { tab: 'study' },
+      notebooks: { tab: 'notebooks' },
       planet: { tab: 'planet' },
       card: { tab: 'student-card' },
       'student-card': { tab: 'student-card' },
@@ -4563,6 +4566,11 @@ Supabaseの設定を確認してください。
           ? <StudentLearningHub userId={String(authUser.id)} userEmail={String(authUser.email || '')} userClass={userClass} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習機能はログイン後に利用できます</h2></div>;
 
+      case 'notebooks':
+        return authUser?.id && !isGuestMode
+          ? <NotebookManager userId={String(authUser.id)} isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookMarked size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">ノート管理はログイン後に利用できます</h2></div>;
+
       case 'math-practice':
         return authUser?.id && !isGuestMode
           ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
@@ -6235,6 +6243,10 @@ Supabaseの設定を確認してください。
           key: 'study', label: '学習・テスト対策', icon: <BookOpenCheck size={17} />,
           isActive: activeTab === 'study', keywords: ['勉強', '小テスト', '定期試験', '学習記録'],
           onSelect: () => setActiveTab('study'),
+        }, {
+          key: 'notebooks', label: 'ノート管理', icon: <BookMarked size={17} />,
+          isActive: activeTab === 'notebooks', keywords: ['ノート', '課題ノート', '残りページ', '未使用ノート', '在庫'],
+          onSelect: () => setActiveTab('notebooks'),
         }, {
           key: 'planet', label: '惑星・文明', icon: <Orbit size={17} />,
           isActive: activeTab === 'planet', keywords: ['惑星', '文明', '成長', 'Learning XP'],

@@ -19,7 +19,8 @@
     "test:planet-tree": "node --experimental-strip-types --test scripts/test-planet-technology-tree.mjs",
     "test:pomodoro": "node --experimental-strip-types --test scripts/test-pomodoro-timeline.mjs",
     "test:study-session-edit": "node --experimental-strip-types --test scripts/test-study-session-edit.mjs",
-    "test:book-isbn": "node --experimental-strip-types --test scripts/test-book-isbn.mjs"
+    "test:book-isbn": "node --experimental-strip-types --test scripts/test-book-isbn.mjs",
+    "test:notebooks": "node --experimental-strip-types --test scripts/test-notebook-manager.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
