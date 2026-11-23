@@ -11,6 +11,7 @@ import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
 import MathPracticeHub from '@/components/MathPracticeHub';
+import ChemistryPracticeHub from '@/components/ChemistryPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import NotebookManager from '@/components/NotebookManager';
@@ -470,6 +471,7 @@ const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'to
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
   notebooks: 'learning',
+  'chemistry-practice': 'learning',
   'math-practice': 'learning',
   'eiken-vocab': 'learning',
   planet: 'learning',
@@ -4581,6 +4583,11 @@ Supabaseの設定を確認してください。
           ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">数学演習はログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、問題演習や学習履歴を利用できます。</p></div>;
 
+      case 'chemistry-practice':
+        return authUser?.id && !isGuestMode
+          ? <ChemistryPracticeHub isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><FlaskConical size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">化学演習はログイン後に利用できます</h2></div>;
+
       case 'eiken-vocab':
         return authUser?.id && !isGuestMode
           ? <EikenVocabAccessPanel isDarkMode={isDarkMode} />
@@ -6269,6 +6276,12 @@ Supabaseの設定を確認してください。
           onSelect: () => setActiveTab('math-practice'),
         }] : []),
         ...(authUser?.id ? [{
+          key: 'chemistry-practice', label: '化学演習ラボ', icon: <FlaskConical size={17} />,
+          isActive: activeTab === 'chemistry-practice',
+          keywords: ['化学演習', '理論化学', '無機化学', '有機化学', '高分子', 'mol', '化学平衡'],
+          onSelect: () => setActiveTab('chemistry-practice'),
+        }] : []),
+        ...(authUser?.id ? [{
           key: 'eiken-vocab', label: '英検単語学習', icon: <Globe2 size={17} />,
           isActive: activeTab === 'eiken-vocab',
           keywords: ['英検', '英単語', '語彙', '単語テスト', '英語学習'],
@@ -6615,7 +6628,7 @@ Supabaseの設定を確認してください。
       </aside>
 
       {/* メインビューポートエリア */}
-      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' || activeTab === 'materials' || activeTab === 'workspaces' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
+      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' || activeTab === 'materials' || activeTab === 'workspaces' || activeTab === 'chemistry-practice' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">

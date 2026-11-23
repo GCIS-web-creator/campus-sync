@@ -58,7 +58,7 @@ type PendingAttempt = {
 type LoadOverrides = { page?: number };
 
 const PAGE_SIZE = 18;
-const SUBJECT_FILTERS = [
+const MATH_SUBJECT_FILTERS = [
   { value: '', label: 'すべての教科' },
   { value: 'math1', label: '数学I' },
   { value: 'matha', label: '数学A' },
@@ -67,13 +67,33 @@ const SUBJECT_FILTERS = [
   { value: 'math3', label: '数学III' },
   { value: 'mathc', label: '数学C' },
 ];
+const CHEMISTRY_SUBJECT_FILTERS = [
+  { value: 'chem_theory', label: '理論化学' },
+  { value: 'chem_inorganic', label: '無機化学' },
+  { value: 'chem_organic', label: '有機化学' },
+  { value: 'chem_polymer', label: '高分子化学' },
+];
+type KnowledgePracticePanelProps = {
+  isDarkMode?: boolean;
+  subjectGroup?: 'math' | 'chemistry';
+  initialSubject?: string;
+  pageTitle?: string;
+  introText?: string;
+};
 const DIFFICULTY: Record<Difficulty, { label: string; xp: number; tone: string }> = {
   normal: { label: '基礎', xp: 2, tone: 'border-sky-400/30 bg-sky-400/10 text-sky-700 dark:text-sky-300' },
   advanced: { label: '応用', xp: 4, tone: 'border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300' },
   challenge: { label: '発展', xp: 6, tone: 'border-violet-400/30 bg-violet-400/10 text-violet-700 dark:text-violet-300' },
 };
 
-export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkMode?: boolean }) {
+export default function KnowledgePracticePanel({
+  isDarkMode = false,
+  subjectGroup = 'math',
+  initialSubject = '',
+  pageTitle,
+  introText,
+}: KnowledgePracticePanelProps) {
+  const subjectFilters = subjectGroup === 'chemistry' ? CHEMISTRY_SUBJECT_FILTERS : MATH_SUBJECT_FILTERS;
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [masteredIds, setMasteredIds] = useState<string[]>([]);
@@ -90,7 +110,7 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [subjectFilter, setSubjectFilter] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState(initialSubject);
   const [unitFilter, setUnitFilter] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('');
 
@@ -280,8 +300,8 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
       <div className="relative flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-[10px] font-black tracking-[.22em] text-cyan-300"><Brain size={13}/> CAMPUSSYNC LEARNING</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">数学問題演習</h2>
-          <p className="mt-2 max-w-xl text-xs leading-6 text-slate-300 sm:text-sm">自分のペースで解いて、解説まで確認。小さな積み重ねを知識の成長につなげよう。</p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">{pageTitle || (subjectGroup === 'chemistry' ? '化学問題演習' : '数学問題演習')}</h2>
+          <p className="mt-2 max-w-xl text-xs leading-6 text-slate-300 sm:text-sm">{introText || '自分のペースで解いて、解説まで確認。小さな積み重ねを知識の成長につなげよう。'}</p>
         </div>
         <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
           <Sparkles size={18} className="text-cyan-300"/>
@@ -314,12 +334,12 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
         <label className="block space-y-1">
           <span className={'text-[10px] font-bold ' + muted}>教科</span>
           <select className={input} value={subjectFilter} onChange={event => setSubjectFilter(event.target.value)}>
-            {SUBJECT_FILTERS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+            {subjectFilters.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
         <label className="block space-y-1">
           <span className={'text-[10px] font-bold ' + muted}>単元</span>
-          <input className={input} value={unitFilter} onChange={event => setUnitFilter(event.target.value)} placeholder="例：微分法、ベクトル"/>
+          <input className={input} value={unitFilter} onChange={event => setUnitFilter(event.target.value)} placeholder={subjectGroup === 'chemistry' ? '例：酸塩基、化学平衡、芳香族' : '例：微分法、ベクトル'}/>
         </label>
         <label className="block space-y-1">
           <span className={'text-[10px] font-bold ' + muted}>難易度</span>
@@ -341,7 +361,7 @@ export default function KnowledgePracticePanel({ isDarkMode = false }: { isDarkM
       <BookOpen size={34} className={'mx-auto ' + muted}/>
       <h3 className="mt-3 text-base font-black">条件に合う問題はまだありません</h3>
       <p className={'mt-2 text-xs leading-6 ' + muted}>教科や単元の条件を変えるか、Adminから問題が公開されるのをお待ちください。</p>
-      <button type="button" onClick={() => { setSubjectFilter(''); setUnitFilter(''); setDifficultyFilter(''); void load({ page: 1 }); }}
+      <button type="button" onClick={() => { setSubjectFilter(initialSubject); setUnitFilter(''); setDifficultyFilter(''); void load({ page: 1 }); }}
         className="mt-4 rounded-xl border border-cyan-500/30 px-4 py-2 text-xs font-black text-cyan-600">条件をリセット</button>
     </section> : <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className={panel + ' min-w-0 rounded-3xl border p-4 shadow-sm sm:p-6'}>

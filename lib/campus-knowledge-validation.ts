@@ -30,7 +30,7 @@ export type KnowledgeQuestionInput = {
 const OPTION_ID = /^[a-z][a-z0-9_-]{0,11}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NUMERIC_ANSWER = /^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)$/;
-const SUBJECT_CODES = ['math1', 'matha', 'math2', 'mathb', 'math3', 'mathc'];
+const SUBJECT_CODES = ['math1', 'matha', 'math2', 'mathb', 'math3', 'mathc', 'chem_theory', 'chem_inorganic', 'chem_organic', 'chem_polymer'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

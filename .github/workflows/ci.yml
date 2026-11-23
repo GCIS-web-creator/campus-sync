@@ -50,6 +50,8 @@ jobs:
         run: npm run test:contributions
       - name: Test knowledge question and attempt validation
         run: npm run test:knowledge
+      - name: Test chemistry question bank coverage and integrity
+        run: npm run test:chemistry-question-bank
       - name: Test planet MP technology tree catalog and prerequisites
         run: npm run test:planet-tree
       # The LINE webhook imports getCloudflareContext directly, so this package is needed

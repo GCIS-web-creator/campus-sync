@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const subjectCode = String(params.get('subject') || '').trim();
     const unit = String(params.get('unit') || '').trim().slice(0, 120);
     const difficulty = String(params.get('difficulty') || '').trim();
-    const allowedSubjectCodes = new Set(['math1', 'matha', 'math2', 'mathb', 'math3', 'mathc']);
+    const allowedSubjectCodes = new Set(['math1', 'matha', 'math2', 'mathb', 'math3', 'mathc', 'chem_theory', 'chem_inorganic', 'chem_organic', 'chem_polymer']);
     const allowedDifficulties = new Set(['normal', 'advanced', 'challenge']);
     if (subjectCode && !allowedSubjectCodes.has(subjectCode)) return json({ success: false, message: '教科フィルターが正しくありません。' }, 400);
     if (difficulty && !allowedDifficulties.has(difficulty)) return json({ success: false, message: '難易度フィルターが正しくありません。' }, 400);
