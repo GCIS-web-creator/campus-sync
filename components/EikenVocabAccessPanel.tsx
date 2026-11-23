@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  AlertCircle, ArrowUpRight, BookOpenCheck, ExternalLink,
+  AlertCircle, BookOpenCheck, ExternalLink,
   Globe2, LoaderCircle, LockKeyhole, LogOut, ShieldCheck,
 } from 'lucide-react';
 
@@ -105,10 +105,7 @@ export default function EikenVocabAccessPanel({ isDarkMode = false }: { isDarkMo
               <p className={`mt-0.5 text-xs ${muted}`}>パスワード認証済み・8時間有効</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <a href={EIKEN_VOCAB_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 px-3 py-2 text-xs font-black text-cyan-700 transition hover:bg-cyan-50">
-              別タブで開く <ArrowUpRight size={15} />
-            </a>
+          <div className="flex items-center justify-end">
             <button type="button" onClick={signOut} disabled={busy} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-50 ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
               <LogOut size={15} />ロック
             </button>
@@ -125,7 +122,7 @@ export default function EikenVocabAccessPanel({ isDarkMode = false }: { isDarkMo
           />
         </div>
         <p className={`px-1 text-[11px] leading-5 ${muted}`}>
-          埋め込み表示がブロックされる場合は「別タブで開く」を使用してください。元の公開URL自体のアクセス制限は、このCampusSync内のパスワードとは別設定です。
+          CampusSync内では専用パスワードの認証後に表示されます。元の公開URLは独立したサイトのため、URLを直接開いた場合にはCampusSyncのパスワードは適用されません。
         </p>
       </section>
     );

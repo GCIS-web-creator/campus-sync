@@ -35,7 +35,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, Globe2
 } from 'lucide-react';
 import {
   AnimatedAsset,
@@ -470,6 +470,8 @@ const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'to
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
   notebooks: 'learning',
+  'math-practice': 'learning',
+  'eiken-vocab': 'learning',
   planet: 'learning',
   materials: 'learning',
   timetable: 'learning',
