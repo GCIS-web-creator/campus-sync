@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyBookBarcode, normalizeBookIsbn, toIsbn10 } from '../lib/book-isbn.ts';
-import { parseNdlOpenSearch, buildBookCoverCandidates } from '../lib/book-catalog.ts';
+import { parseNdlOpenSearch, buildBookCoverCandidates, normalizeBookCoverUrl, toBookCoverProxyUrl } from '../lib/book-catalog.ts';
 
 test('recognizes the Japanese book ISBN barcode', () => {
   assert.deepEqual(classifyBookBarcode('9784342353093'), {
@@ -88,4 +88,21 @@ test('includes the Japanese Books.or.jp cover endpoint for a new ISBN', () => {
   assert.ok(buildBookCoverCandidates('9784327764951').includes(
     'https://thumbnail-s.images.books.or.jp/9784327764951.jpg',
   ));
+});
+
+
+test('accepts pasted HTTPS cover URLs and preserves unknown image hosts as direct links', () => {
+  const url = 'https://covers.example.net/images/book-cover.jpg?size=large';
+  assert.equal(normalizeBookCoverUrl(url), url);
+  assert.equal(toBookCoverProxyUrl(url), url);
+  assert.equal(normalizeBookCoverUrl('http://covers.example.net/cover.jpg'), null);
+  assert.equal(normalizeBookCoverUrl('javascript:alert(1)'), null);
+  assert.equal(normalizeBookCoverUrl('https://user:pass@covers.example.net/cover.jpg'), null);
+});
+
+test('routes known cover catalogue hosts through the CampusSync image proxy', () => {
+  assert.match(
+    toBookCoverProxyUrl('https://ndlsearch.ndl.go.jp/thumbnail/9784327764951.jpg'),
+    /^\\/api\\/books\\/cover\\?url=/,
+  );
 });
