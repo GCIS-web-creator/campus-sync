@@ -32,6 +32,10 @@ type UsageLog = {
   id: string; notebook_id: string; used_on: string; page_start: number;
   page_end: number; subject: string | null; content: string | null; created_at: string;
 };
+type LinkedStudySession = {
+  id: string; subject_name: string; task_title: string; focus_seconds: number;
+  started_at: string; reflection: string | null; next_action: string | null;
+};
 type NotebookForm = {
   name: string; subjects: string[]; purpose: NotebookPurpose; custom_purpose: string;
   notebook_size: string; total_pages: string; used_pages: string; status: NotebookStatus;
@@ -67,6 +71,9 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
   const [historyNotebookId, setHistoryNotebookId] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<UsageLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [studySessionNotebookId, setStudySessionNotebookId] = useState<string | null>(null);
+  const [linkedStudySessions, setLinkedStudySessions] = useState<LinkedStudySession[]>([]);
+  const [studySessionsLoading, setStudySessionsLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<NotebookRow | null>(null);
 
   const dark = isDarkMode;
@@ -311,6 +318,22 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
     setHistoryLoading(false);
   }
 
+  async function loadLinkedStudySessions(notebookId: string) {
+    setStudySessionsLoading(true);
+    setStudySessionNotebookId(notebookId);
+    const { data, error: sessionsError } = await supabase.from('student_study_sessions')
+      .select('id,subject_name,task_title,focus_seconds,started_at,reflection,next_action')
+      .eq('notebook_id', notebookId)
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .limit(30);
+    if (sessionsError) {
+      setError('タイマーの学習記録を読み込めませんでした。' + sessionsError.message);
+      setLinkedStudySessions([]);
+    } else setLinkedStudySessions((data || []) as LinkedStudySession[]);
+    setStudySessionsLoading(false);
+  }
+
   const closeEditor = () => {
     setShowEditor(false);
     setCoverFile(null);
@@ -394,9 +417,10 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">{notebook.storage_location&&<span className={'inline-flex items-center gap-1 text-[10px] '+muted}><MapPin size={11}/>{notebook.storage_location}</span>}<span className={'ml-auto text-[9px] '+muted}>{notebook.last_used_at?'最終使用 '+notebook.last_used_at:'使用履歴なし'}</span></div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <button type="button" className={secondary} disabled={notebook.status==='finished'} onClick={()=>startUsageRecord(notebook)}><ClipboardList size={13}/>ページ記録</button>
             <button type="button" className={secondary} onClick={()=>historyNotebookId===notebook.id?setHistoryNotebookId(null):void loadHistory(notebook.id)}><History size={13}/>使用履歴</button>
+            <button type="button" className={secondary} onClick={()=>studySessionNotebookId===notebook.id?setStudySessionNotebookId(null):void loadLinkedStudySessions(notebook.id)}><History size={13}/>学習記録</button>
             <button type="button" className={secondary} onClick={()=>openEdit(notebook)}><Edit3 size={13}/>編集</button>
             <button type="button" className={secondary} onClick={()=>setDeleteTarget(notebook)}><Trash2 size={13}/>削除</button>
           </div>
@@ -415,6 +439,10 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
             <div className="flex items-center justify-between"><p className="text-xs font-black">使用履歴</p><button type="button" onClick={()=>setHistoryNotebookId(null)} aria-label="閉じる"><X size={14}/></button></div>
             {historyLoading?<p className={'mt-2 text-xs '+muted}>読み込み中…</p>:historyItems.length===0?<p className={'mt-2 text-xs '+muted}>まだ使用履歴はありません。</p>:<div className="mt-2 space-y-2">{historyItems.map(log=><div key={log.id} className="rounded-lg border border-slate-200/70 p-2 text-xs dark:border-slate-700"><div className="flex justify-between gap-2"><span className="font-black">{log.used_on}</span><span className="font-black text-cyan-600">P.{log.page_start}–{log.page_end}</span></div><p className={'mt-1 text-[10px] '+muted}>{[log.subject,log.content].filter(Boolean).join(' ・ ')||'内容の記録なし'}</p></div>)}</div>}
           </div>}
+          {studySessionNotebookId===notebook.id&&<div className={'mt-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-950':'border-slate-200 bg-slate-50')}>
+            <div className="flex items-center justify-between"><p className="text-xs font-black">Pomodoro・学習タイマーの記録</p><button type="button" onClick={()=>setStudySessionNotebookId(null)} aria-label="閉じる"><X size={14}/></button></div>
+            {studySessionsLoading?<p className={'mt-2 text-xs '+muted}>読み込み中…</p>:linkedStudySessions.length===0?<p className={'mt-2 text-xs '+muted}>このノートに紐づいた学習記録はまだありません。</p>:<div className="mt-2 space-y-2">{linkedStudySessions.map(session=><div key={session.id} className="rounded-lg border border-slate-200/70 p-2 text-xs dark:border-slate-700"><div className="flex justify-between gap-2"><span className="font-black">{new Date(session.started_at).toLocaleString('ja-JP')}</span><span className="font-black text-cyan-600">{Math.round(session.focus_seconds/60)}分</span></div><p className="mt-1 font-bold">{session.subject_name} ・ {session.task_title||'勉強内容の記録なし'}</p>{session.reflection&&<p className={'mt-1 text-[10px] '+muted}>振り返り：{session.reflection}</p>}</div>)}</div>}
+          </div>
         </article>;
       })}</div>}
 

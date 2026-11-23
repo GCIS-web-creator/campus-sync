@@ -23,7 +23,8 @@ type PublishedRangeProgress = { school_test_range_id: string; section_id: string
 type PersonalTask = { id: string; title: string; details: string; subject: string; source: string; type: string; due: string; due_at: string | null; completed: boolean; created_at: string };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
-type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; ended_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped' };
+type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; ended_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped'; notebook_id?: string | null };
+type NotebookOption = { id: string; name: string; subjects: string[]; status: 'unused' | 'in_use' | 'stored' | 'finished'; used_pages: number; total_pages: number };
 type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
   publisher: string | null; published_date: string | null; description: string | null;
@@ -56,6 +57,7 @@ type TimerSnapshot = {
   nextAction: string;
   finishKind: 'completed' | 'stopped';
   scheduleId: string | null;
+  notebookId?: string | null;
 };
 function parseTimerSnapshot(raw: unknown): TimerSnapshot | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -92,6 +94,7 @@ function timerSnapshotSignature(snapshot: TimerSnapshot): string {
     focusSubjectId: snapshot.focusSubjectId,
     task: snapshot.task,
     rangeId: snapshot.rangeId,
+    notebookId: snapshot.notebookId || null,
     startedAt: snapshot.startedAt,
     phaseEndsAt: running ? snapshot.phaseEndsAt : null,
     remaining: running ? null : snapshot.remaining,
@@ -332,6 +335,22 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const [focusSubject, setFocusSubject] = useState<Subject>('国語演習');
   const [focusSubjectId, setFocusSubjectId] = useState('');
+  const [availableNotebooks, setAvailableNotebooks] = useState<NotebookOption[]>([]);
+  const [focusNotebookId, setFocusNotebookId] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void supabase.from('student_notebooks')
+      .select('id,name,subjects,status,used_pages,total_pages')
+      .eq('user_id', userId)
+      .in('status', ['unused', 'in_use', 'stored'])
+      .order('updated_at', { ascending: false })
+      .then(({ data, error: notebookError }) => {
+        if (!active || notebookError) return;
+        setAvailableNotebooks((data || []) as NotebookOption[]);
+      });
+    return () => { active = false; };
+  }, [userId]);
   const [task, setTask] = useState('');
   const [rangeId, setRangeId] = useState('');
   const [focusMinutes, setFocusMinutes] = useState(25);
@@ -927,6 +946,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setFocusSubjectId(snapshot.focusSubjectId || '');
       setTask(snapshot.task || '');
       setRangeId(snapshot.rangeId || '');
+      setFocusNotebookId(snapshot.notebookId || '');
       setShowRecord(snapshot.showRecord);
       setReflection(snapshot.reflection || '');
       setNextAction(snapshot.nextAction || '');
@@ -1042,6 +1062,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       focusSubjectId,
       task,
       rangeId,
+      notebookId: focusNotebookId || null,
       startedAt: startedAt.current,
       phaseStartedAt,
       phaseEndsAt,
@@ -1052,7 +1073,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       scheduleId: timerScheduleId,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
-  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   // Persist only meaningful timer state changes; ticking seconds are reconstructed
   // from the absolute timestamps, so we do not write to Postgres every second.
@@ -1074,6 +1095,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       focusSubjectId,
       task,
       rangeId,
+      notebookId: focusNotebookId || null,
       startedAt: startedAt.current,
       phaseStartedAt,
       phaseEndsAt,
@@ -1108,7 +1130,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         cloudTimerSavingRef.current = false;
       }
     })();
-  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   // Supabase Realtime delivers immediate updates; polling/visibility refresh is the
   // fallback so a device still catches up after sleeping or temporarily disconnecting.
@@ -1135,6 +1157,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setFocusSubjectId(snapshot.focusSubjectId || '');
       setTask(snapshot.task || '');
       setRangeId(snapshot.rangeId || '');
+      setFocusNotebookId(snapshot.notebookId || '');
       setShowRecord(snapshot.showRecord);
       setReflection(snapshot.reflection || '');
       setNextAction(snapshot.nextAction || '');
@@ -1540,6 +1563,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     try {
       const { data: savedSession, error: insertError } = await supabase.from('student_study_sessions').insert({
         user_id: userId, test_subject_id: null,
+        notebook_id: focusNotebookId || null,
         subject_name: displaySubjectName(focusSubject) as Subject, task_title: task.trim(),
         test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
@@ -1931,7 +1955,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button>{focusSeconds>0?<button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button>:<button type="button" onClick={discardPausedContinuation} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">この勉強を終了</button>}</>}{timerState==='running'&&<button type="button" onClick={()=>finish(timerMode==='countup'?'completed':'stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">{timerMode==='countup'?'終了して記録':'中断して記録'}</button>}</div>
           {timerMode==='pomodoro'&&timerState==='running'&&<button type="button" onClick={switchTimerPhase} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">{task && focusSeconds===0 ? '中断した勉強を保存済みです。残り時間から再開できます。' : '一時停止中'}</p>}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s} value={s}>{displaySubjectName(s)}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(displaySubjectName(found.subject) as Subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {displaySubjectName(s.subject)}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s} value={s}>{displaySubjectName(s)}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(displaySubjectName(found.subject) as Subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {displaySubjectName(s.subject)}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">使用するノート（任意）<select className={input} value={focusNotebookId} onChange={e=>setFocusNotebookId(e.target.value)} disabled={timerState==='running'}><option value="">ノートを指定しない</option>{availableNotebooks.map(notebook=><option key={notebook.id} value={notebook.id}>{notebook.name} ・ {notebook.subjects.join('／')} ・ 残り{Math.max(0,notebook.total_pages-notebook.used_pages)}ページ</option>)}</select><span className={'block text-[10px] font-normal '+muted}>タイマーの状態と一緒に保存され、終了後の学習記録に紐づきます。</span></label>
+          <label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
       </section>
       <section className={panel}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
