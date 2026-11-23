@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const bank=JSON.parse(readFileSync(new URL('../data/chemistry-question-bank-2026-11.json',import.meta.url),'utf8'));
+const expected={"chem_theory":64,"chem_inorganic":48,"chem_organic":51,"chem_polymer":48}, total=211;
+const norm=s=>s.normalize('NFKC').toLocaleLowerCase('ja-JP').replace(/\\s+/g,' ').trim();
+test('chemistry question totals',()=>{assert.equal(bank.length,total);for(const [k,v]of Object.entries(expected))assert.equal(bank.filter(q=>q.subject_code===k).length,v,k);});
+test('no duplicate prompts in same unit',()=>{const keys=bank.map(q=>[q.subject_code,q.unit,norm(q.prompt)].join('\\n'));assert.equal(new Set(keys).size,keys.length);});
+test('all items have valid answer data and provenance',()=>{for(const [i,q]of bank.entries()){assert.ok(q.subject&&q.unit&&q.title&&q.prompt,'fields '+i);assert.ok(q.explanation);assert.ok(['normal','advanced','challenge'].includes(q.difficulty));assert.equal(q.status,'published');assert.equal(q.target_class,'all');assert.equal(q.source_name,'CampusSyncオリジナル');assert.equal(q.source_url,null);assert.ok(q.source_attribution);}});
+test('multiple choice options are unique and contain the answer key',()=>{const items=bank.filter(q=>q.question_type==='multiple_choice');assert.equal(items.length,total-16);for(const q of items){assert.equal(q.options.length,4);assert.equal(new Set(q.options.map(o=>o.text)).size,4);assert.ok(q.options.some(o=>o.id===q.correct_option_id));}});
+test('numeric answer keys match independent checks',()=>{const items=bank.filter(q=>q.question_type==='numeric');assert.equal(items.length,16);assert.deepEqual(items.map(q=>Number(q.correct_answer)),[0.5,0.2,0.25,8.96,0.4,0.2,4,3,5,50,20,0.5,0.5,60,12.3,10]);});

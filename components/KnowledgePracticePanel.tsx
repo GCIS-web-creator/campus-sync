@@ -79,6 +79,7 @@ type KnowledgePracticePanelProps = {
   initialSubject?: string;
   pageTitle?: string;
   introText?: string;
+  hideSubjectFilter?: boolean;
 };
 const DIFFICULTY: Record<Difficulty, { label: string; xp: number; tone: string }> = {
   normal: { label: '基礎', xp: 2, tone: 'border-sky-400/30 bg-sky-400/10 text-sky-700 dark:text-sky-300' },
@@ -92,6 +93,7 @@ export default function KnowledgePracticePanel({
   initialSubject = '',
   pageTitle,
   introText,
+  hideSubjectFilter = false,
 }: KnowledgePracticePanelProps) {
   const subjectFilters = subjectGroup === 'chemistry' ? CHEMISTRY_SUBJECT_FILTERS : MATH_SUBJECT_FILTERS;
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -331,12 +333,12 @@ export default function KnowledgePracticePanel({
         <span className={'ml-auto text-[10px] ' + muted}>全{totalCount.toLocaleString('ja-JP')}問から検索</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
-        <label className="block space-y-1">
+        {!hideSubjectFilter && <label className="block space-y-1">
           <span className={'text-[10px] font-bold ' + muted}>教科</span>
           <select className={input} value={subjectFilter} onChange={event => setSubjectFilter(event.target.value)}>
             {subjectFilters.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
-        </label>
+        </label>}
         <label className="block space-y-1">
           <span className={'text-[10px] font-bold ' + muted}>単元</span>
           <input className={input} value={unitFilter} onChange={event => setUnitFilter(event.target.value)} placeholder={subjectGroup === 'chemistry' ? '例：酸塩基、化学平衡、芳香族' : '例：微分法、ベクトル'}/>

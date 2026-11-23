@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
     const value = validated.value;
     if (!value.subject_code) {
-      return json({ success: false, message: (index + 1) + '問目: 数学の教科コードを指定してください。' }, 400);
+      return json({ success: false, message: (index + 1) + '問目: 教科コードを指定してください。' }, 400);
     }
     if (!value.source_url && value.source_name !== 'CampusSyncオリジナル') {
       return json({ success: false, message: (index + 1) + '問目: URLを省略できるのはCampusSyncオリジナルの問題だけです。' }, 400);

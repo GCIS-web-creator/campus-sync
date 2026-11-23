@@ -91,6 +91,7 @@ export default function ChemistryPracticeHub({ isDarkMode = false }: { isDarkMod
           initialSubject={active.code}
           pageTitle={active.title}
           introText={active.description}
+          hideSubjectFilter
         />
       </section>
 
