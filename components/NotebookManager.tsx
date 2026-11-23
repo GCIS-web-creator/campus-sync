@@ -442,7 +442,7 @@ export default function NotebookManager({ userId, isDarkMode = false }: { userId
           {studySessionNotebookId===notebook.id&&<div className={'mt-3 rounded-xl border p-3 '+(dark?'border-slate-700 bg-slate-950':'border-slate-200 bg-slate-50')}>
             <div className="flex items-center justify-between"><p className="text-xs font-black">Pomodoro・学習タイマーの記録</p><button type="button" onClick={()=>setStudySessionNotebookId(null)} aria-label="閉じる"><X size={14}/></button></div>
             {studySessionsLoading?<p className={'mt-2 text-xs '+muted}>読み込み中…</p>:linkedStudySessions.length===0?<p className={'mt-2 text-xs '+muted}>このノートに紐づいた学習記録はまだありません。</p>:<div className="mt-2 space-y-2">{linkedStudySessions.map(session=><div key={session.id} className="rounded-lg border border-slate-200/70 p-2 text-xs dark:border-slate-700"><div className="flex justify-between gap-2"><span className="font-black">{new Date(session.started_at).toLocaleString('ja-JP')}</span><span className="font-black text-cyan-600">{Math.round(session.focus_seconds/60)}分</span></div><p className="mt-1 font-bold">{session.subject_name} ・ {session.task_title||'勉強内容の記録なし'}</p>{session.reflection&&<p className={'mt-1 text-[10px] '+muted}>振り返り：{session.reflection}</p>}</div>)}</div>}
-          </div>
+          </div>}
         </article>;
       })}</div>}
 
