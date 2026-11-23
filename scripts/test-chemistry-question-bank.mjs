@@ -1,11 +1,74 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-const bank=JSON.parse(readFileSync(new URL('../data/chemistry-question-bank-2026-11.json',import.meta.url),'utf8'));
-const expected={"chem_theory":64,"chem_inorganic":48,"chem_organic":51,"chem_polymer":48}, total=211;
-const norm=s=>s.normalize('NFKC').toLocaleLowerCase('ja-JP').replace(/\\s+/g,' ').trim();
-test('chemistry question totals',()=>{assert.equal(bank.length,total);for(const [k,v]of Object.entries(expected))assert.equal(bank.filter(q=>q.subject_code===k).length,v,k);});
-test('no duplicate prompts in same unit',()=>{const keys=bank.map(q=>[q.subject_code,q.unit,norm(q.prompt)].join('\\n'));assert.equal(new Set(keys).size,keys.length);});
-test('all items have valid answer data and provenance',()=>{for(const [i,q]of bank.entries()){assert.ok(q.subject&&q.unit&&q.title&&q.prompt,'fields '+i);assert.ok(q.explanation);assert.ok(['normal','advanced','challenge'].includes(q.difficulty));assert.equal(q.status,'published');assert.equal(q.target_class,'all');assert.equal(q.source_name,'CampusSyncオリジナル');assert.equal(q.source_url,null);assert.ok(q.source_attribution);}});
-test('multiple choice options are unique and contain the answer key',()=>{const items=bank.filter(q=>q.question_type==='multiple_choice');assert.equal(items.length,total-16);for(const q of items){assert.equal(q.options.length,4);assert.equal(new Set(q.options.map(o=>o.text)).size,4);assert.ok(q.options.some(o=>o.id===q.correct_option_id));}});
-test('numeric answer keys match independent checks',()=>{const items=bank.filter(q=>q.question_type==='numeric');assert.equal(items.length,16);assert.deepEqual(items.map(q=>Number(q.correct_answer)),[0.5,0.2,0.25,8.96,0.4,0.2,4,3,5,50,20,0.5,0.5,60,12.3,10]);});
+
+const bank = JSON.parse(readFileSync(
+  new URL('../data/chemistry-question-bank-1500-2026-11.json', import.meta.url),
+  'utf8',
+));
+const expectedSubjects = {
+  chem_theory: 400,
+  chem_inorganic: 400,
+  chem_organic: 400,
+  chem_polymer: 300,
+};
+const expectedTypes = { multiple_choice: 1124, numeric: 376 };
+const normalize = value => value.normalize('NFKC')
+  .toLocaleLowerCase('ja-JP')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+test('chemistry question bank contains 1,500 published items', () => {
+  assert.equal(bank.length, 1500);
+  for (const [code, count] of Object.entries(expectedSubjects)) {
+    assert.equal(bank.filter(question => question.subject_code === code).length, count, code);
+  }
+});
+
+test('question prompts are unique within each subject and unit', () => {
+  const keys = bank.map(question => [
+    question.subject_code,
+    question.unit,
+    normalize(question.prompt),
+  ].join('\n'));
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('all questions have complete metadata and original provenance', () => {
+  for (const [index, question] of bank.entries()) {
+    assert.ok(question.subject && question.unit && question.title && question.prompt, 'fields ' + index);
+    assert.ok(question.explanation, 'explanation ' + index);
+    assert.ok(['normal', 'advanced', 'challenge'].includes(question.difficulty));
+    assert.equal(question.status, 'published');
+    assert.equal(question.target_class, 'all');
+    assert.equal(question.source_name, 'CampusSyncオリジナル');
+    assert.equal(question.source_url, null);
+    assert.ok(question.source_attribution);
+  }
+});
+
+test('question formats and multiple-choice answer keys are valid', () => {
+  for (const [type, count] of Object.entries(expectedTypes)) {
+    assert.equal(bank.filter(question => question.question_type === type).length, count, type);
+  }
+  for (const question of bank.filter(item => item.question_type === 'multiple_choice')) {
+    assert.equal(question.options.length, 4, question.title);
+    assert.equal(new Set(question.options.map(option => option.text)).size, 4, question.title);
+    assert.ok(question.options.some(option => option.id === question.correct_option_id), question.title);
+  }
+});
+
+test('numeric questions have valid numeric answer keys and no options', () => {
+  for (const question of bank.filter(item => item.question_type === 'numeric')) {
+    assert.match(question.correct_answer, /^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)$/, question.title);
+    assert.deepEqual(question.options, [], question.title);
+    assert.ok(Number(question.answer_tolerance) >= 0, question.title);
+  }
+});
+
+test('every category has a useful spread of units', () => {
+  for (const code of Object.keys(expectedSubjects)) {
+    const units = new Set(bank.filter(question => question.subject_code === code).map(question => question.unit));
+    assert.ok(units.size >= 5, code + ' units');
+  }
+});
