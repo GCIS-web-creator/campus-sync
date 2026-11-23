@@ -10,12 +10,10 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
-import MathPracticeHub from '@/components/MathPracticeHub';
-import ChemistryPracticeHub from '@/components/ChemistryPracticeHub';
+import LearningPracticeHub from '@/components/LearningPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import NotebookManager from '@/components/NotebookManager';
-import EikenVocabAccessPanel from '@/components/EikenVocabAccessPanel';
 import LineAccountLinkCard from '@/components/LineAccountLinkCard';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
@@ -36,7 +34,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, FlaskConical, Globe2
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit
 } from 'lucide-react';
 import {
   AnimatedAsset,
@@ -471,6 +469,7 @@ const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'to
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   study: 'learning',
   notebooks: 'learning',
+  'practice-lab': 'learning',
   'chemistry-practice': 'learning',
   'math-practice': 'learning',
   'eiken-vocab': 'learning',
@@ -919,6 +918,7 @@ export default function CampusSyncApp() {
   const introStartedAtRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState('home');
+  const [practiceLabSection, setPracticeLabSection] = useState<'math' | 'chemistry' | 'english'>('math');
   const [hashScrollTarget, setHashScrollTarget] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -1040,7 +1040,7 @@ export default function CampusSyncApp() {
 
   // LINEリッチメニューのURLハッシュから、対応するアプリ内タブを直接開く。
   useEffect(() => {
-    const hashRoutes: Record<string, { tab: string; scrollTarget?: string }> = {
+    const hashRoutes: Record<string, { tab: string; scrollTarget?: string; practiceSection?: 'math' | 'chemistry' | 'english' }> = {
       food: { tab: 'cafeteria' },
       weather: { tab: 'weather' },
       tasks: { tab: 'home', scrollTarget: 'tasks' },
@@ -1058,8 +1058,12 @@ export default function CampusSyncApp() {
       'student-card': { tab: 'student-card' },
       calculator: { tab: 'calculator' },
       calc: { tab: 'calculator' },
-      eiken: { tab: 'eiken-vocab' },
-      'eiken-vocab': { tab: 'eiken-vocab' },
+      practice: { tab: 'practice-lab', practiceSection: 'math' },
+      'math-practice': { tab: 'practice-lab', practiceSection: 'math' },
+      'chemistry-practice': { tab: 'practice-lab', practiceSection: 'chemistry' },
+      english: { tab: 'practice-lab', practiceSection: 'english' },
+      eiken: { tab: 'practice-lab', practiceSection: 'english' },
+      'eiken-vocab': { tab: 'practice-lab', practiceSection: 'english' },
     };
 
     const applyHashRoute = () => {
@@ -1076,6 +1080,7 @@ export default function CampusSyncApp() {
       if (!route) return;
       if (hash === 'campus') setFacilitiesSubTab('map');
       setActiveTab(route.tab);
+      if (route.practiceSection) setPracticeLabSection(route.practiceSection);
       setHashScrollTarget(route.scrollTarget || '');
     };
 
@@ -1099,6 +1104,7 @@ export default function CampusSyncApp() {
       study: 'study',
       planet: 'planet',
       'student-card': 'student-card',
+      'practice-lab': 'practice',
       calculator: 'calculator',
       bus: 'transit',
       chat: 'chat',
@@ -4578,20 +4584,15 @@ Supabaseの設定を確認してください。
           ? <NotebookManager userId={String(authUser.id)} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookMarked size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">ノート管理はログイン後に利用できます</h2></div>;
 
-      case 'math-practice':
+      case 'practice-lab':
         return authUser?.id && !isGuestMode
-          ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
-          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">数学演習はログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、問題演習や学習履歴を利用できます。</p></div>;
-
-      case 'chemistry-practice':
-        return authUser?.id && !isGuestMode
-          ? <ChemistryPracticeHub isDarkMode={isDarkMode} />
-          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><FlaskConical size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">化学演習はログイン後に利用できます</h2></div>;
-
-      case 'eiken-vocab':
-        return authUser?.id && !isGuestMode
-          ? <EikenVocabAccessPanel isDarkMode={isDarkMode} />
-          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Globe2 size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">英検単語学習はログイン後に利用できます</h2></div>;
+          ? <LearningPracticeHub
+              userId={String(authUser.id)}
+              isDarkMode={isDarkMode}
+              activeSection={practiceLabSection}
+              onSectionChange={setPracticeLabSection}
+            />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">学習演習ラボはログイン後に利用できます</h2></div>;
 
       case 'planet':
         return authUser?.id && !isGuestMode
@@ -6270,22 +6271,10 @@ Supabaseの設定を確認してください。
           onSelect: () => setActiveTab('planet'),
         }] : []),
         ...(authUser?.id ? [{
-          key: 'math-practice', label: '数学演習ラボ', icon: <BookOpenCheck size={17} />,
-          isActive: activeTab === 'math-practice',
-          keywords: ['数学演習ラボ', '数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
-          onSelect: () => setActiveTab('math-practice'),
-        }] : []),
-        ...(authUser?.id ? [{
-          key: 'chemistry-practice', label: '化学演習ラボ', icon: <FlaskConical size={17} />,
-          isActive: activeTab === 'chemistry-practice',
-          keywords: ['化学演習', '理論化学', '無機化学', '有機化学', '高分子', 'mol', '化学平衡'],
-          onSelect: () => setActiveTab('chemistry-practice'),
-        }] : []),
-        ...(authUser?.id ? [{
-          key: 'eiken-vocab', label: '英検単語学習', icon: <Globe2 size={17} />,
-          isActive: activeTab === 'eiken-vocab',
-          keywords: ['英検', '英単語', '語彙', '単語テスト', '英語学習'],
-          onSelect: () => setActiveTab('eiken-vocab'),
+          key: 'practice-lab', label: '学習演習ラボ', icon: <BookOpenCheck size={17} />,
+          isActive: activeTab === 'practice-lab',
+          keywords: ['学習演習ラボ', '数学演習', '数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '化学演習', '理論化学', '無機化学', '有機化学', '高分子', '英語', '英検', '英単語', '語彙', '問題集', '演習'],
+          onSelect: () => setActiveTab('practice-lab'),
         }] : []),
         {
           key: 'timetable', label: '時間割表', icon: <Calendar size={17} />,
@@ -6628,7 +6617,7 @@ Supabaseの設定を確認してください。
       </aside>
 
       {/* メインビューポートエリア */}
-      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' || activeTab === 'materials' || activeTab === 'workspaces' || activeTab === 'chemistry-practice' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
+      <div className={'flex-1 flex flex-col relative w-full ' + (activeTab === 'ai' || activeTab === 'notes' || activeTab === 'materials' || activeTab === 'workspaces' || activeTab === 'chemistry-practice' || activeTab === 'practice-lab' ? 'max-w-none' : 'max-w-2xl mx-auto') + ' shadow-2xl md:shadow-none bg-gray-50 md:bg-transparent overflow-hidden'}>
         
         {/* モバイル用トップナビヘッダー */}
         <header className="campus-theme-mobile-header md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-md">
