@@ -10,6 +10,7 @@ import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from '.
 import { buildTimetableDirectionBox, type TimetableDeparture } from './_shared/line-flex.ts';
 import type { WeatherDayForecast } from './_shared/weather.ts';
 import { buildWeatherForecastBubble } from './_shared/line-weather-flex.ts';
+import { buildDailyNewsBubble, buildDailyNewsItems, compactSingleDigestFlex } from './_shared/daily-digest-news.ts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -560,51 +561,35 @@ function buildAssignmentListBubble(input: {
     bodyContents,
   });
 }
-function buildSchoolExamRangeBubbles(dateLabel: string, rows: SchoolExamRangeDigestRow[]): Record<string, unknown>[] {
-  const section = (item: SchoolExamRangeSection): Record<string, unknown> => ({
+function buildSchoolExamRangeSummaryBubble(dateLabel: string, rows: SchoolExamRangeDigestRow[]): Record<string, unknown> | null {
+  if (!rows.length) return null;
+  const bodyContents: Record<string, unknown>[] = rows.slice(0, 8).map(row => ({
     type: 'box',
     layout: 'vertical',
-    backgroundColor: '#E2E8F0',
-    cornerRadius: '12px',
-    paddingAll: '2px',
-    contents: [{
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: '#FFFFFF',
-      cornerRadius: '10px',
-      paddingAll: '12px',
-      spacing: 'sm',
-      contents: [
-        { type: 'text', text: item.title, size: 'sm', weight: 'bold', color: '#0F172A', wrap: true },
-        { type: 'text', text: item.body, size: 'xs', color: '#334155', wrap: true },
-        ...(item.note ? [{ type: 'text', text: item.note, size: 'xs', weight: 'bold', color: '#B45309', wrap: true }] : []),
-      ],
-    }],
+    backgroundColor: '#F8FAFC',
+    cornerRadius: '10px',
+    paddingAll: '10px',
+    spacing: 'sm',
+    contents: [
+      { type: 'text', text: row.display_subject + ' ・ ' + row.audience, size: 'sm', color: '#0E7490', weight: 'bold', wrap: true },
+      ...(Array.isArray(row.range_sections) ? row.range_sections.slice(0, 5).map(section => ({
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'xs',
+        contents: [
+          { type: 'text', text: String(section.title || '').slice(0, 100), size: 'xs', color: '#0F172A', weight: 'bold', wrap: true },
+          { type: 'text', text: String(section.body || '').slice(0, 260), size: 'xxs', color: '#475569', wrap: true },
+          ...(section.note ? [{ type: 'text', text: String(section.note).slice(0, 160), size: 'xxs', color: '#B45309', weight: 'bold', wrap: true }] : []),
+        ],
+      })) : []),
+    ],
+  }));
+  return buildBoardBubble({
+    eyebrow: 'CAMPUSSYNC  /  EXAM RANGE',
+    title: '明日の試験範囲',
+    subtitle: dateLabel + ' 試験日｜2026年度 2学期期末考査',
+    bodyContents,
   });
-
-  // One subject = one bubble; all subject bubbles stay in this single digest carousel.
-  return rows.map(row => {
-    const sections = Array.isArray(row.range_sections)
-      ? row.range_sections.filter(item => item && typeof item.title === 'string' && typeof item.body === 'string')
-      : [];
-    return buildBoardBubble({
-      eyebrow: '2026 2ND TERM FINAL / EXAM RANGE',
-      title: '２学期期末考査｜' + row.display_subject,
-      subtitle: dateLabel + ' 試験日｜' + row.audience + '｜2026年度 2学期期末考査',
-      bodyContents: sections.map(section),
-    });
-  });
-}
-
-function buildSchoolExamRangeFlex(dateLabel: string, rows: SchoolExamRangeDigestRow[]): Record<string, unknown> | null {
-  const bubbles = buildSchoolExamRangeBubbles(dateLabel, rows);
-  if (bubbles.length === 0) return null;
-  const subjects = rows.map(row => row.display_subject).filter(Boolean);
-  return {
-    type: 'flex',
-    altText: ('【2学期期末考査・試験範囲】' + subjects.join('・') + '。科目別カードを横にスワイプして確認できます。').slice(0, 400),
-    contents: { type: 'carousel', contents: bubbles },
-  };
 }
 
 function buildExamScheduleAnnouncementBubble(rows: SchoolExamSubjectScheduleRow[]): Record<string, unknown> | null {
@@ -743,53 +728,6 @@ function normalizeDailyDigestCarouselSize<T extends FlexCarouselMessage>(message
     ...message,
     contents: { ...carousel, contents: normalizedContents },
   } as T;
-}
-
-/**
- * Split a digest carousel into LINE-safe Flex messages. LINE limits the JSON
- * definition of a carousel to 50 KB and allows up to five message objects in
- * a broadcast/push request. Use a 45 KB budget for headroom.
- */
-function splitDailyDigestCarousel<T extends FlexCarouselMessage>(message: T): T[] {
-  const carousel = message.contents;
-  if (carousel.type !== 'carousel' || !Array.isArray(carousel.contents)) return [message];
-
-  const maxBytes = 45 * 1024;
-  const bubbles = carousel.contents;
-  const chunks: unknown[][] = [];
-  let current: unknown[] = [];
-
-  const makeMessage = (items: unknown[], index: number, total: number): T => ({
-    ...message,
-    altText: (String((message as { altText?: unknown }).altText || 'CampusSync 日次まとめ')
-      + '（' + index + '/' + total + '）').slice(0, 400),
-    contents: { ...carousel, contents: items },
-  } as T);
-
-  for (const bubble of bubbles) {
-    const candidate = [...current, bubble];
-    const candidateMessage = makeMessage(candidate, 1, 1);
-    const candidateBytes = Buffer.byteLength(JSON.stringify(candidateMessage), 'utf8');
-    if (candidateBytes <= maxBytes) {
-      current = candidate;
-      continue;
-    }
-    if (current.length === 0) {
-      throw new Error('日次まとめのFlexバブル単体が安全なカルーセル上限を超えています。');
-    }
-    chunks.push(current);
-    current = [bubble];
-    const singleBytes = Buffer.byteLength(JSON.stringify(makeMessage(current, 1, 1)), 'utf8');
-    if (singleBytes > maxBytes) {
-      throw new Error('日次まとめのFlexバブル単体が安全なカルーセル上限を超えています。');
-    }
-  }
-  if (current.length) chunks.push(current);
-
-  if (chunks.length > 5) {
-    throw new Error('日次まとめをLINEの1リクエスト上限5メッセージ以内に分割できません。');
-  }
-  return chunks.map((items, index) => makeMessage(items, index + 1, chunks.length));
 }
 
 function jsonError(message: string, status: number) {
@@ -971,7 +909,7 @@ export async function POST(request: Request) {
   }
 
 
-  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult, examScheduleResult] = await Promise.all([
+  const [trainResult, eventResult, classTimetableResult, weatherResult, assignmentResult, changeResult, examScheduleResult, adminNewsResult, tomorrowEventResult] = await Promise.all([
     admin.from('takanodai_timetable')
       .select('direction,departure_time,service,service_day')
       .eq('service_day', isSaturday ? 'saturday' : 'weekday')
@@ -1008,6 +946,18 @@ export async function POST(request: Request) {
       .eq('exam_type', '期末考査')
       .gte('start_date', '2026-11-01')
       .lte('end_date', '2026-12-31'),
+    admin.from('campussync_daily_digest_news')
+      .select('icon,title,body,url,category')
+      .eq('target_date', tomorrow.dateKey)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(6),
+    admin.from('school_event_countdowns')
+      .select('id,title,summary,event_date,is_active')
+      .eq('is_active', true)
+      .eq('event_date', tomorrow.dateKey)
+      .order('title', { ascending: true })
+      .limit(8),
   ]);
 
   if (trainResult.error) console.error('日次まとめ：時刻表取得エラー', trainResult.error.message);
@@ -1017,6 +967,8 @@ export async function POST(request: Request) {
   if (changeResult.error) console.error('日次まとめ：予定変更一覧取得エラー', changeResult.error.message);
   if (examScheduleResult.error) console.error('日次まとめ：定期考査日程取得エラー', examScheduleResult.error.message);
   if (weatherResult.error) console.error('日次まとめ：天気キャッシュ取得エラー', weatherResult.error.message);
+  if (adminNewsResult.error) console.error('日次まとめ：Admin予定ニュースの取得エラー', adminNewsResult.error.message);
+  if (tomorrowEventResult.error) console.error('日次まとめ：明日の学校イベント取得エラー', tomorrowEventResult.error.message);
 
   const targetExamRows = ((examScheduleResult.data || []) as SchoolTestExamQueryRow[]).filter(exam =>
     Array.isArray(exam.target_classes) && exam.target_classes.includes('2-7') && exam.target_classes.includes('2-8')
@@ -1052,7 +1004,7 @@ export async function POST(request: Request) {
       return leftOrder - rightOrder || left.sort_order - right.sort_order;
     });
   const examScopeRows = tomorrowExamRanges.map(({ exam_id: _examId, ...range }) => range);
-  const examFlex = buildSchoolExamRangeFlex(formatJapaneseExamDate(tomorrow.dateKey), examScopeRows);
+  const examRangeBubble = buildSchoolExamRangeSummaryBubble(formatJapaneseExamDate(tomorrow.dateKey), examScopeRows);
   const examScheduleAnnouncement = today === EXAM_SCHEDULE_ANNOUNCEMENT_DATE
     ? buildExamScheduleAnnouncementBubble(examSubjectRows)
     : null;
@@ -1090,7 +1042,18 @@ export async function POST(request: Request) {
 
   const events = (eventResult.data || []) as EventRow[];
   const forecastDays = weatherDays?.filter(day=>day.date>=tomorrow.dateKey).slice(0,3)||[];
-  const flex = normalizeDailyDigestCarouselSize(isSaturday
+  const tomorrowForecast = weatherDays?.find(day => day.date === tomorrow.dateKey) || null;
+  const newsItems = await buildDailyNewsItems({
+    now,
+    todayDateKey: today,
+    tomorrowDateKey: tomorrow.dateKey,
+    weekday,
+    forecast: tomorrowForecast,
+    events: (tomorrowEventResult.data || events) as EventRow[],
+    adminNews: (adminNewsResult.data || []) as Array<{ icon?: string | null; title: string; body?: string | null; url?: string | null; category?: string | null }>,
+  });
+  const newsBubble = buildDailyNewsBubble(tomorrow.dateLabel, newsItems);
+  let flex = normalizeDailyDigestCarouselSize(isSaturday
     ? buildSaturdayDigest({
         dateLabel: todayLabel,
         today,
@@ -1123,7 +1086,27 @@ export async function POST(request: Request) {
         assignmentError: Boolean(assignmentResult.error),
         examScheduleAnnouncement,
       }));
+  const carouselContent = flex.contents as { type?: unknown; contents?: unknown[] };
+  if (Array.isArray(carouselContent.contents)) {
+    if (newsBubble) carouselContent.contents.unshift(newsBubble);
+    if (examRangeBubble) carouselContent.contents.splice(newsBubble ? 1 : 0, 0, examRangeBubble);
+  }
+  try {
+    flex = compactSingleDigestFlex(flex).message;
+  } catch (error) {
+    console.error('日次まとめを単一Flexに縮約できません:', error instanceof Error ? error.message : 'unknown');
+    return jsonError('LINEの50KB制限を超えるため、分割せず今回の配信を中止しました。カード数と内容を調整してください。', 413);
+  }
+
   if (previewRequest) {
+    try {
+      const previewFooterApplied = applyCampusSyncFlexFooters([flex]);
+      if (previewFooterApplied.length !== 1) throw new Error('プレビューのFlex配信数が1ではありません。');
+      flex = compactSingleDigestFlex(previewFooterApplied[0] as typeof flex).message;
+    } catch (error) {
+      console.error('日次まとめのプレビュー最終検査に失敗:', error instanceof Error ? error.message : 'unknown');
+      return jsonError('共通フッター適用後のFlexを45KB以下にまとめられないため、プレビューを中止しました。', 413);
+    }
     const carousel = flex.contents as { type?: unknown; contents?: unknown[] };
     return NextResponse.json({
       success: true,
@@ -1132,16 +1115,25 @@ export async function POST(request: Request) {
       combinedMessageBytes: Buffer.byteLength(JSON.stringify(flex), 'utf8'),
       splitThresholdBytes: 45 * 1024,
       bubbleCount: Array.isArray(carousel.contents) ? carousel.contents.length : 1,
+      newsItems,
+      previewFlex: flex,
+      outboundMessageCount: 1,
       sendsPerformed: false,
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   let flexMessages: typeof flex[];
   try {
-    flexMessages = splitDailyDigestCarousel(flex);
+    const footerApplied = applyCampusSyncFlexFooters([flex]);
+    if (footerApplied.length !== 1) throw new Error('配信メッセージ数が1ではありません。');
+    flex = compactSingleDigestFlex(footerApplied[0] as typeof flex).message;
+    const finalBytes = Buffer.byteLength(JSON.stringify(flex), 'utf8');
+    const finalBubbles = (flex.contents as { contents?: unknown[] }).contents || [];
+    if (finalBytes > 45 * 1024 || finalBubbles.length > 12) throw new Error('フッター適用後のFlexが安全な上限を超えています。');
+    flexMessages = [flex];
   } catch (error) {
-    console.error('日次まとめのFlex分割に失敗:', error instanceof Error ? error.message : 'unknown');
-    return jsonError('日次まとめのメッセージサイズを調整できませんでした。', 500);
+    console.error('日次まとめの単一Flex検証に失敗:', error instanceof Error ? error.message : 'unknown');
+    return jsonError('LINEの50KB制限を超えるため、分割せず配信を中止しました。', 413);
   }
 
   const retryKey = stableRetryKey(today, excludeTrainTimetable ? 'weekday-no-train-timetable' : (isSaturday ? 'saturday' : 'weekday'));
@@ -1150,7 +1142,7 @@ export async function POST(request: Request) {
     response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json', 'X-Line-Retry-Key': retryKey },
-      body: JSON.stringify({ messages: applyCampusSyncFlexFooters(flexMessages) }),
+      body: JSON.stringify({ messages: flexMessages }),
       cache: 'no-store', signal: AbortSignal.timeout(25000),
     });
   } catch (error) {
@@ -1186,75 +1178,7 @@ export async function POST(request: Request) {
   }
   const groupDelivery = await pushLineMessagesToRegisteredChats(accessToken,flexMessages,retryKey,'daily_digest',retryKey);
 
-  // Send exam scopes as an independent Flex Message after the ordinary daily digest.
-  let examBroadcastAccepted = false;
-  let examBroadcastError: string | null = null;
-  let examGroupDelivery: Awaited<ReturnType<typeof pushLineMessagesToRegisteredChats>> | null = null;
-  let examHistorySaved = false;
-  if (examFlex) {
-    const examRetryKey = stableRetryKey(today, 'weekday-exam-scope');
-    try {
-      const examResponse = await fetch('https://api.line.me/v2/bot/message/broadcast', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + accessToken,
-          'Content-Type': 'application/json',
-          'X-Line-Retry-Key': examRetryKey,
-        },
-        body: JSON.stringify({ messages: applyCampusSyncFlexFooters([examFlex]) }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(20000),
-      });
-      await recordLineDeliveryResponse(examResponse, {
-        channel: 'broadcast',
-        kind: 'exam_scope',
-        accessToken,
-        retryKey: examRetryKey,
-        deliveryBatchId: examRetryKey,
-        messages: [examFlex],
-      });
-      examBroadcastAccepted = examResponse.ok || examResponse.status === 409;
-      if (!examBroadcastAccepted) {
-        examBroadcastError = (await examResponse.text().catch(() => '')).slice(0, 500) || 'LINE公式アカウントへの試験範囲配信に失敗しました。';
-        console.error('LINE試験範囲Flexの一斉配信に失敗:', examResponse.status, examBroadcastError);
-      } else {
-        const historyLookup = await admin.from('line_broadcast_history').select('id').eq('delivery_batch_id', examRetryKey).maybeSingle();
-        if (!historyLookup.error && historyLookup.data) {
-          examHistorySaved = true;
-        } else {
-          const { error: historyError } = await admin.from('line_broadcast_history').insert({
-            title: '16:00 2学期期末考査 試験範囲',
-            message: String((examFlex as { altText?: unknown }).altText || '2学期期末考査 試験範囲'),
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            delivery_batch_id: examRetryKey,
-            bot_slot: activeLineBot?.slot && activeLineBot.slot > 0 ? activeLineBot.slot : null,
-          });
-          if (!historyError) examHistorySaved = true;
-          else console.error('試験範囲Flexの配信履歴保存に失敗:', historyError.message);
-        }
-      }
-    } catch (error) {
-      examBroadcastError = error instanceof Error ? error.message : 'LINE試験範囲配信の通信エラー';
-      await recordLineDeliveryResponse(new Response(examBroadcastError, { status: 599 }), {
-        channel: 'broadcast', kind: 'exam_scope', accessToken, retryKey: examRetryKey, deliveryBatchId: examRetryKey, messages: [examFlex],
-      });
-      console.error('LINE試験範囲Flexの通信エラー:', examBroadcastError);
-    }
-
-    try {
-      examGroupDelivery = await pushLineMessagesToRegisteredChats(
-        accessToken,
-        [examFlex],
-        examRetryKey,
-        'exam_scope',
-        examRetryKey,
-      );
-    } catch (error) {
-      console.error('LINEグループへの試験範囲Flex配信に失敗:', error instanceof Error ? error.message : 'unknown error');
-    }
-  }
-
+  // 試験範囲は上のメインカルーセルに統合済み。別メッセージは送信しません。
   // Keep schedule changes queued if any registered group push failed, so the
   // next regular digest can retry them instead of silently dropping them.
   if (changeEvents.length && !groupDelivery.lookupError && (groupDelivery.registered === 0 || groupDelivery.failed === 0)) {
@@ -1270,11 +1194,7 @@ export async function POST(request: Request) {
   if (!mainBroadcastAccepted) deliveryFailureReasons.push('公式アカウント：日次まとめ送信失敗（HTTP ' + response.status + '）');
   if (groupDelivery.lookupError) deliveryFailureReasons.push('グループ：送信先の取得失敗');
   else if (groupDelivery.failed > 0) deliveryFailureReasons.push('グループ：' + groupDelivery.failed + '件の送信失敗');
-  if (examFlex) {
-    if (!examBroadcastAccepted) deliveryFailureReasons.push('試験範囲：公式アカウント送信失敗');
-    if (examGroupDelivery?.lookupError) deliveryFailureReasons.push('試験範囲：グループ送信先の取得失敗');
-    else if ((examGroupDelivery?.failed || 0) > 0) deliveryFailureReasons.push('試験範囲：グループ' + examGroupDelivery?.failed + '件の送信失敗');
-  }
+  // 試験範囲の配信結果はメインFlexの配信結果に含まれます。
   let failureNoticeSent = false;
   if (deliveryFailureReasons.length > 0 && !manualRequest && !replayRequest && !isSaturday) {
     failureNoticeSent = await sendDailyDigestFailureNotice(admin, activeLineBot, today, deliveryFailureReasons);
@@ -1300,27 +1220,20 @@ export async function POST(request: Request) {
       scheduleChanges: changeEvents.length,
       assignmentError: Boolean(assignmentResult.error),
       carouselCards: flexCarouselCards,
+      newsItems: newsItems.length,
       examRangeSubjects: examScopeRows.length,
-      examSeparateFlexMessage: Boolean(examFlex),
+      examRangeIncludedInMainFlex: Boolean(examRangeBubble),
+      outboundMessageCount: 1,
       historySaved,
     },
     groupDelivery,
-    examScopeDelivery: examFlex ? {
-      subjects: examRangeRows.length,
-      carouselCards: Array.isArray((examFlex as { contents?: { contents?: unknown[] } }).contents?.contents)
-        ? (examFlex as { contents: { contents: unknown[] } }).contents.contents.length
-        : 1,
-      broadcastAccepted: examBroadcastAccepted,
-      broadcastError: examBroadcastError,
-      groupDelivery: examGroupDelivery,
-      historySaved: examHistorySaved,
-    } : null,
+    examScopeDelivery: examRangeBubble ? { includedInMainFlex: true, separateMessageSent: false } : null,
     message: deliveryFailureReasons.length
       ? todayLabel + 'の定期配信で一部失敗しました：' + deliveryFailureReasons.join('／') + (failureNoticeSent ? ' 失敗通知を登録済みの1対1トークへ送信しました。' : ' 失敗通知先が未登録、または通知送信に失敗しました。')
       : (excludeTrainTimetable
         ? todayLabel + 'の臨時再送として、電車時刻表を除く天気・' + (includeClassTimetable ? '7組・8組の時間割・' : '') + '学校行事・課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
         : (isSaturday
           ? todayLabel + 'の12:30配信は、国分寺・東村山方面別の土曜時刻表、天気、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery)
-          : todayLabel + 'の16:00配信は、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧を配信しました。' + summarizeLineGroupDelivery(groupDelivery) + (examFlex ? ' 試験範囲7科目は別のFlex Messageで配信処理しました。' : ''))),
+          : todayLabel + 'の16:00配信は、ニュース、国分寺・東村山方面別の時刻表、天気' + (includeClassTimetable ? '・7組・8組' : '') + '、学校行事、課題一覧' + (examRangeBubble ? '、試験範囲' : '') + 'を1つのFlex Messageで配信しました。' + summarizeLineGroupDelivery(groupDelivery))),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

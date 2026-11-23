@@ -49,7 +49,8 @@ from cron.job
 where jobname in (
   'campussync-daily-line-digest',
   'campussync-weekly-school-schedule',
-  'campussync-bot-switch-reminder'
+  'campussync-bot-switch-reminder',
+  'campussync-lightning-watch'
 );
 
 -- 平日16:00 JST = 月〜金 07:00 UTC
@@ -120,6 +121,37 @@ select cron.schedule(
     );
   $cron$
 );
+
+
+-- 10分ごとのLIDEN落雷監視。
+-- UTC 21:00〜10:59 はJST 06:00〜19:59。Edge Function側でも放電時刻を06:00〜19:00に再確認します。
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'campussync-lightning-watch';
+
+select cron.schedule(
+  'campussync-lightning-watch',
+  '*/10 21-23,0-10 * * *',
+  $cron$
+    select net.http_post(
+      url := 'https://sgvhktudhxufluuaipwt.supabase.co/functions/v1/campussync-cron?task=lightning-watch',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'apikey', (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'campussync_supabase_publishable_key'
+        ),
+        'Authorization', 'Bearer ' || (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'campussync_push_reminders_cron_secret'
+        )
+      ),
+      body := '{}'::jsonb,
+      timeout_milliseconds := 60000
+    );
+  $cron$
+);
+
 
 -- 3つのジョブが登録されていることを確認。
 select jobid, jobname, schedule, active

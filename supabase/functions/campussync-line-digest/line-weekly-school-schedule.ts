@@ -8,6 +8,7 @@ import { buildWeeklySchoolScheduleFlexMessage } from './_shared/line-flex.ts';
 import { CLASS_TIMETABLE_DATA, mapClassTimetableRows, type ClassTimetableData, type ClassTimetableRow } from './_shared/class-timetable.ts';
 import { pushLineMessagesToRegisteredChats, summarizeLineGroupDelivery } from './_shared/line-group-chats.ts';
 import { buildWeatherForecastBubble } from './_shared/line-weather-flex.ts';
+import { buildDailyNewsBubble, buildDailyNewsItems, compactSingleDigestFlex } from './_shared/daily-digest-news.ts';
 
 function constantTimeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -328,7 +329,7 @@ export async function POST(request: Request) {
 
   const today = getTokyoTodayKey();
   const weekEnd = addDays(weekStart, 6);
-  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, weatherCacheResult, changeResult, examScheduleResult] = await Promise.all([
+  const [scheduleResult, weeklyEventsResult, countdownResult, assignmentResult, timetableResult, weatherCacheResult, changeResult, examScheduleResult, adminNewsResult] = await Promise.all([
     supabase.from('school_weekly_schedules')
       .select('week_start,title,days').eq('week_start', weekStart).maybeSingle(),
     supabase.from('school_event_countdowns')
@@ -360,6 +361,12 @@ export async function POST(request: Request) {
       .eq('exam_type', '期末考査')
       .lte('start_date', weekEnd)
       .gte('end_date', weekStart),
+    supabase.from('campussync_daily_digest_news')
+      .select('icon,title,body,url,category')
+      .eq('target_date', weekStart)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(6),
   ]);
   if (scheduleResult.error) console.error('週間予定表の取得に失敗（行事情報で代替）:', scheduleResult.error.message);
   if (weeklyEventsResult.error) console.error('週間予定表：学校行事の取得に失敗:', weeklyEventsResult.error.message);
@@ -367,6 +374,7 @@ export async function POST(request: Request) {
   if (assignmentResult.error) console.error('週間予定表：課題取得に失敗:', assignmentResult.error.message);
   if (changeResult.error) console.error('週間予定表：日程変更取得に失敗:', changeResult.error.message);
   if (examScheduleResult.error) console.error('週間予定表：定期考査日程の取得に失敗:', examScheduleResult.error.message);
+  if (adminNewsResult.error) console.error('週間予定表：Admin予定ニュースの取得に失敗:', adminNewsResult.error.message);
   if (timetableResult.error) console.error('週間予定表：月曜日の時間割取得エラー（初期データへフォールバック）', timetableResult.error.message);
   if (weatherCacheResult.error) console.error('週間学校予定表：天気キャッシュの取得に失敗:', weatherCacheResult.error.message);
 
@@ -430,6 +438,16 @@ export async function POST(request: Request) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3);
   const countdownEvents = (countdownResult.data || []) as WeeklyEventRow[];
+  const newsItems = await buildDailyNewsItems({
+    now: new Date(),
+    todayDateKey: today,
+    tomorrowDateKey: weekStart,
+    weekday: 'Sun',
+    forecast: (weeklyWeather.find(day => day.date === weekStart) || null) as any,
+    events: (weeklyEventsResult.data || []) as WeeklyEventRow[],
+    adminNews: (adminNewsResult.data || []) as Array<{ icon?: string | null; title: string; body?: string | null; url?: string | null; category?: string | null }>,
+  });
+  const newsBubble = buildDailyNewsBubble(weekStart.slice(5).replace('-', '/') + '（月）', newsItems);
   const assignments = (assignmentResult.data || []) as WeeklyAssignmentRow[];
   const changeEvents = (changeResult.data || []) as WeeklyChangeRow[];
   const mondayLabel = weekStart.slice(5).replace('-', '/') + '（月）';
@@ -438,7 +456,7 @@ export async function POST(request: Request) {
   const weeklyScheduleBubble = baseFlex.contents as Record<string, unknown>;
   const assignmentBubble = buildWeeklyAssignmentsBubble(today, assignments, changeEvents, Boolean(assignmentResult.error));
   const countdownBubble = buildCountdownBubble(today, countdownEvents, Boolean(countdownResult.error));
-  const flex = {
+  let flex = {
     ...baseFlex,
     altText: (baseFlex.altText + '｜月曜日の7組・8組時間割・課題・期限超過・日程変更・天気予報・カウントダウン').slice(0, 400),
     contents: {
@@ -453,6 +471,19 @@ export async function POST(request: Request) {
       ],
     },
   };
+  const carouselContent = flex.contents as { type?: unknown; contents?: unknown[] };
+  if (Array.isArray(carouselContent.contents) && newsBubble) carouselContent.contents.unshift(newsBubble);
+  try {
+    flex = compactSingleDigestFlex(flex).message;
+    const footerApplied = applyCampusSyncFlexFooters([flex]);
+    if (footerApplied.length !== 1) throw new Error('週間予定表のFlex配信数が1ではありません。');
+    flex = compactSingleDigestFlex(footerApplied[0] as typeof flex).message;
+    if (Buffer.byteLength(JSON.stringify(flex), 'utf8') > 45 * 1024) throw new Error('フッター適用後のFlexが45KBを超えています。');
+  } catch (error) {
+    console.error('週間予定表を単一Flexに縮約できません:', error instanceof Error ? error.message : 'unknown');
+    return jsonError('LINEの50KB制限を超えるため、分割せず週間配信を中止しました。', 413);
+  }
+
   if (probeRequest) {
     const { count: registeredGroups, error: groupCountError } = await supabase
       .from('line_group_chats')
@@ -471,6 +502,9 @@ export async function POST(request: Request) {
       assignmentCount: assignments.length,
       countdownCount: countdownEvents.length,
       weatherDays: weeklyWeather.length,
+      newsItems,
+      outboundMessageCount: 1,
+      singleFlexBytes: Buffer.byteLength(JSON.stringify(flex), 'utf8'),
       changeCount: changeEvents.length,
       registeredGroups: registeredGroups || 0,
     }, { headers: { 'Cache-Control': 'no-store' } });
@@ -512,7 +546,7 @@ export async function POST(request: Request) {
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json', 'X-Line-Retry-Key': retryKey },
-      body: JSON.stringify({ messages: applyCampusSyncFlexFooters([flex]) }),
+      body: JSON.stringify({ messages: [flex] }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20000),
     });

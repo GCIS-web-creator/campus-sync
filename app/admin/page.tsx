@@ -10,6 +10,7 @@ import StudentProfileExportAdmin from '@/components/StudentProfileExportAdmin';
 import ClubNotesAdmin from '@/components/ClubNotesAdmin';
 import SchoolScheduleAdmin from '@/components/SchoolScheduleAdmin';
 import SchoolEventCountdownAdmin from '@/components/SchoolEventCountdownAdmin';
+import DailyDigestNewsAdmin from '@/components/DailyDigestNewsAdmin';
 import CampusFacilityAdmin from '@/components/CampusFacilityAdmin';
 import ClassTimetableAdmin from '@/components/ClassTimetableAdmin';
 import ExamScheduleAdmin from '@/components/ExamScheduleAdmin';
@@ -30,7 +31,7 @@ import {
   LayoutDashboard, Megaphone, FilePlus, Package, Thermometer,
   Check, ClipboardList, Plus, Trash2, UserCheck,
   AlertCircle, Send, Search, Utensils, Clock,
-  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users, Activity
+  BellRing, Save, RefreshCw, History, MessageSquare, ImagePlus, X, MapPin, LogOut, Files, Users, Activity, Newspaper
 } from 'lucide-react';
 import {
   LibraryBooksIcon as BookOpen, SoldOutIcon as Ban, LostApprovalIcon as CheckCircle2,
@@ -2012,7 +2013,7 @@ export default function CampusSyncAdmin() {
                 </button>
               </div>
             </details>
-            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["school-schedule","event-countdowns","menu-calendar","cafeteria","lost","study-room","library","campus-facilities"].includes(activeTab)}>
+            <details className="group rounded-xl border border-slate-800/70 bg-slate-950/30" open={["school-schedule","event-countdowns","daily-digest-news","menu-calendar","cafeteria","lost","study-room","library","campus-facilities"].includes(activeTab)}>
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide text-slate-500 transition hover:bg-slate-900 hover:text-slate-200 md:text-xs">
                 <span>校内情報・施設</span>
                 <span className="text-sm text-slate-600 transition-transform group-open:rotate-180">⌄</span>
@@ -2023,6 +2024,9 @@ export default function CampusSyncAdmin() {
                 </button>
                 <button aria-label="学校イベント・カウントダウン" title="学校イベント・カウントダウン" onClick={() => setActiveTab('event-countdowns')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'event-countdowns' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
                 <CalendarDays size={18} /><span className="sr-only md:not-sr-only">学校イベント・カウントダウン</span>
+                </button>
+                <button aria-label="定期配信ニュース" title="定期配信ニュース" onClick={() => setActiveTab('daily-digest-news')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'daily-digest-news' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+                  <Newspaper size={18} /><span className="sr-only md:not-sr-only">定期配信ニュース</span>
                 </button>
                 <button aria-label="月間献立表の管理" title="月間献立表の管理" onClick={() => setActiveTab('menu-calendar')} className={`w-full flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-1 md:px-4 py-3 rounded-xl font-bold text-[10px] md:text-sm text-center md:text-left transition-all [&_svg]:shrink-0 ${activeTab === 'menu-calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
                 <CalendarDays size={18} /><span className="sr-only md:not-sr-only">月間献立表の管理</span>
@@ -2118,6 +2122,8 @@ export default function CampusSyncAdmin() {
         {activeTab === 'event-countdowns' && (
           <SchoolEventCountdownAdmin adminPassword={adminApiPassword} />
         )}
+
+        {activeTab === 'daily-digest-news' && <DailyDigestNewsAdmin />}
 
         {activeTab === 'school-notifications' && (
           <div className="max-w-5xl space-y-6">
