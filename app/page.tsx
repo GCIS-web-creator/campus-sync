@@ -14,6 +14,7 @@ import MathPracticeHub from '@/components/MathPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import NotebookManager from '@/components/NotebookManager';
+import EikenVocabAccessPanel from '@/components/EikenVocabAccessPanel';
 import LineAccountLinkCard from '@/components/LineAccountLinkCard';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
@@ -1053,6 +1054,8 @@ export default function CampusSyncApp() {
       'student-card': { tab: 'student-card' },
       calculator: { tab: 'calculator' },
       calc: { tab: 'calculator' },
+      eiken: { tab: 'eiken-vocab' },
+      'eiken-vocab': { tab: 'eiken-vocab' },
     };
 
     const applyHashRoute = () => {
@@ -4576,6 +4579,11 @@ Supabaseの設定を確認してください。
           ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><BookOpenCheck size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">数学演習はログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、問題演習や学習履歴を利用できます。</p></div>;
 
+      case 'eiken-vocab':
+        return authUser?.id && !isGuestMode
+          ? <EikenVocabAccessPanel isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Globe2 size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">英検単語学習はログイン後に利用できます</h2></div>;
+
       case 'planet':
         return authUser?.id && !isGuestMode
           ? <PlanetCivilization isDarkMode={isDarkMode} />
@@ -6257,6 +6265,12 @@ Supabaseの設定を確認してください。
           isActive: activeTab === 'math-practice',
           keywords: ['数学演習ラボ', '数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
           onSelect: () => setActiveTab('math-practice'),
+        }] : []),
+        ...(authUser?.id ? [{
+          key: 'eiken-vocab', label: '英検単語学習', icon: <Globe2 size={17} />,
+          isActive: activeTab === 'eiken-vocab',
+          keywords: ['英検', '英単語', '語彙', '単語テスト', '英語学習'],
+          onSelect: () => setActiveTab('eiken-vocab'),
         }] : []),
         {
           key: 'timetable', label: '時間割表', icon: <Calendar size={17} />,

@@ -42,6 +42,8 @@ jobs:
         run: npm run test:notebooks
       - name: Test notebook cover document scanner geometry
         run: npm run test:document-scanner
+      - name: Test Eiken vocabulary password session validation
+        run: npm run test:eiken-vocab
       - name: Test study timer Push request validation
         run: node --experimental-strip-types --test scripts/test-study-timer-push.mjs
       - name: Test contribution submission and review validation

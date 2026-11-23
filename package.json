@@ -21,7 +21,8 @@
     "test:study-session-edit": "node --experimental-strip-types --test scripts/test-study-session-edit.mjs",
     "test:book-isbn": "node --experimental-strip-types --test scripts/test-book-isbn.mjs",
     "test:notebooks": "node --experimental-strip-types --test scripts/test-notebook-manager.mjs",
-    "test:document-scanner": "node --experimental-strip-types --test scripts/test-document-scanner.mjs"
+    "test:document-scanner": "node --experimental-strip-types --test scripts/test-document-scanner.mjs",
+    "test:eiken-vocab": "node --experimental-strip-types --test scripts/test-eiken-vocab-auth.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
