@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, BookMarked, Camera, CheckCircle2, ClipboardList,
-  Edit3, History, MapPin, Plus, Search, Trash2, X,
+  Edit3, History, MapPin, Plus, ScanLine, Search, Trash2, X,
 } from 'lucide-react';
 import NotebookCoverScanner from '@/components/NotebookCoverScanner';
 import { supabase } from '@/lib/supabase';
