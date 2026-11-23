@@ -85,6 +85,69 @@ function createGlowTexture(color: string) {
   return new THREE.CanvasTexture(canvas);
 }
 
+function createSolarCoronaTexture(color: string, seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+
+  const random = seeded(seed + 503);
+  const rgb = new THREE.Color(color);
+  const red = Math.round(rgb.r * 255);
+  const green = Math.round(rgb.g * 255);
+  const blue = Math.round(rgb.b * 255);
+
+  // A bright stellar core fading into a broad, coloured corona.
+  const glow = context.createRadialGradient(256, 256, 2, 256, 256, 250);
+  glow.addColorStop(0, 'rgba(255,255,255,1)');
+  glow.addColorStop(0.035, 'rgba(' + red + ',' + green + ',' + blue + ',0.98)');
+  glow.addColorStop(0.12, 'rgba(' + red + ',' + green + ',' + blue + ',0.66)');
+  glow.addColorStop(0.28, 'rgba(' + red + ',' + green + ',' + blue + ',0.28)');
+  glow.addColorStop(0.52, 'rgba(' + red + ',' + green + ',' + blue + ',0.09)');
+  glow.addColorStop(0.78, 'rgba(' + red + ',' + green + ',' + blue + ',0.025)');
+  glow.addColorStop(1, 'rgba(' + red + ',' + green + ',' + blue + ',0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, 512, 512);
+
+  // Fine, uneven coronal streamers instead of a simple uniform blur.
+  for (let ray = 0; ray < 230; ray += 1) {
+    const angle = random() * Math.PI * 2;
+    const inner = 54 + random() * 34;
+    const outer = 125 + random() * 125;
+    const bend = (random() - 0.5) * 48;
+    const alpha = 0.035 + random() * 0.16;
+    const startX = 256 + Math.cos(angle) * inner;
+    const startY = 256 + Math.sin(angle) * inner;
+    const endX = 256 + Math.cos(angle) * outer;
+    const endY = 256 + Math.sin(angle) * outer;
+    const controlX = 256 + Math.cos(angle) * (inner + outer) * 0.5 - Math.sin(angle) * bend;
+    const controlY = 256 + Math.sin(angle) * (inner + outer) * 0.5 + Math.cos(angle) * bend;
+    context.beginPath();
+    context.moveTo(startX, startY);
+    context.quadraticCurveTo(controlX, controlY, endX, endY);
+    context.strokeStyle = 'rgba(' + red + ',' + green + ',' + blue + ',' + alpha.toFixed(3) + ')';
+    context.lineWidth = 0.5 + random() * 1.8;
+    context.stroke();
+  }
+
+  // Long, soft prominences and delicate loops around the stellar limb.
+  for (let arc = 0; arc < 34; arc += 1) {
+    const angle = random() * Math.PI * 2;
+    const radius = 104 + random() * 70;
+    const span = 0.12 + random() * 0.5;
+    context.beginPath();
+    context.ellipse(256, 256, radius, radius * (0.78 + random() * 0.34), angle, -span, span);
+    context.strokeStyle = 'rgba(' + red + ',' + green + ',' + blue + ',' + (0.025 + random() * 0.09).toFixed(3) + ')';
+    context.lineWidth = 0.7 + random() * 1.4;
+    context.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function createStarField(seed: number) {
   const random = seeded(seed + 701);
   const positions: number[] = []; const colors: number[] = [];
@@ -149,9 +212,11 @@ function makeAtmosphere(radius: number, color: string) {
 }
 
 function addOrbitAndMoon(scene: THREE.Scene, index: number, seed: number, moonColor: string, resources: Array<{ dispose: () => void }>) {
-  const orbitRadius = 2.5 + index * 0.78;
+  // Wider, visibly separated lunar orbits. The third moon is deliberately much farther out.
+  const orbitRadii = [6.5, 10.5, 15.5];
+  const orbitRadius = orbitRadii[index] ?? (15.5 + (index - 2) * 5);
   const plane = new THREE.Group();
-  plane.rotation.set(0.2 + index * 0.27, index * 0.63, 0.35 + index * 0.41);
+  plane.rotation.set(0.2 + index * 0.27, index * 0.63, 0.62 + index * 0.41);
   const orbitPoints: THREE.Vector3[] = [];
   for (let point = 0; point < 128; point += 1) {
     const angle = point / 128 * Math.PI * 2;
@@ -162,7 +227,8 @@ function addOrbitAndMoon(scene: THREE.Scene, index: number, seed: number, moonCo
   plane.add(new THREE.LineLoop(orbitGeometry, orbitMaterial));
   resources.push(orbitGeometry, orbitMaterial);
 
-  const moonGeometry = new THREE.SphereGeometry(0.12 + index * 0.045, 28, 20);
+  const moonRadius = 0.095 + (seeded(seed + index * 31)() * 0.045);
+  const moonGeometry = new THREE.SphereGeometry(moonRadius, 28, 20);
   const moonTexture = createMoonTexture(seed + index * 13, moonColor);
   const moonMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: moonTexture, bumpMap: moonTexture, bumpScale: 0.035, roughness: 0.98, metalness: 0.01 });
   const moon = new THREE.Mesh(moonGeometry, moonMaterial);
@@ -206,8 +272,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#050914');
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 140);
-    camera.position.set(0.1, 0.42, 7.25);
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 3000);
+    camera.position.set(0.1, 0.42, 10.5);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
     controls.enableDamping = true;
@@ -215,7 +281,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
     controls.enablePan = false;
     controls.enableZoom = true;
     controls.minDistance = 3.6;
-    controls.maxDistance = 12.5;
+    controls.maxDistance = 60;
     controls.autoRotate = false;
 
     const resources: Array<{ dispose: () => void }> = [];
@@ -259,25 +325,59 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
     if (!spec.rogue) {
       spec.starClasses.forEach((starClass, index) => {
         const profile = STAR_PROFILES[starClass];
-        // 初期カメラの画角内に恒星が見えるよう、惑星の横方向へ配置する。
-        // 恒星と光の向きはscene/world座標に固定し、カメラの回転から独立させる。
-        const position = index === 0
-          ? new THREE.Vector3(2.7 + (numericId % 4) * 0.08, 1.75 + (numericId % 3) * 0.08, 0)
-          : new THREE.Vector3(-3.0, 1.55, -0.15);
-        const direction = position.clone().normalize();
+        // 恒星は惑星直径の数百倍離れた背景に置く。見えるのは小さな光球と広がるコロナ。
+        const direction = index === 0
+          ? new THREE.Vector3(0.20 + (numericId % 4) * 0.004, 0.17 + (numericId % 3) * 0.003, -1).normalize()
+          : new THREE.Vector3(-0.23, 0.16, -1).normalize();
+        const stellarDistance = index === 0 ? 920 : 1080;
+        const position = direction.clone().multiplyScalar(stellarDistance);
         sunPositions.push(direction.clone());
 
-        const star = new THREE.Mesh(new THREE.SphereGeometry(profile.radius, 40, 28), new THREE.MeshBasicMaterial({ color: profile.color, toneMapped: false }));
+        // 光球は1px前後の小ささに抑え、コロナとプロミネンスを見せる。
+        const starCoreRadius = 1.6 * profile.radius;
+        const star = new THREE.Mesh(
+          new THREE.SphereGeometry(starCoreRadius, 32, 24),
+          new THREE.MeshBasicMaterial({ color: profile.lightColor, toneMapped: false }),
+        );
         star.position.copy(position);
         scene.add(star);
         resources.push(star.geometry, star.material);
 
-        const glowTexture = createGlowTexture(profile.color);
-        const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, color: profile.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-        glow.position.copy(position);
-        glow.scale.setScalar(2.7 + profile.radius * 2.1);
-        scene.add(glow);
-        resources.push(glow.material, glowTexture);
+        const coronaTexture = createSolarCoronaTexture(profile.color, numericId * 17 + index);
+        const coronaMaterial = new THREE.SpriteMaterial({
+          map: coronaTexture,
+          color: '#ffffff',
+          transparent: true,
+          opacity: 0.96,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        });
+        const corona = new THREE.Sprite(coronaMaterial);
+        corona.position.copy(position);
+        corona.scale.setScalar(92 + profile.radius * 12);
+        corona.renderOrder = 3;
+        scene.add(corona);
+        resources.push(corona.material, coronaTexture);
+
+        const haloTexture = createGlowTexture(profile.color);
+        const haloMaterial = new THREE.SpriteMaterial({
+          map: haloTexture,
+          color: profile.color,
+          transparent: true,
+          opacity: 0.48,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        });
+        const halo = new THREE.Sprite(haloMaterial);
+        halo.position.copy(position);
+        halo.scale.setScalar(128 + profile.radius * 16);
+        halo.renderOrder = 2;
+        scene.add(halo);
+        resources.push(halo.material, haloTexture);
 
         const light = new THREE.DirectionalLight(profile.lightColor, profile.intensity);
         light.position.copy(position);
@@ -313,7 +413,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
         ].join('\n'),
       );
     };
-    surfaceMaterial.customProgramCacheKey = () => 'campussync-fixed-stellar-terminator-v1';
+    surfaceMaterial.customProgramCacheKey = () => 'campussync-distant-star-corona-wide-moon-orbits-v2';
 
     const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
     system.add(surface);
@@ -406,11 +506,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-3 p-4">
-        <div className="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 backdrop-blur-md">
-          <p className="text-[10px] font-semibold text-slate-200">☀ 恒星光源は宇宙空間に固定</p>
-          <p className="mt-1 text-[9px] text-slate-400">視点を変えても昼夜の境界はカメラに追従しません</p>
-        </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-end p-4">
         <p className="rounded-lg bg-slate-950/55 px-2.5 py-1.5 text-[9px] text-slate-400 backdrop-blur-md">ドラッグ：視点変更 · ホイール：ズーム</p>
       </div>
     </section>
