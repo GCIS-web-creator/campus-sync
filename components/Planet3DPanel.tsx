@@ -260,8 +260,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       spec.starClasses.forEach((starClass, index) => {
         const profile = STAR_PROFILES[starClass];
         const direction = index === 0
-          ? new THREE.Vector3(7.2 + (numericId % 4) * 0.25, 2.8 + (numericId % 3) * 0.22, -11.4).normalize()
-          : new THREE.Vector3(-7.1, 2.25, -12.6).normalize();
+          ? new THREE.Vector3(7.2 + (numericId % 4) * 0.25, 2.8 + (numericId % 3) * 0.22, 11.4).normalize()
+          : new THREE.Vector3(-7.1, 2.25, 12.6).normalize();
         const position = direction.clone().multiplyScalar(index === 0 ? 15.2 : 17.3);
         sunPositions.push(direction.clone());
 
