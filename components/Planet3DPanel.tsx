@@ -206,7 +206,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#050914');
-    const camera = new THREE.PerspectiveCamera(43, width / height, 0.1, 140);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 140);
     camera.position.set(0.1, 0.42, 7.25);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
@@ -259,10 +259,12 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
     if (!spec.rogue) {
       spec.starClasses.forEach((starClass, index) => {
         const profile = STAR_PROFILES[starClass];
-        const direction = index === 0
-          ? new THREE.Vector3(7.2 + (numericId % 4) * 0.25, 2.8 + (numericId % 3) * 0.22, 11.4).normalize()
-          : new THREE.Vector3(-7.1, 2.25, 12.6).normalize();
-        const position = direction.clone().multiplyScalar(index === 0 ? 15.2 : 17.3);
+        // 初期カメラの画角内に恒星が見えるよう、惑星の横方向へ配置する。
+        // 恒星と光の向きはscene/world座標に固定し、カメラの回転から独立させる。
+        const position = index === 0
+          ? new THREE.Vector3(2.7 + (numericId % 4) * 0.08, 1.75 + (numericId % 3) * 0.08, 0)
+          : new THREE.Vector3(-3.0, 1.55, -0.15);
+        const direction = position.clone().normalize();
         sunPositions.push(direction.clone());
 
         const star = new THREE.Mesh(new THREE.SphereGeometry(profile.radius, 40, 28), new THREE.MeshBasicMaterial({ color: profile.color, toneMapped: false }));
