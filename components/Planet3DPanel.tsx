@@ -6,7 +6,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
 
 type Props = { stage: number; planetAssetId?: string };
-type BuiltStar = { position: THREE.Vector3; direction: THREE.Vector3; profile: (typeof STAR_PROFILES)[keyof typeof STAR_PROFILES] };
 
 function seeded(seed: number) {
   let value = seed >>> 0;
@@ -282,7 +281,6 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
         light.position.copy(position);
         light.target.position.set(0, 0, 0);
         scene.add(light, light.target);
-        resources.push(light);
       });
     }
 
@@ -347,7 +345,6 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       const internalGlow = new THREE.PointLight('#9c74ff', 0.8, 5.2, 2);
       internalGlow.position.set(-0.8, -0.35, 0.35);
       system.add(internalGlow);
-      resources.push(internalGlow);
     }
 
     const clock = new THREE.Clock();
@@ -385,9 +382,6 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       controls.dispose();
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line) object.geometry.dispose();
-      });
       resources.forEach((resource) => resource.dispose());
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
