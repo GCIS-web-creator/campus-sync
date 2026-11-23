@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
+import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
 
 type Props = { stage: number; planetAssetId?: string };
 
@@ -236,12 +237,14 @@ function addOrbitAndMoon(scene: THREE.Scene, index: number, seed: number, moonCo
   plane.add(moon);
   scene.add(plane);
   resources.push(moonGeometry, moonMaterial, moonTexture);
-  return { plane, moon, speed: 0.16 / (1 + index * 0.58) * (index % 2 === 0 ? 1 : -1) };
+  return { plane, moon, speed: 0.16 / (1 + index * 0.58) * (index % 2 === 0 ? 1 : -1), orbitRadius, moonRadius };
 }
 
 export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const [rendererFailed, setRendererFailed] = useState(false);
+  const [selectedCelestial, setSelectedCelestial] = useState<CelestialDetail | null>(null);
+  const returnToPlanetRef = useRef<() => void>(() => {});
   const spec = getPlanetSystemSpec(planetAssetId);
   const numericId = Number.parseInt(spec.id.slice(-3), 10) || 1;
 
@@ -249,6 +252,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
     const mount = mountRef.current;
     if (!mount) return;
     setRendererFailed(false);
+    setSelectedCelestial(null);
     const width = Math.max(1, mount.clientWidth);
     const height = Math.max(1, mount.clientHeight);
     let renderer: THREE.WebGLRenderer;
@@ -272,19 +276,51 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#050914');
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 3000);
-    camera.position.set(0.1, 0.42, 10.5);
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 3000);
+    const defaultCameraPosition = new THREE.Vector3(0.1, 0.42, 10.5);
+    camera.position.copy(defaultCameraPosition);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
     controls.enableDamping = true;
     controls.dampingFactor = 0.055;
     controls.enablePan = false;
     controls.enableZoom = true;
-    controls.minDistance = 3.6;
-    controls.maxDistance = 60;
+    controls.minDistance = 0.55;
+    controls.maxDistance = 1400;
     controls.autoRotate = false;
 
     const resources: Array<{ dispose: () => void }> = [];
+    const interactiveTargets: THREE.Object3D[] = [];
+    let cameraTransition: {
+      startedAt: number;
+      duration: number;
+      fromPosition: THREE.Vector3;
+      controlPositionA: THREE.Vector3;
+      controlPositionB: THREE.Vector3;
+      fromTarget: THREE.Vector3;
+      toPosition: THREE.Vector3;
+      toTarget: THREE.Vector3;
+    } | null = null;
+    const moveCameraSmoothly = (target: THREE.Vector3, position: THREE.Vector3) => {
+      const fromPosition = camera.position.clone();
+      const travel = position.clone().sub(fromPosition);
+      const side = new THREE.Vector3().crossVectors(travel, new THREE.Vector3(0, 1, 0));
+      if (side.lengthSq() < 0.001) side.crossVectors(travel, new THREE.Vector3(1, 0, 0));
+      side.normalize();
+      const arcOffset = Math.min(18, Math.max(2.5, travel.length() * 0.02));
+      const arc = side.multiplyScalar(arcOffset);
+      cameraTransition = {
+        startedAt: performance.now(),
+        duration: 1450,
+        fromPosition,
+        controlPositionA: fromPosition.clone().add(arc),
+        controlPositionB: position.clone().add(arc),
+        fromTarget: controls.target.clone(),
+        toPosition: position.clone(),
+        toTarget: target.clone(),
+      };
+      controls.enabled = false;
+    };
     const starField = createStarField(numericId);
     scene.add(starField);
     resources.push(starField.geometry, starField.material);
@@ -343,6 +379,25 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
         scene.add(star);
         resources.push(star.geometry, star.material);
 
+        const starHit = new THREE.Mesh(
+          new THREE.SphereGeometry(Math.max(24, starCoreRadius * 14), 18, 14),
+          new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false }),
+        );
+        starHit.position.copy(position);
+        starHit.userData.celestialInfo = createStarCelestialDetail({
+          id: 'star-' + index,
+          systemName: spec.name,
+          starClass,
+          starLabel: profile.label,
+          temperature: profile.temperature,
+          planetId: numericId,
+          starIndex: index,
+          starCount: spec.starClasses.length,
+        });
+        scene.add(starHit);
+        interactiveTargets.push(starHit);
+        resources.push(starHit.geometry, starHit.material);
+
         const coronaTexture = createSolarCoronaTexture(profile.color, numericId * 17 + index);
         const coronaMaterial = new THREE.SpriteMaterial({
           map: coronaTexture,
@@ -350,7 +405,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
           transparent: true,
           opacity: 0.96,
           depthWrite: false,
-          depthTest: false,
+          depthTest: true,
           blending: THREE.AdditiveBlending,
           toneMapped: false,
         });
@@ -368,7 +423,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
           transparent: true,
           opacity: 0.48,
           depthWrite: false,
-          depthTest: false,
+          depthTest: true,
           blending: THREE.AdditiveBlending,
           toneMapped: false,
         });
@@ -442,12 +497,70 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
 
     const satelliteColors = ['#9fa8b8', '#b7aa94', '#91b6c7'];
     const moons = Array.from({ length: spec.moonCount }, (_, index) => addOrbitAndMoon(scene, index, numericId, satelliteColors[index % satelliteColors.length], resources));
+    moons.forEach((moon, index) => {
+      const hitTarget = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(0.52, moon.moonRadius * 5), 18, 14),
+        new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false }),
+      );
+      hitTarget.userData.celestialInfo = createMoonCelestialDetail({
+        id: 'moon-' + index,
+        systemName: spec.name,
+        moonIndex: index,
+        moonRadius: moon.moonRadius,
+        orbitRadius: moon.orbitRadius,
+      });
+      moon.moon.add(hitTarget);
+      interactiveTargets.push(hitTarget);
+      resources.push(hitTarget.geometry, hitTarget.material);
+    });
 
     if (spec.rogue) {
       const internalGlow = new THREE.PointLight('#9c74ff', 0.8, 5.2, 2);
       internalGlow.position.set(-0.8, -0.35, 0.35);
       system.add(internalGlow);
     }
+
+    const raycaster = new THREE.Raycaster();
+    const pointerStart = new THREE.Vector2();
+    const pointerEnd = new THREE.Vector2();
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointerStart.set(event.clientX, event.clientY);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointerEnd.set(event.clientX, event.clientY);
+      if (pointerStart.distanceTo(pointerEnd) > 8) return;
+      const bounds = renderer.domElement.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const pointer = new THREE.Vector2(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld();
+      raycaster.setFromCamera(pointer, camera);
+      const planetOcclusion = raycaster.intersectObject(surface, false)[0];
+      const intersections = raycaster.intersectObjects(interactiveTargets, true);
+      const hit = intersections.find(item => item.object.userData.celestialInfo && (!planetOcclusion || item.distance < planetOcclusion.distance));
+      if (!hit) return;
+      const detail = hit.object.userData.celestialInfo as CelestialDetail | undefined;
+      if (!detail) return;
+      const bodyPosition = hit.object.getWorldPosition(new THREE.Vector3());
+      const radial = bodyPosition.lengthSq() > 0 ? bodyPosition.clone().normalize() : new THREE.Vector3(0, 0, 1);
+      const cameraPosition = detail.kind === 'star'
+        ? bodyPosition.clone().sub(radial.multiplyScalar(22))
+        : bodyPosition.clone().add(radial.multiplyScalar( Math.max(0.85, bodyPosition.distanceTo(new THREE.Vector3()) * 0.025) ));
+      setSelectedCelestial(detail);
+      moveCameraSmoothly(bodyPosition, cameraPosition);
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    const restorePlanetView = () => {
+      setSelectedCelestial(null);
+      moveCameraSmoothly(new THREE.Vector3(0, 0, 0), defaultCameraPosition);
+    };
+    returnToPlanetRef.current = restorePlanetView;
 
     const clock = new THREE.Clock();
     let frame = 0;
@@ -462,7 +575,24 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
         moon.plane.rotation.y += delta * moon.speed;
         moon.moon.rotation.y += delta * 0.12;
       });
-      controls.update();
+      if (cameraTransition) {
+        const progress = Math.min(1, (performance.now() - cameraTransition.startedAt) / cameraTransition.duration);
+        const eased = progress * progress * (3 - 2 * progress);
+        const reverse = 1 - eased;
+        camera.position.set(0, 0, 0)
+          .addScaledVector(cameraTransition.fromPosition, reverse * reverse * reverse)
+          .addScaledVector(cameraTransition.controlPositionA, 3 * reverse * reverse * eased)
+          .addScaledVector(cameraTransition.controlPositionB, 3 * reverse * eased * eased)
+          .addScaledVector(cameraTransition.toPosition, eased * eased * eased);
+        controls.target.lerpVectors(cameraTransition.fromTarget, cameraTransition.toTarget, eased);
+        if (progress >= 1) {
+          cameraTransition = null;
+          controls.enabled = true;
+          controls.update();
+        }
+      } else {
+        controls.update();
+      }
       renderer.render(scene, camera);
       frame = window.requestAnimationFrame(render);
     };
@@ -483,12 +613,18 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       active = false;
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
+      returnToPlanetRef.current = () => {};
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       controls.dispose();
       resources.forEach((resource) => resource.dispose());
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
     };
   }, [numericId, spec, stage, planetAssetId]);
+
+  const closeCelestialDetails = () => setSelectedCelestial(null);
+  const returnToPlanet = () => returnToPlanetRef.current();
 
   const starSummary = spec.rogue ? '自由浮遊惑星 · 近傍恒星なし' : spec.starClasses.map((starClass) => STAR_PROFILES[starClass].label).join(' ＋ ');
 
@@ -506,9 +642,22 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-end p-4">
-        <p className="rounded-lg bg-slate-950/55 px-2.5 py-1.5 text-[9px] text-slate-400 backdrop-blur-md">ドラッグ：視点変更 · ホイール：ズーム</p>
-      </div>
+      {selectedCelestial && <div className="absolute bottom-3 left-3 right-3 z-20 max-h-[62%] overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-xl sm:bottom-4 sm:left-4 sm:right-auto sm:w-[min(440px,calc(100%-2rem))] sm:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0"><p className="text-[9px] font-black tracking-[.18em] text-cyan-300">{selectedCelestial.kind === 'star' ? 'STELLAR OBJECT' : 'NATURAL SATELLITE'}</p><h3 className="mt-1 text-base font-black">{selectedCelestial.name}</h3><p className="mt-1 text-[10px] text-slate-400">{selectedCelestial.subtitle}</p></div>
+          <button type="button" onClick={closeCelestialDetails} aria-label="天体の説明を閉じる" className="rounded-lg border border-white/15 px-2.5 py-1.5 text-sm text-slate-300 hover:bg-white/10">×</button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {[['直径', selectedCelestial.diameter], ['公転周期', selectedCelestial.orbitalPeriod], ['自転周期', selectedCelestial.rotationPeriod], ['温度', selectedCelestial.temperature]].map(([label, value]) => <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-2"><p className="text-[9px] font-bold text-slate-400">{label}</p><p className="mt-1 text-[10px] font-semibold leading-4">{value}</p></div>)}
+        </div>
+        <div className="mt-2 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-2.5"><p className="text-[9px] font-black text-cyan-200">人が住める可能性</p><p className="mt-1 text-[10px] leading-5 text-slate-200">{selectedCelestial.habitability}</p></div>
+        <p className="mt-2 text-[10px] leading-5 text-slate-300">{selectedCelestial.description}</p>
+        <p className="mt-2 text-[9px] leading-4 text-slate-500">表示値は架空の惑星系シミュレーション用推定値です。実在する天体の観測データではありません。</p>
+        <button type="button" onClick={returnToPlanet} className="mt-3 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-bold text-white hover:bg-white/15">惑星全体に戻る</button>
+      </div>}
+      {!selectedCelestial && <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-end p-4">
+        <p className="rounded-lg bg-slate-950/55 px-2.5 py-1.5 text-[9px] text-slate-400 backdrop-blur-md">天体をタップ：詳細表示・接近 · ドラッグ：視点変更 · ホイール：ズーム</p>
+      </div>}
     </section>
   );
 }

@@ -23,7 +23,7 @@ type PublishedRangeProgress = { school_test_range_id: string; section_id: string
 type PersonalTask = { id: string; title: string; details: string; subject: string; source: string; type: string; due: string; due_at: string | null; completed: boolean; created_at: string };
 type Assignment = { id: string; title: string; details: string; subject: string; subject_option: string; target_class: string; source: string; due_at: string | null; type: string };
 type MiniTestEvent = { id: string; subject: string; title: string; test_date: string; scope: string; notes: string; period: number | null; start_note: string; duration_minutes: number | null; question_count: number | null; full_score: number | null; target_class: string };
-type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; ended_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped'; notebook_id?: string | null };
+type Session = { id: string; subject_name: Subject; task_title: string; test_range_title: string; focus_seconds: number; break_seconds: number; started_at: string; ended_at: string; reflection: string; next_action: string; finish_kind: 'completed' | 'stopped'; test_subject_id?: string | null; notebook_id?: string | null; book_id?: string | null };
 type NotebookOption = { id: string; name: string; subjects: string[]; status: 'unused' | 'in_use' | 'stored' | 'finished'; used_pages: number; total_pages: number };
 type MyBook = {
   id: string; user_id: string; isbn13: string; title: string; authors: string[];
@@ -58,6 +58,7 @@ type TimerSnapshot = {
   finishKind: 'completed' | 'stopped';
   scheduleId: string | null;
   notebookId?: string | null;
+  bookId?: string | null;
 };
 function parseTimerSnapshot(raw: unknown): TimerSnapshot | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -95,6 +96,7 @@ function timerSnapshotSignature(snapshot: TimerSnapshot): string {
     task: snapshot.task,
     rangeId: snapshot.rangeId,
     notebookId: snapshot.notebookId || null,
+    bookId: snapshot.bookId || null,
     startedAt: snapshot.startedAt,
     phaseEndsAt: running ? snapshot.phaseEndsAt : null,
     remaining: running ? null : snapshot.remaining,
@@ -282,6 +284,12 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [editStartedAt, setEditStartedAt] = useState('');
   const [editFocusDuration, setEditFocusDuration] = useState('00:25:00');
   const [editBreakDuration, setEditBreakDuration] = useState('00:05:00');
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+  const [editTestRangeTitle, setEditTestRangeTitle] = useState('');
+  const [editReflection, setEditReflection] = useState('');
+  const [editNextAction, setEditNextAction] = useState('');
+  const [editNotebookId, setEditNotebookId] = useState('');
+  const [editBookId, setEditBookId] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [historyLimit, setHistoryLimit] = useState(20);
@@ -343,7 +351,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     void supabase.from('student_notebooks')
       .select('id,name,subjects,status,used_pages,total_pages')
       .eq('user_id', userId)
-      .in('status', ['unused', 'in_use', 'stored'])
+      .in('status', ['unused', 'in_use', 'stored', 'finished'])
       .order('updated_at', { ascending: false })
       .then(({ data, error: notebookError }) => {
         if (!active || notebookError) return;
@@ -784,6 +792,12 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setEditStartedAt(toLocalDateTimeInput(session.started_at));
     setEditFocusDuration(formatStudyDurationInput(session.focus_seconds));
     setEditBreakDuration(formatStudyDurationInput(session.break_seconds || 0));
+    setEditTaskTitle(session.task_title || '');
+    setEditTestRangeTitle(session.test_range_title || '');
+    setEditReflection(session.reflection || '');
+    setEditNextAction(session.next_action || '');
+    setEditNotebookId(session.notebook_id || '');
+    setEditBookId(session.book_id || '');
     setEditError('');
   };
 
@@ -813,6 +827,18 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setEditError('開始日時を正しく入力してください。');
       return;
     }
+    if (editTaskTitle.trim().length > 180 || editTestRangeTitle.trim().length > 160 || editReflection.length > 2000 || editNextAction.length > 1000) {
+      setEditError('勉強内容・テスト範囲・振り返りの文字数が上限を超えています。');
+      return;
+    }
+    if (editBookId && !myBooks.some(book => book.id === editBookId)) {
+      setEditError('選択した本がマイブックに見つかりません。再読み込みしてください。');
+      return;
+    }
+    if (editNotebookId && !availableNotebooks.some(notebook => notebook.id === editNotebookId)) {
+      setEditError('選択したノートがノート一覧に見つかりません。再読み込みしてください。');
+      return;
+    }
 
     const startedAtDate = new Date(startedAtValue);
     const endedAtDate = new Date(startedAtDate.getTime() + (focusSecondsValue + breakSecondsValue) * 1000);
@@ -831,6 +857,12 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           ended_at: endedAtDate.toISOString(),
           focus_seconds: focusSecondsValue,
           break_seconds: breakSecondsValue,
+          task_title: editTaskTitle.trim(),
+          test_range_title: editTestRangeTitle.trim(),
+          reflection: editReflection.trim(),
+          next_action: editNextAction.trim(),
+          notebook_id: editNotebookId || null,
+          book_id: editBookId || null,
         })
         .eq('id', editingSession.id)
         .eq('user_id', userId)
@@ -947,6 +979,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setTask(snapshot.task || '');
       setRangeId(snapshot.rangeId || '');
       setFocusNotebookId(snapshot.notebookId || '');
+      setBookStudySelection(snapshot.bookId || '');
       setShowRecord(snapshot.showRecord);
       setReflection(snapshot.reflection || '');
       setNextAction(snapshot.nextAction || '');
@@ -1063,6 +1096,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       task,
       rangeId,
       notebookId: focusNotebookId || null,
+      bookId: bookStudySelection || null,
       startedAt: startedAt.current,
       phaseStartedAt,
       phaseEndsAt,
@@ -1073,7 +1107,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       scheduleId: timerScheduleId,
     };
     try { window.localStorage.setItem(key, JSON.stringify(snapshot)); } catch {}
-  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, bookStudySelection, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   // Persist only meaningful timer state changes; ticking seconds are reconstructed
   // from the absolute timestamps, so we do not write to Postgres every second.
@@ -1096,6 +1130,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       task,
       rangeId,
       notebookId: focusNotebookId || null,
+      bookId: bookStudySelection || null,
       startedAt: startedAt.current,
       phaseStartedAt,
       phaseEndsAt,
@@ -1130,7 +1165,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
         cloudTimerSavingRef.current = false;
       }
     })();
-  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
+  }, [timerReady, userId, timerMode, phase, timerState, remaining, focusSeconds, breakSeconds, focusMinutes, breakMinutes, focusSubject, focusSubjectId, task, rangeId, focusNotebookId, bookStudySelection, phaseStartedAt, phaseEndsAt, showRecord, reflection, nextAction, finishKind, timerScheduleId]);
 
   // Supabase Realtime delivers immediate updates; polling/visibility refresh is the
   // fallback so a device still catches up after sleeping or temporarily disconnecting.
@@ -1158,6 +1193,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       setTask(snapshot.task || '');
       setRangeId(snapshot.rangeId || '');
       setFocusNotebookId(snapshot.notebookId || '');
+      setBookStudySelection(snapshot.bookId || '');
       setShowRecord(snapshot.showRecord);
       setReflection(snapshot.reflection || '');
       setNextAction(snapshot.nextAction || '');
@@ -1298,7 +1334,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const activeSubjects = subjects.filter(item => item.exam_id === examId);
   const activeFocusSubject = subjects.find(item => item.id === focusSubjectId) || null;
-  const focusRanges = ranges.filter(item => item.school_test_subject_id === focusSubjectId);
+  const focusRanges = ranges.filter(item => item.subject_id === focusSubjectId);
   const daysUntilDue = (value: string | null) => {
     if (!value) return null;
     const dueKey = dayKey(new Date(value));
@@ -1315,8 +1351,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setSaving(true); setError('');
     try {
       const { error: insertError } = await supabase.from('student_test_ranges').insert({
-        user_id: userId, school_test_subject_id: subjectId, title: rangeInput.trim(),
-        sort_order: ranges.filter(item => item.school_test_subject_id === subjectId).length,
+        user_id: userId, subject_id: subjectId, title: rangeInput.trim(),
+        sort_order: ranges.filter(item => item.subject_id === subjectId).length,
       });
       if (insertError) throw insertError;
       setRangeInput(''); setMessage('テスト範囲を追加しました。'); await load();
@@ -1562,10 +1598,11 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
     setSaving(true); setError('');
     try {
       const { data: savedSession, error: insertError } = await supabase.from('student_study_sessions').insert({
-        user_id: userId, test_subject_id: null,
+        user_id: userId, test_subject_id: focusSubjectId || null,
         notebook_id: focusNotebookId || null,
+        book_id: bookStudySelection || null,
         subject_name: displaySubjectName(focusSubject) as Subject, task_title: task.trim(),
-        test_range_title: ranges.find(item => item.id === rangeId)?.title || '',
+        test_range_title: ranges.find(item => item.id === rangeId)?.title || rangeId.trim(),
         focus_seconds: focusSeconds, break_seconds: breakSeconds,
         started_at: startedAt.current || new Date().toISOString(), ended_at: new Date().toISOString(),
         reflection: reflection.trim(), next_action: nextAction.trim(), finish_kind: finishKind,
@@ -1955,8 +1992,8 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <div className="mt-4 flex flex-wrap justify-center gap-2">{timerState==='idle'&&!showRecord&&<button type="button" onClick={begin} className="rounded-xl bg-cyan-500 px-6 py-3 text-sm font-black text-white"><Timer className="mr-2 inline" size={16}/>開始</button>}{timerState==='running'&&<button type="button" onClick={pauseTimer} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">一時停止</button>}{timerState==='paused'&&<><button type="button" onClick={resumeTimer} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black">再開</button>{focusSeconds>0?<button type="button" onClick={()=>finish('completed')} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">終了して記録</button>:<button type="button" onClick={discardPausedContinuation} className="rounded-xl bg-white/15 px-5 py-3 text-sm font-black">この勉強を終了</button>}</>}{timerState==='running'&&<button type="button" onClick={()=>finish(timerMode==='countup'?'completed':'stopped')} className="rounded-xl bg-rose-500 px-5 py-3 text-sm font-black">{timerMode==='countup'?'終了して記録':'中断して記録'}</button>}</div>
           {timerMode==='pomodoro'&&timerState==='running'&&<button type="button" onClick={switchTimerPhase} className="mt-3 text-[11px] font-bold text-cyan-100 underline">{phase==='focus'?'休憩に切り替える':'集中に戻る'}</button>}{timerState==='paused'&&<p className="mt-3 text-[11px] text-amber-200">{task && focusSeconds===0 ? '中断した勉強を保存済みです。残り時間から再開できます。' : '一時停止中'}</p>}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s} value={s}>{displaySubjectName(s)}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(displaySubjectName(found.subject) as Subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {displaySubjectName(s.subject)}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection('');const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">使用するノート（任意）<select className={input} value={focusNotebookId} onChange={e=>setFocusNotebookId(e.target.value)} disabled={timerState==='running'}><option value="">ノートを指定しない</option>{availableNotebooks.map(notebook=><option key={notebook.id} value={notebook.id}>{notebook.name} ・ {notebook.subjects.join('／')} ・ 残り{Math.max(0,notebook.total_pages-notebook.used_pages)}ページ</option>)}</select><span className={'block text-[10px] font-normal '+muted}>タイマーの状態と一緒に保存され、終了後の学習記録に紐づきます。</span></label>
-          <label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<select className={input} value={rangeId} onChange={e=>setRangeId(e.target.value)} disabled={timerState==='running'}><option value="">範囲を指定しない</option>{focusRanges.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs font-bold">教科<select className={input} value={focusSubject} onChange={e=>{const value=e.target.value as Subject;setFocusSubject(value);if(activeFocusSubject?.subject!==value)setFocusSubjectId('');setRangeId('')}} disabled={timerState==='running'}>{SUBJECTS.map(s=><option key={s} value={s}>{displaySubjectName(s)}</option>)}</select></label><label className="space-y-1 text-xs font-bold">考査・教科<select className={input} value={focusSubjectId} onChange={e=>{setFocusSubjectId(e.target.value);setRangeId('');const found=subjects.find(s=>s.id===e.target.value);if(found)setFocusSubject(displaySubjectName(found.subject) as Subject)}} disabled={timerState==='running'}><option value="">指定しない</option>{subjects.map(s=><option key={s.id} value={s.id}>{exams.find(exam=>exam.id===s.exam_id)?.exam_type||'考査'} ・ {displaySubjectName(s.subject)}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">マイブックから勉強内容を追加<select className={input} value={bookStudySelection} onChange={e=>{const id=e.target.value;setBookStudySelection(id);const book=myBooks.find(item=>item.id===id);if(book)setTask('本：'+book.title+(book.authors.length?'（'+book.authors.join('・')+'）':''))}} disabled={timerState==='running'}><option value="">登録済みの本を選択</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select></label><label className="space-y-1 text-xs font-bold sm:col-span-2">使用するノート（任意）<select className={input} value={focusNotebookId} onChange={e=>setFocusNotebookId(e.target.value)} disabled={timerState==='running'}><option value="">ノートを指定しない</option>{availableNotebooks.map(notebook=><option key={notebook.id} value={notebook.id}>{notebook.name} ・ {notebook.subjects.join('／')} ・ 残り{Math.max(0,notebook.total_pages-notebook.used_pages)}ページ</option>)}</select><span className={'block text-[10px] font-normal '+muted}>タイマーの状態と一緒に保存され、終了後の学習記録に紐づきます。</span></label>
+          <label className="space-y-1 text-xs font-bold sm:col-span-2">課題・勉強内容<input className={input} value={task} onChange={e=>setTask(e.target.value)} placeholder="例：物理 波動の問題集を解く" maxLength={180} disabled={timerState==='running'} required/></label><label className="space-y-1 text-xs font-bold sm:col-span-2">テスト範囲（任意）<input className={input} list="student-study-range-suggestions" value={focusRanges.find(item=>item.id===rangeId)?.title || rangeId} onChange={e=>{const value=e.target.value;const matched=focusRanges.find(item=>item.title===value);setRangeId(matched?.id || value)}} placeholder="例：教科書 p.120〜145、問題集 3章" maxLength={160} disabled={timerState==='running'}/><datalist id="student-study-range-suggestions">{focusRanges.map(item=><option key={item.id} value={item.title}/>)}</datalist><span className={'block text-[10px] font-normal '+muted}>考査・教科を選ぶと登録済みの範囲が候補に表示されます。候補がなくても自由入力できます。</span></label></div>
       </section>
       <section className={panel}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -2048,6 +2085,26 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <button type="button" onClick={closeSessionEditor} disabled={editSaving} aria-label="編集を閉じる" className={secondary}><X size={15}/></button>
         </div>
         <form onSubmit={saveSessionEdits} className="space-y-3">
+          <label className="block space-y-1 text-xs font-bold">勉強内容・課題名
+            <input className={input} value={editTaskTitle} onChange={event=>setEditTaskTitle(event.target.value)} maxLength={180} placeholder="例：数III 微分法の演習" />
+          </label>
+          <label className="block space-y-1 text-xs font-bold">テスト範囲（任意）
+            <input className={input} value={editTestRangeTitle} onChange={event=>setEditTestRangeTitle(event.target.value)} maxLength={160} placeholder="例：教科書 p.120〜145" />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1 text-xs font-bold">使用した本
+              <select className={input} value={editBookId} onChange={event=>setEditBookId(event.target.value)}><option value="">本を紐づけない</option>{myBooks.map(book=><option key={book.id} value={book.id}>{book.title}</option>)}</select>
+            </label>
+            <label className="block space-y-1 text-xs font-bold">使用したノート
+              <select className={input} value={editNotebookId} onChange={event=>setEditNotebookId(event.target.value)}><option value="">ノートを紐づけない</option>{availableNotebooks.map(notebook=><option key={notebook.id} value={notebook.id}>{notebook.name} ・ {notebook.subjects.join('／')}</option>)}</select>
+            </label>
+          </div>
+          <label className="block space-y-1 text-xs font-bold">勉強した内容・振り返り
+            <textarea className={input} value={editReflection} onChange={event=>setEditReflection(event.target.value)} rows={3} maxLength={2000} placeholder="どこまで進んだか、何を理解できたか…" />
+          </label>
+          <label className="block space-y-1 text-xs font-bold">次にやること
+            <textarea className={input} value={editNextAction} onChange={event=>setEditNextAction(event.target.value)} rows={2} maxLength={1000} placeholder="次回は何から始めるか…" />
+          </label>
           <label className="block space-y-1 text-xs font-bold">開始日時
             <input className={input} type="datetime-local" value={editStartedAt} onChange={event => setEditStartedAt(event.target.value)} required/>
           </label>
@@ -2072,13 +2129,15 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
       <section className={panel}><div className="mb-3 flex items-center gap-2"><CalendarDays size={18} className="text-cyan-600"/><h2 className="font-black">日・週ごとの学習時間</h2></div><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-cyan-50 p-3 text-cyan-950"><p className="text-[10px] font-bold">今日</p><p className="mt-1 text-xl font-black">{duration(todaySeconds)}</p></div><div className="rounded-xl bg-blue-50 p-3 text-blue-950"><p className="text-[10px] font-bold">今週（月〜日）</p><p className="mt-1 text-xl font-black">{duration(weekSeconds)}</p></div></div><div className="mt-4 grid grid-cols-7 items-end gap-2">{weekData.map(day=><div key={day.key} className="flex flex-col items-center gap-1"><div className={'flex h-20 w-full items-end overflow-hidden rounded-md '+(dark?'bg-slate-900':'bg-slate-100')}><div className="w-full rounded-md bg-cyan-600" style={{height:Math.max(day.seconds?5:0,day.seconds/maxDay*100)+'%'}}/></div><span className={'text-[10px] '+muted}>{day.label}</span></div>)}</div></section>
       <section className={panel}><h2 className="mb-3 font-black">教科別の累計（直近120日）</h2>{subjectTotals.length?<div className="space-y-3">{subjectTotals.map(([name,seconds])=><div key={name}><div className="mb-1 flex justify-between text-xs"><b>{name}</b><span className={muted}>{duration(seconds)}</span></div><div className={'h-2 rounded-full '+(dark?'bg-slate-700':'bg-slate-100')}><div className="h-full rounded-full bg-cyan-600" style={{width:Math.max(2,seconds/Math.max(...subjectTotals.map(item=>item[1]))*100)+'%'}}/></div></div>)}</div>:<p className={'text-sm '+muted}>まだ記録がありません。</p>}</section>
       <section className={panel}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black">最近の学習記録</h2><p className={'mt-1 text-[10px] ' + muted}>記録の時間は後から編集できます。</p></div><span className={'text-[10px] ' + muted}>{sessions.length.toLocaleString('ja-JP')}件</span></div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black">最近の学習記録</h2><p className={'mt-1 text-[10px] ' + muted}>勉強内容・時間・本・ノートを後から編集できます。</p></div><span className={'text-[10px] ' + muted}>{sessions.length.toLocaleString('ja-JP')}件</span></div>
         <div className="space-y-2">
           {sessions.slice(0, historyLimit).map(item=><article key={item.id} className={'rounded-xl p-3 '+(dark?'bg-slate-900':'bg-slate-50')}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0"><b className="text-sm">{item.subject_name} ・ {item.task_title || '学習'}</b><p className={'mt-1 text-[10px] ' + muted}>{new Date(item.started_at).toLocaleString('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} ・ {item.finish_kind==='stopped'?'途中終了':'完了'}</p></div>
-              <div className="flex shrink-0 flex-col items-end gap-2"><b className="text-xs text-cyan-600">集中 {duration(item.focus_seconds)}</b><span className={'text-[10px] ' + muted}>休憩 {duration(item.break_seconds || 0)}</span><button type="button" onClick={()=>openSessionEditor(item)} className={secondary}><Pencil size={13}/>時間を編集</button></div>
+              <div className="flex shrink-0 flex-col items-end gap-2"><b className="text-xs text-cyan-600">集中 {duration(item.focus_seconds)}</b><span className={'text-[10px] ' + muted}>休憩 {duration(item.break_seconds || 0)}</span><button type="button" onClick={()=>openSessionEditor(item)} className={secondary}><Pencil size={13}/>内容を編集</button></div>
             </div>
+            {item.test_range_title && <p className={'mt-2 text-[10px] font-semibold '+muted}>テスト範囲：{item.test_range_title}</p>}
+            {(item.book_id || item.notebook_id) && <div className="mt-2 flex flex-wrap gap-2">{item.book_id && <span className="rounded-lg bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-700">本：{myBooks.find(book=>book.id===item.book_id)?.title || '登録済みの本'}</span>}{item.notebook_id && <span className="rounded-lg bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-700">ノート：{availableNotebooks.find(notebook=>notebook.id===item.notebook_id)?.name || '登録済みのノート'}</span>}</div>}
             {item.reflection && <p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.reflection}</p>}
             {item.next_action && <p className={'mt-2 whitespace-pre-wrap text-xs ' + muted}>次：{item.next_action}</p>}
           </article>)}
