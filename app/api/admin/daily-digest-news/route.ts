@@ -90,7 +90,7 @@ export async function POST(request: Request) {
   if (!admin) return fail('Supabaseのサーバー設定がありません。', 503);
   const body = await request.json().catch(() => null);
   const validated = validatePayload(body);
-  if ('error' in validated) return fail(validated.error, 400);
+  if ('error' in validated) return fail(String(validated.error ?? '入力内容を確認してください。'), 400);
   const query = body?.id
     ? admin.from(TABLE).update(validated.value).eq('id', String(body.id))
     : admin.from(TABLE).insert(validated.value);
