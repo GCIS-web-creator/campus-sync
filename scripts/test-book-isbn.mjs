@@ -101,8 +101,8 @@ test('accepts pasted HTTPS cover URLs and preserves unknown image hosts as direc
 });
 
 test('routes known cover catalogue hosts through the CampusSync image proxy', () => {
-  assert.match(
-    toBookCoverProxyUrl('https://ndlsearch.ndl.go.jp/thumbnail/9784327764951.jpg'),
-    /^\\/api\\/books\\/cover\\?url=/,
+  assert.ok(
+    toBookCoverProxyUrl('https://ndlsearch.ndl.go.jp/thumbnail/9784327764951.jpg')
+      .startsWith('/api/books/cover?url='),
   );
 });
