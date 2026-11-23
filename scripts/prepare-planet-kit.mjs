@@ -33,16 +33,22 @@ while (offset + 512 <= tar.length) {
   }
 
   if ((type === 0 || type === 48) && size > 0) {
-    const target = resolve(root, archiveName);
+    const isManagedRenderer = archiveName === 'components/Planet3DPanel.tsx';
+    const target = isManagedRenderer
+      ? resolve(root, 'components', 'Planet3DPanel.bundle-backup.tsx')
+      : resolve(root, archiveName);
     const rel = relative(root, target);
     if (!rel || rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) {
       throw new Error('許可されていないファイルパスです: ' + archiveName);
     }
     extractedBytes += size;
     if (extractedBytes > 32 * 1024 * 1024) throw new Error('惑星キットの展開サイズが上限を超えています。');
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, tar.subarray(dataStart, dataEnd));
-    extracted += 1;
+    // 追跡管理する新レンダラーを、アーカイブ内の旧コンポーネントで上書きしない。
+    if (!isManagedRenderer) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, tar.subarray(dataStart, dataEnd));
+      extracted += 1;
+    }
   }
 
   offset = dataStart + Math.ceil(size / 512) * 512;
@@ -54,7 +60,5 @@ const requiredFiles = [
   resolve(publicPlanetAssets, 'manifest.json'),
   resolve(publicPlanetAssets, 'planets', 'planet-001', 'surface.jpg'),
 ];
-if (requiredFiles.some((path) => !existsSync(path))) {
-  throw new Error('惑星キットの展開結果が不完全です。');
-}
+if (requiredFiles.some((path) => !existsSync(path))) throw new Error('惑星キットの展開結果が不完全です。');
 console.log('惑星キットを展開しました: ' + extracted + ' ファイル (' + extractedBytes.toLocaleString('ja-JP') + ' bytes)');

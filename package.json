@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/generate-weather-icons.mjs && node scripts/prepare-planet-kit.mjs && next build",
+    "build": "node --experimental-strip-types --test scripts/test-planet-system-catalog.mjs && node scripts/generate-weather-icons.mjs && node scripts/prepare-planet-kit.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "check:i18n": "node scripts/check-i18n.mjs",
     "verify:cslogson": "node scripts/verify-cslogson.mjs",
-    "precloudflare:build": "node scripts/generate-weather-icons.mjs && node scripts/prepare-planet-kit.mjs",
+    "precloudflare:build": "node --experimental-strip-types --test scripts/test-planet-system-catalog.mjs && node scripts/generate-weather-icons.mjs && node scripts/prepare-planet-kit.mjs",
     "cloudflare:install": "npm install --no-save --package-lock=false @opennextjs/cloudflare@1.20.16 wrangler@4.158.0",
     "cloudflare:build": "npm run cloudflare:install && npx opennextjs-cloudflare build",
     "cloudflare:preview": "npm run cloudflare:build && npx wrangler dev",
@@ -24,7 +24,8 @@
     "test:notebooks": "node --experimental-strip-types --test scripts/test-notebook-manager.mjs",
     "test:document-scanner": "node --experimental-strip-types --test scripts/test-document-scanner.mjs",
     "test:eiken-vocab": "node --experimental-strip-types --test scripts/test-eiken-vocab-auth.mjs",
-    "predev": "node scripts/prepare-planet-kit.mjs"
+    "predev": "node scripts/prepare-planet-kit.mjs",
+    "test:planet-system": "node --experimental-strip-types --test scripts/test-planet-system-catalog.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
