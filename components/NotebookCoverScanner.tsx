@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Camera, CheckCircle2, ImagePlus, RotateCcw, ScanLine, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, ImagePlus, RotateCcw, ScanLine, X, ZoomIn } from 'lucide-react';
 import {
   detectDocumentCorners,
   makeDefaultDocumentCorners,
@@ -22,6 +22,7 @@ export default function NotebookCoverScanner({ isDarkMode = false, onClose, onSe
   const [autoDetected,setAutoDetected]=useState(false);
   const [processing,setProcessing]=useState(false);
   const [draggingIndex,setDraggingIndex]=useState<number|null>(null);
+  const [magnifierPosition,setMagnifierPosition]=useState<{x:number;y:number;width:number;height:number}|null>(null);
   const videoRef=useRef<HTMLVideoElement>(null);
   const streamRef=useRef<MediaStream|null>(null);
   const svgRef=useRef<SVGSVGElement>(null);
@@ -124,11 +125,15 @@ export default function NotebookCoverScanner({ isDarkMode = false, onClose, onSe
   const updateCorner=(event:React.PointerEvent<SVGSVGElement>)=>{
     if(draggingIndex===null||!sourceCanvas||!svgRef.current)return;
     const rect=svgRef.current.getBoundingClientRect();
-    const x=(event.clientX-rect.left)/rect.width*sourceCanvas.width;
-    const y=(event.clientY-rect.top)/rect.height*sourceCanvas.height;
+    if(rect.width<=0||rect.height<=0)return;
+    const localX=Math.min(rect.width,Math.max(0,event.clientX-rect.left));
+    const localY=Math.min(rect.height,Math.max(0,event.clientY-rect.top));
+    const x=localX/rect.width*sourceCanvas.width;
+    const y=localY/rect.height*sourceCanvas.height;
     setCorners(current=>current.map((point,index)=>index===draggingIndex
       ?{x:Math.min(sourceCanvas.width-1,Math.max(0,x)),y:Math.min(sourceCanvas.height-1,Math.max(0,y))}
       :point));
+    setMagnifierPosition({x:localX,y:localY,width:rect.width,height:rect.height});
   };
 
   const saveScannedImage=async()=>{
@@ -145,6 +150,19 @@ export default function NotebookCoverScanner({ isDarkMode = false, onClose, onSe
   const handleFileInput=(event:React.ChangeEvent<HTMLInputElement>)=>{
     const file=event.target.files?.[0]||null;event.target.value='';void chooseFile(file);
   };
+
+  const magnifierStyle=magnifierPosition?(()=>{
+    const size=120,zoom=3,gap=14;
+    const left=Math.max(8,Math.min(magnifierPosition.width-size-8,magnifierPosition.x<magnifierPosition.width/2?magnifierPosition.x+gap:magnifierPosition.x-size-gap));
+    const top=Math.max(8,Math.min(magnifierPosition.height-size-8,magnifierPosition.y<magnifierPosition.height/2?magnifierPosition.y+gap:magnifierPosition.y-size-gap));
+    return {
+      left,top,width:size,height:size,
+      backgroundImage:'url("'+sourceUrl+'")',
+      backgroundRepeat:'no-repeat',
+      backgroundSize:(magnifierPosition.width*zoom)+'px '+(magnifierPosition.height*zoom)+'px',
+      backgroundPosition:(size/2-magnifierPosition.x*zoom)+'px '+(size/2-magnifierPosition.y*zoom)+'px',
+    } as React.CSSProperties;
+  })():null;
 
   return(
     <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/80 p-2 backdrop-blur-sm sm:p-4">
@@ -173,18 +191,25 @@ export default function NotebookCoverScanner({ isDarkMode = false, onClose, onSe
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileInput}/>
           </>:<>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><p className="text-sm font-black">四隅を確認・調整</p><p className={'mt-1 text-[10px] '+muted}>白い丸をドラッグして、表紙の角に合わせてください。</p></div>
+              <div><p className="text-sm font-black">四隅を確認・調整</p><p className={'mt-1 text-[10px] '+muted}>丸をドラッグすると、指の近くに3倍拡大鏡が表示されます。</p></div>
               <span className={'rounded-full px-2.5 py-1 text-[9px] font-black '+(autoDetected?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{autoDetected?'四隅を自動検出':'手動で枠を調整してください'}</span>
             </div>
             {sourceCanvas&&sourceUrl&&<div className="relative mx-auto w-full overflow-hidden rounded-xl bg-slate-950" style={{aspectRatio:sourceCanvas.width+'/'+sourceCanvas.height}}>
               <img src={sourceUrl} alt="スキャンする表紙" draggable={false} className="absolute inset-0 h-full w-full select-none object-fill"/>
-              <svg ref={svgRef} viewBox={'0 0 '+sourceCanvas.width+' '+sourceCanvas.height} preserveAspectRatio="none" className="absolute inset-0 h-full w-full" style={{touchAction:'none'}} onPointerMove={updateCorner} onPointerUp={()=>setDraggingIndex(null)} onPointerCancel={()=>setDraggingIndex(null)}>
+              <svg ref={svgRef} viewBox={'0 0 '+sourceCanvas.width+' '+sourceCanvas.height} preserveAspectRatio="none" className="absolute inset-0 h-full w-full" style={{touchAction:'none'}} onPointerMove={updateCorner} onPointerUp={()=>{setDraggingIndex(null);setMagnifierPosition(null);}} onPointerCancel={()=>{setDraggingIndex(null);setMagnifierPosition(null);}}>
                 <polygon points={corners.map(point=>point.x+','+point.y).join(' ')} fill="rgba(6,182,212,0.13)" stroke="#22d3ee" strokeWidth={Math.max(3,sourceCanvas.width*0.004)}/>
                 {corners.map((point,index)=><g key={index}>
-                  <circle cx={point.x} cy={point.y} r={Math.max(17,Math.min(sourceCanvas.width,sourceCanvas.height)*0.022)} fill="#0891b2" fillOpacity="0.88" stroke="white" strokeWidth={Math.max(4,sourceCanvas.width*0.003)} style={{touchAction:'none',cursor:'grab'}} onPointerDown={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);setDraggingIndex(index);}}/>
+                  <circle cx={point.x} cy={point.y} r={Math.max(17,Math.min(sourceCanvas.width,sourceCanvas.height)*0.022)} fill="#0891b2" fillOpacity="0.88" stroke="white" strokeWidth={Math.max(4,sourceCanvas.width*0.003)} style={{touchAction:'none',cursor:'grab'}} onPointerDown={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);const rect=svgRef.current?.getBoundingClientRect();if(rect)setMagnifierPosition({x:event.clientX-rect.left,y:event.clientY-rect.top,width:rect.width,height:rect.height});setDraggingIndex(index);}}/>
                   <text x={point.x} y={point.y+Math.max(5,sourceCanvas.width*0.005)} fill="white" fontSize={Math.max(18,sourceCanvas.width*0.025)} fontWeight="bold" textAnchor="middle" pointerEvents="none">{index+1}</text>
                 </g>)}
               </svg>
+              {magnifierStyle&&<div aria-hidden="true" className="pointer-events-none absolute z-20 overflow-hidden rounded-full border-[3px] border-white shadow-2xl ring-2 ring-cyan-500" style={magnifierStyle}>
+                <div className="absolute inset-0 rounded-full bg-black/5"/>
+                <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/65"/>
+                <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-white/65"/>
+                <div className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-cyan-500 shadow"/>
+                <span className="absolute left-1/2 top-1.5 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-cyan-700/95 px-2 py-0.5 text-[9px] font-black text-white shadow"><ZoomIn size={10}/>3×</span>
+              </div>}
             </div>}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button type="button" className={button} onClick={retryDetection} disabled={processing}><RotateCcw size={14}/>自動検出し直す</button>

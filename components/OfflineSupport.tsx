@@ -1,11 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CloudDownload, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { CheckCircle2, CloudDownload, RefreshCw, Wifi, WifiOff, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clearOfflineMaterialsForUser } from '@/lib/offline-materials';
 
 type SyncItem = { url: string; authenticated: boolean };
+
+function localDayKey(): string {
+  const now = new Date();
+  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+}
+
+function offlineSyncStorageKey(userId: string): string {
+  return 'campussync-offline-sync:' + userId + ':' + localDayKey();
+}
 
 function currentMondayKey(): string {
   const now = new Date();
@@ -20,9 +29,26 @@ export default function OfflineSupport() {
   const [syncMessage, setSyncMessage] = useState('');
   const [syncProgress, setSyncProgress] = useState(0);
   const [wifiConfirmed, setWifiConfirmed] = useState(false);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(true);
+  const [syncCompleted, setSyncCompleted] = useState(false);
 
   useEffect(() => {
-    const updateNetwork = () => setOnline(navigator.onLine);
+    let currentUserId: string | null = null;
+    const restoreSyncPanelState = (userId: string | null) => {
+      let completed = false;
+      try {
+        completed = window.localStorage.getItem(offlineSyncStorageKey(userId || 'anonymous')) === '1';
+      } catch {
+        completed = false;
+      }
+      setSyncCompleted(completed);
+      setSyncPanelOpen(!completed || !navigator.onLine);
+    };
+    const updateNetwork = () => {
+      const nextOnline = navigator.onLine;
+      setOnline(nextOnline);
+      if (!nextOnline) setSyncPanelOpen(true);
+    };
     updateNetwork();
     window.addEventListener('online', updateNetwork);
     window.addEventListener('offline', updateNetwork);
@@ -33,9 +59,9 @@ export default function OfflineSupport() {
         .catch(error => console.error('CampusSync offline service worker registration failed:', error));
     }
 
-    let currentUserId: string | null = null;
     void supabase.auth.getSession().then(({ data }) => {
       currentUserId = data.session?.user.id || null;
+      restoreSyncPanelState(currentUserId);
     }).catch(() => undefined);
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -49,7 +75,9 @@ export default function OfflineSupport() {
         void clearOfflineMaterialsForUser(previousUserId).catch(() => undefined);
         navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_USER_CACHE', userId: previousUserId });
       }
+      const previousUserId = currentUserId;
       currentUserId = nextUserId;
+      if (previousUserId !== nextUserId) restoreSyncPanelState(nextUserId);
     });
 
     return () => {
@@ -77,6 +105,7 @@ export default function OfflineSupport() {
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       const token = data.session?.access_token || '';
+      const syncUserId = data.session?.user.id || 'anonymous';
       if ('serviceWorker' in navigator) {
         await navigator.serviceWorker.ready.catch(() => undefined);
       }
@@ -114,8 +143,17 @@ export default function OfflineSupport() {
       }
       if (!navigator.onLine) {
         setSyncMessage('接続が切れたため同期を中断しました。保存済みデータは引き続き利用できます。');
+      } else if (succeeded === syncItems.length && failures.length === 0) {
+        setSyncMessage('同期が完了しました。');
+        setSyncCompleted(true);
+        try {
+          window.localStorage.setItem(offlineSyncStorageKey(syncUserId), '1');
+        } catch {
+          // The current session can still hide the panel when storage is unavailable.
+        }
+        setSyncPanelOpen(false);
       } else if (succeeded > 0) {
-        setSyncMessage('同期完了：' + succeeded + ' / ' + syncItems.length + '項目。PDFはプリント資料室で個別に「オフラインに保存」してください。');
+        setSyncMessage('一部のデータのみ同期しました（' + succeeded + ' / ' + syncItems.length + '）。もう一度同期してください。');
       } else {
         setSyncMessage('同期できませんでした。ログイン状態と通信環境を確認してください。');
       }
@@ -127,7 +165,7 @@ export default function OfflineSupport() {
     }
   };
 
-  return (
+  return syncPanelOpen ? (
     <div className="fixed bottom-4 left-3 z-[120] max-w-[min(23rem,calc(100vw-1.5rem))]" aria-live="polite">
       <div className={'rounded-2xl border px-3 py-2.5 shadow-xl backdrop-blur-xl ' + (online
         ? 'border-slate-200/80 bg-white/95 text-slate-800 dark:border-slate-700 dark:bg-slate-950/95 dark:text-slate-100'
@@ -138,11 +176,12 @@ export default function OfflineSupport() {
           {online ? (
             <button type="button" onClick={() => void syncOfflineData()} disabled={syncing || !wifiConfirmed} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-[10px] font-black text-white disabled:opacity-40">
               {syncing ? <RefreshCw size={12} className="animate-spin" /> : <CloudDownload size={12} />}
-              {syncing ? '同期中' : 'Wi-Fi接続時に同期'}
+              {syncing ? '同期中' : syncCompleted ? '再同期' : 'Wi-Fi接続時に同期'}
             </button>
           ) : (
             <span className="ml-auto rounded-lg bg-amber-200/70 px-2 py-1 text-[10px] font-black dark:bg-amber-900">保存データのみ利用可能</span>
           )}
+          <button type="button" onClick={() => setSyncPanelOpen(false)} disabled={syncing} aria-label="同期パネルを閉じる" className="ml-1 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-200"><X size={14}/></button>
         </div>
         {online && <label className="mt-2 flex cursor-pointer items-center gap-2 text-[10px] leading-4"><input type="checkbox" checked={wifiConfirmed} onChange={event => setWifiConfirmed(event.target.checked)} disabled={syncing} className="h-3.5 w-3.5 accent-cyan-600" />この端末がWi-Fiに接続中であることを確認しました</label>}
         {syncMessage && <p className="mt-2 max-w-[20rem] text-[10px] leading-4 opacity-80">{syncMessage}</p>}
@@ -151,5 +190,9 @@ export default function OfflineSupport() {
         {online && <p className="mt-1 text-[10px] leading-4 opacity-70">モバイル通信での同期は行いません。Wi-Fi確認後に手動で同期します。</p>}
       </div>
     </div>
+  ) : (
+    <button type="button" onClick={() => setSyncPanelOpen(true)} aria-label="オフライン同期パネルを開く" title={syncCompleted ? '今日のWi-Fi同期は完了しています。再同期できます。' : 'オフライン同期'} className="fixed bottom-4 left-3 z-[120] flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-700 shadow-lg transition hover:scale-105 dark:border-slate-700 dark:bg-slate-950 dark:text-cyan-300">
+      {!online ? <WifiOff size={17}/> : syncCompleted ? <CheckCircle2 size={18}/> : <CloudDownload size={17}/>}
+    </button>
   );
 }

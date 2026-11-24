@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findNotebookDuplicates, getNotebookRemainingPages, getNotebookRemainingPercent,
-  getNotebookStatusLabel,
+  getNotebookStatusLabel, NOTEBOOK_SUBJECT_OPTIONS,
 } from '../lib/notebook-manager.ts';
 
 const notebooks = [
@@ -29,4 +29,16 @@ test('status labels are localized', () => {
   assert.equal(getNotebookStatusLabel('in_use'),'使用中');
   assert.equal(getNotebookStatusLabel('stored'),'保管中');
   assert.equal(getNotebookStatusLabel('finished'),'使用終了');
+});
+
+test('subject options cover the main Japanese high-school subject areas', () => {
+  for (const subject of [
+    '現代の国語', '地理総合', '日本史探究', '倫理', '数学I', '数学A',
+    '物理基礎', '化学基礎', '地学基礎', '英語コミュニケーションI',
+    '論理・表現I', '情報I', '体育', '音楽I', '家庭基礎',
+    '総合的な探究の時間', 'その他',
+  ]) {
+    assert.ok(NOTEBOOK_SUBJECT_OPTIONS.includes(subject), 'missing subject: ' + subject);
+  }
+  assert.equal(new Set(NOTEBOOK_SUBJECT_OPTIONS).size, NOTEBOOK_SUBJECT_OPTIONS.length);
 });

@@ -1,7 +1,18 @@
-export const NOTEBOOK_SUBJECT_OPTIONS = [
-  '国語演習', '古典探求', '物理', '生物', '数学III', '数学C',
-  '公共', '英コミュ', '論表', '情報', '保健', '化学', 'その他',
+export const NOTEBOOK_SUBJECT_GROUPS = [
+  { label: '国語', subjects: ['現代の国語', '言語文化', '論理国語', '文学国語', '国語表現', '国語演習', '古典探求', '古典探究'] },
+  { label: '地理・歴史', subjects: ['地理総合', '地理探究', '歴史総合', '日本史探究', '世界史探究'] },
+  { label: '公民', subjects: ['公共', '倫理', '政治・経済'] },
+  { label: '数学', subjects: ['数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '数学演習'] },
+  { label: '理科', subjects: ['科学と人間生活', '物理基礎', '物理', '化学基礎', '化学', '生物基礎', '生物', '地学基礎', '地学'] },
+  { label: '英語', subjects: ['英語コミュニケーションI', '英語コミュニケーションII', '英語コミュニケーションIII', '英コミュ', '論理・表現I', '論理・表現II', '論理・表現III', '論表', '英語演習'] },
+  { label: '情報', subjects: ['情報', '情報I', '情報II'] },
+  { label: '保健体育', subjects: ['保健', '体育', '保健体育'] },
+  { label: '芸術', subjects: ['音楽I', '音楽II', '美術I', '美術II', '書道I', '書道II'] },
+  { label: '家庭', subjects: ['家庭基礎', '家庭総合'] },
+  { label: '探究・その他', subjects: ['総合的な探究の時間', '探究活動', '学校設定科目', 'その他'] },
 ] as const;
+
+export const NOTEBOOK_SUBJECT_OPTIONS = NOTEBOOK_SUBJECT_GROUPS.flatMap(group => [...group.subjects]);
 export const NOTEBOOK_SIZE_OPTIONS = ['B5', 'A4', 'A5', 'A6', 'B6', 'その他'] as const;
 export const NOTEBOOK_PURPOSE_OPTIONS = ['授業', '課題', '演習', 'まとめ', '試験対策', 'その他'] as const;
 export type NotebookPurpose = typeof NOTEBOOK_PURPOSE_OPTIONS[number];
