@@ -206,7 +206,7 @@ try {
   for (const label of ['文明発展スコア', '4つの成長軸', '技術文明', '社会文明', '研究・知識', '自然環境', '最近の成長履歴']) {
     await page.getByText(label, { exact: true }).first().waitFor({ state: 'visible' });
   }
-  await page.locator('svg[role="img"][aria-label*="集落時代"]').waitFor({ state: 'visible' });
+  await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
 
   const firstLoadCount = planetGetCalls;
