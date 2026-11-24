@@ -6,7 +6,8 @@ export function isSchoolClassCode(value: string): value is SchoolClassCode {
 
 export function isExamTargetedAtClass(targetClasses: unknown, classCode: string): boolean {
   if (!isSchoolClassCode(classCode)) return false;
-  if (!Array.isArray(targetClasses) || targetClasses.length === 0) return true;
+  if (!Array.isArray(targetClasses)) return false;
+  if (targetClasses.length === 0) return true;
   return targetClasses.some(value => typeof value === 'string' && value.trim() === classCode);
 }
 

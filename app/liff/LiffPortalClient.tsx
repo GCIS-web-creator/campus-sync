@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import WeatherForecast from '@/components/WeatherForecast';
 import FunctionCalculator from '@/components/FunctionCalculator';
 
@@ -64,11 +65,10 @@ function jstDateKey(date = new Date()): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 function mondayOf(dateKey: string): string {
-  const date = new Date(dateKey + 'T00:00:00+09:00');
-  const weekday = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).getDay();
-  const shift = (weekday + 6) % 7;
-  date.setDate(date.getDate() - shift);
-  return jstDateKey(date);
+  const date = new Date(dateKey + 'T00:00:00Z');
+  const shift = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - shift);
+  return date.toISOString().slice(0, 10);
 }
 function dateLabel(value: string): string {
   if (!value) return '日付未設定';
@@ -85,7 +85,7 @@ function formatTime(value: string): string {
   return match ? `${match[1].padStart(2, '0')}:${match[2]}` : value;
 }
 
-function Badge({ children, tone = 'slate' }: { children: React.ReactNode; tone?: 'slate' | 'blue' | 'green' | 'amber' | 'red' }) {
+function Badge({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'blue' | 'green' | 'amber' | 'red' }) {
   const colors = {
     slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     blue: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-200',
@@ -108,6 +108,7 @@ export default function LiffPortalClient() {
   const [schoolInfoError, setSchoolInfoError] = useState('');
   const [events, setEvents] = useState<CountdownEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
   const [eventsError, setEventsError] = useState('');
   const [timetable, setTimetable] = useState<ClassTimetable | null>(null);
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule['schedule']>(null);
@@ -116,6 +117,7 @@ export default function LiffPortalClient() {
   const [selectedDay, setSelectedDay] = useState<string>('Mon');
   const [trainRows, setTrainRows] = useState<TrainRow[]>([]);
   const [trainLoading, setTrainLoading] = useState(false);
+  const [trainLoaded, setTrainLoaded] = useState(false);
   const [trainError, setTrainError] = useState('');
   const [trainDirection, setTrainDirection] = useState<'kokubunji' | 'higashimurayama'>('kokubunji');
   const [trainDayType, setTrainDayType] = useState<'weekday' | 'saturday'>('weekday');
@@ -182,6 +184,7 @@ export default function LiffPortalClient() {
 
   const loadEvents = useCallback(async () => {
     setEventsLoading(true);
+    setEventsLoaded(false);
     setEventsError('');
     try {
       const response = await fetch('/api/school-countdowns', { cache: 'no-store' });
@@ -192,15 +195,17 @@ export default function LiffPortalClient() {
       setEventsError(error instanceof Error ? error.message : 'イベント情報を取得できませんでした。');
     } finally {
       setEventsLoading(false);
+      setEventsLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    if (activePanel === 'events' && events.length === 0 && !eventsLoading && !eventsError) void loadEvents();
-  }, [activePanel, events.length, eventsLoading, eventsError, loadEvents]);
+    if (activePanel === 'events' && !eventsLoaded && !eventsLoading && !eventsError) void loadEvents();
+  }, [activePanel, eventsLoaded, eventsLoading, eventsError, loadEvents]);
 
   const loadTrains = useCallback(async () => {
     setTrainLoading(true);
+    setTrainLoaded(false);
     setTrainError('');
     try {
       const response = await fetch('/api/public/train-departures', { cache: 'no-store' });
@@ -211,12 +216,13 @@ export default function LiffPortalClient() {
       setTrainError(error instanceof Error ? error.message : '電車時刻表を取得できませんでした。');
     } finally {
       setTrainLoading(false);
+      setTrainLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    if (activePanel === 'trains' && trainRows.length === 0 && !trainLoading && !trainError) void loadTrains();
-  }, [activePanel, trainRows.length, trainLoading, trainError, loadTrains]);
+    if (activePanel === 'trains' && !trainLoaded && !trainLoading && !trainError) void loadTrains();
+  }, [activePanel, trainLoaded, trainLoading, trainError, loadTrains]);
 
   const panelInfo = useMemo(() => PANELS.find(panel => panel.key === activePanel), [activePanel]);
   const isScienceClass = classCode === '2-7' || classCode === '2-8';
