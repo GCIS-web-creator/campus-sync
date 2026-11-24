@@ -2,7 +2,16 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X } from 'lucide-react';
+import {
+  Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X,
+  CheckCircle2, Trash2, CloudOff,
+} from 'lucide-react';
+import {
+  getOfflineMaterial,
+  listOfflineMaterials,
+  removeOfflineMaterial,
+  saveOfflineMaterial,
+} from '@/lib/offline-materials';
 
 type StudyMaterial = {
   id: string;
@@ -42,24 +51,68 @@ function dateLabel(value: string | null) {
 export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDarkMode?: boolean }) {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
+  const [online, setOnline] = useState(true);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
   const [subject, setSubject] = useState('all');
   const [materialType, setMaterialType] = useState('all');
-  const [preview, setPreview] = useState<{ item: StudyMaterial; url: string } | null>(null);
+  const [preview, setPreview] = useState<{ item: StudyMaterial; url: string; local: boolean } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
+  const reportConnectionFailure = (error: unknown) => {
+    if (!navigator.onLine || error instanceof TypeError) {
+      setOnline(false);
+      window.dispatchEvent(new Event('campussync:network-offline'));
+    }
+  };
+
+  const loadOfflineMaterials = async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) {
+        setMaterials([]);
+        setSavedIds([]);
+        setMessage('保存済み資料を確認するには、オンライン時に学校アカウントでログインしてください。');
+        return;
+      }
+      const records = await listOfflineMaterials<StudyMaterial>(userId);
+      setMaterials(records.map((record) => record.material));
+      setSavedIds(records.map((record) => record.materialId));
+      setMessage('オフライン中です。ここには「オフライン保存」した資料だけを表示しています。');
+    } catch (error) {
+      setMaterials([]);
+      setSavedIds([]);
+      setMessage(error instanceof Error ? error.message : '端末内の保存資料を読み込めませんでした。');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadMaterials = async () => {
+    if (!navigator.onLine) {
+      await loadOfflineMaterials();
+      return;
+    }
     setLoading(true);
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       const token = sessionData.session?.access_token;
-      if (!token) {
+      const userId = sessionData.session?.user.id;
+      if (!token || !userId) {
         setMaterials([]);
+        setSavedIds([]);
         setMessage('学校アカウントでログインすると資料を閲覧できます。');
         return;
       }
+
+      const records = await listOfflineMaterials<StudyMaterial>(userId).catch(() => []);
+      setSavedIds(records.map((record) => record.materialId));
+
       const response = await fetch('/api/materials', {
         headers: { Authorization: 'Bearer ' + token },
         cache: 'no-store',
@@ -69,33 +122,136 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       setMaterials((result.materials || []) as StudyMaterial[]);
       setMessage('');
     } catch (error) {
-      setMaterials([]);
-      setMessage(error instanceof Error ? error.message : '資料一覧を取得できませんでした。');
+      reportConnectionFailure(error);
+      await loadOfflineMaterials();
+      setMessage(
+        (error instanceof Error ? error.message : '資料一覧を取得できませんでした。') +
+        ' 端末に保存済みの資料だけを表示しています。',
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void loadMaterials(); }, []);
+  useEffect(() => {
+    const handleOnline = () => {
+      setOnline(true);
+      void loadMaterials();
+    };
+    const handleOffline = () => {
+      setOnline(false);
+      void loadOfflineMaterials();
+    };
+    const handleNetworkOnline = () => {
+      setOnline(true);
+      void loadMaterials();
+    };
+    const handleNetworkOffline = () => {
+      setOnline(false);
+      void loadOfflineMaterials();
+    };
+    setOnline(navigator.onLine);
+    if (navigator.onLine) void loadMaterials();
+    else void loadOfflineMaterials();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('campussync:network-online', handleNetworkOnline as EventListener);
+    window.addEventListener('campussync:network-offline', handleNetworkOffline as EventListener);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('campussync:network-online', handleNetworkOnline as EventListener);
+      window.removeEventListener('campussync:network-offline', handleNetworkOffline as EventListener);
+    };
+  }, []);
 
-  const openMaterial = async (item: StudyMaterial, download = false) => {
+  useEffect(() => {
+    return () => {
+      if (preview?.local) URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
+
+  const openMaterial = async (item: StudyMaterial) => {
     setOpeningId(item.id);
     try {
       const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) throw new Error('学校アカウントでログインしてください。');
+
+      const saved = await getOfflineMaterial<StudyMaterial>(userId, item.id).catch(() => null);
+      if (saved) {
+        setPreview({ item, url: URL.createObjectURL(saved.blob), local: true });
+        return;
+      }
+
+      if (!navigator.onLine) {
+        throw new Error('この資料は端末に保存されていません。オンライン時に「オフライン保存」を押してください。');
+      }
+
       const token = data.session?.access_token;
-      if (!token) throw new Error('ログイン状態を確認できませんでした。');
-      const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id) + (download ? '&download=1' : ''), {
-        headers: { Authorization: 'Bearer ' + token },
+      const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id), {
+        headers: { Authorization: 'Bearer ' + (token || '') },
         cache: 'no-store',
       });
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.success || !result.url) throw new Error(result?.message || 'ファイルを開けませんでした。');
-      if (download) window.open(result.url, '_blank', 'noopener,noreferrer');
-      else setPreview({ item, url: result.url });
+      if (!response.ok || !result?.success || !result.url) {
+        throw new Error(result?.message || 'ファイルを開けませんでした。');
+      }
+      setPreview({ item, url: result.url, local: false });
     } catch (error) {
+      reportConnectionFailure(error);
       setMessage(error instanceof Error ? error.message : 'ファイルを開けませんでした。');
     } finally {
       setOpeningId(null);
+    }
+  };
+
+  const toggleOfflineSave = async (item: StudyMaterial) => {
+    setSavingId(item.id);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) throw new Error('学校アカウントでログインしてください。');
+
+      if (savedIds.includes(item.id)) {
+        await removeOfflineMaterial(userId, item.id);
+        setSavedIds((current) => current.filter((id) => id !== item.id));
+        setMessage('「' + item.title + '」を端末内の保存資料から削除しました。');
+        return;
+      }
+
+      if (!navigator.onLine) throw new Error('資料の保存にはインターネット接続が必要です。');
+
+      const token = data.session?.access_token;
+      const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id), {
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success || !result.url) {
+        throw new Error(result?.message || '資料のダウンロードURLを取得できませんでした。');
+      }
+
+      const fileResponse = await fetch(result.url, { cache: 'no-store' });
+      if (!fileResponse.ok) throw new Error('資料ファイルをダウンロードできませんでした。');
+      const blob = await fileResponse.blob();
+
+      if (navigator.storage?.estimate) {
+        const estimate = await navigator.storage.estimate();
+        const remaining = (estimate.quota || 0) - (estimate.usage || 0);
+        if (remaining > 0 && blob.size > remaining * 0.85) {
+          throw new Error('端末の空き容量が不足しています。不要な保存資料を削除してください。');
+        }
+      }
+
+      await saveOfflineMaterial(userId, item.id, item, blob);
+      setSavedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
+      setMessage('「' + item.title + '」をこの端末に保存しました。次回から通信なしで開けます。');
+    } catch (error) {
+      reportConnectionFailure(error);
+      setMessage(error instanceof Error ? error.message : '端末への保存に失敗しました。');
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -120,7 +276,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
           <h2 className="mt-1 flex items-center gap-2 text-2xl font-black"><BookOpen className="text-cyan-600" /> プリント・資料室</h2>
           <p className={'mt-2 text-sm leading-6 ' + muted}>授業プリント、課題、解答・解説など、公開された資料をまとめて確認できます。</p>
         </div>
-        <button type="button" onClick={() => void loadMaterials()} disabled={loading} className={'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ' + (isDarkMode ? 'border-slate-600 text-slate-200 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><RefreshCw size={14} /> 更新</button>
+        <button type="button" onClick={() => void loadMaterials()} disabled={loading || !online} className={'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40 ' + (isDarkMode ? 'border-slate-600 text-slate-200 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><RefreshCw size={14} /> 更新</button>
       </div>
 
       <div className={'rounded-2xl border p-3 sm:p-4 ' + panel}>
@@ -138,42 +294,57 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
             {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
-        <p className={'mt-3 text-[11px] ' + muted}>{filteredMaterials.length}件の資料</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className={'text-[11px] ' + muted}>{filteredMaterials.length}件の資料</p>
+          <span className={'inline-flex items-center gap-1 text-[10px] font-bold ' + (online ? 'text-emerald-600' : 'text-amber-500')}>
+            {online ? <CheckCircle2 size={12} /> : <CloudOff size={12} />}
+            {online ? 'オンライン' : '保存済み資料のみ'}
+          </span>
+        </div>
       </div>
 
       {message && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">{message}</p>}
 
+      {!online && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">オフライン中は、端末に保存した資料だけが表示されます。保存していない資料の一覧取得・閲覧はできません。</p>}
+
       {loading ? <div className={'rounded-2xl border p-10 text-center text-sm ' + panel}>資料を読み込み中...</div>
         : filteredMaterials.length === 0 ? (
           <div className={'rounded-2xl border border-dashed p-10 text-center ' + panel}>
-            <BookOpen size={30} className={'mx-auto ' + muted} />
-            <p className="mt-3 text-sm font-bold">表示できる資料はありません</p>
-            <p className={'mt-1 text-xs ' + muted}>条件を変更するか、管理者による資料公開をお待ちください。</p>
+            {online ? <BookOpen size={30} className={'mx-auto ' + muted} /> : <CloudOff size={30} className={'mx-auto ' + muted} />}
+            <p className="mt-3 text-sm font-bold">{online ? '表示できる資料はありません' : '端末に保存された資料はありません'}</p>
+            <p className={'mt-1 text-xs ' + muted}>{online ? '条件を変更するか、管理者による資料公開をお待ちください。' : 'オンライン時に必要な資料の「オフライン保存」を押してください。'}</p>
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredMaterials.map(item => (
-              <article key={item.id} className={'flex flex-col rounded-2xl border p-4 shadow-sm ' + panel}>
-                <div className="flex items-start gap-3">
-                  <span className={'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ' + (isDarkMode ? 'bg-slate-700 text-cyan-300' : 'bg-cyan-50 text-cyan-700')}>
-                    {item.mime_type === 'application/pdf' ? <FileText size={23} /> : <FileImage size={23} />}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="break-words text-sm font-black">{item.title}</h3>
-                    <p className={'mt-1 text-[11px] ' + muted}>{item.subject} ・ {TYPE_LABELS[item.material_type] || 'その他'}</p>
-                    <p className={'mt-1 text-[10px] ' + muted}>{item.mime_type === 'application/pdf' ? 'PDF' : '画像'} ・ {sizeLabel(item.file_size)}</p>
+            {filteredMaterials.map(item => {
+              const isSaved = savedIds.includes(item.id);
+              return (
+                <article key={item.id} className={'flex flex-col rounded-2xl border p-4 shadow-sm ' + panel}>
+                  <div className="flex items-start gap-3">
+                    <span className={'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ' + (isDarkMode ? 'bg-slate-700 text-cyan-300' : 'bg-cyan-50 text-cyan-700')}>
+                      {item.mime_type === 'application/pdf' ? <FileText size={23} /> : <FileImage size={23} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words text-sm font-black">{item.title}</h3>
+                      <p className={'mt-1 text-[11px] ' + muted}>{item.subject} ・ {TYPE_LABELS[item.material_type] || 'その他'}</p>
+                      <p className={'mt-1 text-[10px] ' + muted}>{item.mime_type === 'application/pdf' ? 'PDF' : '画像'} ・ {sizeLabel(item.file_size)}</p>
+                      {isSaved && <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> この端末に保存済み</span>}
+                    </div>
                   </div>
-                </div>
-                {item.description && <p className={'mt-3 whitespace-pre-wrap text-xs leading-5 ' + muted}>{item.description}</p>}
-                <div className="mt-auto flex items-center justify-between gap-2 pt-4">
-                  <span className={'text-[10px] ' + muted}>{dateLabel(item.published_at || item.created_at)} 公開</span>
-                  <div className="flex gap-2">
-                    <button type="button" disabled={openingId === item.id} onClick={() => void openMaterial(item)} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-[11px] font-black text-white hover:bg-cyan-500 disabled:opacity-50"><Eye size={13} /> 開く</button>
-                    <button type="button" disabled={openingId === item.id} onClick={() => void openMaterial(item, true)} aria-label="ダウンロード" className={'rounded-lg border px-2.5 py-2 ' + (isDarkMode ? 'border-slate-600 text-slate-200 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><Download size={14} /></button>
+                  {item.description && <p className={'mt-3 whitespace-pre-wrap text-xs leading-5 ' + muted}>{item.description}</p>}
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
+                    <span className={'text-[10px] ' + muted}>{dateLabel(item.published_at || item.created_at)} 公開</span>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={openingId === item.id} onClick={() => void openMaterial(item)} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-[11px] font-black text-white hover:bg-cyan-500 disabled:opacity-50"><Eye size={13} /> 開く</button>
+                      <button type="button" disabled={savingId === item.id || (!online && !isSaved)} onClick={() => void toggleOfflineSave(item)} aria-label={isSaved ? '端末から保存を削除' : 'オフライン用に保存'} className={'inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 text-[10px] font-bold disabled:opacity-40 ' + (isSaved ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : isDarkMode ? 'border-slate-600 text-slate-200 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>
+                        {isSaved ? <Trash2 size={13} /> : <Download size={13} />}
+                        {isSaved ? '保存解除' : 'オフライン保存'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
 
@@ -181,9 +352,12 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-2 sm:p-6" role="dialog" aria-modal="true" aria-label="資料プレビュー">
           <div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-              <div className="min-w-0"><p className="truncate text-sm font-black text-white">{preview.item.title}</p><p className="text-[10px] text-slate-500">{preview.item.file_name}</p></div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-white">{preview.item.title}</p>
+                <p className="text-[10px] text-slate-500">{preview.item.file_name} ・ {preview.local ? '端末内の保存データ' : 'オンライン'}</p>
+              </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => void openMaterial(preview.item, true)} className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200"><Download size={13}/> 保存</button>
+                {!preview.local && <button type="button" disabled={!online || savingId === preview.item.id} onClick={() => void toggleOfflineSave(preview.item)} className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 disabled:opacity-40"><Download size={13}/> オフライン保存</button>}
                 <button type="button" onClick={() => setPreview(null)} aria-label="閉じる" className="rounded-lg p-2 text-slate-300 hover:bg-slate-800"><X size={18}/></button>
               </div>
             </div>
