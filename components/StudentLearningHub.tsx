@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import StudentLearningAnalytics from '@/components/StudentLearningAnalytics';
 import { BarChart3, BookOpenCheck, CalendarDays, CheckCircle2, GraduationCap, History, Plus, QrCode, Timer, TrendingUp, UserRound, X, Globe2, Trash2, Info, Pencil } from 'lucide-react';
 
-const SUBJECTS = ['国語演習', '古典探求', '古典探究', '物理', '化学', '生物', '数３', '数C', '数学C', '数学Ⅱ', '英コミュⅡ', '保健（30分）', '物理・生物', '論理表現Ⅱ（30分）', '公共', '英コミュ', '論表', '情報', '保健'] as const;
+const SUBJECTS = ['現代の国語', '言語文化', '論理国語', '文学国語', '国語演習', '古典探求', '古典探究', '地理総合', '地理探究', '歴史総合', '日本史探究', '世界史探究', '公共', '倫理', '政治・経済', '数学I', '数学Ⅱ', '数学III', '数３', '数学A', '数学B', '数C', '数学C', '物理基礎', '物理', '化学基礎', '化学', '生物基礎', '生物', '地学基礎', '地学', '英語コミュニケーションI', '英語コミュニケーションII', '英コミュⅡ', '英語コミュニケーションIII', '英コミュ', '論理・表現I', '論理・表現II', '論理表現Ⅱ（30分）', '論理・表現III', '論表', '情報', '情報I', '情報II', '保健', '保健（30分）', '体育', '音楽', '美術', '書道', '家庭基礎', '家庭総合', '総合的な探究の時間', '物理・生物', 'その他'] as const;
 type Subject = typeof SUBJECTS[number];
 type Exam = { id: string; school_year: number; term: number; exam_type: string; start_date: string; end_date: string; target_classes?: string[] | null };
 type ExamSubject = { id: string; exam_id: string; subject: Subject; exam_date: string; sort_order: number };
@@ -284,6 +284,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
   const [editStartedAt, setEditStartedAt] = useState('');
   const [editFocusDuration, setEditFocusDuration] = useState('00:25:00');
   const [editBreakDuration, setEditBreakDuration] = useState('00:05:00');
+  const [editSubjectName, setEditSubjectName] = useState<Subject>('その他');
   const [editTaskTitle, setEditTaskTitle] = useState('');
   const [editTestRangeTitle, setEditTestRangeTitle] = useState('');
   const [editReflection, setEditReflection] = useState('');
@@ -789,6 +790,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
 
   const openSessionEditor = (session: Session) => {
     setEditingSession(session);
+    setEditSubjectName(session.subject_name);
     setEditStartedAt(toLocalDateTimeInput(session.started_at));
     setEditFocusDuration(formatStudyDurationInput(session.focus_seconds));
     setEditBreakDuration(formatStudyDurationInput(session.break_seconds || 0));
@@ -857,6 +859,7 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           ended_at: endedAtDate.toISOString(),
           focus_seconds: focusSecondsValue,
           break_seconds: breakSecondsValue,
+          subject_name: editSubjectName,
           task_title: editTaskTitle.trim(),
           test_range_title: editTestRangeTitle.trim(),
           reflection: editReflection.trim(),
@@ -2085,6 +2088,9 @@ export default function StudentLearningHub({ userId, userEmail = '', userClass =
           <button type="button" onClick={closeSessionEditor} disabled={editSaving} aria-label="編集を閉じる" className={secondary}><X size={15}/></button>
         </div>
         <form onSubmit={saveSessionEdits} className="space-y-3">
+          <label className="block space-y-1 text-xs font-bold">教科
+            <select className={input} value={editSubjectName} onChange={event=>setEditSubjectName(event.target.value as Subject)} required>{SUBJECTS.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select>
+          </label>
           <label className="block space-y-1 text-xs font-bold">勉強内容・課題名
             <input className={input} value={editTaskTitle} onChange={event=>setEditTaskTitle(event.target.value)} maxLength={180} placeholder="例：数III 微分法の演習" />
           </label>
