@@ -21,7 +21,7 @@ test('limits target-class exams to the selected class', () => {
   assert.equal(isExamTargetedAtClass(['2-7', '2-8'], '2-8'), true);
   assert.equal(isExamTargetedAtClass(['2-7'], '2-8'), false);
   assert.equal(isExamTargetedAtClass([], '1-1'), true);
-  assert.equal(isExamTargetedAtClass(null, '1-1'), true);
+  assert.equal(isExamTargetedAtClass(null, '1-1'), false);
   assert.equal(isExamTargetedAtClass(['2-7'], 'invalid'), false);
 });
 
