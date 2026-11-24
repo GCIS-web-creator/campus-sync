@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { CheckCircle2, CloudDownload, RefreshCw, Wifi, WifiOff, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clearOfflineMaterialsForUser } from '@/lib/offline-materials';
@@ -24,15 +25,18 @@ function currentMondayKey(): string {
 }
 
 export default function OfflineSupport() {
+  const pathname = usePathname();
+  const isPublicLiffRoute = pathname === '/liff' || pathname.startsWith('/liff/');
   const [online, setOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncProgress, setSyncProgress] = useState(0);
   const [wifiConfirmed, setWifiConfirmed] = useState(false);
-  const [syncPanelOpen, setSyncPanelOpen] = useState(true);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [syncCompleted, setSyncCompleted] = useState(false);
 
   useEffect(() => {
+    if (isPublicLiffRoute) return;
     let currentUserId: string | null = null;
     const restoreSyncPanelState = (userId: string | null) => {
       let completed = false;
@@ -42,7 +46,9 @@ export default function OfflineSupport() {
         completed = false;
       }
       setSyncCompleted(completed);
-      setSyncPanelOpen(!completed || !navigator.onLine);
+      // Keep the panel collapsed while online; an expanded fixed panel can cover page controls.
+      // Offline mode still opens it automatically through updateNetwork().
+      setSyncPanelOpen(!navigator.onLine);
     };
     const updateNetwork = () => {
       const nextOnline = navigator.onLine;
@@ -85,7 +91,9 @@ export default function OfflineSupport() {
       window.removeEventListener('offline', updateNetwork);
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [isPublicLiffRoute]);
+
+  if (isPublicLiffRoute) return null;
 
   const syncOfflineData = async () => {
     if (!navigator.onLine || syncing) return;
