@@ -19,6 +19,7 @@ export default function OfflineSupport() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncProgress, setSyncProgress] = useState(0);
+  const [wifiConfirmed, setWifiConfirmed] = useState(false);
 
   useEffect(() => {
     const updateNetwork = () => setOnline(navigator.onLine);
@@ -60,6 +61,15 @@ export default function OfflineSupport() {
 
   const syncOfflineData = async () => {
     if (!navigator.onLine || syncing) return;
+    const networkType = (navigator as Navigator & { connection?: { type?: string } }).connection?.type;
+    if (networkType && networkType !== 'wifi') {
+      setSyncMessage('Wi-Fi接続が確認できません。モバイル通信を使わないため、Wi-Fiに接続してから同期してください。');
+      return;
+    }
+    if (!wifiConfirmed) {
+      setSyncMessage('Wi-Fiに接続していることを確認してから同期してください。');
+      return;
+    }
     setSyncing(true);
     setSyncProgress(0);
     setSyncMessage('端末に保存するデータを確認しています…');
@@ -67,6 +77,9 @@ export default function OfflineSupport() {
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       const token = data.session?.access_token || '';
+      if ('serviceWorker' in navigator) {
+        await navigator.serviceWorker.ready.catch(() => undefined);
+      }
       const syncItems: SyncItem[] = [
         { url: '/api/weather/forecast', authenticated: false },
         { url: '/api/class-timetable', authenticated: false },
@@ -123,17 +136,19 @@ export default function OfflineSupport() {
           {online ? <Wifi size={15} className="shrink-0 text-emerald-600" /> : <WifiOff size={15} className="shrink-0 text-amber-600" />}
           <span className="text-[11px] font-black">{online ? 'オンライン' : 'オフラインモード'}</span>
           {online ? (
-            <button type="button" onClick={() => void syncOfflineData()} disabled={syncing} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-[10px] font-black text-white disabled:opacity-50">
+            <button type="button" onClick={() => void syncOfflineData()} disabled={syncing || !wifiConfirmed} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-[10px] font-black text-white disabled:opacity-40">
               {syncing ? <RefreshCw size={12} className="animate-spin" /> : <CloudDownload size={12} />}
-              {syncing ? '同期中' : 'オフライン用に同期'}
+              {syncing ? '同期中' : 'Wi-Fi接続時に同期'}
             </button>
           ) : (
             <span className="ml-auto rounded-lg bg-amber-200/70 px-2 py-1 text-[10px] font-black dark:bg-amber-900">保存データのみ利用可能</span>
           )}
         </div>
+        {online && <label className="mt-2 flex cursor-pointer items-center gap-2 text-[10px] leading-4"><input type="checkbox" checked={wifiConfirmed} onChange={event => setWifiConfirmed(event.target.checked)} disabled={syncing} className="h-3.5 w-3.5 accent-cyan-600" />この端末がWi-Fiに接続中であることを確認しました</label>}
         {syncMessage && <p className="mt-2 max-w-[20rem] text-[10px] leading-4 opacity-80">{syncMessage}</p>}
         {syncing && <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: (syncProgress / 7 * 100) + '%' }} /></div>}
         {!online && <p className="mt-1 text-[10px] leading-4 opacity-80">投稿・編集・AI・外部サービス連携は接続復帰後に利用できます。</p>}
+        {online && <p className="mt-1 text-[10px] leading-4 opacity-70">モバイル通信での同期は行いません。Wi-Fi確認後に手動で同期します。</p>}
       </div>
     </div>
   );

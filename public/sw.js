@@ -127,7 +127,13 @@ self.addEventListener('fetch', event => {
       const cache = await caches.open(SHELL_CACHE);
       try {
         const response = await fetch(request);
-        if (response.ok && url.pathname === '/') await cache.put(request, response.clone());
+        if (response.ok && !url.search && response.type !== 'opaqueredirect') {
+          await cache.put(request, response.clone());
+          const cachedPages = await cache.keys();
+          if (cachedPages.length > 40) {
+            for (const oldPage of cachedPages.slice(0, cachedPages.length - 40)) await cache.delete(oldPage);
+          }
+        }
         return response;
       } catch {
         return await cache.match(request) || await cache.match('/') || new Response(
