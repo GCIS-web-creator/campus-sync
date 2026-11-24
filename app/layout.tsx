@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import RouteSpecificOverlays from '@/components/RouteSpecificOverlays';
+import OfflineSupport from '@/components/OfflineSupport';
 import { CampusLanguageProvider } from '@/components/CampusLanguageProvider';
 import { getCampusSyncBaseUrl } from '@/lib/site-url';
 
@@ -58,6 +59,7 @@ export default function RootLayout({
         <CampusLanguageProvider>
           {children}
           <RouteSpecificOverlays />
+          <OfflineSupport />
         </CampusLanguageProvider>
       </body>
     </html>
