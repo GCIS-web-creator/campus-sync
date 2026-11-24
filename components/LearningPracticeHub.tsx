@@ -120,7 +120,7 @@ export default function LearningPracticeHub({
             aria-labelledby="learning-practice-tab-chemistry"
             hidden={activeSection !== 'chemistry'}
           >
-            <ChemistryPracticeHub isDarkMode={isDarkMode} />
+            <ChemistryPracticeHub userId={userId} isDarkMode={isDarkMode} />
           </section>
         )}
         {visited.includes('english') && (

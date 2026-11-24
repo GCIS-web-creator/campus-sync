@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Atom, BookOpenCheck, ExternalLink, FlaskConical, Layers3, Microscope } from 'lucide-react';
+import { Atom, BookOpenCheck, ExternalLink, FlaskConical, Layers3, Microscope, Sparkles } from 'lucide-react';
 import KnowledgePracticePanel from '@/components/KnowledgePracticePanel';
+import ChemistryRedoxPractice from '@/components/ChemistryRedoxPractice';
 
 const COURSES = [
   {
@@ -33,9 +34,16 @@ const COURSES = [
     description: '単糖・二糖・多糖・アミノ酸・タンパク質・核酸・合成樹脂・合成繊維・ゴムを学びます。',
     icon: Layers3,
   },
+  {
+    code: 'chem_redox',
+    label: '酸化還元',
+    title: '酸化還元・半反応式',
+    description: '電子の授受・酸化数・酸化剤と還元剤・半反応式・酸性条件のイオン反応式をタイル形式で練習します。',
+    icon: Sparkles,
+  },
 ] as const;
 
-export default function ChemistryPracticeHub({ isDarkMode = false }: { isDarkMode?: boolean }) {
+export default function ChemistryPracticeHub({ userId, isDarkMode = false }: { userId: string; isDarkMode?: boolean }) {
   const [activeCode, setActiveCode] = useState<(typeof COURSES)[number]['code']>('chem_theory');
   const active = COURSES.find(course => course.code === activeCode) || COURSES[0];
   const dark = isDarkMode;
@@ -57,7 +65,7 @@ export default function ChemistryPracticeHub({ isDarkMode = false }: { isDarkMod
         </div>
       </header>
 
-      <nav aria-label="化学演習分野" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <nav aria-label="化学演習分野" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
         {COURSES.map(course => {
           const Icon = course.icon;
           const selected = activeCode === course.code;
@@ -84,15 +92,19 @@ export default function ChemistryPracticeHub({ isDarkMode = false }: { isDarkMod
             <p className={'mt-1 max-w-3xl text-xs leading-6 ' + (dark ? 'text-slate-400' : 'text-slate-500')}>{active.description}</p>
           </div>
         </div>
-        <KnowledgePracticePanel
-          key={active.code}
-          isDarkMode={isDarkMode}
-          subjectGroup="chemistry"
-          initialSubject={active.code}
-          pageTitle={active.title}
-          introText={active.description}
-          hideSubjectFilter
-        />
+        {active.code === 'chem_redox' ? (
+          <ChemistryRedoxPractice userId={userId} isDarkMode={isDarkMode} />
+        ) : (
+          <KnowledgePracticePanel
+            key={active.code}
+            isDarkMode={isDarkMode}
+            subjectGroup="chemistry"
+            initialSubject={active.code}
+            pageTitle={active.title}
+            introText={active.description}
+            hideSubjectFilter
+          />
+        )}
       </section>
 
       <section className={'rounded-2xl border p-4 ' + (dark ? 'border-slate-700 bg-slate-900/70' : 'border-slate-200 bg-white')}>
