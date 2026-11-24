@@ -19,12 +19,12 @@ Do not move `SUPABASE_SERVICE_ROLE_KEY` into a `NEXT_PUBLIC_*` variable or brows
 ## LINE Developers setup (manual step)
 
 1. In the existing LINE Login channel/provider used by the CampusSync materials LIFF, create a separate LIFF app for the public portal. Keep it under the same provider as the official account's Messaging API channel when the channels are linked.
-2. Set its endpoint URL to `https://campus-sync-mocha.vercel.app/liff`.
+2. Set its endpoint URL to the `/liff` path on the confirmed production host. For the Cloudflare Worker deployment, the configured host is `https://campus-sync.gcis-webcreator.workers.dev/liff`; use it only after the commit containing this page has actually been deployed. A successful CI build by itself does not publish the page.
 3. Set the LIFF size to Full. Do not request the `profile` or `email` scopes. The page does not need an ID token or LINE user ID.
 4. Save the new LIFF ID. Use its URL, `https://liff.line.me/{LIFF_ID}`, as the URI action in the LINE Official Account rich menu.
 5. Keep the existing materials LIFF app and its endpoint unchanged. This public portal is a separate LIFF entry point.
 
-The LIFF ID and rich-menu action must be configured in LINE Developers / LINE Official Account Manager; this repository change cannot perform those console actions.
+The LIFF ID and rich-menu action must be configured in LINE Developers / LINE Official Account Manager; this repository change cannot perform those console actions. Keep the existing materials LIFF app untouched.
 
 ## Deployment
 
@@ -32,4 +32,4 @@ The portal requires the same server environment already used by existing school 
 - `NEXT_PUBLIC_SUPABASE_URL` (or `SUPABASE_URL`)
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-The public portal itself does not need a `NEXT_PUBLIC_LINE_LIFF_ID` because it does not call LIFF identity APIs. Configure LINE's LIFF endpoint URL after a deployment containing this route is live.
+The public portal does not request the LINE `profile` or `email` scopes and does not call LIFF profile or ID-token APIs. It uses the LIFF URL as the LINE entry point, while all class selection stays in browser-local storage. Configure the LINE endpoint only after a deployment containing this route is live.

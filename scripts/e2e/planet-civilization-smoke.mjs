@@ -4,6 +4,7 @@ import { chromium } from 'playwright';
 const origin = 'http://127.0.0.1:8787';
 const supabaseHost = 'build-check-placeholder.supabase.co';
 let planetGetCalls = 0;
+let publicPortalSupabaseRequests = 0;
 let savedStudySession = null;
 let xpAwardPayload = null;
 let studySessionSequence = 0;
@@ -103,6 +104,7 @@ try {
     }
 
     if (url.hostname === supabaseHost) {
+      publicPortalSupabaseRequests += 1;
       const corsHeaders = {
         'access-control-allow-origin': origin,
         'access-control-allow-credentials': 'true',
@@ -151,6 +153,16 @@ try {
 
     return route.abort();
   });
+
+  // The LINE public portal must render without CampusSync or Supabase identity.
+  await page.goto(origin + '/liff', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '学校情報ポータル', exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+  await page.getByText('ログイン不要', { exact: true }).waitFor({ state: 'visible' });
+  for (const label of ['試験範囲', '時間割表', 'イベント', '課題・提出物', '気象パネル', '電車発車案内', '高機能電卓']) {
+    await page.getByRole('button', { name: new RegExp(label) }).waitFor({ state: 'visible' });
+  }
+  assert.equal(publicPortalSupabaseRequests, 0, 'Public LIFF portal must not request Supabase identity or user data');
+  assert.equal(await page.getByRole('button', { name: 'オフライン同期パネルを開く' }).count(), 0, 'Public LIFF portal must not show the personal offline-sync control');
 
   await page.addInitScript(() => {
     window.__campusSongPlayCalls = [];
