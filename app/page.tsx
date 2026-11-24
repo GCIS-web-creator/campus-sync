@@ -23,6 +23,7 @@ import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import CountdownEventWidget from '@/components/CountdownEventWidget';
 import WeatherForecast from '@/components/WeatherForecast';
 import FlashcardLearningHub from '@/components/FlashcardLearningHub';
+import TranslatorPanel from '@/components/TranslatorPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -35,7 +36,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, Layers3
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, Layers3, Languages
 } from 'lucide-react';
 import {
   AnimatedAsset,
@@ -492,6 +493,7 @@ const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   'student-card': 'tools',
   calculator: 'tools',
   ai: 'tools',
+  translator: 'tools',
   notes: 'tools',
 };
 
@@ -1059,6 +1061,7 @@ export default function CampusSyncApp() {
       card: { tab: 'student-card' },
       'student-card': { tab: 'student-card' },
       calculator: { tab: 'calculator' },
+      translator: { tab: 'translator' },
       calc: { tab: 'calculator' },
       practice: { tab: 'practice-lab', practiceSection: 'math' },
       'math-practice': { tab: 'practice-lab', practiceSection: 'math' },
@@ -1102,6 +1105,7 @@ export default function CampusSyncApp() {
       weather: 'weather',
       cafeteria: 'food',
       ai: 'ai',
+      translator: 'translator',
       notes: 'notes',
       study: 'study',
       planet: 'planet',
@@ -4556,6 +4560,9 @@ Supabaseの設定を確認してください。
       case 'calculator':
         return <CampusCalculator isDarkMode={isDarkMode} />;
 
+      case 'translator':
+        return <TranslatorPanel isDarkMode={isDarkMode} />;
+
       case 'notes':
         return authUser?.id && !isGuestMode
           ? <CampusNotes userId={String(authUser.id)} studentId={studentId} studentName={studentName} />
@@ -6393,7 +6400,7 @@ Supabaseの設定を確認してください。
       id: 'tools',
       label: '便利ツール',
       icon: <Sparkles size={17} />,
-      keywords: ['AI', '生徒証', 'メモ', '電卓', '計算'],
+      keywords: ['AI', '生徒証', 'メモ', '電卓', '計算', '翻訳', '多言語', '外国語'],
       items: [
         ...(authUser?.id ? [{
           key: 'student-card', label: 'デジタル生徒証', icon: <QrCode size={17} />,
@@ -6404,6 +6411,11 @@ Supabaseの設定を確認してください。
           key: 'calculator', label: '電卓', icon: <Calculator size={17} />,
           isActive: activeTab === 'calculator', keywords: ['計算', '数学'],
           onSelect: () => setActiveTab('calculator'),
+        },
+        {
+          key: 'translator', label: '翻訳', icon: <Languages size={17} />,
+          isActive: activeTab === 'translator', keywords: ['翻訳', '多言語', '外国語', '英語', '中国語', '韓国語'],
+          onSelect: () => setActiveTab('translator'),
         },
         {
           key: 'ai', label: 'CampusSync AI', icon: <Sparkles size={17} />,
