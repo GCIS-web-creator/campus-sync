@@ -22,6 +22,7 @@ import CampusFacilityMap, { type CampusFacility } from '@/components/CampusFacil
 import WeeklySchoolSchedule from '@/components/WeeklySchoolSchedule';
 import CountdownEventWidget from '@/components/CountdownEventWidget';
 import WeatherForecast from '@/components/WeatherForecast';
+import FlashcardLearningHub from '@/components/FlashcardLearningHub';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   supabase } from '@/lib/supabase';
@@ -34,7 +35,7 @@ import {
   Plus, ChevronRight, AlertTriangle, Sparkles, Star, Menu, Search as GlobalSearchIcon, ClipboardList,
   MapPin, User, Palette, BellRing, Sparkle,
   Heart, ThumbsUp, ChevronLeft, BookOpenCheck, BookMarked, ShieldAlert,
-  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit
+  Volume2, Coffee, Moon, Sun, HelpCircle, Orbit, Layers3
 } from 'lucide-react';
 import {
   AnimatedAsset,
@@ -467,6 +468,7 @@ type StudentNavigationGroup = {
 
 const STUDENT_NAV_GROUP_IDS = ['learning', 'campus', 'community', 'weather', 'tools'] as const;
 const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
+  cards: 'learning',
   study: 'learning',
   notebooks: 'learning',
   'practice-lab': 'learning',
@@ -4574,6 +4576,11 @@ Supabaseの設定を確認してください。
           ? <StudentMaterialsLibrary isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><FolderOpen size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">資料室はログイン後に利用できます</h2></div>;
 
+      case 'cards':
+        return authUser?.id && !isGuestMode
+          ? <FlashcardLearningHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Layers3 size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">カード学習はログイン後に利用できます</h2></div>;
+
       case 'study':
         return authUser?.id && !isGuestMode
           ? <StudentLearningHub userId={String(authUser.id)} userEmail={String(authUser.email || '')} userClass={userClass} isDarkMode={isDarkMode} />
@@ -6261,6 +6268,10 @@ Supabaseの設定を確認してください。
           key: 'study', label: '学習・テスト対策', icon: <BookOpenCheck size={17} />,
           isActive: activeTab === 'study', keywords: ['勉強', '小テスト', '定期試験', '学習記録'],
           onSelect: () => setActiveTab('study'),
+        }, {
+          key: 'cards', label: 'カード学習', icon: <Layers3 size={17} />,
+          isActive: activeTab === 'cards', keywords: ['単語帳', 'フラッシュカード', '暗記カード', 'マッチ', '用語と定義'],
+          onSelect: () => setActiveTab('cards'),
         }, {
           key: 'notebooks', label: 'ノート管理', icon: <BookMarked size={17} />,
           isActive: activeTab === 'notebooks', keywords: ['ノート', '課題ノート', '残りページ', '未使用ノート', '在庫'],
