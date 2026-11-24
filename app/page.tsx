@@ -9,7 +9,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
-import MathPracticeHub from '@/components/MathPracticeHub';
+import PracticeLab from '@/components/PracticeLab';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
 import StudentAttendance from '@/components/StudentAttendance';
 import GroupWorkspaces from '@/components/GroupWorkspaces';
@@ -4495,8 +4495,8 @@ Supabaseの設定を確認してください。
 
       case 'math-practice':
         return authUser?.id && !isGuestMode
-          ? <MathPracticeHub userId={String(authUser.id)} isDarkMode={isDarkMode} />
-          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Calculator size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">数学演習はログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、問題演習や学習履歴を利用できます。</p></div>;
+          ? <PracticeLab userId={String(authUser.id)} isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><Calculator size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">演習ラボはログイン後に利用できます</h2><p className="mt-2 text-sm text-slate-500">学校アカウントでログインすると、数学・化学の問題演習や学習履歴を利用できます。</p></div>;
 
       case 'student-card':
         return authUser?.id && !isGuestMode
@@ -6142,8 +6142,8 @@ Supabaseの設定を確認してください。
           onSelect: () => setActiveTab('study'),
         }] : []),
         ...(authUser?.id ? [{
-          key: 'math-practice', label: '数学演習ラボ', icon: <Calculator size={17} />,
-          isActive: activeTab === 'math-practice', keywords: ['数学', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
+          key: 'math-practice', label: '演習ラボ', icon: <Calculator size={17} />,
+          isActive: activeTab === 'math-practice', keywords: ['数学', '化学', '酸化還元', '半反応式', '酸化剤', '還元剤', '数学I', '数学II', '数学III', '数学A', '数学B', '数学C', '問題集', '演習'],
           onSelect: () => setActiveTab('math-practice'),
         }] : []),
         {
