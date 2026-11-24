@@ -439,15 +439,39 @@ const INITIAL_LOST_AND_FOUND: LostAndFoundItem[] = [];
 
 
 const FAVORITE_DASHBOARD_OPTIONS = [
+  // 授業・学習
+  { id: 'study', label: '学習・テスト対策', icon: BookOpenCheck, requiresAuth: true },
+  { id: 'cards', label: 'カード学習', icon: Layers3, requiresAuth: true },
+  { id: 'notebooks', label: 'ノート管理', icon: BookMarked, requiresAuth: true },
+  { id: 'planet', label: '惑星・文明', icon: Orbit, requiresAuth: true },
+  { id: 'practice-lab', label: '学習演習ラボ', icon: BookOpenCheck, requiresAuth: true },
+  { id: 'materials', label: 'プリント・資料室', icon: FolderOpen, requiresAuth: true },
   { id: 'timetable', label: '時間割', icon: Calendar },
-  { id: 'cafeteria', label: '学食', icon: Utensils },
-  { id: 'ai', label: 'CampusSync AI', icon: Sparkles },
+  { id: 'school-schedule', label: '学校予定表', icon: Calendar },
+  { id: 'countdowns', label: 'イベントカウントダウン', icon: Clock },
   { id: 'tasks', label: '課題・提出物', icon: FileText },
-  { id: 'bus', label: '電車・バス', icon: Train },
-  { id: 'chat', label: 'クラスチャット', icon: MessageCircle },
+  // 校内生活
+  { id: 'cafeteria', label: '学食', icon: Utensils },
+  { id: 'facilities', label: '校内施設・落とし物', icon: Search },
   { id: 'campus-map', label: '校内マップ', icon: MapPin },
-  { id: 'notifications', label: 'お知らせ', icon: BellRing },
+  // 連絡・交流
+  { id: 'attendance', label: '出欠連絡', icon: ClipboardList, requiresAuth: true },
+  { id: 'workspaces', label: '共有ワークスペース', icon: Users, requiresAuth: true },
+  { id: 'chat', label: 'クラスチャット', icon: MessageCircle },
+  { id: 'club', label: '部活・委員会ノート', icon: MessageSquare },
+  { id: 'notifications', label: '通知・連絡', icon: BellRing },
+  // 交通・気象情報
+  { id: 'weather', label: '気象パネル', icon: ThermometerSun },
+  { id: 'bus', label: '電車発車案内', icon: Train },
+  // 便利ツール
+  { id: 'student-card', label: 'デジタル生徒証', icon: QrCode, requiresAuth: true },
+  { id: 'calculator', label: '電卓', icon: Calculator },
+  { id: 'translator', label: '翻訳', icon: Languages },
+  { id: 'ai', label: 'CampusSync AI', icon: Sparkles },
+  { id: 'notes', label: '高機能メモ', icon: BookOpenCheck, requiresAuth: true },
 ] as const;
+
+const MAX_FAVORITE_DASHBOARD_TABS = 12;
 
 type StudentNavigationItem = {
   key: string;
@@ -2119,6 +2143,12 @@ const handleDeleteLostWatch = async (id: string) => {
     total_seats: 35,
   });
 
+  const availableFavoriteDashboardOptions = FAVORITE_DASHBOARD_OPTIONS.filter(
+    option => !('requiresAuth' in option) || Boolean(authUser?.id)
+  );
+  const displayedFavoriteDashboardTabs = favoriteDashboardTabs.filter(id =>
+    availableFavoriteDashboardOptions.some(option => option.id === id)
+  );
 
 // お気に入りダッシュボードは端末内に保存し、学校の個人情報は保存しない。
 useEffect(() => {
@@ -2129,7 +2159,7 @@ useEffect(() => {
       if (Array.isArray(parsed)) {
         const valid = parsed.filter((value): value is string =>
           typeof value === 'string' && FAVORITE_DASHBOARD_OPTIONS.some(option => option.id === value)
-        ).slice(0, 6);
+        ).slice(0, MAX_FAVORITE_DASHBOARD_TABS);
         setFavoriteDashboardTabs(valid);
       }
     }
@@ -2140,7 +2170,7 @@ useEffect(() => {
 
 useEffect(() => {
   try {
-    window.localStorage.setItem('campus-sync-dashboard-favorites-v1', JSON.stringify(favoriteDashboardTabs.slice(0, 6)));
+    window.localStorage.setItem('campus-sync-dashboard-favorites-v1', JSON.stringify(favoriteDashboardTabs.slice(0, MAX_FAVORITE_DASHBOARD_TABS)));
   } catch (error) {
     console.warn('お気に入りダッシュボードを保存できませんでした。', error);
   }
@@ -4691,16 +4721,17 @@ Supabaseの設定を確認してください。
                   {showFavoriteEditor ? '閉じる' : '編集'}
                 </button>
               </div>
-              {favoriteDashboardTabs.length > 0 ? (
+              {displayedFavoriteDashboardTabs.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {favoriteDashboardTabs.map(id => {
-                    const item = FAVORITE_DASHBOARD_OPTIONS.find(option => option.id === id);
+                  {displayedFavoriteDashboardTabs.map(id => {
+                    const item = availableFavoriteDashboardOptions.find(option => option.id === id);
                     if (!item) return null;
                     const Icon = item.icon;
                     return (
                       <button key={id} type="button" onClick={() => {
                         if (id === 'tasks') { setActiveTab('home'); setHashScrollTarget('tasks'); }
                         else if (id === 'campus-map') { setFacilitiesSubTab('map'); setActiveTab('facilities'); }
+                        else if (id === 'facilities') { setFacilitiesSubTab('status'); setActiveTab('facilities'); }
                         else setActiveTab(id);
                       }} className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-left transition hover:border-cyan-200 hover:bg-cyan-50">
                         <Icon size={19} className="shrink-0 text-cyan-700"/>
@@ -4714,15 +4745,15 @@ Supabaseの設定を確認してください。
               )}
               {showFavoriteEditor && (
                 <div className="mt-3 rounded-xl border border-dashed border-gray-200 p-3">
-                  <p className="mb-2 text-[10px] font-bold text-gray-500">ホームに表示する機能（最大6件）</p>
+                  <p className="mb-2 text-[10px] font-bold text-gray-500">ホームに表示する機能（最大12件）</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {FAVORITE_DASHBOARD_OPTIONS.map(item => (
+                    {availableFavoriteDashboardOptions.map(item => (
                       <label key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-gray-50 p-2 text-[10px] font-bold text-gray-700">
                         <input
                           type="checkbox"
                           checked={favoriteDashboardTabs.includes(item.id)}
                           onChange={event => setFavoriteDashboardTabs(current => {
-                            if (event.target.checked) return current.length >= 6 ? current : [...current, item.id];
+                            if (event.target.checked) return current.length >= MAX_FAVORITE_DASHBOARD_TABS ? current : [...current, item.id];
                             return current.filter(value => value !== item.id);
                           })}
                         />
@@ -6441,8 +6472,8 @@ Supabaseの設定を確認してください。
       return { ...group, items };
     }).filter(group => group.items.length > 0);
 
-    const matchingFavorites = favoriteDashboardTabs
-      .map(id => FAVORITE_DASHBOARD_OPTIONS.find(option => option.id === id))
+    const matchingFavorites = displayedFavoriteDashboardTabs
+      .map(id => availableFavoriteDashboardOptions.find(option => option.id === id))
       .filter((item): item is (typeof FAVORITE_DASHBOARD_OPTIONS)[number] =>
         item !== undefined && (!query || (item.label + ' ' + item.id).toLocaleLowerCase().includes(query))
       );
@@ -6461,6 +6492,9 @@ Supabaseの設定を確認してください。
         setActiveTab('home');
       } else if (id === 'campus-map') {
         setFacilitiesSubTab('map');
+        setActiveTab('facilities');
+      } else if (id === 'facilities') {
+        setFacilitiesSubTab('status');
         setActiveTab('facilities');
       } else {
         setActiveTab(id);
