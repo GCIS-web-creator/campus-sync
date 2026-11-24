@@ -6,11 +6,6 @@ import type { ReactNode } from 'react';
 import WeatherForecast from '@/components/WeatherForecast';
 import FunctionCalculator from '@/components/FunctionCalculator';
 
-type LineLiffSdk = { init: (options: { liffId: string }) => Promise<unknown> };
-declare global {
-  interface Window { liff?: LineLiffSdk }
-}
-
 type PanelKey = 'exams' | 'timetable' | 'events' | 'assignments' | 'weather' | 'trains' | 'calculator';
 type ClassCode = `${1 | 2 | 3}-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8}`;
 type RangeSection = { section_id?: string; kind?: 'range' | 'notice'; title: string; body: string; note?: string | null };
