@@ -8,9 +8,11 @@ const CORE_URLS = [
   '/illustrations/error-offline.svg',
 ];
 
-async function cacheShellDocument() {
+let activeShellPrefetchController = null;
+
+async function cacheShellDocument(includeStaticAssets = false, signal) {
   try {
-    const response = await fetch('/', { cache: 'reload' });
+    const response = await fetch('/', { cache: 'reload', signal });
     const cacheControl = response.headers.get('cache-control') || '';
     if (
       !response.ok ||
@@ -22,8 +24,10 @@ async function cacheShellDocument() {
     const shellCache = await caches.open(SHELL_CACHE);
     await shellCache.put('/', response.clone()).catch(() => undefined);
 
+    // Large shell-asset prefetch is deferred until a Wi-Fi connection is confirmed.
+    if (!includeStaticAssets) return;
+
     // The HTML contains the initial route's hashed Next.js scripts and styles.
-    // Pre-cache them now so the first offline launch does not depend on a reload.
     const html = await response.text();
     const assetPaths = Array.from(html.matchAll(/(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g))
       .map((match) => match[1])
@@ -31,7 +35,7 @@ async function cacheShellDocument() {
     const assets = await caches.open(ASSET_CACHE);
     await Promise.allSettled(assetPaths.map(async (path) => {
       try {
-        const assetResponse = await fetch(path, { cache: 'reload' });
+        const assetResponse = await fetch(path, { cache: 'reload', signal });
         if (assetResponse.ok && assetResponse.type === 'basic') {
           await assets.put(path, assetResponse.clone()).catch(() => undefined);
         }
@@ -46,7 +50,9 @@ async function cacheShellDocument() {
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
-    await cacheShellDocument();
+    // Cache only the small HTML shell during installation. Static assets are
+    // cached on normal use and proactively fetched only after a Wi-Fi signal.
+    await cacheShellDocument(false);
     const cache = await caches.open(SHELL_CACHE);
     await Promise.allSettled(CORE_URLS.map(async (url) => {
       try {
@@ -145,6 +151,30 @@ self.addEventListener('fetch', (event) => {
       return response;
     } catch {
       return (await cache.match(request)) || Response.error();
+    }
+  })());
+});
+
+
+self.addEventListener('message', (event) => {
+  const type = event.data?.type;
+  if (type === 'CAMPUSSYNC_CANCEL_WIFI_PREFETCH') {
+    activeShellPrefetchController?.abort();
+    activeShellPrefetchController = null;
+    return;
+  }
+  if (type !== 'CAMPUSSYNC_PREFETCH_ON_WIFI') return;
+
+  event.waitUntil((async () => {
+    activeShellPrefetchController?.abort();
+    const controller = new AbortController();
+    activeShellPrefetchController = controller;
+    try {
+      await cacheShellDocument(true, controller.signal);
+    } finally {
+      if (activeShellPrefetchController === controller) {
+        activeShellPrefetchController = null;
+      }
     }
   })());
 });

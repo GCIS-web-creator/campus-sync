@@ -29,6 +29,36 @@ type StudyMaterial = {
 };
 
 const SUBJECTS = ['国語演習', '古典探求', '物理', '生物', '数３', '数C', '公共', '英コミュ', '論表', '情報', '保健', 'その他'];
+const LARGE_DOWNLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
+
+type NetworkInformationLike = {
+  type?: string;
+  saveData?: boolean;
+};
+
+function canStartLargeDownload(): boolean {
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+
+  if (connection?.saveData === true) return false;
+  if (connection?.type === 'cellular' || connection?.type === 'wimax') return false;
+  if (connection?.type === 'wifi' || connection?.type === 'ethernet') return true;
+
+  // Some browsers (notably Safari on iPhone/iPad) do not expose the network type.
+  // Do not guess: ask the user to confirm Wi-Fi before transferring a large file.
+  return window.confirm(
+    'このブラウザーではWi-Fi接続かどうかを自動判定できません。\n\nWi-Fiに接続していることを確認してから、大容量ファイルの通信を続けますか？',
+  );
+}
+
+function isLargeDownload(bytes: number): boolean {
+  return Number.isFinite(bytes) && bytes >= LARGE_DOWNLOAD_LIMIT_BYTES;
+}
+
+function largeDownloadBlockedMessage(): string {
+  return '10MB以上の大容量ファイルはWi-Fi接続時のみ利用できます。Wi-Fiに接続してから、もう一度お試しください。';
+}
+
+
 const TYPE_LABELS: Record<string, string> = {
   lesson: '授業プリント',
   assignment: '課題・宿題',
@@ -188,6 +218,10 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
         throw new Error('この資料は端末に保存されていません。オンライン時に「オフライン保存」を押してください。');
       }
 
+      if (isLargeDownload(item.file_size) && !canStartLargeDownload()) {
+        throw new Error(largeDownloadBlockedMessage());
+      }
+
       const token = data.session?.access_token;
       const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id), {
         headers: { Authorization: 'Bearer ' + (token || '') },
@@ -222,6 +256,12 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
 
       if (!navigator.onLine) throw new Error('資料の保存にはインターネット接続が必要です。');
 
+      let largeDownloadApproved = false;
+      if (isLargeDownload(item.file_size)) {
+        if (!canStartLargeDownload()) throw new Error(largeDownloadBlockedMessage());
+        largeDownloadApproved = true;
+      }
+
       const token = data.session?.access_token;
       const response = await fetch('/api/materials/file?id=' + encodeURIComponent(item.id), {
         headers: { Authorization: 'Bearer ' + (token || '') },
@@ -234,6 +274,18 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
 
       const fileResponse = await fetch(result.url, { cache: 'no-store' });
       if (!fileResponse.ok) throw new Error('資料ファイルをダウンロードできませんでした。');
+
+      // Use the server's declared size as a second check in case the catalogue
+      // metadata was missing or outdated. Cancel before reading a large body.
+      const responseSize = Number(fileResponse.headers.get('content-length') || 0);
+      if (isLargeDownload(responseSize) && !largeDownloadApproved) {
+        if (!canStartLargeDownload()) {
+          await fileResponse.body?.cancel().catch(() => undefined);
+          throw new Error(largeDownloadBlockedMessage());
+        }
+        largeDownloadApproved = true;
+      }
+
       const blob = await fileResponse.blob();
 
       if (navigator.storage?.estimate) {
@@ -278,6 +330,10 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
         </div>
         <button type="button" onClick={() => void loadMaterials()} disabled={loading || !online} className={'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40 ' + (isDarkMode ? 'border-slate-600 text-slate-200 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><RefreshCw size={14} /> 更新</button>
       </div>
+
+      <p className={'rounded-xl border px-4 py-3 text-xs leading-5 ' + (isDarkMode ? 'border-slate-700 bg-slate-900 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600')}>
+        10MB以上の大容量ファイルはWi-Fi接続時のみダウンロードします。通常の画面表示や小さな通信はモバイル通信でも利用できます。
+      </p>
 
       <div className={'rounded-2xl border p-3 sm:p-4 ' + panel}>
         <label className={'flex items-center gap-2 rounded-xl border px-3 py-3 ' + (isDarkMode ? 'border-slate-600 bg-slate-900' : 'border-slate-200 bg-slate-50')}>

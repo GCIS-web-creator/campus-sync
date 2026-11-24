@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import { CloudOff, Wifi } from 'lucide-react';
 
+type NetworkInformationLike = EventTarget & {
+  type?: string;
+  effectiveType?: string;
+  saveData?: boolean;
+};
+
+type NavigatorWithNetworkInformation = Navigator & {
+  connection?: NetworkInformationLike;
+};
+
 type CampusSyncNetworkEvent = 'campussync:network-online' | 'campussync:network-offline';
 
 export default function OfflineManager() {
@@ -21,10 +31,38 @@ export default function OfflineManager() {
     window.addEventListener('campussync:network-online', handleNetworkOnline as EventListener);
     window.addEventListener('campussync:network-offline', handleNetworkOffline as EventListener);
 
+    let connection: NetworkInformationLike | undefined;
+    let readyWorker: ServiceWorker | null = null;
+
+    const updateWifiPrefetch = () => {
+      if (!readyWorker) return;
+      const isWifi = connection?.type === 'wifi' && connection.saveData !== true;
+      readyWorker.postMessage({
+        type: isWifi
+          ? 'CAMPUSSYNC_PREFETCH_ON_WIFI'
+          : 'CAMPUSSYNC_CANCEL_WIFI_PREFETCH',
+      });
+    };
+
+    let removeConnectionListener: () => void = () => {};
+
     if ('serviceWorker' in navigator) {
+      const networkNavigator = navigator as NavigatorWithNetworkInformation;
+      connection = networkNavigator.connection;
+
+      if (connection) {
+        connection.addEventListener('change', updateWifiPrefetch);
+        removeConnectionListener = () => connection?.removeEventListener('change', updateWifiPrefetch);
+      }
+
       navigator.serviceWorker
         .register('/sw.js', { scope: '/', updateViaCache: 'none' })
-        .then((registration) => registration.update().catch(() => undefined))
+        .then(async (registration) => {
+          await navigator.serviceWorker.ready;
+          readyWorker = registration.active || navigator.serviceWorker.controller;
+          updateWifiPrefetch();
+          registration.update().catch(() => undefined);
+        })
         .catch((error) => console.warn('CampusSync offline worker registration failed:', error));
     }
 
@@ -33,6 +71,8 @@ export default function OfflineManager() {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('campussync:network-online', handleNetworkOnline as EventListener);
       window.removeEventListener('campussync:network-offline', handleNetworkOffline as EventListener);
+      removeConnectionListener();
+      readyWorker?.postMessage({ type: 'CAMPUSSYNC_CANCEL_WIFI_PREFETCH' });
     };
   }, []);
 
