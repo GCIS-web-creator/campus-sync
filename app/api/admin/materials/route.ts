@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .limit(300),
     admin.from('study_material_folders')
-      .select('id,name,parent_id,sort_order,created_at,updated_at')
+      .select('id,name,parent_id,sort_order,color,created_at,updated_at')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true }),
   ]);

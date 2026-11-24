@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 const noStore = { 'Cache-Control': 'no-store, private' };
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+const DEFAULT_FOLDER_COLOR = '#f59e0b';
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ success: false, message }, { status, headers: noStore });
@@ -27,7 +29,7 @@ export async function GET(request: Request) {
   const admin = getStudyMaterialsAdminClient();
   if (!admin) return fail('Supabaseのサーバー設定が不足しています。', 503);
   const { data, error } = await admin.from('study_material_folders')
-    .select('id,name,parent_id,sort_order,created_at,updated_at')
+    .select('id,name,parent_id,sort_order,color,created_at,updated_at')
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error) return fail('フォルダー一覧を取得できませんでした。', 500);
@@ -40,9 +42,11 @@ export async function POST(request: Request) {
   const admin = getStudyMaterialsAdminClient();
   if (!admin) return fail('Supabaseのサーバー設定が不足しています。', 503);
 
-  const body = await request.json().catch(() => null) as { name?: unknown; parent_id?: unknown } | null;
+  const body = await request.json().catch(() => null) as { name?: unknown; parent_id?: unknown; color?: unknown } | null;
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   const parentId = typeof body?.parent_id === 'string' ? body.parent_id : null;
+  const color = typeof body?.color === 'string' ? body.color : DEFAULT_FOLDER_COLOR;
+  if (!HEX_COLOR_PATTERN.test(color)) return fail('フォルダー色の指定が正しくありません。');
   if (!name || name.length > 80) return fail('フォルダー名は1〜80文字で入力してください。');
   if (parentId && !UUID_PATTERN.test(parentId)) return fail('親フォルダーが正しくありません。');
   if (parentId) {
@@ -53,8 +57,9 @@ export async function POST(request: Request) {
   const { data, error } = await admin.from('study_material_folders').insert({
     name,
     parent_id: parentId,
+    color,
     updated_at: new Date().toISOString(),
-  }).select('id,name,parent_id,sort_order,created_at,updated_at').single();
+  }).select('id,name,parent_id,sort_order,color,created_at,updated_at').single();
   if (error || !data) {
     if (error?.code === '23505') return fail('同じ場所に同じ名前のフォルダーがあります。', 409);
     console.error('Study material folder create failed:', error?.message);
@@ -69,15 +74,24 @@ export async function PATCH(request: Request) {
   const admin = getStudyMaterialsAdminClient();
   if (!admin) return fail('Supabaseのサーバー設定が不足しています。', 503);
 
-  const body = await request.json().catch(() => null) as { id?: unknown; name?: unknown } | null;
+  const body = await request.json().catch(() => null) as { id?: unknown; name?: unknown; color?: unknown } | null;
   const id = typeof body?.id === 'string' ? body.id : '';
-  const name = typeof body?.name === 'string' ? body.name.trim() : '';
-  if (!UUID_PATTERN.test(id) || !name || name.length > 80) return fail('フォルダー名は1〜80文字で入力してください。');
+  if (!UUID_PATTERN.test(id)) return fail('変更対象のフォルダーIDが正しくありません。');
+  const update: { name?: string; color?: string; updated_at: string } = { updated_at: new Date().toISOString() };
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'name')) {
+    const name = typeof body?.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 80) return fail('フォルダー名は1〜80文字で入力してください。');
+    update.name = name;
+  }
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'color')) {
+    const color = typeof body?.color === 'string' ? body.color : '';
+    if (!HEX_COLOR_PATTERN.test(color)) return fail('フォルダー色の指定が正しくありません。');
+    update.color = color;
+  }
+  if (!update.name && !update.color) return fail('変更内容がありません。');
 
-  const { data, error } = await admin.from('study_material_folders').update({
-    name,
-    updated_at: new Date().toISOString(),
-  }).eq('id', id).select('id,name,parent_id,sort_order,updated_at').maybeSingle();
+  const { data, error } = await admin.from('study_material_folders').update(update)
+    .eq('id', id).select('id,name,parent_id,sort_order,color,updated_at').maybeSingle();
   if (error || !data) {
     if (error?.code === '23505') return fail('同じ場所に同じ名前のフォルダーがあります。', 409);
     return fail('フォルダー名を変更できませんでした。', error ? 500 : 404);

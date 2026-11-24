@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         .order('published_at', { ascending: false })
         .limit(300),
       context.admin.from('study_material_folders')
-        .select('id,name,parent_id,sort_order')
+        .select('id,name,parent_id,sort_order,color')
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true }),
       context.admin.from('study_material_submissions')

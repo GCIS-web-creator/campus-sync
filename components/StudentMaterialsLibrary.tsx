@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { compressImageFile } from '@/lib/compress-image-file';
 import {
   Search, FileText, FileImage, Download, Eye, RefreshCw, BookOpen, X, UploadCloud,
-  Folder, FolderOpen, ChevronRight, ArrowUp,
+  Folder, FolderOpen, ChevronRight, ArrowUp, Files,
 } from 'lucide-react';
 
 type StudyMaterial = {
@@ -29,6 +29,7 @@ type MaterialFolder = {
   name: string;
   parent_id: string | null;
   sort_order: number;
+  color: string;
 };
 type MaterialSubmission = {
   id: string; title: string; subject: string; material_type: string;
@@ -67,6 +68,8 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
   const [materialType, setMaterialType] = useState('all');
   const [preview, setPreview] = useState<{ item: StudyMaterial; url: string } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [selectedPdfIds, setSelectedPdfIds] = useState<string[]>([]);
+  const [mergingPdfs, setMergingPdfs] = useState(false);
   const [verifiedClass, setVerifiedClass] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<MaterialSubmission[]>([]);
   const [studentFiles, setStudentFiles] = useState<File[]>([]);
@@ -132,6 +135,45 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
       setMessage(error instanceof Error ? error.message : 'ファイルを開けませんでした。');
     } finally {
       setOpeningId(null);
+    }
+  };
+
+  const mergeSelectedPdfs = async () => {
+    if (selectedPdfIds.length < 2 || mergingPdfs) return;
+    setMergingPdfs(true);
+    setMessage('');
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      const token = data.session?.access_token;
+      if (!token) throw new Error('ログイン状態を確認できませんでした。');
+
+      const response = await fetch('/api/materials/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ ids: selectedPdfIds }),
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.message || 'PDFを結合できませんでした。');
+      }
+      const blob = await response.blob();
+      if (!blob.size || blob.type !== 'application/pdf') throw new Error('結合PDFを受信できませんでした。');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'CampusSync_プリント資料まとめ.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setSelectedPdfIds([]);
+      setMessage('選択したPDFを1つにまとめてダウンロードしました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'PDFを結合できませんでした。');
+    } finally {
+      setMergingPdfs(false);
     }
   };
 
@@ -266,6 +308,8 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
     });
   }, [materials, search, subject, materialType, activeFolderId]);
 
+  const visiblePdfIds = filteredMaterials.filter(item => item.mime_type === 'application/pdf').map(item => item.id);
+  const allVisiblePdfsSelected = visiblePdfIds.length > 0 && visiblePdfIds.every(id => selectedPdfIds.includes(id));
   const panel = isDarkMode ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-900';
   const muted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
   const subtlePanel = isDarkMode ? 'border-slate-700 bg-slate-900/70 hover:bg-slate-700' : 'border-slate-200 bg-slate-50 hover:bg-cyan-50';
@@ -390,7 +434,7 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {childFolders.map(folder => (
                   <button key={folder.id} type="button" onClick={() => setCurrentFolderId(folder.id)} className={'flex items-center gap-3 rounded-2xl border p-4 text-left transition ' + subtlePanel}>
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500"><Folder size={23} /></span>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ color: folder.color || '#f59e0b', backgroundColor: (folder.color || '#f59e0b') + '18' }}><Folder size={23} /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-sm font-black">{folder.name}</span>
                       <span className={'block mt-1 text-[10px] ' + muted}>フォルダーを開く</span>
@@ -407,6 +451,25 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
               <h3 className={'flex items-center gap-2 text-sm font-black ' + (isDarkMode ? 'text-slate-200' : 'text-slate-700')}><FileText size={16} className="text-cyan-600" /> {search.trim() ? '検索結果' : 'このフォルダーの資料'}</h3>
               <span className={'text-[10px] ' + muted}>{filteredMaterials.length}件</span>
             </div>
+            {visiblePdfIds.length > 0 && (
+              <div className={'flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 ' + (isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-cyan-50/60')}>
+                <label className="inline-flex items-center gap-2 text-xs font-bold">
+                  <input type="checkbox" checked={allVisiblePdfsSelected} onChange={event => {
+                    setSelectedPdfIds(previous => event.target.checked
+                      ? [...new Set([...previous, ...visiblePdfIds])]
+                      : previous.filter(id => !visiblePdfIds.includes(id)));
+                  }} className="h-4 w-4 accent-cyan-600" />
+                  表示中のPDFをすべて選択
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={'text-[10px] ' + muted}>選択中 {selectedPdfIds.length}件</span>
+                  <button type="button" disabled={selectedPdfIds.length < 2 || mergingPdfs} onClick={() => void mergeSelectedPdfs()} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-[11px] font-black text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40">
+                    <Files size={14} /> {mergingPdfs ? 'PDFを結合中…' : '選択PDFを1つにまとめてダウンロード'}
+                  </button>
+                  {selectedPdfIds.length > 0 && <button type="button" onClick={() => setSelectedPdfIds([])} disabled={mergingPdfs} className="rounded-lg border border-slate-500/30 px-2.5 py-2 text-[10px] font-bold">解除</button>}
+                </div>
+              </div>
+            )}
             {filteredMaterials.length === 0 ? (
               <div className={'rounded-2xl border border-dashed p-10 text-center ' + panel}>
                 <FolderOpen size={30} className={'mx-auto ' + muted} />
@@ -418,6 +481,9 @@ export default function StudentMaterialsLibrary({ isDarkMode = false }: { isDark
                 {filteredMaterials.map(item => (
                   <article key={item.id} className={'flex flex-col rounded-2xl border p-4 shadow-sm ' + panel}>
                     <div className="flex items-start gap-3">
+                      {item.mime_type === 'application/pdf' && (
+                        <input type="checkbox" aria-label={item.title + 'を結合対象に選択'} checked={selectedPdfIds.includes(item.id)} onChange={event => setSelectedPdfIds(previous => event.target.checked ? [...previous, item.id] : previous.filter(id => id !== item.id))} className="mt-4 h-4 w-4 shrink-0 accent-cyan-600" />
+                      )}
                       <span className={'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ' + (isDarkMode ? 'bg-slate-700 text-cyan-300' : 'bg-cyan-50 text-cyan-700')}>
                         {item.mime_type === 'application/pdf' ? <FileText size={23} /> : <FileImage size={23} />}
                       </span>

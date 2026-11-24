@@ -28,6 +28,7 @@ type MaterialFolder = {
   name: string;
   parent_id: string | null;
   sort_order: number;
+  color: string;
 };
 type MaterialSubmission = {
   id: string; student_id: string; student_name: string; user_class: string;
@@ -44,6 +45,16 @@ const MATERIAL_TYPES: Array<{ value: string; label: string }> = [
   { value: 'explanation', label: '解説' },
   { value: 'past_exam', label: '過去問・考査資料' },
   { value: 'other', label: 'その他' },
+];
+const FOLDER_COLORS = [
+  { value: '#f59e0b', label: 'アンバー' },
+  { value: '#3b82f6', label: 'ブルー' },
+  { value: '#06b6d4', label: 'シアン' },
+  { value: '#10b981', label: 'エメラルド' },
+  { value: '#8b5cf6', label: 'バイオレット' },
+  { value: '#f43f5e', label: 'ローズ' },
+  { value: '#f97316', label: 'オレンジ' },
+  { value: '#64748b', label: 'スレート' },
 ];
 const SCHOOL_CLASSES = Array.from({ length: 3 }, (_, grade) =>
   Array.from({ length: 8 }, (_, index) => (grade + 1) + '-' + (index + 1)),
@@ -67,6 +78,7 @@ export default function StudyMaterialsAdmin() {
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [folders, setFolders] = useState<MaterialFolder[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [uploadFolderId, setUploadFolderId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -146,7 +158,7 @@ export default function StudyMaterialsAdmin() {
     let succeeded = 0;
     setMessage('アップロードを開始します…');
     try {
-      const folderId = currentFolderId || folders.find(folder => folder.parent_id === null && folder.name === '学校資料')?.id || null;
+      const folderId = uploadFolderId || currentFolderId || folders.find(folder => folder.parent_id === null && folder.name === '学校資料')?.id || null;
       for (const selectedFile of files) {
         let uploadedPath: string | null = null;
         try {
@@ -404,6 +416,25 @@ export default function StudyMaterialsAdmin() {
     }
   };
 
+  const changeFolderColor = async (folder: MaterialFolder, color: string) => {
+    if (folder.color === color) return;
+    try {
+      const response = await fetch('/api/admin/materials/folders', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folder.id, color }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) throw new Error(result?.message || 'フォルダーの色を変更できませんでした。');
+      setFolders(previous => previous.map(item => item.id === folder.id ? { ...item, color } : item));
+      setMessage('「' + folder.name + '」の色を変更しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'フォルダーの色を変更できませんでした。');
+    }
+  };
+
   const deleteFolder = async (folder: MaterialFolder) => {
     if (!window.confirm('「' + folder.name + '」を削除します。空のフォルダーだけ削除できます。')) return;
     try {
@@ -463,7 +494,7 @@ export default function StudyMaterialsAdmin() {
       <section className="rounded-2xl border border-slate-800 bg-slate-950 p-5 sm:p-6">
         <div className="mb-4">
           <h3 className="text-base font-black text-white">新しい資料を登録</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-400">PDF・PNG・JPG形式を一度に最大20件まで登録できます。1ファイル20MBまで。各ファイルは個別の資料として保存されます。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">PDF・PNG・JPG形式を一度に最大20件まで登録できます。1ファイル20MBまで。登録前に保存先フォルダーを選択できます。</p>
         </div>
         <form onSubmit={handleUpload} className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
@@ -479,6 +510,12 @@ export default function StudyMaterialsAdmin() {
               <select value={materialType} onChange={event => setMaterialType(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500">
                 {MATERIAL_TYPES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
+            </label>
+            <label className="block text-xs font-bold text-slate-300">保存先フォルダー
+              <select value={uploadFolderId || activeFolderId || ''} onChange={event => setUploadFolderId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500">
+                {folderOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+              </select>
+              <span className="mt-1 block text-[10px] font-normal text-slate-500">選択した場所へ最初から登録します。登録後に移動する必要はありません。</span>
             </label>
             <label className="block text-xs font-bold text-slate-300">公開対象
               <select value={targetScope} onChange={event => { const value = event.target.value as 'all' | 'grade' | 'class'; setTargetScope(value); setTargetValue(value === 'class' ? '1-1' : '1'); }} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:border-cyan-500">
@@ -554,12 +591,15 @@ export default function StudyMaterialsAdmin() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="text-base font-black text-white">学校資料エクスプローラー <span className="ml-1 text-xs text-slate-500">{materials.length}件</span></h3>
-            <p className="mt-1 text-xs text-slate-500">フォルダーを開いて資料を整理できます。アップロード先は現在開いているフォルダーです。</p>
+            <p className="mt-1 text-xs text-slate-500">フォルダーを開いて資料を整理できます。登録画面で保存先を自由に指定できます。</p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <button type="button" onClick={() => void createFolder()} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-300 hover:bg-amber-500/20"><FolderPlus size={14} /> 新規フォルダー</button>
             {currentFolderId && folderMap.get(currentFolderId) && (
               <>
+                <select aria-label="現在のフォルダー色" value={folderMap.get(currentFolderId)!.color || '#f59e0b'} onChange={event => void changeFolderColor(folderMap.get(currentFolderId)!, event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-200">
+                  {FOLDER_COLORS.map(option => <option key={option.value} value={option.value}>色：{option.label}</option>)}
+                </select>
                 <button type="button" onClick={() => void renameFolder(folderMap.get(currentFolderId)!)} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-700"><Pencil size={13} /> 名前変更</button>
                 <button type="button" onClick={() => void deleteFolder(folderMap.get(currentFolderId)!)} className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/20"><Trash2 size={13} /> 空フォルダー削除</button>
               </>
@@ -596,8 +636,11 @@ export default function StudyMaterialsAdmin() {
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {childFolders.map(folder => (
                 <div key={folder.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3">
-                  <Folder size={19} className="shrink-0 text-amber-400" />
+                  <Folder size={19} className="shrink-0" style={{ color: folder.color || '#f59e0b' }} />
                   <button type="button" onClick={() => setCurrentFolderId(folder.id)} className="min-w-0 flex-1 truncate text-left text-xs font-black text-slate-100 hover:text-cyan-300">{folder.name}</button>
+                  <select aria-label={folder.name + 'のフォルダー色'} value={folder.color || '#f59e0b'} onChange={event => void changeFolderColor(folder, event.target.value)} className="max-w-[108px] rounded-lg border border-slate-700 bg-slate-950 px-1.5 py-1.5 text-[10px] text-slate-200">
+                    {FOLDER_COLORS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
                   <button type="button" onClick={() => void renameFolder(folder)} aria-label="フォルダー名を変更" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={13} /></button>
                   <button type="button" onClick={() => void deleteFolder(folder)} aria-label="空フォルダーを削除" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 size={13} /></button>
                   <ChevronRight size={14} className="text-slate-600" />
