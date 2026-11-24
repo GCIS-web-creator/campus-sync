@@ -8,6 +8,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
 import { buildCampusAiFlexMessage, buildNoticeFlexMessage, buildExamScopeFlexMessages, type ExamScopeFlexInput } from '@/lib/line-flex';
 import { buildLineGoogleSearchFlexMessage, type LineGoogleSearchResult } from '@/lib/line-google-search-flex';
+import { findLineSchoolMaterialMatches, parseLineSchoolMaterialSearchRequest, type LineSchoolMaterialSearchResult } from '@/lib/line-school-material-search';
 import { getLineHumorAnswer } from '@/lib/line-humor';
 import { isLineMarketQuestion, getLineMarketSnapshots } from '@/lib/line-market-data';
 import { buildLineMarketFlexMessage } from '@/lib/line-market-flex';
@@ -1040,6 +1041,135 @@ function parseLineSchoolMaterialsCommand(input: string): LineSchoolMaterialsComm
   return null;
 }
 
+function buildLineSchoolMaterialFlexMessage(
+  question: string,
+  result: LineSchoolMaterialSearchResult,
+) {
+  const makeBubble = (match: NonNullable<Extract<LineSchoolMaterialSearchResult, { status: 'found' | 'ambiguous' }>['matches'][number]>, index: number) => ({
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#173B40',
+      paddingAll: '17px',
+      spacing: 'xs',
+      contents: [
+        { type: 'text', text: 'CAMPUSSYNC / SCHOOL MATERIALS', size: 'xxs', color: '#A7D3CD', weight: 'bold' },
+        { type: 'text', text: result.status === 'ambiguous' ? 'PDF候補 ' + String(index + 1).padStart(2, '0') : 'PDFを特定しました', size: 'lg', color: '#FFFFFF', weight: 'bold', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      spacing: 'md',
+      contents: [
+        { type: 'text', text: match.title.slice(0, 120), size: 'md', weight: 'bold', color: '#173B40', wrap: true },
+        { type: 'text', text: match.subject + '  ·  ' + match.folderPath, size: 'xs', color: '#64748B', wrap: true },
+        { type: 'separator', color: '#D8E6E4', margin: 'sm' },
+        { type: 'text', text: 'ファイル名', size: 'xxs', color: '#64748B', weight: 'bold' },
+        { type: 'text', text: match.fileName.slice(0, 180), size: 'sm', color: '#334155', wrap: true },
+        { type: 'text', text: 'PDF  ·  ' + lineMaterialSizeLabel(match.fileSize) + '  ·  URL有効期限 1時間', size: 'xs', color: '#64748B', wrap: true },
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#176B87',
+          height: 'md',
+          action: { type: 'uri', label: 'PDFを開く', uri: match.signedUrl },
+        },
+      ],
+    },
+  });
+
+  if (result.status === 'found' || result.status === 'ambiguous') {
+    const bubbles = result.matches.map(makeBubble);
+    return {
+      type: 'flex',
+      altText: result.status === 'ambiguous'
+        ? '学校資料のPDF候補を' + result.matches.length + '件見つけました。'
+        : '学校資料「' + result.matches[0].title + '」を開けます。',
+      contents: bubbles.length > 1 ? { type: 'carousel', contents: bubbles } : bubbles[0],
+    };
+  }
+
+  const messages: Record<string, string> = {
+    not_found: '指定された教科・学期・資料名に一致するPDFが見つかりませんでした。資料名の一部だけでも検索できます。',
+    link_required: 'この資料はクラス別の閲覧制限があります。CampusSyncの設定画面でLINE連携を完了してから、公式アカウントとの1対1トークで検索してください。',
+    class_unverified: 'LINE連携は確認できましたが、管理者による所属クラス確認がまだ完了していません。確認完了後にクラス別資料を開けます。',
+    group_restricted: 'この資料はクラス別の閲覧制限があるため、グループにはPDFリンクを送信できません。公式アカウントとの1対1トークで同じ検索をしてください。',
+    unavailable: '資料検索またはPDFリンクの発行に失敗しました。少し待ってからもう一度お試しください。',
+  };
+  const bodyContents: Record<string, unknown>[] = [
+    { type: 'text', text: 'SCHOOL MATERIALS  /  SEARCH', size: 'xxs', color: '#376C69', weight: 'bold' },
+    { type: 'text', text: messages[result.status], size: 'sm', color: '#334155', wrap: true },
+    { type: 'text', text: '検索語句：' + question.slice(0, 100), size: 'xs', color: '#64748B', wrap: true },
+  ];
+  const liffId = process.env.LINE_LIFF_ID || process.env.NEXT_PUBLIC_LINE_LIFF_ID || '';
+  if (result.status === 'not_found' && /^\d{3,}-[A-Za-z0-9]+$/u.test(liffId)) {
+    bodyContents.push({
+      type: 'button',
+      style: 'secondary',
+      height: 'md',
+      action: { type: 'uri', label: '資料エクスプローラーを開く', uri: 'https://liff.line.me/' + liffId },
+    });
+  }
+  return {
+    type: 'flex',
+    altText: '学校資料検索｜' + messages[result.status],
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#173B40',
+        paddingAll: '17px',
+        contents: [
+          { type: 'text', text: 'CAMPUSSYNC / SCHOOL MATERIALS', size: 'xxs', color: '#A7D3CD', weight: 'bold' },
+          { type: 'text', text: '資料検索', size: 'lg', color: '#FFFFFF', weight: 'bold' },
+        ],
+      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'md', contents: bodyContents },
+    },
+  };
+}
+
+async function replyLineSchoolMaterialSearch(
+  replyToken: string,
+  question: string,
+  result: LineSchoolMaterialSearchResult,
+  accessToken: string,
+  destinationType: 'user' | 'group' | 'room',
+  destinationId: string | null,
+): Promise<void> {
+  const messages = applyCampusSyncFlexFooters([buildLineSchoolMaterialFlexMessage(question, result)]);
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyToken, messages }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+    await recordLineDeliveryResponse(response, {
+      channel: 'reply',
+      destinationType,
+      destinationId,
+      kind: 'campus_ai_school_material_search',
+      accessToken,
+      messages,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('LINE school material search reply failed:', response.status, detail.slice(0, 400));
+    }
+  } catch (error) {
+    console.error('LINE school material search reply request failed:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+
 async function completeLineStudentLink(
   replyToken: string,
   lineUserId: string,
@@ -1956,6 +2086,30 @@ async function handleLineEvents(
         await replyPlain(event.replyToken, 'LINE連携は安全のため、CampusSync公式アカウントとの1対1トークで行ってください。', channelAccessToken, [], 'campus_ai_school_materials_link');
         return;
       }
+      const materialSearchRequest = parseLineSchoolMaterialSearchRequest(question);
+      if (materialSearchRequest) {
+        const destinationType = event.source?.type === 'room' ? 'room' : event.source?.type === 'group' ? 'group' : 'user';
+        const destinationId = event.source?.type === 'room'
+          ? event.source.roomId || null
+          : event.source?.type === 'group'
+            ? event.source.groupId || null
+            : event.source?.userId || null;
+        const result = await findLineSchoolMaterialMatches(
+          materialSearchRequest,
+          typeof event.source?.userId === 'string' ? event.source.userId : null,
+          isGroupOrRoom,
+        );
+        await replyLineSchoolMaterialSearch(
+          event.replyToken,
+          question,
+          result,
+          channelAccessToken,
+          destinationType,
+          destinationId,
+        );
+        return;
+      }
+
       const materialsCommand = parseLineSchoolMaterialsCommand(question);
       if (materialsCommand) {
         if (materialsCommand.legacyNavigation) return;
