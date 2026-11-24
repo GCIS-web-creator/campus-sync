@@ -64,7 +64,7 @@ export function parseLineSchoolMaterialSearchRequest(input: string): LineSchoolM
   if (!/(?:学校資料|資料室|資料|PDF|プリント)/iu.test(normalized)) return null;
   if (!/(?:開いて|開く|見せて|表示して|見たい|閲覧|送って|開けて)/u.test(normalized)) return null;
 
-  const subject = MATERIAL_SUBJECTS.find(item => normalized.includes(item)) ?? null;
+  const subject = MATERIAL_SUBJECTS.find(item => normalized.includes(item.normalize('NFKC'))) ?? null;
   const termMatch = normalized.match(/([1-3])学期/u);
   const term = termMatch ? termMatch[1] + '学期' : null;
   const requireSchoolRoot = /学校資料/u.test(normalized);
@@ -149,18 +149,21 @@ function scoreMaterial(
   request: LineSchoolMaterialSearchRequest,
   material: MaterialRow,
 ): number {
-  const candidate = normalizeMaterialText(material.title + ' ' + material.file_name);
+  const candidateParts = [
+    normalizeMaterialText(material.title),
+    normalizeMaterialText(material.file_name),
+  ];
   const candidateVersion = getMaterialVersion(material);
   const queryBase = request.version ? request.titleQuery.slice(0, -1) : request.titleQuery;
-  const candidateBase = candidateVersion && /^[abc]/u.test(candidate)
-    ? candidate.slice(1)
-    : candidate;
+  const candidateBases = candidateParts.map(candidate =>
+    candidateVersion && /^[abc]/u.test(candidate) ? candidate.slice(1) : candidate,
+  );
 
-  let score = candidate.includes(request.titleQuery)
+  let score = candidateParts.some(candidate => candidate.includes(request.titleQuery))
     ? 145
-    : candidateBase.includes(queryBase)
+    : candidateBases.some(candidate => candidate.includes(queryBase))
       ? 115
-      : Math.round(diceSimilarity(queryBase, candidateBase) * 90);
+      : Math.round(Math.max(...candidateBases.map(candidate => diceSimilarity(queryBase, candidate))) * 90);
 
   if (request.version) {
     score += candidateVersion === request.version ? 45 : candidateVersion ? -65 : -20;
