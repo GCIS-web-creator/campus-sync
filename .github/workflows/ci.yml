@@ -122,9 +122,12 @@ jobs:
         with:
           name: campus-sync-cloudflare-worker-${{ github.sha }}
           path: |
-            .open-next/worker.js
-            .open-next/worker.js.map
+            .open-next/**
+            wrangler.jsonc
+            package.json
+            package-lock.json
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
       - name: Save regenerated lockfile to migration branch
         if: github.ref == 'refs/heads/cloudflare-workers-migration' && success()

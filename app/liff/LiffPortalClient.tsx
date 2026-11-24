@@ -1,9 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Script from 'next/script';
 import type { ReactNode } from 'react';
 import WeatherForecast from '@/components/WeatherForecast';
 import FunctionCalculator from '@/components/FunctionCalculator';
+
+type LineLiffSdk = { init: (options: { liffId: string }) => Promise<unknown> };
+declare global {
+  interface Window { liff?: LineLiffSdk }
+}
 
 type PanelKey = 'exams' | 'timetable' | 'events' | 'assignments' | 'weather' | 'trains' | 'calculator';
 type ClassCode = `${1 | 2 | 3}-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8}`;
@@ -122,6 +128,45 @@ export default function LiffPortalClient() {
   const [trainDirection, setTrainDirection] = useState<'kokubunji' | 'higashimurayama'>('kokubunji');
   const [trainDayType, setTrainDayType] = useState<'weekday' | 'saturday'>('weekday');
   const [today, setToday] = useState('');
+  const [lineLiffId, setLineLiffId] = useState('');
+  const [lineLiffStatus, setLineLiffStatus] = useState<'loading' | 'not-configured' | 'initializing' | 'ready' | 'error'>('loading');
+  const lineLiffInitStarted = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/public/liff-config', { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error('LIFF設定を取得できませんでした。');
+        return await response.json() as { liffId?: string };
+      })
+      .then(payload => {
+        if (!active) return;
+        const nextId = typeof payload.liffId === 'string' ? payload.liffId.trim() : '';
+        setLineLiffId(nextId);
+        setLineLiffStatus(nextId ? 'initializing' : 'not-configured');
+      })
+      .catch(() => {
+        if (active) setLineLiffStatus('not-configured');
+      });
+    return () => { active = false; };
+  }, []);
+
+  const initializeLineLiff = useCallback(async () => {
+    if (!lineLiffId || !window.liff || lineLiffInitStarted.current) return;
+    lineLiffInitStarted.current = true;
+    setLineLiffStatus('initializing');
+    try {
+      await window.liff.init({ liffId: lineLiffId });
+      setLineLiffStatus('ready');
+    } catch (error) {
+      setLineLiffStatus('error');
+      console.warn('CampusSync public LIFF initialization failed:', error);
+    }
+  }, [lineLiffId]);
+
+  useEffect(() => {
+    if (lineLiffId && window.liff) void initializeLineLiff();
+  }, [lineLiffId, initializeLineLiff]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem('campussync-public-class');
@@ -248,6 +293,14 @@ export default function LiffPortalClient() {
 
   return (
     <main className="min-h-screen bg-[#f3f6fb] text-slate-900 dark:bg-[#07111f] dark:text-slate-100">
+      {lineLiffId && (
+        <Script
+          src="https://static.line-scdn.net/liff/edge/2/sdk.js"
+          strategy="afterInteractive"
+          onLoad={() => void initializeLineLiff()}
+          onError={() => setLineLiffStatus('error')}
+        />
+      )}
       <div className="mx-auto min-h-screen max-w-5xl px-3 pb-12 pt-4 sm:px-6 sm:pt-7">
         <header className="mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-[#10253c] via-[#173c58] to-[#087b91] p-5 text-white shadow-xl shadow-slate-900/10 sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -259,7 +312,8 @@ export default function LiffPortalClient() {
             <div className="rounded-2xl border border-white/20 bg-white/10 px-3 py-2 text-right backdrop-blur">
               <p className="text-[9px] font-black tracking-[0.16em] text-cyan-100">ACCESS</p>
               <p className="mt-0.5 text-sm font-bold">ログイン不要</p>
-              <p className="text-[10px] text-blue-100">個人情報は取得しません</p>
+              <p className="text-[10px] text-blue-100">{lineLiffStatus === 'ready' ? 'LINE LIFF接続済み・個人情報は取得しません' : '個人情報は取得しません'}</p>
+              {lineLiffStatus === 'error' && <p className="mt-1 max-w-40 text-[9px] leading-4 text-amber-100">LINE初期化に失敗しました。通常のWeb表示は続けて利用できます。</p>}
             </div>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
