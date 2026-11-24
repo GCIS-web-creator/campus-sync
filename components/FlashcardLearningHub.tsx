@@ -194,9 +194,9 @@ export default function FlashcardLearningHub({ userId, isDarkMode = false }: { u
   }, [userId]);
 
   const loadCloud = useCallback(async () => {
-    const { data: setData, error: setError } = await supabase.from("student_flashcard_sets")
+    const { data: setData, error: setQueryError } = await supabase.from("student_flashcard_sets")
       .select("*").eq("user_id", userId).order("updated_at", { ascending: false });
-    if (setError) throw setError;
+    if (setQueryError) throw setQueryError;
     const setRows = (setData || []) as SetRow[];
     let cardRows: CardRow[] = [];
     let progressRows: ProgressRow[] = [];
