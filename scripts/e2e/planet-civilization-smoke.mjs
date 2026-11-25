@@ -234,7 +234,7 @@ try {
   await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).click();
   await page.getByText(/文明 Stage 1/).waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: '惑星視点', exact: true }).click();
+  await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
   await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
   await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '30 MPで航行開始', exact: true }).click();
