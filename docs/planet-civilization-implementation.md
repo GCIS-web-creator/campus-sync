@@ -146,3 +146,10 @@
 - Supabase本番マイグレーション適用と権限・RLS・関数の確認。
 - PR #41の最新本番ブランチとの統合、Cloudflare本番デプロイ。
 - 実Supabase認証アカウントで申請→Admin審査→10 / 25 / 50 XP反映→再読込→二重付与防止を確認。
+
+## Cloudflare本番反映手順（2026-11-25追記）
+
+- 本番Workerは `cloudflare-workers-migration` ブランチから生成する。
+- Pull RequestではNext.jsビルド、Cloudflare Workerビルド、`wrangler deploy --dry-run`、ローカルWorkerの惑星文明ブラウザテストを実行する。
+- 通常のpushでは本番Workerを自動更新しない。意図したリリースでは、マージされるpushのコミットメッセージに `[deploy-worker]` を付けるか、GitHub Actionsの `CampusSync CI` を `workflow_dispatch` で手動実行する。
+- `[deploy-worker]` は本番反映を明示する一回限りのガードであり、通常の修正コミットには付けない。
