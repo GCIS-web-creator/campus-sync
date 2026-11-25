@@ -22,10 +22,7 @@ export async function GET(request: Request) {
     production: process.env.CAMPUS_SYNC_PUBLIC_LIFF_ID_PRODUCTION,
   }[environment];
 
-  const legacyDevelopmentId =
-    environment === 'development' ? process.env.CAMPUS_SYNC_PUBLIC_LIFF_ID : '';
-
-  const liffId = (environmentVariable || legacyDevelopmentId || DEFAULT_LIFF_IDS[environment]).trim();
+  const liffId = (environmentVariable || DEFAULT_LIFF_IDS[environment]).trim();
 
   return NextResponse.json(
     { liffId, environment },
