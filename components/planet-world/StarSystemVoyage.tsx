@@ -243,7 +243,6 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     sunlight.target.position.copy(planetPosition);
     scene.add(sunlight, sunlight.target);
     scene.add(new THREE.AmbientLight('#9eafc8', 0.25));
-    resources.push(sunlight);
 
     const starOrbitRadius = starRadius + 85;
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
