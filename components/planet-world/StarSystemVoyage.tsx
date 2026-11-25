@@ -537,7 +537,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
-      const desiredFov = phaseId === 'moon-orbit' ? 22
+      const desiredFov = phaseId === 'moon-orbit' ? 18
         : phaseId === 'planet-orbit' ? 48
         : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 42
         : 46;
@@ -590,6 +590,13 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const activePhase = STAR_SYSTEM_VOYAGE_PHASES[phaseIndex];
   const remaining = Math.max(0, STAR_SYSTEM_VOYAGE_DURATION_MS - elapsed);
   const noStar = !starClass || !starProfile || system.rogue;
+  const lowOrbitActive = activePhase?.id === 'planet-orbit' || activePhase?.id === 'moon-orbit';
+  const starOrbitActive = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim';
+  const orbitReadout = lowOrbitActive
+    ? '地表高度 10 km · 低軌道'
+    : starOrbitActive
+      ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
+      : '宇宙船全長 1 km';
 
   return (
     <div className="absolute inset-0 z-40 overflow-hidden bg-[#02050d] text-white">
@@ -599,7 +606,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約1分の自動航行です。視点は宇宙船の前面キャノピー内に固定されます。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約1分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表10km上空を周回します。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.82c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約60秒</p><p className="text-[9px] text-slate-500">航行シーンを圧縮再生</p></div>
@@ -617,7 +624,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 ))}
               </ol>
             </div>
-            <p className="mt-3 text-[10px] leading-5 text-slate-400">天体の大きさ・軌道距離は地球、月、太陽に近い比率で配置し、宇宙船のカメラ位置から描画します。実際の宇宙船や天体観測データではなく、距離を保ったゲーム内シミュレーションです。</p>
+            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、太陽は約139万倍。低軌道では表面の曲率が視界を横切る距離まで接近し、惑星・衛星を中心に船が周回する視点になります。実時間の重力シミュレーションではなく、物理寸法比を使った演出です。</p>
             <p className="mt-2 text-[10px] font-bold text-amber-200">航行開始後に途中で終了しても、消費したMPは返還されません。</p>
             {noStar && <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">この惑星は恒星を持たない自由浮遊惑星のため、恒星を巡る航行はできません。</p>}
             {error && <p role="alert" className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
@@ -644,6 +651,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
               <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
+              <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-right backdrop-blur-md">
               <p className="text-[9px] font-bold text-slate-400">MISSION ELAPSED</p>
