@@ -122,23 +122,78 @@ function makeMoonTexture() {
 
 function makeCorona(color: string) {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const context = canvas.getContext('2d');
   if (!context) return new THREE.CanvasTexture(canvas);
-  const gradient = context.createRadialGradient(128, 128, 6, 128, 128, 126);
+  const random = seeded(6_419);
+  const tint = new THREE.Color(color);
+  const rgb = 'rgba(' + Math.round(tint.r * 255) + ',' + Math.round(tint.g * 255) + ',' + Math.round(tint.b * 255) + ',';
+  const gradient = context.createRadialGradient(256, 256, 5, 256, 256, 250);
   gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.12, color + 'ee');
-  gradient.addColorStop(0.3, color + '88');
-  gradient.addColorStop(0.62, color + '25');
-  gradient.addColorStop(1, color + '00');
+  gradient.addColorStop(0.035, rgb + '0.98)');
+  gradient.addColorStop(0.12, rgb + '0.7)');
+  gradient.addColorStop(0.28, rgb + '0.3)');
+  gradient.addColorStop(0.56, rgb + '0.1)');
+  gradient.addColorStop(1, rgb + '0)');
   context.fillStyle = gradient;
-  context.fillRect(0, 0, 256, 256);
+  context.fillRect(0, 0, 512, 512);
+
+  for (let ray = 0; ray < 260; ray++) {
+    const angle = random() * Math.PI * 2;
+    const inner = 52 + random() * 38;
+    const outer = 132 + random() * 118;
+    const bend = (random() - 0.5) * 54;
+    context.beginPath();
+    context.moveTo(256 + Math.cos(angle) * inner, 256 + Math.sin(angle) * inner);
+    context.quadraticCurveTo(
+      256 + Math.cos(angle) * (inner + outer) * 0.5 - Math.sin(angle) * bend,
+      256 + Math.sin(angle) * (inner + outer) * 0.5 + Math.cos(angle) * bend,
+      256 + Math.cos(angle) * outer,
+      256 + Math.sin(angle) * outer,
+    );
+    context.strokeStyle = rgb + (0.025 + random() * 0.16).toFixed(3) + ')';
+    context.lineWidth = 0.5 + random() * 2;
+    context.stroke();
+  }
+  for (let arc = 0; arc < 42; arc++) {
+    const angle = random() * Math.PI * 2;
+    const radius = 116 + random() * 72;
+    const span = 0.12 + random() * 0.58;
+    context.beginPath();
+    context.ellipse(256, 256, radius, radius * (0.76 + random() * 0.4), angle, -span, span);
+    context.strokeStyle = rgb + (0.018 + random() * 0.1).toFixed(3) + ')';
+    context.lineWidth = 0.6 + random() * 1.5;
+    context.stroke();
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
+function makeSpeedStreaks() {
+  const random = seeded(7_713);
+  const positions: number[] = [];
+  for (let index = 0; index < 230; index++) {
+    const angle = random() * Math.PI * 2;
+    const radius = 7 + random() * 48;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const z = -72 - random() * 50;
+    const length = 12 + random() * 48;
+    positions.push(x, y, z, x + Math.cos(angle) * length * 0.18, y + Math.sin(angle) * length * 0.18, z + length);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: '#a8dcff',
+    transparent: true,
+    opacity: 0.035,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  return { lines: new THREE.LineSegments(geometry, material), geometry, material };
+}
 function makeStarfield(seed: number) {
   const random = seeded(seed + 91);
   const positions: number[] = [];
@@ -241,7 +296,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
     const camera = new THREE.PerspectiveCamera(62, mount.clientWidth / Math.max(1, mount.clientHeight), 0.08, 120_000);
+    scene.add(camera);
     const resources: Array<{ dispose: () => void }> = [];
+    const speedEffects = makeSpeedStreaks();
+    camera.add(speedEffects.lines);
+    resources.push(speedEffects.geometry, speedEffects.material);
 
     const starfield = makeStarfield(Number.parseInt(system.id.slice(-3), 10) || 1);
     scene.add(starfield);
@@ -439,7 +498,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         }
         consumed += phase.durationMs;
       }
-      const pose = getPose(STAR_SYSTEM_VOYAGE_PHASES[index].id, localProgress);
+      const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
+      const pose = getPose(phaseId, localProgress);
+      const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
+      speedEffects.material.opacity = highSpeed ? 0.72 : phaseId === 'star-skim' ? 0.24 : 0.025;
+      speedEffects.lines.rotation.z += highSpeed ? 0.0018 : 0.00035;
       camera.position.copy(pose.position);
       camera.lookAt(pose.target);
       star.rotation.y += 0.0008;
