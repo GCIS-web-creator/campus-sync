@@ -1,10 +1,12 @@
 # CampusSync Profile Fonts
 
-The profile studio loads compact Latin web-font subsets from this directory.
+The profile studio embeds compact Latin web-font subsets in Worker static assets. Japanese characters intentionally fall back to the system Japanese sans-serif stack.
 
-- `modern-campussync.woff2`: Comfortaa-derived geometric rounded face, with the family renamed to CampusSync Modern. It includes the basic Latin alphabet, digits and punctuation. Its lowercase `a` and `g` are single-storey. Japanese characters intentionally fall back to the system Japanese sans-serif font.
-- `thunder-riot.woff2`: A DejaVu Sans Bold-derived display face with restrained jagged contour edits and renamed family metadata. It includes basic Latin characters, digits and punctuation. Japanese characters fall back to the system Japanese font; the profile CSS applies the lightning-style outline/shadow treatment to the text.
+- `sakura-pop-plump-v3.woff2`: Sakura Pop Plump V3, weight 800. Glyph outlines are expanded with a vector-offset pass for fuller central strokes. Basic Latin U+0020–U+007E. Rainbow coloring is CSS, not baked into the font. License: `LICENSE-COMFORTAA-OFL-1.1.txt` (Comfortaa-derived; renamed to avoid the reserved source name).
+- `mainframe.woff2`: MainFrame, weight 500. Rounded-square digital display face with squared G and single-storey a/g. Basic Latin U+0020–U+007E. License: `LICENSE-MAINFRAME.txt`.
+- `modern-campussync.woff2`: Comfortaa-derived geometric rounded face with single-storey a/g. License: `LICENSE-COMFORTAA-OFL-1.1.txt`.
+- `thunder-riot.woff2`: DejaVu Sans Bold-derived display face with jagged contours. License notice: `LICENSE-BITSTREAM-VERA.txt`.
 
-The Modern rainbow is a CSS preview and remains controlled separately from the font outlines.
+The legacy database value `marshmallow` remains accepted and renders as Sakura Pop for backwards compatibility. New selections save as `sakura-pop` or `mainframe`.
 
-License notices are included in the matching license files in this directory. These fonts are embedded as application assets, not offered for standalone sale.
+These fonts are embedded as application assets and are not offered for standalone sale.
