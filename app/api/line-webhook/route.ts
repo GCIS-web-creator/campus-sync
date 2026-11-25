@@ -474,7 +474,7 @@ const CAMPUSSYNC_MINI_APP_URL = 'https://miniapp.line.me/2012791695-OIyf4BUb';
 function isLineMiniAppCommand(question: string): boolean {
   const normalized = question
     .normalize('NFKC')
-    .replace(/[\\s　]+/gu, '')
+    .replace(/[\s　]+/gu, '')
     .replace(/^(?:の|で|へ)/u, '');
   return /^(?:campussync)?(?:の)?ミニアプリ(?:(?:を)?(?:開いて|開く|表示して|起動して|見せて)|(?:の)?(?:url|リンク))?$/iu.test(normalized);
 }
@@ -892,7 +892,7 @@ async function handleLineEvents(
     if (!hasTrigger && !isDirectChat) return;
 
     const question = hasTrigger
-      ? messageText.slice(trigger.length).replace(/^[\\sへ:：,、-]+/, '').trim()
+      ? messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim()
       : messageText;
 
     if (hasTrigger && isLineMiniAppCommand(question)) {
