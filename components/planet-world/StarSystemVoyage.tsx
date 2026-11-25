@@ -108,6 +108,8 @@ function formatClock(milliseconds: number) {
 export default function StarSystemVoyage({ system, starClass, mpBalance, onPurchase, onExit }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const startAtRef = useRef(0);
+  const purchaseLockRef = useRef(false);
+  const pendingTravelIdRef = useRef<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [started, setStarted] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -118,16 +120,20 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const starProfile = starClass ? STAR_PROFILES[starClass] : null;
 
   const beginVoyage = async () => {
-    if (purchasing || started || !starClass) return;
+    if (purchaseLockRef.current || purchasing || started || !starClass) return;
     if (mpBalance < 30) {
       setError('星系旅行には30MP必要です。技術ツリーで所持MPを確認してください。');
       return;
     }
+    purchaseLockRef.current = true;
     setPurchasing(true);
     setError('');
     try {
-      const result = await onPurchase(crypto.randomUUID());
+      const travelId = pendingTravelIdRef.current ?? crypto.randomUUID();
+      pendingTravelIdRef.current = travelId;
+      const result = await onPurchase(travelId);
       if (!result.success) throw new Error(result.message || '決済できませんでした。');
+      pendingTravelIdRef.current = null;
       startAtRef.current = performance.now();
       setElapsed(0);
       setPhaseIndex(0);
@@ -136,6 +142,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '星系旅行を開始できませんでした。');
     } finally {
+      purchaseLockRef.current = false;
       setPurchasing(false);
     }
   };
@@ -427,7 +434,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs font-bold text-slate-300">所持MP <b className="text-white">{mpBalance.toLocaleString('ja-JP')}</b> / 30 MP</span>
               <div className="flex gap-2">
-                <button type="button" onClick={onExit} className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/5">戻る</button>
+                <button type="button" onClick={onExit} disabled={purchasing} className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/5 disabled:opacity-40">戻る</button>
                 <button type="button" onClick={() => void beginVoyage()} disabled={purchasing || noStar || mpBalance < 30} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40">{purchasing ? '決済中…' : mpBalance < 30 ? 'MPが不足しています' : '30 MPで航行開始'}</button>
               </div>
             </div>
