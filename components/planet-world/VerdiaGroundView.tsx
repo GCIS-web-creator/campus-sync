@@ -7,17 +7,24 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 type Props = { atmosphereColor: string; onBack: () => void };
 type MaterialKey = 'grassland' | 'forest-floor' | 'sedimentary-rock' | 'lakeshore' | 'permeable-road' | 'biocomposite-wood' | 'biofilm-roof';
 type Binding = { mesh: THREE.Mesh; key: MaterialKey };
+type GeographyMasks = {
+  sampleBiome: (x: number, z: number) => [number, number, number, number];
+  sampleWater: (x: number, z: number) => [number, number, number, number];
+  breakupTexture: THREE.Texture;
+};
 
 const ASSET = '/planet-world/planet-006/verdia-material-pack-v1/material-atlas.webp';
+const GEO_MASK_ASSET = '/planet-world/planet-006/verdia-material-pack-v1/geography-masks-atlas.webp';
 const CELL = 96;
+const GEO_MASK_CELL = 128;
 const KEYS: MaterialKey[] = ['grassland', 'forest-floor', 'sedimentary-rock', 'lakeshore', 'permeable-road', 'biocomposite-wood', 'biofilm-roof'];
 const COLUMNS = { baseColor: 0, normal: 1, roughness: 2, ao: 3, height: 4, emissive: 5 };
 const LOCATIONS = [
-  { id: 'aurora', name: 'Aurora Reach', detail: '森と丘陵に囲まれた高原の居住区', target: [-34, 3, 22] as [number, number, number] },
-  { id: 'glassfield', name: 'Glassfield', detail: '草原と研究施設が広がる中央平野', target: [0, 3, 4] as [number, number, number] },
-  { id: 'ember', name: 'Ember Haven', detail: '地層が露出した岩峰のふもと', target: [-62, 5, -25] as [number, number, number] },
-  { id: 'tidal', name: 'Tidal Arc', detail: '湖岸と湿地に沿って続く水辺の街', target: [39, 2, -24] as [number, number, number] },
-  { id: 'nova', name: 'Nova Suburb', detail: '緑化屋根の住宅が並ぶ新興郊外', target: [37, 3, 39] as [number, number, number] },
+  { id: 'aurora', name: 'Aurora Reach', detail: '北西の森林と湖岸が接する緑豊かな居住区', target: [-105, 4, 85] as [number, number, number] },
+  { id: 'glassfield', name: 'Glassfield', detail: '西側の草原と海岸平野に広がる研究都市', target: [-95, 3, 65] as [number, number, number] },
+  { id: 'ember', name: 'Ember Haven', detail: '中央西部の高低差と森林に囲まれた丘陵都市', target: [-45, 7, -20] as [number, number, number] },
+  { id: 'tidal', name: 'Tidal Arc', detail: '東寄りの内陸湖と湿地に沿って続く水辺の街', target: [30, 4, 40] as [number, number, number] },
+  { id: 'nova', name: 'Nova Suburb', detail: '東側の森林帯に計画された緑化住宅地区', target: [85, 4, 15] as [number, number, number] },
 ];
 
 function randomFrom(seed: number) {
@@ -78,18 +85,96 @@ function makeMaterials(source: CanvasImageSource, anisotropy: number, textures: 
   });
   return mats;
 }
-function terrainGeometry(key: MaterialKey, tile: number) {
+
+async function loadGeographyMasks(): Promise<GeographyMasks> {
+  const response = await fetch(GEO_MASK_ASSET, { cache: 'force-cache' });
+  if (!response.ok) throw new Error('ヴェルディア地理マスクを取得できません');
+  const bitmap = await createImageBitmap(await response.blob(), {
+    premultiplyAlpha: 'none',
+    colorSpaceConversion: 'none',
+  });
+  try {
+    if (bitmap.width !== GEO_MASK_CELL * 2 || bitmap.height !== GEO_MASK_CELL * 2) {
+      throw new Error('ヴェルディア地理マスクのサイズが不正です');
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('地理マスク用Canvasを作成できません');
+    context.drawImage(bitmap, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const sample = (left: number, top: number, x: number, z: number): [number, number, number, number] => {
+      const u = Math.max(0, Math.min(0.999999, (x + 120) / 240));
+      const v = Math.max(0, Math.min(0.999999, (z + 120) / 240));
+      const px = left + Math.floor(u * GEO_MASK_CELL);
+      const py = top + Math.floor(v * GEO_MASK_CELL);
+      const offset = (py * canvas.width + px) * 4;
+      return [pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3]];
+    };
+    const noiseCanvas = document.createElement('canvas');
+    noiseCanvas.width = GEO_MASK_CELL;
+    noiseCanvas.height = GEO_MASK_CELL;
+    const noiseContext = noiseCanvas.getContext('2d');
+    if (!noiseContext) throw new Error('タイリングノイズを作成できません');
+    noiseContext.drawImage(canvas, 0, GEO_MASK_CELL, GEO_MASK_CELL, GEO_MASK_CELL, 0, 0, GEO_MASK_CELL, GEO_MASK_CELL);
+    const breakupTexture = new THREE.CanvasTexture(noiseCanvas);
+    breakupTexture.colorSpace = THREE.NoColorSpace;
+    breakupTexture.wrapS = breakupTexture.wrapT = THREE.RepeatWrapping;
+    breakupTexture.magFilter = THREE.LinearFilter;
+    breakupTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    breakupTexture.generateMipmaps = true;
+    breakupTexture.needsUpdate = true;
+    return {
+      sampleBiome: (x, z) => sample(0, 0, x, z),
+      sampleWater: (x, z) => sample(GEO_MASK_CELL, 0, x, z),
+      breakupTexture,
+    };
+  } finally {
+    bitmap.close();
+  }
+}
+
+function applyTileBreakup(material: THREE.MeshStandardMaterial, noise: THREE.Texture) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.verdiaTileBreakup = { value: noise };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vVerdiaBreakupUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVerdiaBreakupUv = (modelMatrix * vec4(transformed, 1.0)).xz / 41.0;');
+    const breakupFragment = '#include <map_fragment>\n' +
+      'float verdiaNoiseA = texture2D(verdiaTileBreakup, vVerdiaBreakupUv).r;\n' +
+      'vec2 verdiaRotatedUv = mat2(0.8660254, -0.5, 0.5, 0.8660254) * vVerdiaBreakupUv;\n' +
+      'float verdiaNoiseB = texture2D(verdiaTileBreakup, verdiaRotatedUv).r;\n' +
+      'diffuseColor.rgb *= 1.0 + (((verdiaNoiseA + verdiaNoiseB) * 0.5) - 0.5) * 0.2;';
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D verdiaTileBreakup;\nvarying vec2 vVerdiaBreakupUv;')
+      .replace('#include <map_fragment>', breakupFragment);
+  };
+  material.customProgramCacheKey = () => 'campussync-verdia-tile-breakup-v1';
+}
+
+function terrainGeometry(key: MaterialKey, tile: number, masks?: GeographyMasks) {
   const size = 240, half = size / 2, divisions = 112, step = size / divisions;
   const positions: number[] = [], uvs: number[] = [];
   const vertex = (x: number, z: number) => { positions.push(x, heightAt(x, z), z); uvs.push(x / tile, z / tile); };
   for (let iz = 0; iz < divisions; iz++) for (let ix = 0; ix < divisions; ix++) {
     const x0 = -half + ix * step, x1 = x0 + step, z0 = -half + iz * step, z1 = z0 + step;
     const x = (x0 + x1) / 2, z = (z0 + z1) / 2, lake = lakeDistance(x, z);
-    if (lake < 0.84) continue;
-    const category: MaterialKey = Math.abs(x - roadX(z)) < 5.4 ? 'permeable-road' : lake < 1.14 ? 'lakeshore' : forestAt(x, z) ? 'forest-floor' : heightAt(x, z) > 5 || (x < -75 && Math.sin(z * 0.09) > -0.2) ? 'sedimentary-rock' : 'grassland';
+    const biome = masks?.sampleBiome(x, z);
+    const water = masks?.sampleWater(x, z);
+    if (masks ? water![0] >= 128 : lake < 0.84) continue;
+    let category: MaterialKey;
+    if (Math.abs(x - roadX(z)) < 5.4) category = 'permeable-road';
+    else if (biome) {
+      const channels = [biome[0], biome[1], biome[2], biome[3]];
+      const dominant = channels.indexOf(Math.max(...channels));
+      category = Math.max(...channels) < 28
+        ? (heightAt(x, z) > 5 ? 'sedimentary-rock' : 'grassland')
+        : dominant === 0 ? 'grassland' : dominant === 1 ? 'forest-floor' : dominant === 2 ? 'lakeshore' : 'sedimentary-rock';
+    } else category = lake < 1.14 ? 'lakeshore' : forestAt(x, z) ? 'forest-floor' : heightAt(x, z) > 5 || (x < -75 && Math.sin(z * 0.09) > -0.2) ? 'sedimentary-rock' : 'grassland';
     if (category !== key) continue;
-    vertex(x0, z0); vertex(x1, z0); vertex(x0, z1);
-    vertex(x1, z0); vertex(x1, z1); vertex(x0, z1);
+    vertex(x0, z0); vertex(x0, z1); vertex(x1, z0);
+    vertex(x0, z1); vertex(x1, z1); vertex(x1, z0);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -117,7 +202,7 @@ function addBuilding(scene: THREE.Scene, bindings: Binding[], resources: Array<{
     group.add(pane); resources.push(geo);
   }
 }
-function addTrees(scene: THREE.Scene, resources: Array<{ dispose: () => void }>) {
+function addTrees(scene: THREE.Scene, resources: Array<{ dispose: () => void }>, masks?: GeographyMasks) {
   const random = randomFrom(617), count = 128, dummy = new THREE.Object3D();
   const trunkGeo = new THREE.CylinderGeometry(0.22, 0.4, 4.4, 7);
   const leafGeo = new THREE.ConeGeometry(2.1, 6.2, 8);
@@ -128,13 +213,43 @@ function addTrees(scene: THREE.Scene, resources: Array<{ dispose: () => void }>)
   let n = 0;
   for (let tries = 0; tries < count * 12 && n < count; tries++) {
     const x = (random() - 0.5) * 218, z = (random() - 0.5) * 218;
-    if (!forestAt(x, z) || lakeDistance(x, z) < 1.2 || Math.abs(x - roadX(z)) < 8) continue;
+    const biome = masks?.sampleBiome(x, z);
+    const water = masks?.sampleWater(x, z);
+    const inForest = biome ? biome[1] > 76 && biome[1] >= biome[0] && biome[1] >= biome[2] : forestAt(x, z);
+    if (!inForest || (water ? water[0] >= 128 : lakeDistance(x, z) < 1.2) || Math.abs(x - roadX(z)) < 8) continue;
     const scale = 0.7 + random() * 0.8, y = heightAt(x, z);
     dummy.position.set(x, y + 2.1 * scale, z); dummy.scale.setScalar(scale); dummy.rotation.y = random() * Math.PI * 2; dummy.updateMatrix(); trunks.setMatrixAt(n, dummy.matrix);
     dummy.position.set(x, y + 5.3 * scale, z); dummy.scale.setScalar(scale); dummy.updateMatrix(); leaves.setMatrixAt(n, dummy.matrix); n++;
   }
   trunks.count = leaves.count = n; trunks.castShadow = leaves.castShadow = true;
   scene.add(trunks, leaves); resources.push(trunkGeo, leafGeo, trunkMat, leafMat, trunks, leaves);
+}
+
+
+function createWaterGeometry(masks: GeographyMasks) {
+  const size = 240, divisions = GEO_MASK_CELL, step = size / divisions;
+  const positions: number[] = [], colors: number[] = [];
+  const addVertex = (x: number, z: number) => {
+    const water = masks.sampleWater(x, z);
+    const depth = Math.max(0, Math.min(1, water[1] / 220));
+    const tint = new THREE.Color('#8bc5c9').lerp(new THREE.Color('#20516e'), depth);
+    positions.push(x, heightAt(x, z) - 0.42, z);
+    colors.push(tint.r, tint.g, tint.b);
+  };
+  for (let iz = 0; iz < divisions; iz++) {
+    for (let ix = 0; ix < divisions; ix++) {
+      const x0 = -size / 2 + ix * step, x1 = x0 + step;
+      const z0 = -size / 2 + iz * step, z1 = z0 + step;
+      if (masks.sampleWater((x0 + x1) / 2, (z0 + z1) / 2)[0] < 128) continue;
+      addVertex(x0, z0); addVertex(x0, z1); addVertex(x1, z0);
+      addVertex(x0, z1); addVertex(x1, z1); addVertex(x1, z0);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+  return geometry;
 }
 
 export default function VerdiaGroundView({ atmosphereColor, onBack }: Props) {
@@ -187,9 +302,11 @@ export default function VerdiaGroundView({ atmosphereColor, onBack }: Props) {
     sun.shadow.bias = -0.00018; scene.add(sun); scene.add(sun.target);
 
     const groundTiles: Array<[MaterialKey, number]> = [['grassland', 3], ['forest-floor', 3], ['sedimentary-rock', 6], ['lakeshore', 3], ['permeable-road', 2.4]];
+    const terrainMeshes = new Map<MaterialKey, THREE.Mesh>();
     groundTiles.forEach(([key, tile]) => {
       const geo = terrainGeometry(key, tile), mesh = new THREE.Mesh(geo, fallback[key]);
       mesh.receiveShadow = true; scene.add(mesh); bindings.push({ mesh, key }); resources.push(geo);
+      terrainMeshes.set(key, mesh);
     });
 
     const waterMat = new THREE.MeshPhysicalMaterial({ color: '#6ea9ae', roughness: 0.24, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.9, clearcoat: 0.75, clearcoatRoughness: 0.2 });
@@ -199,41 +316,80 @@ export default function VerdiaGroundView({ atmosphereColor, onBack }: Props) {
 
     const windows = new THREE.MeshStandardMaterial({ color: '#9fd7d0', emissive: '#2c6862', emissiveIntensity: 0.32, roughness: 0.24, metalness: 0.08 });
     resources.push(windows);
-    const plans = [[-30, 23, 12, 10, 10], [-13, 5, 10, 9, 14], [18, 28, 13, 11, 12], [48, 38, 11, 10, 9], [64, 12, 9, 9, 12], [-62, -2, 12, 10, 11], [5, -48, 10, 9, 8], [27, -59, 13, 10, 13]];
+    const plans = [[-104, 85, 12, 10, 10], [-94, 65, 10, 9, 14], [-45, -20, 13, 11, 12], [30, 40, 11, 10, 9], [85, 15, 9, 9, 12], [20, 70, 12, 10, 11], [55, 30, 10, 9, 8], [80, 0, 13, 10, 13]];
     plans.forEach((plan, i) => addBuilding(scene, bindings, resources, plan, i, fallback, windows));
 
     const edgeMat = new THREE.LineBasicMaterial({ color: '#d8d5bc', transparent: true, opacity: 0.55 });
-    for (const side of [-4.9, 4.9]) {
-      const points: THREE.Vector3[] = [];
-      for (let i = 0; i <= 96; i++) { const z = -112 + i * (224 / 96), x = roadX(z) + side; points.push(new THREE.Vector3(x, heightAt(x, z) + 0.09, z)); }
-      const geo = new THREE.BufferGeometry().setFromPoints(points); scene.add(new THREE.Line(geo, edgeMat)); resources.push(geo);
-    }
-    resources.push(edgeMat); addTrees(scene, resources);
+    const roadEdgeLines: THREE.Line[] = [];
+    const rebuildRoadEdges = (masks?: GeographyMasks) => {
+      roadEdgeLines.forEach(line => { scene.remove(line); line.geometry.dispose(); }); roadEdgeLines.length = 0;
+      for (const side of [-4.9, 4.9]) {
+        let points: THREE.Vector3[] = [];
+        const flush = () => {
+          if (points.length > 1) { const geo = new THREE.BufferGeometry().setFromPoints(points); const line = new THREE.Line(geo, edgeMat); scene.add(line); resources.push(geo); roadEdgeLines.push(line); }
+          points = [];
+        };
+        for (let i = 0; i <= 96; i++) {
+          const z = -112 + i * (224 / 96), x = roadX(z) + side;
+          if (masks && masks.sampleWater(x, z)[0] >= 128) { flush(); continue; }
+          points.push(new THREE.Vector3(x, heightAt(x, z) + 0.09, z));
+        }
+        flush();
+      }
+    };
+    resources.push(edgeMat); rebuildRoadEdges();
 
-    const random = randomFrom(1606), rockGeo = new THREE.IcosahedronGeometry(1, 1);
-    const rocks = new THREE.InstancedMesh(rockGeo, fallback['sedimentary-rock'], 58), rockDummy = new THREE.Object3D();
-    let rockCount = 0;
-    for (let i = 0; i < 300 && rockCount < 58; i++) {
-      const x = -104 + random() * 72, z = -95 + random() * 184;
-      if (heightAt(x, z) < 3.5 || Math.abs(x - roadX(z)) < 10) continue;
-      const size = 0.45 + random() * 1.6;
-      rockDummy.position.set(x, heightAt(x, z) + size * 0.42, z);
-      rockDummy.scale.set(size * 1.2, size * 0.68, size);
-      rockDummy.rotation.set(random() * 0.4, random() * Math.PI, random() * 0.3); rockDummy.updateMatrix(); rocks.setMatrixAt(rockCount++, rockDummy.matrix);
-    }
-    rocks.count = rockCount; rocks.castShadow = rocks.receiveShadow = true; scene.add(rocks); resources.push(rockGeo, rocks);
+    const rockGeo = new THREE.IcosahedronGeometry(1, 1);
+    const rocks = new THREE.InstancedMesh(rockGeo, fallback['sedimentary-rock'], 58);
+    const populateRocks = (masks?: GeographyMasks) => {
+      const random = randomFrom(1606), dummy = new THREE.Object3D(); let count = 0;
+      for (let i = 0; i < 900 && count < 58; i++) {
+        const x = -116 + random() * 108, z = -112 + random() * 224;
+        const biome = masks?.sampleBiome(x, z), waterData = masks?.sampleWater(x, z);
+        if (waterData && waterData[0] >= 128) continue;
+        if (masks && (biome?.[3] ?? 0) < 70 && heightAt(x, z) < 4.2) continue;
+        if (!masks && heightAt(x, z) < 3.5) continue;
+        if (Math.abs(x - roadX(z)) < 10) continue;
+        const size = 0.45 + random() * 1.6;
+        dummy.position.set(x, heightAt(x, z) + size * 0.42, z); dummy.scale.set(size * 1.2, size * 0.68, size);
+        dummy.rotation.set(random() * 0.4, random() * Math.PI, random() * 0.3); dummy.updateMatrix(); rocks.setMatrixAt(count++, dummy.matrix);
+      }
+      rocks.count = count; rocks.instanceMatrix.needsUpdate = true;
+    };
+    populateRocks(); rocks.castShadow = rocks.receiveShadow = true; scene.add(rocks); resources.push(rockGeo, rocks);
 
     let alive = true;
-    new THREE.TextureLoader().load(ASSET, (atlas) => {
-      if (!alive) { atlas.dispose(); return; }
-      const textures: THREE.Texture[] = [atlas];
-      try {
-        const materials = makeMaterials(atlas.image as CanvasImageSource, Math.min(renderer.capabilities.getMaxAnisotropy(), 8), textures);
-        resources.push(...textures, ...Object.values(materials));
-        bindings.forEach(({ mesh, key }) => { mesh.material = materials[key]; });
-        rocks.material = materials['sedimentary-rock'];
-      } catch { if (alive) setAssetError(true); }
-    }, undefined, () => { if (alive) setAssetError(true); });
+    const loadMaterialAtlas = (masks?: GeographyMasks) => {
+      new THREE.TextureLoader().load(ASSET, (atlas) => {
+        if (!alive) { atlas.dispose(); return; }
+        const textures: THREE.Texture[] = [atlas];
+        try {
+          const materials = makeMaterials(atlas.image as CanvasImageSource, Math.min(renderer.capabilities.getMaxAnisotropy(), 8), textures);
+          if (masks) Object.values(materials).forEach(material => applyTileBreakup(material, masks.breakupTexture));
+          resources.push(...textures, ...Object.values(materials));
+          bindings.forEach(({ mesh, key }) => { mesh.material = materials[key]; });
+          rocks.material = materials['sedimentary-rock'];
+        } catch { if (alive) setAssetError(true); }
+      }, undefined, () => { if (alive) setAssetError(true); });
+    };
+    void loadGeographyMasks().then((masks) => {
+      if (!alive) { masks.breakupTexture.dispose(); return; }
+      resources.push(masks.breakupTexture);
+      groundTiles.forEach(([key, tile]) => {
+        const mesh = terrainMeshes.get(key); if (!mesh) return;
+        const nextGeometry = terrainGeometry(key, tile, masks), previousGeometry = mesh.geometry;
+        mesh.geometry = nextGeometry; previousGeometry.dispose(); resources.push(nextGeometry);
+      });
+      const nextWaterGeometry = createWaterGeometry(masks);
+      water.geometry.dispose(); water.geometry = nextWaterGeometry;
+      water.material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.22, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.88, clearcoat: 0.8, clearcoatRoughness: 0.18 });
+      water.rotation.set(0, 0, 0); water.position.set(0, 0, 0); water.scale.set(1, 1, 1);
+      resources.push(nextWaterGeometry, water.material as THREE.Material);
+      rebuildRoadEdges(masks); populateRocks(masks); addTrees(scene, resources, masks); loadMaterialAtlas(masks);
+    }).catch(() => {
+      if (!alive) return;
+      setAssetError(true); addTrees(scene, resources); loadMaterialAtlas();
+    });
 
     let cameraMove: { start: number; from: THREE.Vector3; to: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
     moveRef.current = (id) => {
