@@ -55,6 +55,7 @@ type ApiPayload = {
   planet?: Planet;
   growth?: Growth;
   recentLedger?: LedgerEntry[];
+  mpSummary?: { balance: number; earned_total: number; spent_total: number };
 };
 type Props = { isDarkMode?: boolean };
 
@@ -86,6 +87,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
   const [planet, setPlanet] = useState<Planet | null>(null);
   const [growth, setGrowth] = useState<Growth | null>(null);
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
+  const [mpBalance, setMpBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recalculatingXp, setRecalculatingXp] = useState(false);
@@ -114,6 +116,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
       setPlanet(payload.planet);
       setGrowth(payload.growth);
       setRecentLedger(payload.recentLedger || []);
+      setMpBalance(Math.max(0, Number(payload.mpSummary?.balance || 0)));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '惑星データを読み込めませんでした。');
     } finally {
@@ -121,6 +124,32 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
       setRefreshing(false);
     }
   }, []);
+
+  const purchaseStarSystemTravel = async (travelId: string) => {
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+        return { success: false, message: 'ログイン状態を確認できません。再ログインしてください。' };
+      }
+      const response = await fetch('/api/planet-civilization', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + sessionData.session.access_token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'purchase-star-system-travel', travel_id: travelId }),
+      });
+      const payload = await response.json() as { success: boolean; balance?: number; message?: string };
+      if (!response.ok || !payload.success) {
+        return { success: false, message: payload.message || '星系旅行の決済に失敗しました。' };
+      }
+      const balance = Math.max(0, Number(payload.balance || 0));
+      setMpBalance(balance);
+      return { success: true, balance };
+    } catch (cause) {
+      return { success: false, message: cause instanceof Error ? cause.message : '通信エラーが発生しました。' };
+    }
+  };
 
   useEffect(() => { void load(); }, [load]);
 
@@ -190,7 +219,7 @@ export default function PlanetCivilization({ isDarkMode = false }: Props) {
         </div>
         {activePanel === 'technology' ? <PlanetTechnologyTree isDarkMode={isDarkMode}/> : <>
         <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
-          <Planet3DPanel stage={stage} planetAssetId={planet.planet_asset_id}/>
+          <Planet3DPanel stage={stage} planetAssetId={planet.planet_asset_id} mpBalance={mpBalance} onStartStarTravel={purchaseStarSystemTravel}/>
           <section className={`rounded-[26px] border p-4 sm:p-5 ${panel}`}>
             <div className="flex items-start justify-between gap-3"><div><p className={`text-[9px] font-black tracking-[.2em] ${subText}`}>CIVILIZATION</p><h2 className="mt-1 text-xl font-black">{STAGES[stage].name}</h2><p className={`mt-2 text-xs leading-5 ${subText}`}>{STAGES[stage].description}</p></div><span className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-500"><Orbit size={23}/></span></div>
             <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">文明発展スコア</span><span className="text-xs font-black tabular-nums">{formatNumber(civilizationScore)}</span></div><div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-700" style={{ width: progress + '%' }}/></div><p className={`mt-2 text-[10px] ${subText}`}>{stage >= 5 ? '現在の最終段階に到達しています。' : `次の段階「${nextStage.name}」まであと ${formatNumber(Math.max(0, nextStage.required - civilizationScore))} ポイント`}</p><p className={`mt-1 text-[9px] ${subText}`}>XP合計 {formatNumber(totalXp)} + 自然成長値 {formatNumber(growth.nature_growth)} × 5</p></div>
