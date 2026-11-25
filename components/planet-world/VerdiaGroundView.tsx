@@ -292,6 +292,29 @@ function addBuilding(scene: THREE.Scene, bindings: Binding[], resources: Array<{
   group.add(door);
   resources.push(doorGeo);
 
+  // A few landmark homes grow into compact stone towers like the old mill villages.
+  if (index % 6 === 0) {
+    const towerHeight = h * 1.45;
+    const towerGeo = new THREE.CylinderGeometry(w * 0.12, w * 0.17, towerHeight, 12, 2);
+    const tower = new THREE.Mesh(towerGeo, fallback['sedimentary-rock']);
+    tower.position.set(-w * 0.2, h + towerHeight / 2 - 0.25, -d * 0.18);
+    tower.castShadow = tower.receiveShadow = true;
+    group.add(tower);
+    bindings.push({ mesh: tower, key: 'sedimentary-rock' });
+    resources.push(towerGeo);
+    const towerRoofGeo = new THREE.ConeGeometry(w * 0.22, Math.max(3.2, roofHeight * 0.8), 10);
+    const towerRoof = new THREE.Mesh(towerRoofGeo, fallback['biofilm-roof']);
+    towerRoof.position.set(-w * 0.2, h + towerHeight + Math.max(1.6, roofHeight * 0.4) - 0.25, -d * 0.18);
+    group.add(towerRoof);
+    bindings.push({ mesh: towerRoof, key: 'biofilm-roof' });
+    resources.push(towerRoofGeo);
+    const slitGeo = new THREE.BoxGeometry(0.42, 1.15, 0.12);
+    const slit = new THREE.Mesh(slitGeo, windows);
+    slit.position.set(-w * 0.2, h + towerHeight * 0.63, -d * 0.18 + w * 0.17);
+    group.add(slit);
+    resources.push(slitGeo);
+  }
+
   // Chimneys, dormers, balconies and buttresses create distinct rooflines and façades.
   if (index % 2 === 0) {
     const chimneyGeo = new THREE.BoxGeometry(0.8, 2.8 + (index % 3), 0.9);
@@ -879,7 +902,7 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
     let cameraMove: { start: number; from: THREE.Vector3; to: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
     moveRef.current = (id) => {
       const data = LOCATIONS.find(x => x.id === id) ?? LOCATIONS[1], target = new THREE.Vector3(...data.target);
-      cameraMove = { start: performance.now(), from: camera.position.clone(), to: target.clone().add(new THREE.Vector3(14, 28, 62)), fromTarget: controls.target.clone(), toTarget: target };
+      cameraMove = { start: performance.now(), from: camera.position.clone(), to: target.clone().add(new THREE.Vector3(18, 18, 125)), fromTarget: controls.target.clone(), toTarget: target };
       controls.enabled = false;
     };
     const clock = new THREE.Clock(); let frame = 0;
