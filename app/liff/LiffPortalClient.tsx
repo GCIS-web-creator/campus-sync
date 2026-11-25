@@ -101,7 +101,9 @@ function Notice({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">{children}</div>;
 }
 
-export default function LiffPortalClient() {
+type LiffEnvironment = 'development' | 'review' | 'production';
+
+export default function LiffPortalClient({ environment = 'development' }: { environment?: LiffEnvironment }) {
   const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
   const [classCode, setClassCode] = useState<ClassCode>('2-7');
   const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
@@ -129,7 +131,7 @@ export default function LiffPortalClient() {
 
   useEffect(() => {
     let active = true;
-    void fetch('/api/public/liff-config', { cache: 'no-store' })
+    void fetch('/api/public/liff-config?environment=' + encodeURIComponent(environment), { cache: 'no-store' })
       .then(async response => {
         if (!response.ok) throw new Error('LIFF設定を取得できませんでした。');
         return await response.json() as { liffId?: string };
@@ -144,7 +146,7 @@ export default function LiffPortalClient() {
         if (active) setLineLiffStatus('not-configured');
       });
     return () => { active = false; };
-  }, []);
+  }, [environment]);
 
   const initializeLineLiff = useCallback(async () => {
     if (!lineLiffId || !window.liff || lineLiffInitStarted.current) return;
