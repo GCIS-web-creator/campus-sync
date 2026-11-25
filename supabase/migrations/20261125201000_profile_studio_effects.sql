@@ -143,12 +143,63 @@ BEGIN
     END IF;
     v_stops := new.studio #> '{name_appearance,stops}';
     IF v_stops IS NOT NULL THEN
-      IF jsonb_typeof(v_stops) <> 'array' OR jsonb_array_length(v_stops) < 1 OR jsonb_array_length(v_stops) > 8 THEN
+      IF jsonb_typeof(v_stops) <> 'array' THEN
+        RAISE EXCEPTION 'グラデーション色は配列で指定してください。';
+      END IF;
+      IF jsonb_array_length(v_stops) < 1 OR jsonb_array_length(v_stops) > 8 THEN
         RAISE EXCEPTION 'グラデーション色は1〜8色で指定してください。';
       END IF;
       FOR v_stop IN SELECT jsonb_array_elements_text(v_stops)
       LOOP
         IF v_stop IS NULL OR v_stop !~ '^#[0-9A-Fa-f]{6}
+
+    v_angle := COALESCE(NULLIF(new.studio #>> '{name_appearance,angle}', '')::numeric, 90);
+    v_stroke := COALESCE(NULLIF(new.studio #>> '{name_appearance,stroke}', '')::numeric, 0);
+    v_shadow := COALESCE(NULLIF(new.studio #>> '{name_appearance,shadow}', '')::numeric, 0);
+    v_glow := COALESCE(NULLIF(new.studio #>> '{name_appearance,glow}', '')::numeric, 0);
+    v_weight := COALESCE(NULLIF(new.studio #>> '{name_appearance,weight}', '')::numeric, 700);
+    v_spacing := COALESCE(NULLIF(new.studio #>> '{name_appearance,spacing}', '')::numeric, 0);
+    IF v_angle < 0 OR v_angle > 360 OR v_stroke < 0 OR v_stroke > 8
+       OR v_shadow < 0 OR v_shadow > 24 OR v_glow < 0 OR v_glow > 24
+       OR v_weight < 300 OR v_weight > 900 OR v_spacing < -2 OR v_spacing > 12 THEN
+      RAISE EXCEPTION '名前のカスタムスタイルの範囲が正しくありません。';
+    END IF;
+    IF COALESCE(new.studio #>> '{name_appearance,strokeColor}', '#ffffff') !~ '^#[0-9A-Fa-f]{6}$' THEN
+      RAISE EXCEPTION '縁取り色の形式が正しくありません。';
+    END IF;
+  END IF;
+
+  new.updated_at := now();
+  RETURN new;
+END;
+$function$;
+ THEN
+          RAISE EXCEPTION 'グラデーション色の形式が正しくありません。';
+        END IF;
+      END LOOP;
+    END IF;
+
+    v_angle := COALESCE(NULLIF(new.studio #>> '{name_appearance,angle}', '')::numeric, 90);
+    v_stroke := COALESCE(NULLIF(new.studio #>> '{name_appearance,stroke}', '')::numeric, 0);
+    v_shadow := COALESCE(NULLIF(new.studio #>> '{name_appearance,shadow}', '')::numeric, 0);
+    v_glow := COALESCE(NULLIF(new.studio #>> '{name_appearance,glow}', '')::numeric, 0);
+    v_weight := COALESCE(NULLIF(new.studio #>> '{name_appearance,weight}', '')::numeric, 700);
+    v_spacing := COALESCE(NULLIF(new.studio #>> '{name_appearance,spacing}', '')::numeric, 0);
+    IF v_angle < 0 OR v_angle > 360 OR v_stroke < 0 OR v_stroke > 8
+       OR v_shadow < 0 OR v_shadow > 24 OR v_glow < 0 OR v_glow > 24
+       OR v_weight < 300 OR v_weight > 900 OR v_spacing < -2 OR v_spacing > 12 THEN
+      RAISE EXCEPTION '名前のカスタムスタイルの範囲が正しくありません。';
+    END IF;
+    IF COALESCE(new.studio #>> '{name_appearance,strokeColor}', '#ffffff') !~ '^#[0-9A-Fa-f]{6}$' THEN
+      RAISE EXCEPTION '縁取り色の形式が正しくありません。';
+    END IF;
+  END IF;
+
+  new.updated_at := now();
+  RETURN new;
+END;
+$function$;
+ THEN
           RAISE EXCEPTION 'グラデーション色の形式が正しくありません。';
         END IF;
       END LOOP;
