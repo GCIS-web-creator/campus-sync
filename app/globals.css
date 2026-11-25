@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* CampusSync custom display fonts */
+@font-face {
+  font-family: "Marshmallow Pop";
+  src: url("/fonts/MarshmallowPop-Bold-web.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
