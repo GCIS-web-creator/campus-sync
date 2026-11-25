@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ContributionRankBadge } from '@/components/ContributionRanks';
-import { BadgeCheck, BookOpen, Check, ChevronLeft, Compass, Eye, EyeOff, Lock, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users } from 'lucide-react';
+import { BadgeCheck, Check, ChevronLeft, Compass, Eye, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users } from 'lucide-react';
 
 type ProfileDraft = {
   display_name: string;
@@ -292,6 +292,10 @@ export default function ProfileStudio({
       setMessage('プロフィール名を入力してください。');
       return;
     }
+    if (profile.avatar_url.trim().length > 2048 || profile.banner_url.trim().length > 2048) {
+      setMessage('画像URLは2048文字以内で入力してください。');
+      return;
+    }
     if (profile.avatar_url.trim() && !avatarUrl) {
       setMessage('アイコン画像URLはHTTPSのURLを入力してください。');
       return;
@@ -318,7 +322,7 @@ export default function ProfileStudio({
       show_class: Boolean(profile.is_public && profile.show_class),
       class_label: profile.is_public && profile.show_class ? userClass : null,
       equipped_badges: profile.equipped_badges.filter(id => unlockedIds.includes(id) && COSMETICS.some(item => item.id === id && item.category === 'badge')),
-      contribution_points: profile.contribution_points,
+      contribution_points: contributionPoints,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('student_profile_customizations').upsert(payload, { onConflict: 'user_id' });
@@ -385,7 +389,7 @@ export default function ProfileStudio({
                     {AVATARS.map(avatar => <button type="button" key={avatar} onClick={() => setProfile(prev => ({ ...prev, avatar_emoji: avatar, avatar_url: '' }))} aria-pressed={profile.avatar_emoji === avatar && !profile.avatar_url} className={'flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition ' + (profile.avatar_emoji === avatar && !profile.avatar_url ? 'border-cyan-400 bg-cyan-500/15 ring-2 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}>{avatar}</button>)}
                   </div>
                   <label className={'mt-3 block text-[10px] font-bold ' + muted}>画像URL（任意・HTTPSのみ）</label>
-                  <input value={profile.avatar_url} onChange={event => setProfile(prev => ({ ...prev, avatar_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/avatar.png" />
+                  <input maxLength={2048} value={profile.avatar_url} onChange={event => setProfile(prev => ({ ...prev, avatar_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/avatar.png" />
                 </div>
               </section>
 
@@ -409,7 +413,7 @@ export default function ProfileStudio({
                   {BANNERS.map(banner => <button key={banner.id} type="button" onClick={() => setProfile(prev => ({ ...prev, banner_theme: banner.id }))} className={'rounded-xl border p-2 text-xs font-black ' + (profile.banner_theme === banner.id ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>{banner.label}</button>)}
                 </div>
                 <label className={'mt-3 block text-[10px] font-bold ' + muted}>バナー画像URL（任意・HTTPSのみ）</label>
-                <input value={profile.banner_url} onChange={event => setProfile(prev => ({ ...prev, banner_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/banner.jpg" />
+                <input maxLength={2048} value={profile.banner_url} onChange={event => setProfile(prev => ({ ...prev, banner_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/banner.jpg" />
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className={'mb-2 text-[11px] font-bold ' + muted}>プロフィール枠</p>
