@@ -42,8 +42,8 @@ function heightAt(x: number, z: number) {
   const farBlend = Math.max(0, Math.min(1, (distance - 150) / 700));
   const rolling = (Math.sin(x * 0.0028) * 24 + Math.cos(z * 0.0032) * 28
     + Math.sin((x + z) * 0.0017) * 18) * farBlend;
-  const westernRidge = 250 * Math.exp(-((z - (-1850 + Math.sin(x * 0.0011) * 320)) / 390) ** 2);
-  const northernRidge = 320 * Math.exp(-((z - (3350 + Math.cos(x * 0.0009) * 420)) / 510) ** 2);
+  const westernRidge = 250 * Math.exp(-Math.pow((z - (-1850 + Math.sin(x * 0.0011) * 320)) / 390, 2));
+  const northernRidge = 320 * Math.exp(-Math.pow((z - (3350 + Math.cos(x * 0.0009) * 420)) / 510, 2));
   return local + foothills + rolling + (westernRidge + northernRidge) * farBlend;
 }
 function lakeDistance(x: number, z: number) { return Math.sqrt(((x - 39) / 25) ** 2 + ((z + 24) / 17) ** 2); }
@@ -192,7 +192,13 @@ function terrainGeometry(key: MaterialKey, tile: number, masks?: GeographyMasks)
 }
 function makeGabledRoof(width: number, depth: number, ridgeHeight: number) {
   const positions: number[] = [];
-  const addTriangle = (a: number[], b: number[], c: number[]) => positions.push(...a, ...b, ...c);
+  const uvs: number[] = [];
+  const addTriangle = (a: number[], b: number[], c: number[]) => {
+    for (const point of [a, b, c]) {
+      positions.push(...point);
+      uvs.push(point[0] / width + 0.5, point[2] / depth + 0.5);
+    }
+  };
   const leftFront = [-width / 2, 0, -depth / 2], leftBack = [-width / 2, 0, depth / 2];
   const rightFront = [width / 2, 0, -depth / 2], rightBack = [width / 2, 0, depth / 2];
   const ridgeFront = [0, ridgeHeight, -depth / 2], ridgeBack = [0, ridgeHeight, depth / 2];
@@ -201,6 +207,8 @@ function makeGabledRoof(width: number, depth: number, ridgeHeight: number) {
   addTriangle(leftFront, rightFront, ridgeFront); addTriangle(leftBack, ridgeBack, rightBack);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  withUv2(geometry);
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -451,6 +459,25 @@ function createCloudTexture() {
   return texture;
 }
 
+function createSolarGlow(color: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const gradient = context.createRadialGradient(128, 128, 4, 128, 128, 126);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
+  gradient.addColorStop(0.12, color + 'dd');
+  gradient.addColorStop(0.36, color + '65');
+  gradient.addColorStop(0.7, color + '20');
+  gradient.addColorStop(1, color + '00');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function addModernSkyline(scene: THREE.Scene, resources: Array<{ dispose: () => void }>, stage: number) {
   if (stage < 2) return;
   const random = randomFrom(6_206 + stage * 19);
@@ -631,14 +658,13 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
     renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;'; mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const sky = new THREE.Color(atmosphereColor).lerp(new THREE.Color('#d3e3df'), 0.48);
-    scene.background = sky; scene.fog = new THREE.Fog(sky, 110, 270);
-    const camera = new THREE.PerspectiveCamera(48, mount.clientWidth / Math.max(1, mount.clientHeight), 0.1, 700);
-    camera.position.set(8, 18, 34);
+    scene.fog = new THREE.FogExp2(new THREE.Color('#bcd8dc'), 0.00019);
+    const camera = new THREE.PerspectiveCamera(59, mount.clientWidth / Math.max(1, mount.clientHeight), 0.1, 15_000);
+    camera.position.set(10, 30, 88);
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 3, 0); controls.enableDamping = true; controls.dampingFactor = 0.06;
-    controls.enablePan = true; controls.minDistance = 10; controls.maxDistance = 110;
-    controls.minPolarAngle = 0.18; controls.maxPolarAngle = Math.PI * 0.48; controls.update();
+    controls.target.set(0, 15, -210); controls.enableDamping = true; controls.dampingFactor = 0.055;
+    controls.enablePan = true; controls.minDistance = 8; controls.maxDistance = 1_450;
+    controls.minPolarAngle = 0.13; controls.maxPolarAngle = Math.PI * 0.485; controls.update();
 
     const resources: Array<{ dispose: () => void }> = [];
     const bindings: Binding[] = [];
@@ -653,29 +679,93 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
     };
     Object.values(fallback).forEach(m => resources.push(m));
 
-    scene.add(new THREE.HemisphereLight('#effbff', '#52654b', 2));
-    const sun = new THREE.DirectionalLight('#fff2d7', 3.1);
-    sun.position.set(-55, 82, 38); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -135; sun.shadow.camera.right = sun.shadow.camera.top = 135;
-    sun.shadow.bias = -0.00018; scene.add(sun); scene.add(sun.target);
+    const sunDirection = new THREE.Vector3(-0.29, 0.36, -0.89).normalize();
+    const skyDome = createSkyDome(sunDirection, atmosphereColor);
+    scene.add(skyDome);
+    resources.push(skyDome.geometry, skyDome.material);
+
+    const cloudTexture = createCloudTexture();
+    const cloudLayer = new THREE.Mesh(
+      new THREE.SphereGeometry(8_900, 72, 48),
+      new THREE.MeshBasicMaterial({ map: cloudTexture, color: '#ffffff', transparent: true, opacity: 0.28, side: THREE.BackSide, depthWrite: false }),
+    );
+    cloudLayer.position.y = 250;
+    scene.add(cloudLayer);
+    resources.push(cloudLayer.geometry, cloudLayer.material, cloudTexture);
+
+    scene.add(new THREE.HemisphereLight('#eaf8ff', '#52634d', 1.8));
+    const sunPosition = sunDirection.clone().multiplyScalar(7_000);
+    const sun = new THREE.DirectionalLight('#fff1d7', 3.35);
+    sun.position.copy(sunPosition);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1536, 1536);
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -620;
+    sun.shadow.camera.right = sun.shadow.camera.top = 620;
+    sun.shadow.bias = -0.00018;
+    scene.add(sun, sun.target);
+
+    const sunCore = new THREE.Mesh(
+      new THREE.SphereGeometry(52, 36, 28),
+      new THREE.MeshBasicMaterial({ color: '#fff3d4', toneMapped: false }),
+    );
+    sunCore.position.copy(sunPosition);
+    scene.add(sunCore);
+    resources.push(sunCore.geometry, sunCore.material);
+    const solarGlowTexture = createSolarGlow('#ffbd70');
+    const solarGlowMaterial = new THREE.SpriteMaterial({ map: solarGlowTexture, color: '#fff2d8', transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const solarGlow = new THREE.Sprite(solarGlowMaterial);
+    solarGlow.position.copy(sunPosition);
+    solarGlow.scale.setScalar(780);
+    scene.add(solarGlow);
+    resources.push(solarGlowTexture, solarGlowMaterial);
+    const solarHaloTexture = createSolarGlow('#f1b77c');
+    const solarHaloMaterial = new THREE.SpriteMaterial({ map: solarHaloTexture, color: '#f4c28f', transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const solarHalo = new THREE.Sprite(solarHaloMaterial);
+    solarHalo.position.copy(sunPosition);
+    solarHalo.scale.setScalar(1_480);
+    scene.add(solarHalo);
+    resources.push(solarHaloTexture, solarHaloMaterial);
 
     const groundTiles: Array<[MaterialKey, number]> = [['grassland', 3], ['forest-floor', 3], ['sedimentary-rock', 6], ['lakeshore', 3], ['permeable-road', 2.4]];
     const terrainMeshes = new Map<MaterialKey, THREE.Mesh>();
+    (['grassland', 'sedimentary-rock'] as const).forEach((key) => {
+      const geometry = createFarTerrainGeometry(key);
+      const mesh = new THREE.Mesh(geometry, fallback[key]);
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      bindings.push({ mesh, key });
+      resources.push(geometry);
+    });
     groundTiles.forEach(([key, tile]) => {
       const geo = terrainGeometry(key, tile), mesh = new THREE.Mesh(geo, fallback[key]);
       mesh.receiveShadow = true; scene.add(mesh); bindings.push({ mesh, key }); resources.push(geo);
       terrainMeshes.set(key, mesh);
     });
+    addMountainRange(scene, resources, -2_350, 510, '#748b82', 17);
+    addMountainRange(scene, resources, -3_720, 690, '#8c9fa0', 29);
+    addMountainRange(scene, resources, -4_650, 790, '#a8b7b6', 43);
+    addModernSkyline(scene, resources, stage);
 
     const waterMat = new THREE.MeshPhysicalMaterial({ color: '#6ea9ae', roughness: 0.24, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.9, clearcoat: 0.75, clearcoatRoughness: 0.2 });
     const water = new THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>(new THREE.CircleGeometry(1, 96), waterMat);
     water.rotation.x = -Math.PI / 2; water.scale.set(20.8, 13.8, 1);
     water.position.set(39, heightAt(39, -24) - 0.45, -24); scene.add(water); resources.push(water.geometry, waterMat);
 
-    const windows = new THREE.MeshStandardMaterial({ color: '#9fd7d0', emissive: '#2c6862', emissiveIntensity: 0.32, roughness: 0.24, metalness: 0.08 });
+    const windows = new THREE.MeshStandardMaterial({ color: '#a8ddd6', emissive: '#3c8079', emissiveIntensity: stage >= 3 ? 0.55 : 0.32, roughness: 0.2, metalness: 0.1 });
     resources.push(windows);
-    const plans = [[-104, 85, 12, 10, 10], [-94, 65, 10, 9, 14], [-45, -20, 13, 11, 12], [30, 40, 11, 10, 9], [85, 15, 9, 9, 12], [20, 70, 12, 10, 11], [55, 30, 10, 9, 8], [80, 0, 13, 10, 13]];
-    plans.forEach((plan, i) => addBuilding(scene, bindings, resources, plan, i, fallback, windows));
+    const plans = [
+      [-104, 85, 12, 10, 10], [-94, 65, 10, 9, 14], [-45, -20, 13, 11, 12],
+      [30, 40, 11, 10, 9], [85, 15, 9, 9, 12], [20, 70, 12, 10, 11],
+      [55, 30, 10, 9, 8], [80, 0, 13, 10, 13], [-84, -78, 12, 10, 8],
+      [-58, 95, 15, 11, 11], [-20, 86, 10, 12, 9], [8, 96, 14, 10, 13],
+      [72, 84, 13, 11, 10], [105, 70, 10, 9, 8], [104, -46, 12, 10, 12],
+      [5, -88, 14, 11, 15], [-108, -18, 10, 10, 9], [-91, -96, 13, 10, 11],
+      [-18, -82, 11, 9, 8], [94, -92, 14, 11, 12], [-65, 28, 9, 9, 8],
+      [62, -76, 12, 9, 10], [105, 105, 11, 10, 9], [-25, 38, 10, 9, 8],
+      [43, 70, 12, 10, 10], [-73, -42, 12, 10, 12],
+    ];
+    const settlementCount = stage >= 5 ? plans.length : stage >= 3 ? 22 : stage >= 2 ? 19 : stage >= 1 ? 16 : 9;
+    plans.slice(0, settlementCount).forEach((plan, i) => addBuilding(scene, bindings, resources, plan, i, fallback, windows, stage));
 
     const edgeMat = new THREE.LineBasicMaterial({ color: '#d8d5bc', transparent: true, opacity: 0.55 });
     const roadEdgeLines: THREE.Line[] = [];
@@ -743,21 +833,22 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
       water.material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.22, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.88, clearcoat: 0.8, clearcoatRoughness: 0.18 });
       water.rotation.set(0, 0, 0); water.position.set(0, 0, 0); water.scale.set(1, 1, 1);
       resources.push(nextWaterGeometry, water.material as THREE.Material);
-      rebuildRoadEdges(masks); populateRocks(masks); addTrees(scene, resources, masks); loadMaterialAtlas(masks);
+      rebuildRoadEdges(masks); populateRocks(masks); addTrees(scene, resources, masks, stage); loadMaterialAtlas(masks);
     }).catch(() => {
       if (!alive) return;
-      setAssetError(true); addTrees(scene, resources); loadMaterialAtlas();
+      setAssetError(true); addTrees(scene, resources, undefined, stage); loadMaterialAtlas();
     });
 
     let cameraMove: { start: number; from: THREE.Vector3; to: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
     moveRef.current = (id) => {
       const data = LOCATIONS.find(x => x.id === id) ?? LOCATIONS[1], target = new THREE.Vector3(...data.target);
-      cameraMove = { start: performance.now(), from: camera.position.clone(), to: target.clone().add(new THREE.Vector3(7, 14, 27)), fromTarget: controls.target.clone(), toTarget: target };
+      cameraMove = { start: performance.now(), from: camera.position.clone(), to: target.clone().add(new THREE.Vector3(14, 28, 62)), fromTarget: controls.target.clone(), toTarget: target };
       controls.enabled = false;
     };
     const clock = new THREE.Clock(); let frame = 0;
     const render = () => {
-      clock.getDelta();
+      const delta = Math.min(clock.getDelta(), 0.05);
+      cloudLayer.rotation.y += delta * 0.00022;
       if (cameraMove) {
         const t = Math.min(1, (performance.now() - cameraMove.start) / 1250), e = t * t * (3 - 2 * t);
         camera.position.lerpVectors(cameraMove.from, cameraMove.to, e); controls.target.lerpVectors(cameraMove.fromTarget, cameraMove.toTarget, e);
@@ -783,7 +874,7 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/30 via-transparent to-slate-950/25" />
       <div className="absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
         <div className="rounded-xl border border-white/20 bg-slate-950/65 px-3 py-2 shadow-xl backdrop-blur-md">
-          <p className="text-[9px] font-black tracking-[.2em] text-emerald-200">VERDIA · SURFACE EXPLORATION</p><p className="mt-0.5 text-xs font-bold">地上探査 · PBR MATERIALS</p>
+          <p className="text-[9px] font-black tracking-[.2em] text-emerald-200">VERDIA · SURFACE EXPLORATION</p><p className="mt-0.5 text-xs font-bold">地上探査 · PBR MATERIALS</p><p className="mt-1 text-[9px] text-emerald-100/80">文明 Stage {stage} · {stage < 2 ? '自然集落・木石建築' : stage < 4 ? '都市・研究インフラ' : '未来都市・惑星規模交通'}</p>
         </div>
         <button type="button" onClick={onBack} className="pointer-events-auto rounded-xl border border-white/20 bg-slate-950/70 px-3 py-2 text-[10px] font-bold shadow-lg backdrop-blur-md">惑星視点へ戻る</button>
       </div>
