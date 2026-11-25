@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { ContributionRankBadge } from '@/components/ContributionRanks';
 import { BadgeCheck, BookOpen, Check, ChevronLeft, Compass, Eye, EyeOff, Lock, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users } from 'lucide-react';
 
 type ProfileDraft = {
@@ -19,6 +20,7 @@ type ProfileDraft = {
   show_class: boolean;
   class_label: string;
   equipped_badges: string[];
+  contribution_points: number;
 };
 
 type PublicProfile = ProfileDraft & {
@@ -47,6 +49,7 @@ const DEFAULT_PROFILE: ProfileDraft = {
   show_class: false,
   class_label: '',
   equipped_badges: [],
+  contribution_points: 0,
 };
 
 const AVATARS = ['🌸', '🌙', '⭐', '🪐', '🐈', '🦊', '🐬', '🐧', '🦋', '🌻', '🎧', '📚', '🎮', '🍀', '☁️', '💎'];
@@ -76,8 +79,8 @@ const COSMETICS = [
   { id: 'frame_aurora', category: 'frame', name: 'オーロラフレーム', icon: '🌌', detail: '学習セッションを5回完了', target: 5, metric: 'study_sessions' },
   { id: 'badge_study_10', category: 'badge', name: '学びの継続者', icon: '🔥', detail: '学習セッションを10回完了', target: 10, metric: 'study_sessions' },
   { id: 'effect_sparkle', category: 'effect', name: 'スターライト', icon: '✨', detail: '学習時間が合計120分に到達', target: 120, metric: 'focus_minutes' },
-  { id: 'badge_sword', category: 'badge', name: '貢献の剣', icon: '⚔️', detail: '貢献活動が1件承認される', target: 1, metric: 'approved_contributions' },
-  { id: 'frame_prism', category: 'frame', name: 'プリズムフレーム', icon: '💎', detail: '貢献活動が3件承認される', target: 3, metric: 'approved_contributions' },
+  { id: 'badge_contribution_3', category: 'badge', name: 'キャンパスサポーター', icon: '🌟', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
+  { id: 'frame_prism', category: 'frame', name: 'プリズムフレーム', icon: '💎', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
 ] as const;
 
 const PROFILE_CSS = [
@@ -131,6 +134,7 @@ function fromRow(row: any, fallbackClass: string): ProfileDraft {
     show_class: Boolean(row?.show_class),
     class_label: String(row?.class_label || fallbackClass || ''),
     equipped_badges: Array.isArray(row?.equipped_badges) ? row.equipped_badges : [],
+    contribution_points: Math.max(0, Number(row?.contribution_points) || 0),
   };
 }
 
@@ -162,8 +166,11 @@ function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; comp
           {profile.show_class && profile.class_label && <p className="mt-1 text-[11px] font-bold text-slate-300/75">{profile.class_label}組</p>}
           <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200/85">{profile.bio || '自己紹介はまだ設定されていません。'}</p>
         </div>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[.04] p-2.5">
+          <ContributionRankBadge points={profile.contribution_points} compact />
+        </div>
         {badges.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {badges.map(badge => <span key={badge.id} className="ps-badge"><span>{badge.icon}</span>{badge.name}</span>)}
           </div>
         )}
@@ -179,11 +186,15 @@ export default function ProfileStudio({
   userId,
   studentName,
   userClass,
+  studentId,
+  contributionPoints = 0,
   isDarkMode = false,
 }: {
   userId: string;
   studentName: string;
   userClass: string;
+  studentId: string;
+  contributionPoints?: number;
   isDarkMode?: boolean;
 }) {
   const [profile, setProfile] = useState<ProfileDraft>(DEFAULT_PROFILE);
@@ -207,7 +218,7 @@ export default function ProfileStudio({
     const [profileResult, studyResult, contributionResult] = await Promise.all([
       supabase.from('student_profile_customizations').select('*').eq('user_id', userId).maybeSingle(),
       supabase.from('student_study_sessions').select('focus_seconds,ended_at').eq('user_id', userId),
-      supabase.from('campus_contribution_submissions').select('status').eq('user_id', userId),
+      supabase.from('contribution_history').select('delta').eq('student_id', studentId),
     ]);
 
     if (profileResult.error) {
@@ -216,7 +227,7 @@ export default function ProfileStudio({
     } else if (profileResult.data) {
       setProfile(fromRow(profileResult.data, userClass));
     } else {
-      setProfile({ ...DEFAULT_PROFILE, display_name: 'CampusSyncユーザー', class_label: userClass });
+      setProfile({ ...DEFAULT_PROFILE, display_name: 'CampusSyncユーザー', class_label: userClass, contribution_points: contributionPoints });
     }
 
     if (studyResult.error || contributionResult.error) {
@@ -227,7 +238,7 @@ export default function ProfileStudio({
       setMetrics({
         study_sessions: studyRows.filter((row: any) => row.ended_at && Number(row.focus_seconds) > 0).length,
         focus_minutes: Math.floor(studyRows.reduce((sum: number, row: any) => sum + Math.max(0, Number(row.focus_seconds) || 0), 0) / 60),
-        approved_contributions: contributionRows.filter((row: any) => ['approved', 'accepted', 'published'].includes(String(row.status || '').toLowerCase())).length,
+        approved_contributions: contributionRows.filter((row: any) => Number(row.delta) > 0).length,
       });
     }
 
@@ -238,7 +249,7 @@ export default function ProfileStudio({
       setUnlockedIds((unlockResult.data || []).map((row: any) => String(row.cosmetic_id)));
     }
     setLoading(false);
-  }, [userId, userClass]);
+  }, [userId, userClass, studentId, contributionPoints]);
 
   useEffect(() => {
     void loadOwnProfile();
@@ -249,7 +260,7 @@ export default function ProfileStudio({
     setSelectedProfile(null);
     let query = supabase
       .from('student_profile_customizations')
-      .select('user_id,display_name,bio,avatar_emoji,avatar_url,banner_theme,banner_url,name_style,name_font,frame_style,avatar_effect,is_public,show_class,class_label,equipped_badges,updated_at')
+      .select('user_id,display_name,bio,avatar_emoji,avatar_url,banner_theme,banner_url,name_style,name_font,frame_style,avatar_effect,is_public,show_class,class_label,equipped_badges,contribution_points,updated_at')
       .eq('is_public', true)
       .order('updated_at', { ascending: false })
       .limit(60);
@@ -309,6 +320,7 @@ export default function ProfileStudio({
       show_class: Boolean(profile.is_public && profile.show_class),
       class_label: profile.is_public && profile.show_class ? userClass : null,
       equipped_badges: profile.equipped_badges.filter(id => unlockedIds.includes(id) && COSMETICS.some(item => item.id === id && item.category === 'badge')),
+      contribution_points: profile.contribution_points,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('student_profile_customizations').upsert(payload, { onConflict: 'user_id' });
@@ -454,7 +466,7 @@ export default function ProfileStudio({
                 <div className="mb-4 grid grid-cols-3 gap-2">
                   <div className="rounded-xl bg-cyan-500/10 p-2 text-center"><p className="text-xl font-black text-cyan-500">{metrics.study_sessions}</p><p className={'text-[9px] font-bold ' + muted}>学習回数</p></div>
                   <div className="rounded-xl bg-violet-500/10 p-2 text-center"><p className="text-xl font-black text-violet-500">{metrics.focus_minutes}</p><p className={'text-[9px] font-bold ' + muted}>学習分数</p></div>
-                  <div className="rounded-xl bg-amber-500/10 p-2 text-center"><p className="text-xl font-black text-amber-500">{metrics.approved_contributions}</p><p className={'text-[9px] font-bold ' + muted}>承認された貢献</p></div>
+                  <div className="rounded-xl bg-amber-500/10 p-2 text-center"><p className="text-xl font-black text-amber-500">{metrics.approved_contributions}</p><p className={'text-[9px] font-bold ' + muted}>貢献記録</p></div>
                 </div>
                 <div className="space-y-3">
                   {COSMETICS.map(item => {
