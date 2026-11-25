@@ -3,6 +3,7 @@
   "name": "campus-sync",
   "main": ".open-next/worker.js",
   "upload_source_maps": true,
+  "keep_vars": true,
   "compatibility_date": "2026-11-10",
   "compatibility_flags": [
     "nodejs_compat",
