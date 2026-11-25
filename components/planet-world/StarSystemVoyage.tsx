@@ -5,6 +5,9 @@ import * as THREE from 'three';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
+  getLowOrbitRadius,
+  getStarCoronaClearanceKm,
+  getStarOrbitRadius,
   getVoyageStarRadius,
   STAR_SYSTEM_VOYAGE_DURATION_MS,
   STAR_SYSTEM_VOYAGE_PHASES,
@@ -233,6 +236,8 @@ function formatClock(milliseconds: number) {
 
 export default function StarSystemVoyage({ system, starClass, mpBalance, onPurchase, onExit }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const displayStarRadius = starClass ? getVoyageStarRadius(starClass) : 0;
+  const coronaClearanceKm = starClass ? getStarCoronaClearanceKm(displayStarRadius) : 0;
   const startAtRef = useRef(0);
   const purchaseLockRef = useRef(false);
   const pendingTravelIdRef = useRef<string | null>(null);
@@ -279,7 +284,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+        logarithmicDepthBuffer: true,
+      });
     } catch {
       setError('この端末では3D航行表示を初期化できませんでした。');
       return;
@@ -295,7 +305,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
-    const camera = new THREE.PerspectiveCamera(62, mount.clientWidth / Math.max(1, mount.clientHeight), 0.08, 120_000);
+    const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
     scene.add(camera);
     const resources: Array<{ dispose: () => void }> = [];
     const speedEffects = makeSpeedStreaks();
@@ -307,7 +317,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     resources.push(starfield.geometry, starfield.material);
 
     const starRadius = getVoyageStarRadius(starClass);
-    const starGeometry = new THREE.SphereGeometry(starRadius, 96, 72);
+    const starGeometry = new THREE.SphereGeometry(starRadius, 256, 160);
     const starMaterial = new THREE.MeshBasicMaterial({ color: starProfile.lightColor, toneMapped: false });
     const star = new THREE.Mesh(starGeometry, starMaterial);
     scene.add(star);
@@ -339,13 +349,13 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       toneMapped: false,
     });
     const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(starRadius * 10);
+    halo.scale.setScalar(starRadius * 6.0);
     scene.add(halo);
     resources.push(haloTexture, haloMaterial);
 
     const planetPosition = new THREE.Vector3(-VOYAGE_SCALE.astronomicalUnit, 0, 0);
     const moonPosition = planetPosition.clone().add(new THREE.Vector3(0, 0, VOYAGE_SCALE.earthMoonDistance));
-    const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 96, 72);
+    const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 512, 256);
     const loader = new THREE.TextureLoader();
     const fallbackPlanetTexture = makePlanetSurfaceTexture(Number.parseInt(system.id.slice(-3), 10) || 1, system.atmosphereColor);
     let planetMaterial: THREE.MeshStandardMaterial;
@@ -371,14 +381,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture);
 
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 64, 48),
+      new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
       new THREE.MeshBasicMaterial({ color: system.atmosphereColor, transparent: true, opacity: 0.14, side: THREE.BackSide, depthWrite: false }),
     );
     atmosphere.position.copy(planetPosition);
     scene.add(atmosphere);
     resources.push(atmosphere.geometry, atmosphere.material);
 
-    const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 48, 32);
+    const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 256, 128);
     const moonTexture = makeMoonTexture();
     const moonMaterial = new THREE.MeshStandardMaterial({ map: moonTexture, roughness: 1, metalness: 0 });
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
@@ -392,14 +402,59 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(sunlight, sunlight.target);
     scene.add(new THREE.AmbientLight('#9eafc8', 0.25));
 
-    const starOrbitRadius = starRadius + 85;
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const starOrbitRadius = getStarOrbitRadius(starRadius);
+    const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
+    const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
-    const planetFlyby = planetPosition.clone().add(new THREE.Vector3(-420, 92, 250));
-    const planetOrbitRadius = 3.6;
-    const moonOrbitRadius = 1.5;
-    const starSkimPoint = new THREE.Vector3(-starRadius - 15, 0, 0);
+    const planetFlybyRadius = VOYAGE_SCALE.earthRadius * 4.5;
+    const planetFlyby = planetPosition.clone().add(new THREE.Vector3(
+      -planetFlybyRadius * 0.82,
+      planetFlybyRadius * 0.36,
+      planetFlybyRadius * 0.42,
+    ));
+    const starSkimPoint = new THREE.Vector3(-starOrbitRadius, 0, 0);
     const outerEnd = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 520, 3_800);
+    const moonToPlanetDirection = planetPosition.clone().sub(moonPosition).normalize();
+    const moonOrbitBasisA = new THREE.Vector3(1, 0, 0);
+    const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
     const totalDuration = STAR_SYSTEM_VOYAGE_DURATION_MS;
+
+    const getPlanetOrbitPose = (angle: number) => {
+      const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
+      const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
+      const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
+      // Aim a few degrees below the local tangent so the immense curved
+      // surface and atmospheric limb fill the lower part of the canopy.
+      const target = position.clone()
+        .addScaledVector(tangent, 16)
+        .addScaledVector(radial, -1.05);
+      return { position, target, up: radial };
+    };
+
+    const getMoonOrbitPose = (angle: number) => {
+      const radial = moonOrbitBasisA.clone().multiplyScalar(Math.cos(angle))
+        .addScaledVector(moonOrbitBasisB, Math.sin(angle)).normalize();
+      const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
+        .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
+      const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
+      // The orbit plane is perpendicular to the parent-planet direction.
+      // The ship keeps its parent world in view while skimming the moon's limb.
+      const target = position.clone()
+        .addScaledVector(moonToPlanetDirection, 80)
+        .addScaledVector(tangent, 4);
+      return { position, target, up: radial };
+    };
+
+    const getStarOrbitPose = (angle: number) => {
+      const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const position = radial.clone().multiplyScalar(starOrbitRadius);
+      return {
+        position,
+        target: new THREE.Vector3(0, 0, 0),
+        up: worldUp,
+      };
+    };
 
     const getPose = (id: string, progress: number) => {
       const t = ease(progress);
@@ -407,6 +462,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         return {
           position: outerStart.clone().lerp(planetFlyby, t),
           target: planetPosition.clone().lerp(new THREE.Vector3(0, 0, 0), t * 0.18),
+          up: worldUp,
         };
       }
       if (id === 'planet-flyby-inbound') {
@@ -414,72 +470,52 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         return {
           position: planetFlyby.clone().lerp(end, t),
           target: planetPosition.clone().lerp(new THREE.Vector3(0, 0, 0), t),
+          up: worldUp,
         };
       }
       if (id === 'star-orbit') {
         const angle = Math.PI + Math.PI * 2 * progress;
-        return {
-          position: new THREE.Vector3(Math.cos(angle) * starOrbitRadius, 13 + Math.sin(angle * 2) * 5, Math.sin(angle) * starOrbitRadius),
-          target: new THREE.Vector3(0, 0, 0),
-        };
+        return getStarOrbitPose(angle);
       }
       if (id === 'planet-transfer') {
-        const start = new THREE.Vector3(-starOrbitRadius, 0, 0);
-        const end = planetPosition.clone().add(new THREE.Vector3(planetOrbitRadius, 0.35, 0));
-        const position = start.clone().lerp(end, t);
+        const startPose = getStarOrbitPose(Math.PI);
+        const endPose = getPlanetOrbitPose(0);
+        const position = startPose.position.clone().lerp(endPose.position, t);
+        const target = startPose.target.clone().lerp(endPose.target, t);
+        const up = startPose.up.clone().lerp(endPose.up, t).normalize();
         position.y += Math.sin(Math.PI * progress) * 440;
         position.z += Math.sin(Math.PI * progress) * 160;
-        return {
-          position,
-          target: new THREE.Vector3(0, 0, 0).lerp(planetPosition, t),
-        };
+        return { position, target, up };
       }
       if (id === 'planet-orbit') {
-        const angle = Math.PI * 4 * progress;
-        return {
-          position: planetPosition.clone().add(new THREE.Vector3(
-            Math.cos(angle) * planetOrbitRadius,
-            0.48 + Math.sin(angle * 2) * 0.16,
-            Math.sin(angle) * planetOrbitRadius,
-          )),
-          target: planetPosition.clone(),
-        };
+        return getPlanetOrbitPose(Math.PI * 4 * progress);
       }
       if (id === 'moon-transfer') {
-        const start = planetPosition.clone().add(new THREE.Vector3(planetOrbitRadius, 0.48, 0));
-        const end = moonPosition.clone().add(new THREE.Vector3(moonOrbitRadius, 0.12, 0));
-        const position = start.clone().lerp(end, t);
-        position.y += Math.sin(Math.PI * progress) * 8;
-        return {
-          position,
-          target: planetPosition.clone().lerp(moonPosition, t),
-        };
+        const startPose = getPlanetOrbitPose(Math.PI * 4);
+        const endPose = getMoonOrbitPose(0);
+        const position = startPose.position.clone().lerp(endPose.position, t);
+        const target = startPose.target.clone().lerp(endPose.target, t);
+        const up = startPose.up.clone().lerp(endPose.up, t).normalize();
+        return { position, target, up };
       }
       if (id === 'moon-orbit') {
-        const angle = Math.PI * 2 * progress;
-        return {
-          position: moonPosition.clone().add(new THREE.Vector3(
-            Math.cos(angle) * moonOrbitRadius,
-            0.2 + Math.sin(angle * 2) * 0.12,
-            Math.sin(angle) * moonOrbitRadius,
-          )),
-          target: moonPosition.clone(),
-        };
+        return getMoonOrbitPose(Math.PI * 2 * progress);
       }
       if (id === 'star-skim') {
-        const start = moonPosition.clone().add(new THREE.Vector3(moonOrbitRadius, 0.2, 0));
-        const position = start.clone().lerp(starSkimPoint, t);
+        const startPose = getMoonOrbitPose(Math.PI * 2);
+        const position = startPose.position.clone().lerp(starSkimPoint, t);
         position.z += Math.sin(Math.PI * progress) * 28;
         position.y += Math.sin(Math.PI * progress) * 14;
-        return { position, target: new THREE.Vector3(0, 0, 0) };
+        const target = position.clone().lerp(new THREE.Vector3(0, 0, 0), 0.72);
+        return { position, target, up: worldUp };
       }
       const position = starSkimPoint.clone().lerp(outerEnd, t);
       return {
         position,
         target: position.clone().add(new THREE.Vector3(-5_000, 120, 1_800)),
+        up: worldUp,
       };
     };
-
     let frame = 0;
     let lastUiUpdate = 0;
     let alive = true;
@@ -501,9 +537,18 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
+      const desiredFov = phaseId === 'moon-orbit' ? 22
+        : phaseId === 'planet-orbit' ? 48
+        : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 42
+        : 46;
+      if (camera.fov !== desiredFov) {
+        camera.fov = desiredFov;
+        camera.updateProjectionMatrix();
+      }
       speedEffects.material.opacity = highSpeed ? 0.72 : phaseId === 'star-skim' ? 0.24 : 0.025;
       speedEffects.lines.rotation.z += highSpeed ? 0.0018 : 0.00035;
       camera.position.copy(pose.position);
+      camera.up.copy(pose.up);
       camera.lookAt(pose.target);
       star.rotation.y += 0.0008;
       renderer.render(scene, camera);
