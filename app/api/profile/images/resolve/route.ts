@@ -21,8 +21,9 @@ export async function POST(request: Request) {
   const context = await getStudyStudentContext(request);
   if (!context) return fail('学校アカウントでログインしてください。', 401);
   const body = await request.json().catch(() => null) as { items?: ImageRequest[] } | null;
-  const items = Array.isArray(body?.items) ? body.items.slice(0, 120) : [];
-  if (!items.length || body?.items?.length > 120) return fail('画像情報を確認してください。');
+  const itemCount = Array.isArray(body?.items) ? body.items.length : 0;
+  if (itemCount === 0 || itemCount > 120) return fail('画像情報を確認してください。');
+  const items = body!.items!.slice(0, 120);
 
   try {
     await ensureProfileImagesBucket(context.admin);
