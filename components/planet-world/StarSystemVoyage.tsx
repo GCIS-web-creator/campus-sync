@@ -438,6 +438,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       {started && (
         <>
           <div className="pointer-events-none absolute inset-0 z-10" style={{ background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,5,15,.26) 78%, rgba(0,3,10,.88) 100%)' }} />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[15%] bg-gradient-to-b from-slate-950/45 via-slate-900/15 to-transparent" />
+          <div className="pointer-events-none absolute left-0 top-[8%] z-10 h-[64%] w-[7%] border-r border-cyan-100/15 bg-gradient-to-r from-slate-950/65 to-transparent [clip-path:polygon(0_0,100%_8%,74%_100%,0_91%)] sm:w-[5%]" />
+          <div className="pointer-events-none absolute right-0 top-[8%] z-10 h-[64%] w-[7%] border-l border-cyan-100/15 bg-gradient-to-l from-slate-950/65 to-transparent [clip-path:polygon(0_8%,100%_0,100%_91%,26%_100%)] sm:w-[5%]" />
+          <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-[9%] w-[54%] -translate-x-1/2 rounded-b-[50%] border-b border-x border-cyan-100/20 bg-gradient-to-b from-slate-950/50 to-transparent" />
+          <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-5">
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
               <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
