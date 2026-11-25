@@ -72,7 +72,8 @@ const NAME_FONTS = [
   { id: 'sans', label: 'Sans', sample: 'すっきり' },
   { id: 'serif', label: 'Serif', sample: 'クラシック' },
   { id: 'mono', label: 'Mono', sample: 'テック' },
-  { id: 'marshmallow', label: 'Marshmallow Pop', sample: 'ふっくらポップ' },
+  { id: 'sakura-pop', label: 'Sakura Pop', sample: 'mallow' },
+  { id: 'mainframe', label: 'MainFrame', sample: 'Gg 01' },
   { id: 'modern', label: 'Modern', sample: 'Gg Mallow' },
   { id: 'thunder-riot', label: 'Thunder Riot', sample: 'ROCK! 雷' },
 ];
@@ -87,6 +88,8 @@ const COSMETICS = [
 ] as const;
 
 const PROFILE_CSS = [
+  '@font-face{font-family:"Sakura Pop";src:url("/fonts/sakura-pop-plump-v3.woff2") format("woff2");font-style:normal;font-weight:800;font-display:swap}',
+  '@font-face{font-family:"MainFrame";src:url("/fonts/mainframe.woff2") format("woff2");font-style:normal;font-weight:500;font-display:swap}',
   '@font-face{font-family:"CampusSync Modern";src:url("/fonts/modern-campussync.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}',
   '@font-face{font-family:"Thunder Riot";src:url("/fonts/thunder-riot.woff2") format("woff2");font-style:normal;font-weight:900;font-display:swap}',
   '.ps-card{position:relative;overflow:hidden;border-radius:26px;background:#09152d;color:#f8fafc;box-shadow:0 18px 48px rgba(15,23,42,.2)}',
@@ -105,7 +108,7 @@ const PROFILE_CSS = [
   '.ps-avatar-inner img{width:100%;height:100%;object-fit:cover}',
   '.ps-avatar-sparkle:after{content:"✦";position:absolute;right:-5px;top:0;color:#bae6fd;font-size:28px;text-shadow:0 0 14px #67e8f9;animation:ps-twinkle 1.8s ease-in-out infinite}',
   '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
-  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-marshmallow{font-family:"Marshmallow Pop","Noto Sans JP",sans-serif;font-weight:900;letter-spacing:-.035em;-webkit-text-stroke:.15px currentColor}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400!important;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900!important;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
+  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800!important;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500!important;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400!important;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900!important;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
   '.ps-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(191,219,254,.22);border-radius:999px;background:rgba(255,255,255,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#e0f2fe}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
@@ -148,7 +151,8 @@ function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; comp
   const bannerUrl = safeHttpsUrl(profile.banner_url);
   const bannerStyle = bannerUrl ? { backgroundImage: 'linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5)),url("' + bannerUrl.replace(/"/g, '%22') + '")' } : undefined;
   const nameStyleClass = 'ps-name-' + profile.name_style;
-  const fontClass = 'ps-font-' + profile.name_font + (profile.name_font === 'modern' ? ' ps-font-modern-rainbow' : '');
+  const normalizedFont = profile.name_font === 'marshmallow' ? 'sakura-pop' : (profile.name_font || 'rounded');
+  const fontClass = 'ps-font-' + normalizedFont + (normalizedFont === 'modern' ? ' ps-font-modern-rainbow' : normalizedFont === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '');
   const frameClass = profile.frame_style === 'aurora' ? 'ps-frame-aurora' : profile.frame_style === 'prism' ? 'ps-frame-prism' : '';
   const badges = COSMETICS.filter(item => item.category === 'badge' && profile.equipped_badges.includes(item.id));
   return (
@@ -407,14 +411,17 @@ export default function ProfileStudio({
                   <p className={'mb-2 text-[11px] font-bold ' + muted}>フォント</p>
                   <div className="grid grid-cols-2 gap-2">
                     {NAME_FONTS.map(font => {
-                      const previewClass = font.id === 'marshmallow'
-                        ? ' ps-font-marshmallow'
-                        : font.id === 'modern'
-                          ? ' ps-font-modern ps-font-modern-rainbow'
-                          : font.id === 'thunder-riot'
-                            ? ' ps-font-thunder-riot'
-                            : '';
-                      return <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id }))} className={'rounded-xl border px-3 py-2 text-left ' + (profile.name_font === font.id ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>
+                      const previewClass = font.id === 'sakura-pop'
+                        ? ' ps-font-sakura-pop ps-font-sakura-pop-rainbow'
+                        : font.id === 'mainframe'
+                          ? ' ps-font-mainframe'
+                          : font.id === 'modern'
+                            ? ' ps-font-modern ps-font-modern-rainbow'
+                            : font.id === 'thunder-riot'
+                              ? ' ps-font-thunder-riot'
+                              : '';
+                      const selected = profile.name_font === font.id || (font.id === 'sakura-pop' && profile.name_font === 'marshmallow');
+                      return <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id }))} className={'rounded-xl border px-3 py-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>
                         <span className={'block text-xs font-black' + previewClass}>{font.label}</span>
                         <span className={'mt-1 block text-[10px] ' + muted + previewClass}>{font.sample}</span>
                       </button>;
