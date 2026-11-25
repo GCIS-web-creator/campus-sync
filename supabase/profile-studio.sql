@@ -88,7 +88,7 @@ begin
   ) then
     alter table public.student_profile_customizations
       add constraint student_profile_name_font_check
-      check (name_font in ('rounded','sans','serif','mono'));
+      check (name_font in ('rounded','sans','serif','mono','marshmallow','modern','thunder-riot'));
   end if;
 
   if not exists (
