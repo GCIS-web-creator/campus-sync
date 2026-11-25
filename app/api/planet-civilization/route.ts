@@ -84,11 +84,15 @@ export async function GET(request: NextRequest) {
     if (!owner) return json({ success: false, message: 'ログインが必要です。' }, 401);
 
     const { planet, growth } = await ensurePlanet(owner.admin, owner.user.id);
-    const { data: recentLedger, error: ledgerError } = await owner.admin.from('campus_xp_ledger')
-      .select('id,xp_type,amount,entry_kind,adjustment_direction,source_type,source_id,source_date,reason,rule_version,created_at')
-      .eq('user_id', owner.user.id)
-      .order('created_at', { ascending: false })
-      .limit(12);
+    const [{ data: mpSummary, error: mpError }, { data: recentLedger, error: ledgerError }] = await Promise.all([
+      owner.admin.rpc('campus_get_planet_mp_summary', { p_user_id: owner.user.id }),
+      owner.admin.from('campus_xp_ledger')
+        .select('id,xp_type,amount,entry_kind,adjustment_direction,source_type,source_id,source_date,reason,rule_version,created_at')
+        .eq('user_id', owner.user.id)
+        .order('created_at', { ascending: false })
+        .limit(12),
+    ]);
+    if (mpError) throw mpError;
     if (ledgerError) throw ledgerError;
 
     const ledger = recentLedger || [];
@@ -120,7 +124,7 @@ export async function GET(request: NextRequest) {
       source_session: learningSessionsById.get(String(entry.source_id || '')) || null,
     }));
 
-    return json({ success: true, planet, growth, recentLedger: recentLedgerWithSources });
+    return json({ success: true, planet, growth, recentLedger: recentLedgerWithSources, mpSummary });
   } catch (error) {
     console.error('[planet-civilization] GET failed:', error);
     return json({ success: false, message: '惑星データを読み込めませんでした。' }, 500);
@@ -132,7 +136,29 @@ export async function POST(request: NextRequest) {
     const owner = await getOwner(request);
     if (!owner) return json({ success: false, message: 'ログインが必要です。' }, 401);
 
-    const body = await request.json().catch(() => null) as { action?: string; session_id?: string } | null;
+    const body = await request.json().catch(() => null) as {
+      action?: string;
+      session_id?: string;
+      travel_id?: string;
+    } | null;
+
+    if (body?.action === 'purchase-star-system-travel') {
+      if (!body.travel_id || !UUID.test(body.travel_id)) {
+        return json({ success: false, message: '星系旅行IDが正しくありません。' }, 400);
+      }
+      const { data, error } = await owner.admin.rpc('campus_purchase_planet_star_system_travel', {
+        p_user_id: owner.user.id,
+        p_travel_id: body.travel_id,
+      });
+      if (error) {
+        const message = String(error.message || '');
+        if (/MPが不足/.test(message)) return json({ success: false, message }, 409);
+        console.error('[planet-civilization] Star-system travel purchase failed:', message);
+        return json({ success: false, message: '星系旅行の決済に失敗しました。再読み込みしてからお試しください。' }, 500);
+      }
+      return json({ success: true, ...data });
+    }
+
     if (body?.action !== 'award-learning-xp' || !body.session_id || !UUID.test(body.session_id)) {
       return json({ success: false, message: 'リクエスト内容が正しくありません。' }, 400);
     }
