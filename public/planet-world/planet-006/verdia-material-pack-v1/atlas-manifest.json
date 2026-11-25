@@ -51,10 +51,41 @@
     "biocomposite-wood": 2,
     "biofilm-roof": 2
   },
-  "sourceResolution": "PC source tier, packed into 96px-per-material cells (576×672 total) as a 43KB WebP atlas to reduce first-load transfer",
+  "geographyMasks": {
+    "file": "geography-masks-atlas.webp",
+    "dimensions": [
+      256,
+      256
+    ],
+    "cellSize": 128,
+    "sourceCrop": {
+      "x": 1664,
+      "y": 576,
+      "width": 384,
+      "height": 384,
+      "sourceDimensions": [
+        2048,
+        1024
+      ]
+    },
+    "layout": {
+      "biomeSplat": "top-left RGBA: R grassland, G forest floor, B lakeshore/bed, A rock outcrop",
+      "waterMask": "top-right RGBA: R water, G deep water, B polar, A reserved",
+      "tileBreakup": "bottom-left grayscale"
+    },
+    "decoding": {
+      "premultiplyAlpha": "none",
+      "colorSpaceConversion": "none",
+      "colorSpace": "NoColorSpace"
+    },
+    "worldMapping": "The selected 384×384 source crop maps to the 240×240 metre local ground patch",
+    "waterThreshold": 128
+  },
+  "sourceResolution": "The compact PBR atlas uses 96px cells to keep the first landing download small; the source pack provides 1024px mobile and 2048px PC maps.",
   "notes": [
     "Atlas cells are cropped into independent CanvasTextures at runtime.",
     "Base Color and Emissive are loaded as sRGB; Normal, Roughness, AO and Height are loaded as linear.",
-    "The original large-scale biome masks are not part of this compact runtime atlas; the first ground scene places biomes procedurally."
+    "Biome and water masks are decoded as data, not display color, and determine ground materials, trees, shorelines and water geometry.",
+    "The periodic tile-breakup mask modulates the PBR material shader to reduce visible repetition."
   ]
 }
