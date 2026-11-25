@@ -7,6 +7,7 @@ let planetGetCalls = 0;
 let publicPortalSupabaseRequests = 0;
 let savedStudySession = null;
 let xpAwardPayload = null;
+let travelPurchasePayload = null;
 let studySessionSequence = 0;
 let failNextXpAward = false;
 const xpAwardRequests = [];
@@ -26,6 +27,7 @@ const planetPayload = {
     id: '22222222-2222-4222-8222-222222222222',
     planet_name: 'わたしの惑星',
     civilization_stage: 1,
+    planet_asset_id: 'planet-006',
     is_public: false,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
@@ -43,6 +45,7 @@ const planetPayload = {
     recalculated_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
   },
+  mpSummary: { balance: 50, earned_total: 50, spent_total: 0 },
   recentLedger: [{
     id: '33333333-3333-4333-8333-333333333333',
     xp_type: 'learning',
@@ -89,7 +92,12 @@ try {
           planetGetCalls += 1;
           return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(planetPayload) });
         }
-        xpAwardPayload = request.postDataJSON();
+        const body = request.postDataJSON();
+        if (body?.action === 'purchase-star-system-travel') {
+          travelPurchasePayload = body;
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, spent_mp: 30, balance: 20 }) });
+        }
+        xpAwardPayload = body;
         xpAwardRequests.push({ ...xpAwardPayload });
         if (failNextXpAward) {
           failNextXpAward = false;
@@ -221,6 +229,20 @@ try {
   await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
 
+  // Exercise the new Verdia terrain view and the star-voyage purchase flow.
+  await page.getByRole('button', { name: '地上視点', exact: true }).click();
+  await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).click();
+  await page.getByText(/文明 Stage 1/).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '惑星視点', exact: true }).click();
+  await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
+  await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '30 MPで航行開始', exact: true }).click();
+  await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+  assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
+  assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
+  await page.getByRole('button', { name: '航行を終了', exact: true }).click();
+
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
   const refreshButton = planetHeader.locator('button').filter({ hasText: /更新|Refresh/ }).first();
@@ -325,7 +347,7 @@ try {
 
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
 
-  console.log('PASS: planet screen, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed with task/remaining time, XP handoff, and retry recovery');
+  console.log('PASS: planet screen, Verdia ground landing, star-voyage 30 MP purchase handoff, cockpit flight entry, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed, XP handoff, and retry recovery');
 } finally {
   await browser.close();
 }
