@@ -778,9 +778,10 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
       new THREE.Vector3(30, heightAt(30, 40) - 0.3, 40),
     ]);
     const creekGeometry = new THREE.TubeGeometry(creekCurve, 72, 0.95, 10, false);
-    const creek = new THREE.Mesh(creekGeometry, waterMat);
+    let creekMat = new THREE.MeshPhysicalMaterial({ color: '#68b9cf', roughness: 0.16, metalness: 0, clearcoat: 0.95, clearcoatRoughness: 0.1 });
+    const creek = new THREE.Mesh(creekGeometry, creekMat);
     scene.add(creek);
-    resources.push(water.geometry, waterMat, creekGeometry);
+    resources.push(water.geometry, waterMat, creekGeometry, creekMat);
 
     const windows = new THREE.MeshStandardMaterial({ color: '#a8ddd6', emissive: '#3c8079', emissiveIntensity: stage >= 3 ? 0.55 : 0.32, roughness: 0.2, metalness: 0.1 });
     resources.push(windows);
@@ -864,9 +865,11 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
       waterMat.dispose();
       waterMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.2, metalness: 0, transmission: 0.1, transparent: true, opacity: 0.9, clearcoat: 0.9, clearcoatRoughness: 0.14 });
       water.material = waterMat;
-      creek.material = waterMat;
+      creekMat.dispose();
+      creekMat = new THREE.MeshPhysicalMaterial({ color: '#68b9cf', roughness: 0.16, metalness: 0, clearcoat: 0.95, clearcoatRoughness: 0.1 });
+      creek.material = creekMat;
       water.rotation.set(0, 0, 0); water.position.set(0, 0, 0); water.scale.set(1, 1, 1);
-      resources.push(nextWaterGeometry, waterMat);
+      resources.push(nextWaterGeometry, waterMat, creekMat);
       rebuildRoadEdges(masks); populateRocks(masks); addTrees(scene, resources, masks, stage); loadMaterialAtlas(masks);
     }).catch(() => {
       if (!alive) return;
