@@ -10,6 +10,7 @@ import CampusAIChat from '@/components/CampusAIChat';
 import CampusNotes from '@/components/CampusNotes';
 import CampusCalculator from '@/components/CampusCalculator';
 import StudentLearningHub, { DigitalStudentCard } from '@/components/StudentLearningHub';
+import ProfileStudio from '@/components/ProfileStudio';
 import LearningPracticeHub from '@/components/LearningPracticeHub';
 import PlanetCivilization from '@/components/PlanetCivilization';
 import StudentMaterialsLibrary from '@/components/StudentMaterialsLibrary';
@@ -512,6 +513,7 @@ const STUDENT_NAV_GROUP_BY_TAB: Record<string, string> = {
   chat: 'community',
   club: 'community',
   notifications: 'community',
+  profile: 'community',
   weather: 'weather',
   bus: 'weather',
   'student-card': 'tools',
@@ -4584,6 +4586,11 @@ Supabaseの設定を確認してください。
     const subTextClass = isDarkMode ? 'text-slate-400' : 'text-gray-400';
 
     switch (activeTab) {
+      case 'profile':
+        return authUser?.id && !isGuestMode
+          ? <ProfileStudio userId={String(authUser.id)} studentId={studentId} userClass={userClass} contributionPoints={lifetimeContributionPoints} isDarkMode={isDarkMode} />
+          : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><User size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">プロフィールは学校アカウントでログインすると利用できます</h2></div>;
+
       case 'ai':
         return <CampusAIChat mode="full" />;
 
@@ -6407,6 +6414,11 @@ Supabaseの設定を確認してください。
           badge: notifications.filter(note => !note.isRead).length,
           onSelect: () => setActiveTab('notifications'),
         },
+        ...(authUser?.id && !isGuestMode ? [{
+          key: 'profile', label: 'プロフィール・バッジ', icon: <User size={17} />,
+          isActive: activeTab === 'profile', keywords: ['プロフィール', 'アイコン', 'バッジ', '装飾', '公開プロフィール'],
+          onSelect: () => setActiveTab('profile'),
+        }] : []),
       ],
     },
     {
