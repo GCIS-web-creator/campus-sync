@@ -261,6 +261,9 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
   const numericId = Number.parseInt(spec.id.slice(-3), 10) || 1;
 
   useEffect(() => {
+    // Keep only one active WebGL context: the ground renderer or the voyage renderer
+    // replaces this orbital renderer while its mode is active.
+    if (viewMode !== 'orbit') return;
     const mount = mountRef.current;
     if (!mount) return;
     setRendererFailed(false);
@@ -633,7 +636,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
     };
-  }, [numericId, spec, stage, planetAssetId]);
+  }, [numericId, spec, stage, planetAssetId, viewMode]);
 
   const closeCelestialDetails = () => setSelectedCelestial(null);
   const returnToPlanet = () => returnToPlanetRef.current();
