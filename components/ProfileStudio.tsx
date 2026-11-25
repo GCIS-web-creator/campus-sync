@@ -148,7 +148,7 @@ function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; comp
   const bannerUrl = safeHttpsUrl(profile.banner_url);
   const bannerStyle = bannerUrl ? { backgroundImage: 'linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5)),url("' + bannerUrl.replace(/"/g, '%22') + '")' } : undefined;
   const nameStyleClass = 'ps-name-' + profile.name_style;
-  const fontClass = 'ps-font-' + profile.name_font;
+  const fontClass = 'ps-font-' + profile.name_font + (profile.name_font === 'modern' ? ' ps-font-modern-rainbow' : '');
   const frameClass = profile.frame_style === 'aurora' ? 'ps-frame-aurora' : profile.frame_style === 'prism' ? 'ps-frame-prism' : '';
   const badges = COSMETICS.filter(item => item.category === 'badge' && profile.equipped_badges.includes(item.id));
   return (
