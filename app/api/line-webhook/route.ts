@@ -5,7 +5,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
 import { rememberLineChatEvent, type LineChatSource } from '@/lib/line-group-chats';
-import { buildCampusAiFlexMessage } from '@/lib/line-flex';
+import { buildCampusAiFlexMessage, buildNoticeFlexMessage } from '@/lib/line-flex';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -469,6 +469,82 @@ async function replyLineMiniTestStep(
   await replyPlain(replyToken, (prefix ? prefix + '\n\n' : '') + prompt.text, accessToken, prompt.quickReplies, 'mini_test_registration');
 }
 
+const CAMPUSSYNC_MINI_APP_URL = 'https://miniapp.line.me/2012791695-OIyf4BUb';
+
+function isLineMiniAppCommand(question: string): boolean {
+  const normalized = question
+    .normalize('NFKC')
+    .replace(/[\\s　]+/gu, '')
+    .replace(/^(?:の|で|へ)/u, '');
+  return /^(?:campussync)?(?:の)?ミニアプリ(?:(?:を)?(?:開いて|開く|表示して|起動して|見せて)|(?:の)?(?:url|リンク))?$/iu.test(normalized);
+}
+
+async function replyLineMiniAppLink(
+  replyToken: string,
+  accessToken: string,
+  destinationType: 'user' | 'group' | 'room',
+  destinationId: string | null,
+): Promise<void> {
+  const notice = buildNoticeFlexMessage(
+    'CampusSync ミニアプリ',
+    'LINE上でCampusSyncを利用できます。下のボタンから本番用ミニアプリを開いてください。',
+  );
+  const body = notice.contents.body as Record<string, unknown>;
+  const bodyContents = Array.isArray(body.contents) ? body.contents : [];
+  const message = {
+    ...notice,
+    altText: 'CampusSync ミニアプリを開く',
+    contents: {
+      ...notice.contents,
+      body: {
+        ...body,
+        contents: [
+          ...bodyContents,
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#0F766E',
+            action: {
+              type: 'uri',
+              label: 'ミニアプリを開く',
+              uri: CAMPUSSYNC_MINI_APP_URL,
+            },
+          },
+        ],
+      },
+    },
+  };
+  const messages = applyCampusSyncFlexFooters([message]);
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ replyToken, messages }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000),
+    });
+    await recordLineDeliveryResponse(response, {
+      channel: 'reply',
+      destinationType,
+      destinationId,
+      kind: 'campus_ai_mini_app_link',
+      accessToken,
+      messages,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error('LINE mini app link reply failed:', response.status, detail.slice(0, 300));
+    }
+  } catch (error) {
+    console.error('LINE mini app link reply request failed:', error instanceof Error ? error.name : 'unknown');
+  }
+}
+
+
 async function handleLineMiniTestRegistration(
   event: LineTextMessageEvent,
   replyToken: string,
@@ -816,8 +892,21 @@ async function handleLineEvents(
     if (!hasTrigger && !isDirectChat) return;
 
     const question = hasTrigger
-      ? messageText.slice(trigger.length).replace(/^[\sへ:：,、-]+/, '').trim()
+      ? messageText.slice(trigger.length).replace(/^[\\sへ:：,、-]+/, '').trim()
       : messageText;
+
+    if (hasTrigger && isLineMiniAppCommand(question)) {
+      const destinationType: 'user' | 'group' | 'room' = event.source?.type === 'room'
+        ? 'room'
+        : event.source?.type === 'group' ? 'group' : 'user';
+      const destinationId = event.source?.type === 'room'
+        ? event.source.roomId || null
+        : event.source?.type === 'group'
+          ? event.source.groupId || null
+          : event.source?.userId || null;
+      await replyLineMiniAppLink(event.replyToken, channelAccessToken, destinationType, destinationId);
+      return;
+    }
     if (!question) return;
 
     const answer = await getCampusAiAnswer(question);
