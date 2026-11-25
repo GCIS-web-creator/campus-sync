@@ -1,0 +1,4 @@
+/* Manual pause, off-screen pause and small-screen particle budget. */
+[data-paused="true"] *{animation-play-state:paused!important}
+@media(max-width:640px){.pn-fx .pn-st:nth-of-type(n+18){display:none}.pn-fx .pn-rn:nth-of-type(n+16){display:none}}
+@media(prefers-reduced-motion:reduce){.pn-fx *,.ps-sea *,.ps-deco *{animation:none!important;transition:none!important}}
