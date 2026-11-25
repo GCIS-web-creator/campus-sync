@@ -72,6 +72,7 @@ const NAME_FONTS = [
   { id: 'sans', label: 'Sans', sample: 'すっきり' },
   { id: 'serif', label: 'Serif', sample: 'クラシック' },
   { id: 'mono', label: 'Mono', sample: 'テック' },
+  { id: 'marshmallow', label: 'Marshmallow Pop', sample: 'ふっくらポップ' },
 ];
 
 const COSMETICS = [
@@ -100,7 +101,7 @@ const PROFILE_CSS = [
   '.ps-avatar-inner img{width:100%;height:100%;object-fit:cover}',
   '.ps-avatar-sparkle:after{content:"✦";position:absolute;right:-5px;top:0;color:#bae6fd;font-size:28px;text-shadow:0 0 14px #67e8f9;animation:ps-twinkle 1.8s ease-in-out infinite}',
   '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
-  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}',
+  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-marshmallow{font-family:"Marshmallow Pop","Noto Sans JP",sans-serif;font-weight:900;letter-spacing:-.035em;-webkit-text-stroke:.15px currentColor}',
   '.ps-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(191,219,254,.22);border-radius:999px;background:rgba(255,255,255,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#e0f2fe}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
@@ -401,7 +402,7 @@ export default function ProfileStudio({
                 <div className="mt-4">
                   <p className={'mb-2 text-[11px] font-bold ' + muted}>フォント</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {NAME_FONTS.map(font => <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id }))} className={'rounded-xl border px-3 py-2 text-left ' + (profile.name_font === font.id ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}><span className="block text-xs font-black">{font.label}</span><span className={'text-[10px] ' + muted}>{font.sample}</span></button>)}
+                    {NAME_FONTS.map(font => <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id }))} className={'rounded-xl border px-3 py-2 text-left ' + (profile.name_font === font.id ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}><span className={'block text-xs font-black ' + (font.id === 'marshmallow' ? 'ps-font-marshmallow' : '')}>{font.label}</span><span className={'mt-1 block text-[10px] ' + muted + (font.id === 'marshmallow' ? ' ps-font-marshmallow' : '')}>{font.sample}</span></button>)}
                   </div>
                 </div>
               </section>
