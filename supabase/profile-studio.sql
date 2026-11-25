@@ -170,6 +170,26 @@ begin
       add constraint student_profile_contribution_points_nonnegative
       check (contribution_points >= 0);
   end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'student_profile_equipped_badges_max_length'
+      and conrelid = 'public.student_profile_customizations'::regclass
+  ) then
+    alter table public.student_profile_customizations
+      add constraint student_profile_equipped_badges_max_length
+      check (cardinality(equipped_badges) <= 5);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'student_profile_class_visibility_check'
+      and conrelid = 'public.student_profile_customizations'::regclass
+  ) then
+    alter table public.student_profile_customizations
+      add constraint student_profile_class_visibility_check
+      check (not show_class or (is_public and class_label is not null));
+  end if;
 end;
 $$;
 
