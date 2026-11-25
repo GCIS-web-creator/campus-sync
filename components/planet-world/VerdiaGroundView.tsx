@@ -310,7 +310,7 @@ export default function VerdiaGroundView({ atmosphereColor, onBack }: Props) {
     });
 
     const waterMat = new THREE.MeshPhysicalMaterial({ color: '#6ea9ae', roughness: 0.24, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.9, clearcoat: 0.75, clearcoatRoughness: 0.2 });
-    const water = new THREE.Mesh(new THREE.CircleGeometry(1, 96), waterMat);
+    const water = new THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>(new THREE.CircleGeometry(1, 96), waterMat);
     water.rotation.x = -Math.PI / 2; water.scale.set(20.8, 13.8, 1);
     water.position.set(39, heightAt(39, -24) - 0.45, -24); scene.add(water); resources.push(water.geometry, waterMat);
 
