@@ -217,9 +217,13 @@ function makeGabledRoof(width: number, depth: number, ridgeHeight: number) {
   const leftFront = [-width / 2, 0, -depth / 2], leftBack = [-width / 2, 0, depth / 2];
   const rightFront = [width / 2, 0, -depth / 2], rightBack = [width / 2, 0, depth / 2];
   const ridgeFront = [0, ridgeHeight, -depth / 2], ridgeBack = [0, ridgeHeight, depth / 2];
-  addTriangle(leftFront, ridgeFront, leftBack); addTriangle(leftBack, ridgeFront, ridgeBack);
-  addTriangle(ridgeFront, rightFront, ridgeBack); addTriangle(rightFront, rightBack, ridgeBack);
-  addTriangle(leftFront, rightFront, ridgeFront); addTriangle(leftBack, ridgeBack, rightBack);
+  // Wind triangles outward so the roof remains visible with standard back-face culling.
+  addTriangle(leftFront, leftBack, ridgeFront);
+  addTriangle(leftBack, ridgeBack, ridgeFront);
+  addTriangle(ridgeFront, ridgeBack, rightFront);
+  addTriangle(rightFront, ridgeBack, rightBack);
+  addTriangle(leftFront, ridgeFront, rightFront);
+  addTriangle(leftBack, rightBack, ridgeBack);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
