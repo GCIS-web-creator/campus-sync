@@ -30,6 +30,35 @@ function tokyoDateKey(date = new Date()): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+const EXAM_RANGE_SUBJECT_ALIASES: Record<string, readonly string[]> = {
+  '英コミュⅡ': ['英コミュⅡ', '英コミュ'],
+  '英コミュ': ['英コミュⅡ', '英コミュ'],
+  '論理表現Ⅱ（30分）': ['論理表現Ⅱ（30分）', '論理表現Ⅱ', '論表'],
+  '論理表現Ⅱ': ['論理表現Ⅱ（30分）', '論理表現Ⅱ', '論表'],
+  '論表': ['論理表現Ⅱ（30分）', '論理表現Ⅱ', '論表'],
+  '数学C': ['数学C', '数C'],
+  '数C': ['数学C', '数C'],
+  '古典探究': ['古典探究', '古典探求'],
+  '古典探求': ['古典探究', '古典探求'],
+  '物理・生物': ['物理・生物', '物理', '生物'],
+  '物理': ['物理・生物', '物理'],
+  '生物': ['物理・生物', '生物'],
+  '数３': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+  '数3': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+  '数Ⅲ': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+  '数学Ⅲ': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+  '数学３': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+  '数学3': ['数３', '数3', '数Ⅲ', '数学Ⅲ', '数学３', '数学3'],
+};
+
+function matchesExamRangeSubject(
+  examSubject: string,
+  range: { subject: string; display_subject: string },
+): boolean {
+  const acceptedNames = EXAM_RANGE_SUBJECT_ALIASES[examSubject] || [examSubject];
+  return acceptedNames.includes(range.subject) || acceptedNames.includes(range.display_subject);
+}
+
 export async function GET(request: Request) {
   const classCode = new URL(request.url).searchParams.get('class') || '';
   if (!isSchoolClassCode(classCode)) {
@@ -129,7 +158,7 @@ export async function GET(request: Request) {
           subject: subject.subject,
           examDate: subject.exam_date,
           ranges: rangeRows
-            .filter(range => range.exam_id === exam.id && range.subject === subject.subject)
+            .filter(range => range.exam_id === exam.id && matchesExamRangeSubject(subject.subject, range))
             .map(range => ({
               displaySubject: range.display_subject,
               audience: range.audience,
