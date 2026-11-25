@@ -1,0 +1,23 @@
+Copyright 2008-2017 Johan Aakerlund. Modified font based on Comfortaa.
+Modified font family name: CampusSync Modern (renamed from Comfortaa because "Comfortaa" is a Reserved Font Name).
+
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide development of collaborative font projects, to support the font creation efforts of academic and linguistic communities, and to provide a free and open framework in which fonts may be shared and improved in partnership with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and redistributed freely as long as they are not sold by themselves. The fonts, including any derivative works, can be bundled, embedded, redistributed and/or sold with any software provided that any reserved names are not used by derivative works. The fonts and derivatives, however, cannot be released under any other type of license. The requirement for fonts to remain under this license does not apply to any document created using the fonts or their derivatives.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining a copy of the Font Software, to use, study, copy, merge, embed, modify, redistribute, and sell modified and unmodified copies of the Font Software, subject to the following conditions:
+1. Neither the Font Software nor any of its individual components, in Original or Modified Versions, may be sold by itself.
+2. Original or Modified Versions may be bundled, redistributed, or sold with software provided that each copy contains the copyright notice and this license.
+3. Modified Versions may not use Reserved Font Names without written permission.
+4. Copyright holders' and authors' names may not be used to promote modified versions except to acknowledge their contribution or with permission.
+5. The Font Software must be distributed entirely under this license.
+
+TERMINATION
+This license becomes null and void if the conditions above are not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
