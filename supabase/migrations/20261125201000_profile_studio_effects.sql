@@ -151,7 +151,7 @@ BEGIN
       END IF;
       FOR v_stop IN SELECT jsonb_array_elements_text(v_stops)
       LOOP
-        IF v_stop IS NULL OR v_stop !~ '^#[0-9A-Fa-f]{6}
+        IF v_stop IS NULL OR v_stop !~ '^#[0-9A-Fa-f]{6}$' THEN
 
     v_angle := COALESCE(NULLIF(new.studio #>> '{name_appearance,angle}', '')::numeric, 90);
     v_stroke := COALESCE(NULLIF(new.studio #>> '{name_appearance,stroke}', '')::numeric, 0);
