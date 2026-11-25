@@ -1,0 +1,60 @@
+{
+  "schema": "campussync.verdia-material-atlas/1",
+  "pack": "verdia-material-pack-v1",
+  "planetId": "planet-006",
+  "sourceVersion": "1.0.0",
+  "file": "material-atlas.webp",
+  "dimensions": [
+    576,
+    672
+  ],
+  "tileSize": 96,
+  "layout": {
+    "columns": [
+      "baseColor",
+      "normal",
+      "roughness",
+      "ao",
+      "height",
+      "emissive"
+    ],
+    "rows": [
+      "grassland",
+      "forest-floor",
+      "sedimentary-rock",
+      "lakeshore",
+      "permeable-road",
+      "biocomposite-wood",
+      "biofilm-roof"
+    ]
+  },
+  "colorSpace": {
+    "baseColor": "srgb",
+    "normal": "linear",
+    "roughness": "linear",
+    "ao": "linear",
+    "height": "linear",
+    "emissive": "srgb"
+  },
+  "materialSettings": {
+    "metalness": 0,
+    "roughness": 1,
+    "normalConvention": "OpenGL +Y up; no green-channel flip",
+    "heightUsage": "bump-only micro relief; not planetary terrain elevation"
+  },
+  "physicalTileMeters": {
+    "grassland": 3,
+    "forest-floor": 3,
+    "sedimentary-rock": 6,
+    "lakeshore": 3,
+    "permeable-road": 2.4,
+    "biocomposite-wood": 2,
+    "biofilm-roof": 2
+  },
+  "sourceResolution": "PC source tier, packed into 96px-per-material cells (576×672 total) as a 43KB WebP atlas to reduce first-load transfer",
+  "notes": [
+    "Atlas cells are cropped into independent CanvasTextures at runtime.",
+    "Base Color and Emissive are loaded as sRGB; Normal, Roughness, AO and Height are loaded as linear.",
+    "The original large-scale biome masks are not part of this compact runtime atlas; the first ground scene places biomes procedurally."
+  ]
+}

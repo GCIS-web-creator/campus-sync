@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
+import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
 
 type Props = { stage: number; planetAssetId?: string };
 
@@ -244,6 +245,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
   const mountRef = useRef<HTMLDivElement>(null);
   const [rendererFailed, setRendererFailed] = useState(false);
   const [viewMode, setViewMode] = useState<'orbit'|'ground'>('orbit');
+  const viewModeRef = useRef<'orbit'|'ground'>('orbit');
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [groundLanding, setGroundLanding] = useState(false);
   const [selectedCelestial, setSelectedCelestial] = useState<CelestialDetail | null>(null);
@@ -596,7 +599,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
       } else {
         controls.update();
       }
-      renderer.render(scene, camera);
+      if (viewModeRef.current !== 'ground') renderer.render(scene, camera);
       frame = window.requestAnimationFrame(render);
     };
     render();
@@ -648,7 +651,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
         </div>
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
-      {viewMode==='ground' && <div className="absolute inset-0 z-20 overflow-hidden" style={{background:'linear-gradient(180deg, '+spec.atmosphereColor+' 0%, '+spec.atmosphereColor+'99 28%, #14202b 52%, #0a1119 100%)'}}>
+      {viewMode==='ground' && numericId !== 6 && <div className="absolute inset-0 z-20 overflow-hidden" style={{background:'linear-gradient(180deg, '+spec.atmosphereColor+' 0%, '+spec.atmosphereColor+'99 28%, #14202b 52%, #0a1119 100%)'}}>
         <div className="absolute inset-0 opacity-60" style={{background:'radial-gradient(circle at 70% 20%, rgba(255,255,255,.35), transparent 30%),linear-gradient(180deg,transparent 55%,rgba(0,0,0,.35))'}}/>
         <div className="absolute left-[12%] top-[26%] h-[35%] w-[20%] rounded-t-[40%] bg-black/20 blur-3xl"/>
         <div className="absolute right-[10%] top-[18%] h-[38%] w-[30%] rounded-full bg-white/10 blur-3xl"/>
@@ -666,6 +669,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001' }: P
           {groundLanding&&<p className="mt-2 rounded-lg bg-white/10 px-2 py-1.5 text-[10px]">降下先：{selectedCity} ・ {spec.rogue?'恒星光のない環境に合わせた人工照明と断熱居住区':'近未来の郊外居住区'}（景観プレビュー）</p>}
         </div>
       </div>}
+      {viewMode==='ground' && numericId === 6 && <VerdiaGroundView atmosphereColor={spec.atmosphereColor} onBack={()=>{setViewMode('orbit');setGroundLanding(false);setSelectedCity('');}} />}
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}
       {selectedCelestial && <div className="absolute bottom-3 left-3 right-3 z-20 max-h-[62%] overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-xl sm:bottom-4 sm:left-4 sm:right-auto sm:w-[min(440px,calc(100%-2rem))] sm:p-4">
         <div className="flex items-start justify-between gap-3">
