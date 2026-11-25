@@ -1,0 +1,28 @@
+/* CampusSync Profile Studio effects */
+:root{--ps-wave-back:url(/profile-studio/effects/wave-back.svg);--ps-wave-mid:url(/profile-studio/effects/wave-mid.svg);--ps-wave-front:url(/profile-studio/effects/wave-front.svg);--ps-foam:url(/profile-studio/effects/foam.svg)}
+.ps-deco{position:absolute;left:50%;top:50%;width:240px;height:240px;margin:-120px 0 0 -120px;pointer-events:none;z-index:3}
+.ps-ring{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ps-r1{transform-origin:120px 120px;animation:ps-spin 60s linear infinite}.ps-r2{transform-origin:120px 120px;animation:ps-spin 90s linear infinite reverse}
+.ps-halo{position:absolute;inset:40px;border-radius:50%;background:radial-gradient(circle,transparent 52%,rgba(255,182,205,.5) 64%,transparent 76%);animation:ps-br 5s ease-in-out infinite}
+@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-br{50%{opacity:.35;transform:scale(1.06)}}
+.ps-pt{position:absolute;top:-20px;left:var(--x);width:var(--s);height:var(--s);animation:ps-fall var(--d) linear var(--dl) infinite;opacity:0}
+.ps-pt svg{width:100%;height:100%;display:block;animation:ps-sway var(--sw) ease-in-out infinite alternate;filter:drop-shadow(0 0 3px rgba(255,170,200,.6))}
+@keyframes ps-fall{0%{transform:translate(0,0);opacity:0}12%{opacity:.95}85%{opacity:.9}100%{transform:translate(var(--dx),280px);opacity:0}}
+@keyframes ps-sway{from{transform:translateX(-16px) rotate(var(--r0)) rotateY(0)}to{transform:translateX(16px) rotate(var(--r1)) rotateY(150deg)}}
+.ps-sea{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden;opacity:var(--ps-sea-opacity,.2);contain:layout paint}
+.ps-tide{position:absolute;left:0;right:0;bottom:0;height:72%;animation:ps-tide 14s cubic-bezier(.45,0,.35,1) infinite;will-change:transform}
+@keyframes ps-tide{0%,100%{transform:translateY(104%)}42%{transform:translateY(26%)}58%{transform:translateY(30%)}}
+.ps-water{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(170,230,245,.3) 35%,rgba(110,195,230,.1) 75%,transparent)}
+.ps-foam{position:absolute;left:0;right:0;top:-4px;height:70px;background:var(--ps-foam) center/100% 100%;-webkit-mask-image:linear-gradient(180deg,#000,transparent);mask-image:linear-gradient(180deg,#000,transparent);animation:ps-foam 9s ease-in-out infinite alternate;opacity:.8}
+@keyframes ps-foam{to{transform:translateX(-6%) scaleY(1.15);opacity:.5}}
+.ps-layer{position:absolute;left:0;width:400%;height:60px;animation:ps-drift var(--sp) linear infinite;will-change:transform;background-size:100% 100%;background-repeat:no-repeat}
+.ps-layer.back{top:-44px;--sp:30s;background-image:var(--ps-wave-back);opacity:.5;filter:blur(.6px)}
+.ps-layer.mid{top:-40px;--sp:19s;animation-direction:reverse;background-image:var(--ps-wave-mid);opacity:.8}
+.ps-layer.front{top:-34px;--sp:12s;background-image:var(--ps-wave-front)}
+@keyframes ps-drift{to{transform:translateX(-50%)}}
+.ps-sp{position:absolute;bottom:var(--b);left:var(--x);width:var(--s);height:var(--s);border-radius:50%;background:#fff;filter:blur(.8px);opacity:0;animation:ps-rise var(--d) ease-out var(--dl) infinite}
+@keyframes ps-rise{0%{transform:translate(0,0);opacity:0}20%{opacity:1}100%{transform:translate(var(--dx),-130px);opacity:0}}
+.ps-gl{position:absolute;bottom:var(--b);left:var(--x);width:16px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#fff,transparent);opacity:0;animation:ps-tw var(--d) ease-in-out var(--dl) infinite}
+@keyframes ps-tw{50%{opacity:.9}}
+[data-paused="true"] *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.ps-sea *,.ps-deco *{animation:none!important}.ps-tide{transform:translateY(60%)}.ps-pt,.ps-sp{opacity:.5}}

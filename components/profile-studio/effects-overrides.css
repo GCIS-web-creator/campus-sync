@@ -1,0 +1,5 @@
+/* Replaces SMIL motion with CSS and keeps animation low-cost. */
+.pn-orbit-dot{transform-box:fill-box;transform-origin:center;animation:pn-orbit-dot 8s linear infinite}
+@keyframes pn-orbit-dot{to{transform:rotate(360deg)}}
+.ps-motion-preview[data-paused="true"] *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.pn-orbit-dot{animation:none!important}}

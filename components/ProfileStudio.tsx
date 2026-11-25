@@ -3,15 +3,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ContributionRankBadge } from '@/components/ContributionRanks';
-import { BadgeCheck, Check, ChevronLeft, Compass, Eye, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users } from 'lucide-react';
+import { BadgeCheck, Check, ChevronLeft, Compass, Eye, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users, SlidersHorizontal } from 'lucide-react';
+import { ProfileMediaEditor } from '@/components/profile-studio/ProfileMediaEditor';
+import { GradientEditor } from '@/components/profile-studio/GradientEditor';
+import { BadgeIcon } from '@/components/profile-studio/BadgeIcon';
+import { AvatarDeco, BannerEffect, type DecoKind } from '@/components/profile-studio/NatureEffects';
+import { DECO_ITEMS } from '@/components/profile-studio/catalog';
+import { DEFAULT_PROFILE_STUDIO, normalizeProfileStudio, nameCss, type ProfileStudioSettings } from '@/components/profile-studio/nameStyle';
 
 type ProfileDraft = {
   display_name: string;
   bio: string;
   avatar_emoji: string;
   avatar_url: string;
+  avatar_path: string;
   banner_theme: string;
   banner_url: string;
+  banner_path: string;
+  studio: ProfileStudioSettings;
   name_style: string;
   name_font: string;
   frame_style: string;
@@ -39,8 +48,11 @@ const DEFAULT_PROFILE: ProfileDraft = {
   bio: '',
   avatar_emoji: '🌸',
   avatar_url: '',
+  avatar_path: '',
   banner_theme: 'aurora',
   banner_url: '',
+  banner_path: '',
+  studio: DEFAULT_PROFILE_STUDIO,
   name_style: 'gradient',
   name_font: 'rounded',
   frame_style: 'basic',
@@ -108,7 +120,7 @@ const PROFILE_CSS = [
   '.ps-avatar-inner img{width:100%;height:100%;object-fit:cover}',
   '.ps-avatar-sparkle:after{content:"✦";position:absolute;right:-5px;top:0;color:#bae6fd;font-size:28px;text-shadow:0 0 14px #67e8f9;animation:ps-twinkle 1.8s ease-in-out infinite}',
   '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
-  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800!important;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500!important;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400!important;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900!important;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
+  '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
   '.ps-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(191,219,254,.22);border-radius:999px;background:rgba(255,255,255,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#e0f2fe}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
@@ -126,14 +138,41 @@ function safeHttpsUrl(value: string): string {
   }
 }
 
+type ProfileImageRef = { userId: string; kind: 'avatar' | 'banner'; path: string };
+
+async function resolveProfileImageUrls(items: ProfileImageRef[]): Promise<Map<string, string>> {
+  if (!items.length) return new Map();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return new Map();
+  const response = await fetch('/api/profile/images/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ items }),
+    cache: 'no-store',
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(body?.items)) return new Map();
+  const urls = new Map<string, string>();
+  for (const item of body.items) {
+    if (typeof item?.url === 'string' && typeof item?.userId === 'string' && (item?.kind === 'avatar' || item?.kind === 'banner')) {
+      urls.set(item.userId + ':' + item.kind, item.url);
+    }
+  }
+  return urls;
+}
+
 function fromRow(row: any, fallbackClass: string): ProfileDraft {
   return {
     display_name: String(row?.display_name || 'CampusSyncユーザー'),
     bio: String(row?.bio || ''),
     avatar_emoji: String(row?.avatar_emoji || '🌸'),
     avatar_url: String(row?.avatar_url || ''),
+    avatar_path: String(row?.avatar_path || ''),
     banner_theme: String(row?.banner_theme || 'aurora'),
     banner_url: String(row?.banner_url || ''),
+    banner_path: String(row?.banner_path || ''),
+    studio: normalizeProfileStudio(row?.studio),
     name_style: String(row?.name_style || 'gradient'),
     name_font: String(row?.name_font || 'rounded'),
     frame_style: String(row?.frame_style || 'basic'),
@@ -146,20 +185,35 @@ function fromRow(row: any, fallbackClass: string): ProfileDraft {
   };
 }
 
-function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; compact?: boolean }) {
+function ProfileCard({
+  profile,
+  compact = false,
+  previewAvatarKind,
+  previewBannerKind,
+}: {
+  profile: ProfileDraft;
+  compact?: boolean;
+  previewAvatarKind?: DecoKind | null;
+  previewBannerKind?: DecoKind | null;
+}) {
   const avatarUrl = safeHttpsUrl(profile.avatar_url);
   const bannerUrl = safeHttpsUrl(profile.banner_url);
   const bannerStyle = bannerUrl ? { backgroundImage: 'linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5)),url("' + bannerUrl.replace(/"/g, '%22') + '")' } : undefined;
+  const studio = normalizeProfileStudio(profile.studio);
   const nameStyleClass = 'ps-name-' + profile.name_style;
   const normalizedFont = profile.name_font === 'marshmallow' ? 'sakura-pop' : (profile.name_font || 'rounded');
   const fontClass = 'ps-font-' + normalizedFont + (normalizedFont === 'modern' ? ' ps-font-modern-rainbow' : normalizedFont === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '');
   const frameClass = profile.frame_style === 'aurora' ? 'ps-frame-aurora' : profile.frame_style === 'prism' ? 'ps-frame-prism' : '';
   const badges = COSMETICS.filter(item => item.category === 'badge' && profile.equipped_badges.includes(item.id));
+  const avatarKind = previewAvatarKind === undefined ? studio.equipped.avatar_deco as DecoKind | null : previewAvatarKind;
+  const bannerKind = previewBannerKind === undefined ? studio.equipped.profile_effect as DecoKind | null : previewBannerKind;
+  const customNameStyle = studio.name_appearance.enabled ? nameCss(studio.name_appearance) : undefined;
   return (
     <div className="ps-card">
       <div className={'ps-banner ps-banner-' + profile.banner_theme} style={bannerStyle}>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0e1a35]/75" />
-        {!compact && <span className="absolute bottom-3 right-4 rounded-full border border-white/20 bg-slate-950/25 px-3 py-1 text-[9px] font-black tracking-[.2em] text-white/80">CAMPUSSYNC PROFILE</span>}
+        {bannerKind && <BannerEffect kind={bannerKind} count={compact ? 8 : 18} paused={studio.motionPaused} intensity={0.16} />}
+        <div className="absolute inset-0 z-[5] bg-gradient-to-b from-transparent via-transparent to-[#0e1a35]/75" />
+        {!compact && <span className="absolute bottom-3 right-4 z-10 rounded-full border border-white/20 bg-slate-950/25 px-3 py-1 text-[9px] font-black tracking-[.2em] text-white/80">CAMPUSSYNC PROFILE</span>}
       </div>
       <div className="ps-profile-body">
         <div className="flex items-end justify-between gap-3">
@@ -167,11 +221,12 @@ function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; comp
             <div className="ps-avatar-inner">
               {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{profile.avatar_emoji || '🌸'}</span>}
             </div>
+            {avatarKind && <AvatarDeco kind={avatarKind} count={compact ? 6 : 10} paused={studio.motionPaused} />}
           </div>
           {profile.is_public && <span className="mb-2 inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-200"><Eye size={12} /> 公開中</span>}
         </div>
         <div className="mt-3 min-w-0">
-          <h3 className={'break-words text-2xl font-black tracking-tight ' + nameStyleClass + ' ' + fontClass}>{profile.display_name || '名前未設定'}</h3>
+          <h3 style={customNameStyle} className={'break-words text-2xl font-black tracking-tight ' + nameStyleClass + ' ' + fontClass}>{profile.display_name || '名前未設定'}</h3>
           {profile.show_class && profile.class_label && <p className="mt-1 text-[11px] font-bold text-slate-300/75">{profile.class_label}組</p>}
           <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200/85">{profile.bio || '自己紹介はまだ設定されていません。'}</p>
         </div>
@@ -180,7 +235,7 @@ function ProfileCard({ profile, compact = false }: { profile: ProfileDraft; comp
         </div>
         {badges.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {badges.map(badge => <span key={badge.id} className="ps-badge"><span>{badge.icon}</span>{badge.name}</span>)}
+            {badges.map(badge => <span key={badge.id} className="ps-badge"><BadgeIcon id={badge.id} state="equipped" size={24} />{badge.name}</span>)}
           </div>
         )}
         <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-[10px] font-semibold text-slate-300/65">
@@ -215,6 +270,8 @@ export default function ProfileStudio({
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null);
+  const [previewAvatarKind, setPreviewAvatarKind] = useState<DecoKind | null | undefined>(undefined);
+  const [previewBannerKind, setPreviewBannerKind] = useState<DecoKind | null | undefined>(undefined);
 
   const darkCard = isDarkMode ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-800';
   const muted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
@@ -232,7 +289,14 @@ export default function ProfileStudio({
       console.error('プロフィール設定の読み込みに失敗:', profileResult.error);
       setMessage('プロフィール機能のデータベース設定を確認してください。');
     } else if (profileResult.data) {
-      setProfile(fromRow(profileResult.data, userClass));
+      const draft = fromRow(profileResult.data, userClass);
+      const imageUrls = await resolveProfileImageUrls([
+        ...(draft.avatar_path ? [{ userId, kind: 'avatar' as const, path: draft.avatar_path }] : []),
+        ...(draft.banner_path ? [{ userId, kind: 'banner' as const, path: draft.banner_path }] : []),
+      ]);
+      draft.avatar_url = imageUrls.get(userId + ':avatar') || safeHttpsUrl(draft.avatar_url);
+      draft.banner_url = imageUrls.get(userId + ':banner') || safeHttpsUrl(draft.banner_url);
+      setProfile(draft);
     } else {
       setProfile({ ...DEFAULT_PROFILE, display_name: 'CampusSyncユーザー', class_label: userClass, contribution_points: contributionPoints });
     }
@@ -267,7 +331,7 @@ export default function ProfileStudio({
     setSelectedProfile(null);
     let query = supabase
       .from('student_profile_customizations')
-      .select('user_id,display_name,bio,avatar_emoji,avatar_url,banner_theme,banner_url,name_style,name_font,frame_style,avatar_effect,is_public,show_class,class_label,equipped_badges,contribution_points,updated_at')
+      .select('user_id,display_name,bio,avatar_emoji,avatar_url,avatar_path,banner_theme,banner_url,banner_path,studio,name_style,name_font,frame_style,avatar_effect,is_public,show_class,class_label,equipped_badges,contribution_points,updated_at')
       .eq('is_public', true)
       .order('updated_at', { ascending: false })
       .limit(60);
@@ -278,7 +342,19 @@ export default function ProfileStudio({
       setMessage('公開プロフィールを読み込めませんでした。');
       setDirectory([]);
     } else {
-      setDirectory((data || []).map((row: any) => ({ ...fromRow(row, ''), user_id: String(row.user_id), updated_at: row.updated_at })));
+      const rows = data || [];
+      const refs = rows.flatMap((row: any) => [
+        ...(row.avatar_path ? [{ userId: String(row.user_id), kind: 'avatar' as const, path: String(row.avatar_path) }] : []),
+        ...(row.banner_path ? [{ userId: String(row.user_id), kind: 'banner' as const, path: String(row.banner_path) }] : []),
+      ]);
+      const imageUrls = await resolveProfileImageUrls(refs);
+      setDirectory(rows.map((row: any) => {
+        const id = String(row.user_id);
+        const draft = fromRow(row, '');
+        draft.avatar_url = imageUrls.get(id + ':avatar') || safeHttpsUrl(draft.avatar_url);
+        draft.banner_url = imageUrls.get(id + ':banner') || safeHttpsUrl(draft.banner_url);
+        return { ...draft, user_id: id, updated_at: row.updated_at };
+      }));
     }
     setDirectoryLoading(false);
   }, [searchText]);
@@ -320,9 +396,12 @@ export default function ProfileStudio({
       display_name: cleanName,
       bio: cleanBio,
       avatar_emoji: AVATARS.includes(profile.avatar_emoji) ? profile.avatar_emoji : '🌸',
-      avatar_url: avatarUrl || null,
+      avatar_url: profile.avatar_path ? null : (avatarUrl || null),
+      avatar_path: profile.avatar_path || null,
       banner_theme: BANNERS.some(item => item.id === profile.banner_theme) ? profile.banner_theme : 'aurora',
-      banner_url: bannerUrl || null,
+      banner_url: profile.banner_path ? null : (bannerUrl || null),
+      banner_path: profile.banner_path || null,
+      studio: normalizeProfileStudio(profile.studio),
       name_style: NAME_STYLES.some(item => item.id === profile.name_style) ? profile.name_style : 'gradient',
       name_font: NAME_FONTS.some(item => item.id === profile.name_font) ? profile.name_font : 'rounded',
       frame_style: ['basic', 'aurora', 'prism'].includes(profile.frame_style) ? profile.frame_style : 'basic',
@@ -339,7 +418,12 @@ export default function ProfileStudio({
       console.error('プロフィール保存に失敗:', error);
       setMessage(error.message.includes('まだ解放') ? error.message : '保存できませんでした。時間をおいて再度お試しください。');
     } else {
-      setProfile(fromRow(payload, userClass));
+      const saved = fromRow(payload, userClass);
+      saved.avatar_url = profile.avatar_url;
+      saved.banner_url = profile.banner_url;
+      setProfile(saved);
+      setPreviewAvatarKind(undefined);
+      setPreviewBannerKind(undefined);
       setMessage('プロフィールを保存しました。');
     }
     setSaving(false);
@@ -395,10 +479,16 @@ export default function ProfileStudio({
                 <div className="mt-4">
                   <p className={'mb-2 text-[11px] font-bold ' + muted}>アイコン</p>
                   <div className="flex flex-wrap gap-2">
-                    {AVATARS.map(avatar => <button type="button" key={avatar} onClick={() => setProfile(prev => ({ ...prev, avatar_emoji: avatar, avatar_url: '' }))} aria-pressed={profile.avatar_emoji === avatar && !profile.avatar_url} className={'flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition ' + (profile.avatar_emoji === avatar && !profile.avatar_url ? 'border-cyan-400 bg-cyan-500/15 ring-2 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}>{avatar}</button>)}
+                    {AVATARS.map(avatar => <button type="button" key={avatar} onClick={() => setProfile(prev => ({ ...prev, avatar_emoji: avatar, avatar_url: '', avatar_path: '' }))} aria-pressed={profile.avatar_emoji === avatar && !profile.avatar_url} className={'flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition ' + (profile.avatar_emoji === avatar && !profile.avatar_url ? 'border-cyan-400 bg-cyan-500/15 ring-2 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}>{avatar}</button>)}
                   </div>
                   <label className={'mt-3 block text-[10px] font-bold ' + muted}>画像URL（任意・HTTPSのみ）</label>
-                  <input maxLength={2048} value={profile.avatar_url} onChange={event => setProfile(prev => ({ ...prev, avatar_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/avatar.png" />
+                  <input maxLength={2048} value={profile.avatar_path ? '' : profile.avatar_url} onChange={event => setProfile(prev => ({ ...prev, avatar_url: event.target.value, avatar_path: '' }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/avatar.png" />
+                   <ProfileMediaEditor
+                     kind="avatar" userId={userId} currentUrl={profile.avatar_url}
+                     hasImage={Boolean(profile.avatar_path || profile.avatar_url)} dark={isDarkMode}
+                     onUploaded={({ path, url }) => setProfile(prev => ({ ...prev, avatar_path: path, avatar_url: url, avatar_emoji: '🌸' }))}
+                     onRemove={() => setProfile(prev => ({ ...prev, avatar_path: '', avatar_url: '', avatar_emoji: '🌸' }))}
+                   />
                 </div>
               </section>
 
@@ -428,6 +518,25 @@ export default function ProfileStudio({
                     })}
                   </div>
                 </div>
+                 <div className="mt-4 rounded-xl border border-slate-300/25 p-3">
+                   <label className="flex items-center gap-2 text-xs font-black">
+                     <input type="checkbox" checked={profile.studio.name_appearance.enabled} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, enabled: event.target.checked } } }))} className="h-4 w-4 accent-violet-500" />
+                     カスタムグラデーションを使う
+                   </label>
+                   {profile.studio.name_appearance.enabled && (
+                     <div className="mt-3 space-y-3">
+                       <GradientEditor stops={profile.studio.name_appearance.stops} angle={profile.studio.name_appearance.angle} onChange={(stops, angle) => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, stops, angle } } }))} />
+                       <div className="grid grid-cols-2 gap-3">
+                         <label className="text-[10px] font-bold">縁取り色<input type="color" value={profile.studio.name_appearance.strokeColor} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, strokeColor: event.target.value } } }))} className="mt-1 h-8 w-full rounded-lg border-0 bg-transparent" /></label>
+                         <label className="text-[10px] font-bold">文字の太さ：{profile.studio.name_appearance.weight}<input type="range" min="300" max="900" step="50" value={profile.studio.name_appearance.weight} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, weight: Number(event.target.value) } } }))} className="mt-2 w-full" /></label>
+                         <label className="text-[10px] font-bold">縁取り：{profile.studio.name_appearance.stroke.toFixed(1)}px<input type="range" min="0" max="8" step=".5" value={profile.studio.name_appearance.stroke} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, stroke: Number(event.target.value) } } }))} className="mt-2 w-full" /></label>
+                         <label className="text-[10px] font-bold">影：{profile.studio.name_appearance.shadow}px<input type="range" min="0" max="24" value={profile.studio.name_appearance.shadow} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, shadow: Number(event.target.value) } } }))} className="mt-2 w-full" /></label>
+                         <label className="text-[10px] font-bold">発光：{profile.studio.name_appearance.glow}px<input type="range" min="0" max="24" value={profile.studio.name_appearance.glow} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, glow: Number(event.target.value) } } }))} className="mt-2 w-full" /></label>
+                         <label className="text-[10px] font-bold">文字間隔：{profile.studio.name_appearance.spacing}px<input type="range" min="-2" max="12" step=".5" value={profile.studio.name_appearance.spacing} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, name_appearance: { ...prev.studio.name_appearance, spacing: Number(event.target.value) } } }))} className="mt-2 w-full" /></label>
+                       </div>
+                     </div>
+                   )}
+                 </div>
               </section>
 
               <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
@@ -437,7 +546,13 @@ export default function ProfileStudio({
                   {BANNERS.map(banner => <button key={banner.id} type="button" onClick={() => setProfile(prev => ({ ...prev, banner_theme: banner.id }))} className={'rounded-xl border p-2 text-xs font-black ' + (profile.banner_theme === banner.id ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>{banner.label}</button>)}
                 </div>
                 <label className={'mt-3 block text-[10px] font-bold ' + muted}>バナー画像URL（任意・HTTPSのみ）</label>
-                <input maxLength={2048} value={profile.banner_url} onChange={event => setProfile(prev => ({ ...prev, banner_url: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/banner.jpg" />
+                <input maxLength={2048} value={profile.banner_path ? '' : profile.banner_url} onChange={event => setProfile(prev => ({ ...prev, banner_url: event.target.value, banner_path: '' }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/banner.jpg" />
+                 <ProfileMediaEditor
+                   kind="banner" userId={userId} currentUrl={profile.banner_url}
+                   hasImage={Boolean(profile.banner_path || profile.banner_url)} dark={isDarkMode}
+                   onUploaded={({ path, url }) => setProfile(prev => ({ ...prev, banner_path: path, banner_url: url }))}
+                   onRemove={() => setProfile(prev => ({ ...prev, banner_path: '', banner_url: '' }))}
+                 />
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className={'mb-2 text-[11px] font-bold ' + muted}>プロフィール枠</p>
@@ -455,6 +570,34 @@ export default function ProfileStudio({
                     </select>
                   </div>
                 </div>
+                 <div className="mt-4 rounded-xl border border-slate-300/25 p-3">
+                   <div className="mb-2 flex items-center gap-2"><SlidersHorizontal size={14} className="text-cyan-500" /><p className="text-xs font-black">新しい装飾テーマ</p></div>
+                   <p className={'mb-3 text-[10px] leading-5 ' + muted}>22種類の見本をプレビューできます。解放条件はまだ設定されていないため、今は見本表示のみで、装備・保存はできません。</p>
+                   <label className="mb-2 block text-[10px] font-black">アイコン装飾（プレビュー）</label>
+                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                     <button type="button" onClick={() => setPreviewAvatarKind(null)} className={'rounded-lg border p-2 text-[10px] font-bold ' + (previewAvatarKind === null ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし</button>
+                     {DECO_ITEMS.filter(item => item.slot === 'avatar_deco').map(item => {
+                       const unlocked = unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId));
+                       const selected = previewAvatarKind === item.kind;
+                       return <button key={item.id} type="button" onClick={() => setPreviewAvatarKind(selected ? undefined : item.kind)} className={'rounded-lg border p-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>
+                         <span className="block text-[10px] font-black">{item.name}</span><span className={'mt-1 block text-[9px] ' + (unlocked ? 'text-emerald-500' : 'text-amber-500')}>{unlocked ? '解放済み' : '🔒 見本プレビュー'}</span>
+                       </button>;
+                     })}
+                   </div>
+                   <label className="mb-2 mt-4 block text-[10px] font-black">バナー効果（プレビュー）</label>
+                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                     <button type="button" onClick={() => setPreviewBannerKind(null)} className={'rounded-lg border p-2 text-[10px] font-bold ' + (previewBannerKind === null ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし</button>
+                     {DECO_ITEMS.filter(item => item.slot === 'profile_effect').map(item => {
+                       const unlocked = unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId));
+                       const selected = previewBannerKind === item.kind;
+                       return <button key={item.id} type="button" onClick={() => setPreviewBannerKind(selected ? undefined : item.kind)} className={'rounded-lg border p-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>
+                         <span className="block text-[10px] font-black">{item.name}</span><span className={'mt-1 block text-[9px] ' + (unlocked ? 'text-emerald-500' : 'text-amber-500')}>{unlocked ? '解放済み' : '🔒 見本プレビュー'}</span>
+                       </button>;
+                     })}
+                   </div>
+                   <label className="mt-4 flex items-center gap-2 text-[10px] font-bold"><input type="checkbox" checked={profile.studio.motionPaused} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, motionPaused: event.target.checked } }))} className="h-4 w-4 accent-cyan-500" />動きを止める</label>
+                   <p className={'mt-2 text-[9px] leading-5 ' + muted}>端末の「視差効果を減らす」設定も優先されます。</p>
+                 </div>
               </section>
 
               <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
@@ -462,7 +605,7 @@ export default function ProfileStudio({
                 <p className={'mb-3 text-[10px] ' + muted}>プロフィールに表示するバッジを最大5個まで選べる。</p>
                 {unlockedCosmetics.filter(item => item.category === 'badge').length ? (
                   <div className="flex flex-wrap gap-2">
-                    {unlockedCosmetics.filter(item => item.category === 'badge').map(item => <button key={item.id} type="button" onClick={() => toggleBadge(item.id)} aria-pressed={profile.equipped_badges.includes(item.id)} className={'rounded-full border px-3 py-2 text-[11px] font-black transition ' + (profile.equipped_badges.includes(item.id) ? 'border-amber-400 bg-amber-400/15 text-amber-600' : 'border-slate-300/30 bg-slate-500/5')}><span className="mr-1.5">{item.icon}</span>{item.name}{profile.equipped_badges.includes(item.id) ? ' ✓' : ' ＋'}</button>)}
+                    {unlockedCosmetics.filter(item => item.category === 'badge').map(item => <button key={item.id} type="button" onClick={() => toggleBadge(item.id)} aria-pressed={profile.equipped_badges.includes(item.id)} className={'flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-black transition ' + (profile.equipped_badges.includes(item.id) ? 'border-amber-400 bg-amber-400/15 text-amber-600' : 'border-slate-300/30 bg-slate-500/5')}><BadgeIcon id={item.id} state={profile.equipped_badges.includes(item.id) ? 'equipped' : 'unlocked'} size={22} />{item.name}{profile.equipped_badges.includes(item.id) ? ' ✓' : ' ＋'}</button>)}
                   </div>
                 ) : <p className={'rounded-xl border border-dashed border-slate-300/30 p-4 text-center text-xs ' + muted}>まだバッジはありません。下の実績を達成すると解放されるよ。</p>}
               </section>
@@ -483,7 +626,7 @@ export default function ProfileStudio({
             <div className="space-y-4">
               <section className={'rounded-2xl border p-3 sm:p-4 ' + darkCard}>
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-black">リアルタイムプレビュー</h3><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[9px] font-black text-cyan-500">LIVE PREVIEW</span></div>
-                <ProfileCard profile={profile} />
+                <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} />
                 <p className={'mt-3 text-[10px] leading-5 ' + muted}>装飾を変更すると、保存前でもここに反映されるよ。</p>
               </section>
 
@@ -530,7 +673,7 @@ export default function ProfileStudio({
                     <p className="mt-2 truncate text-sm font-black">{item.display_name}</p>
                     {item.show_class && item.class_label && <p className={'mt-0.5 text-[10px] ' + muted}>{item.class_label}組</p>}
                     <p className={'mt-2 line-clamp-2 min-h-9 text-[11px] leading-5 ' + muted}>{item.bio || '自己紹介はありません。'}</p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">{COSMETICS.filter(badge => badge.category === 'badge' && item.equipped_badges.includes(badge.id)).slice(0, 3).map(badge => <span key={badge.id} className="rounded-full bg-cyan-500/10 px-2 py-1 text-[9px] font-black">{badge.icon} {badge.name}</span>)}</div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">{COSMETICS.filter(badge => badge.category === 'badge' && item.equipped_badges.includes(badge.id)).slice(0, 3).map(badge => <span key={badge.id} className="rounded-full bg-cyan-500/10 px-2 py-1 text-[9px] font-black"><BadgeIcon id={badge.id} size={16} /> {badge.name}</span>)}</div>
                     <span className="mt-3 inline-flex items-center gap-1 text-[10px] font-black text-cyan-500">プロフィールを見る <ChevronLeft size={12} className="rotate-180" /></span>
                   </div>
                 </button>)}
