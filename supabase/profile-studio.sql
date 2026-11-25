@@ -133,6 +133,26 @@ begin
 
   if not exists (
     select 1 from pg_constraint
+    where conname = 'student_profile_avatar_url_length_check'
+      and conrelid = 'public.student_profile_customizations'::regclass
+  ) then
+    alter table public.student_profile_customizations
+      add constraint student_profile_avatar_url_length_check
+      check (avatar_url is null or char_length(avatar_url) <= 2048);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'student_profile_banner_url_length_check'
+      and conrelid = 'public.student_profile_customizations'::regclass
+  ) then
+    alter table public.student_profile_customizations
+      add constraint student_profile_banner_url_length_check
+      check (banner_url is null or char_length(banner_url) <= 2048);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
     where conname = 'student_profile_class_label_check'
       and conrelid = 'public.student_profile_customizations'::regclass
   ) then
