@@ -204,9 +204,10 @@ export default function ProfileStudio({
   const loadOwnProfile = useCallback(async () => {
     setLoading(true);
     setMessage('');
-    const [profileResult, achievementResult] = await Promise.all([
+    const [profileResult, studyResult, contributionResult] = await Promise.all([
       supabase.from('student_profile_customizations').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.rpc('refresh_student_profile_unlocks'),
+      supabase.from('student_study_sessions').select('focus_seconds,ended_at').eq('user_id', userId),
+      supabase.from('campus_contribution_submissions').select('status').eq('user_id', userId),
     ]);
 
     if (profileResult.error) {
@@ -218,14 +219,15 @@ export default function ProfileStudio({
       setProfile({ ...DEFAULT_PROFILE, display_name: 'CampusSyncユーザー', class_label: userClass });
     }
 
-    if (achievementResult.error) {
-      console.warn('プロフィール実績の更新に失敗:', achievementResult.error);
-    } else if (achievementResult.data) {
-      const data = achievementResult.data as any;
+    if (studyResult.error || contributionResult.error) {
+      console.warn('プロフィール実績の読み込みに失敗:', studyResult.error || contributionResult.error);
+    } else {
+      const studyRows = studyResult.data || [];
+      const contributionRows = contributionResult.data || [];
       setMetrics({
-        study_sessions: Number(data.study_sessions || 0),
-        focus_minutes: Number(data.focus_minutes || 0),
-        approved_contributions: Number(data.approved_contributions || 0),
+        study_sessions: studyRows.filter((row: any) => row.ended_at && Number(row.focus_seconds) > 0).length,
+        focus_minutes: Math.floor(studyRows.reduce((sum: number, row: any) => sum + Math.max(0, Number(row.focus_seconds) || 0), 0) / 60),
+        approved_contributions: contributionRows.filter((row: any) => ['approved', 'accepted', 'published'].includes(String(row.status || '').toLowerCase())).length,
       });
     }
 
