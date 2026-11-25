@@ -327,7 +327,7 @@ function addBuilding(scene: THREE.Scene, bindings: Binding[], resources: Array<{
   }
 
   // The central mill district gains an original waterwheel and a timber footbridge.
-  if (index % 7 === 4) {
+  if (index % 7 === 3) {
     const wheel = new THREE.Group();
     wheel.position.set(w * 0.62, h * 0.48, 0);
     wheel.rotation.y = Math.PI / 2;
@@ -348,7 +348,7 @@ function addBuilding(scene: THREE.Scene, bindings: Binding[], resources: Array<{
       wheel.add(paddle);
       resources.push(paddleGeo);
     }
-    scene.add(wheel);
+    group.add(wheel);
   }
 }
 
@@ -766,10 +766,21 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
     addMountainRange(scene, resources, -4_650, 790, '#a8b7b6', 43);
     addModernSkyline(scene, resources, stage);
 
-    const waterMat = new THREE.MeshPhysicalMaterial({ color: '#6ea9ae', roughness: 0.24, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.9, clearcoat: 0.75, clearcoatRoughness: 0.2 });
+    let waterMat = new THREE.MeshPhysicalMaterial({ color: '#6ea9ae', roughness: 0.2, metalness: 0, transmission: 0.1, transparent: true, opacity: 0.92, clearcoat: 0.9, clearcoatRoughness: 0.14 });
     const water = new THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>(new THREE.CircleGeometry(1, 96), waterMat);
     water.rotation.x = -Math.PI / 2; water.scale.set(20.8, 13.8, 1);
-    water.position.set(39, heightAt(39, -24) - 0.45, -24); scene.add(water); resources.push(water.geometry, waterMat);
+    water.position.set(39, heightAt(39, -24) - 0.45, -24); scene.add(water);
+    const creekCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(39, heightAt(39, -24) - 0.28, -24),
+      new THREE.Vector3(34, heightAt(34, -8) - 0.3, -8),
+      new THREE.Vector3(24, heightAt(24, 9) - 0.3, 9),
+      new THREE.Vector3(24, heightAt(24, 26) - 0.3, 26),
+      new THREE.Vector3(30, heightAt(30, 40) - 0.3, 40),
+    ]);
+    const creekGeometry = new THREE.TubeGeometry(creekCurve, 72, 0.95, 10, false);
+    const creek = new THREE.Mesh(creekGeometry, waterMat);
+    scene.add(creek);
+    resources.push(water.geometry, waterMat, creekGeometry);
 
     const windows = new THREE.MeshStandardMaterial({ color: '#a8ddd6', emissive: '#3c8079', emissiveIntensity: stage >= 3 ? 0.55 : 0.32, roughness: 0.2, metalness: 0.1 });
     resources.push(windows);
@@ -850,9 +861,12 @@ export default function VerdiaGroundView({ atmosphereColor, stage, onBack }: Pro
       });
       const nextWaterGeometry = createWaterGeometry(masks);
       water.geometry.dispose(); water.geometry = nextWaterGeometry;
-      water.material = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.22, metalness: 0, transmission: 0.08, transparent: true, opacity: 0.88, clearcoat: 0.8, clearcoatRoughness: 0.18 });
+      waterMat.dispose();
+      waterMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.2, metalness: 0, transmission: 0.1, transparent: true, opacity: 0.9, clearcoat: 0.9, clearcoatRoughness: 0.14 });
+      water.material = waterMat;
+      creek.material = waterMat;
       water.rotation.set(0, 0, 0); water.position.set(0, 0, 0); water.scale.set(1, 1, 1);
-      resources.push(nextWaterGeometry, water.material as THREE.Material);
+      resources.push(nextWaterGeometry, waterMat);
       rebuildRoadEdges(masks); populateRocks(masks); addTrees(scene, resources, masks, stage); loadMaterialAtlas(masks);
     }).catch(() => {
       if (!alive) return;
