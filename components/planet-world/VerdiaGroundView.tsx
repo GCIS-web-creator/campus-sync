@@ -162,32 +162,47 @@ function applyTileBreakup(material: THREE.MeshStandardMaterial, noise: THREE.Tex
 }
 
 function terrainGeometry(key: MaterialKey, tile: number, masks?: GeographyMasks) {
-  const size = 240, half = size / 2, divisions = 112, step = size / divisions;
-  const positions: number[] = [], uvs: number[] = [];
-  const vertex = (x: number, z: number) => { positions.push(x, heightAt(x, z), z); uvs.push(x / tile, z / tile); };
-  for (let iz = 0; iz < divisions; iz++) for (let ix = 0; ix < divisions; ix++) {
-    const x0 = -half + ix * step, x1 = x0 + step, z0 = -half + iz * step, z1 = z0 + step;
-    const x = (x0 + x1) / 2, z = (z0 + z1) / 2, lake = lakeDistance(x, z);
-    const biome = masks?.sampleBiome(x, z);
-    const water = masks?.sampleWater(x, z);
-    if (masks ? water![0] >= 128 : lake < 0.84) continue;
-    let category: MaterialKey;
-    if (Math.abs(x - roadX(z)) < 5.4) category = 'permeable-road';
-    else if (biome) {
-      const channels = [biome[0], biome[1], biome[2], biome[3]];
-      const dominant = channels.indexOf(Math.max(...channels));
-      category = Math.max(...channels) < 28
-        ? (heightAt(x, z) > 5 ? 'sedimentary-rock' : 'grassland')
-        : dominant === 0 ? 'grassland' : dominant === 1 ? 'forest-floor' : dominant === 2 ? 'lakeshore' : 'sedimentary-rock';
-    } else category = lake < 1.14 ? 'lakeshore' : forestAt(x, z) ? 'forest-floor' : heightAt(x, z) > 5 || (x < -75 && Math.sin(z * 0.09) > -0.2) ? 'sedimentary-rock' : 'grassland';
-    if (category !== key) continue;
-    vertex(x0, z0); vertex(x0, z1); vertex(x1, z0);
-    vertex(x0, z1); vertex(x1, z1); vertex(x1, z0);
+  const size = 240, half = size / 2, divisions = 144, step = size / divisions;
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  for (let iz = 0; iz <= divisions; iz++) {
+    for (let ix = 0; ix <= divisions; ix++) {
+      const x = -half + ix * step, z = -half + iz * step;
+      positions.push(x, heightAt(x, z), z);
+      uvs.push(x / tile, z / tile);
+    }
+  }
+  const vertexIndex = (ix: number, iz: number) => iz * (divisions + 1) + ix;
+  for (let iz = 0; iz < divisions; iz++) {
+    for (let ix = 0; ix < divisions; ix++) {
+      const x0 = -half + ix * step, x1 = x0 + step;
+      const z0 = -half + iz * step, z1 = z0 + step;
+      const x = (x0 + x1) / 2, z = (z0 + z1) / 2;
+      const lake = lakeDistance(x, z);
+      const biome = masks?.sampleBiome(x, z);
+      const water = masks?.sampleWater(x, z);
+      if (masks ? water![0] >= 128 : lake < 0.84) continue;
+      let category: MaterialKey;
+      if (Math.abs(x - roadX(z)) < 5.4) category = 'permeable-road';
+      else if (biome) {
+        const channels = [biome[0], biome[1], biome[2], biome[3]];
+        const dominant = channels.indexOf(Math.max(...channels));
+        category = Math.max(...channels) < 28
+          ? (heightAt(x, z) > 5 ? 'sedimentary-rock' : 'grassland')
+          : dominant === 0 ? 'grassland' : dominant === 1 ? 'forest-floor' : dominant === 2 ? 'lakeshore' : 'sedimentary-rock';
+      } else category = lake < 1.14 ? 'lakeshore' : forestAt(x, z) ? 'forest-floor' : heightAt(x, z) > 5 || (x < -75 && Math.sin(z * 0.09) > -0.2) ? 'sedimentary-rock' : 'grassland';
+      if (category !== key) continue;
+      const a = vertexIndex(ix, iz), b = vertexIndex(ix, iz + 1);
+      const c = vertexIndex(ix + 1, iz), d = vertexIndex(ix + 1, iz + 1);
+      indices.push(a, b, c, b, d, c);
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  withUv2(geo); geo.computeVertexNormals(); geo.computeBoundingSphere();
+  geo.setIndex(indices);
+  withUv2(geo);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
   return geo;
 }
 function makeGabledRoof(width: number, depth: number, ridgeHeight: number) {
@@ -339,11 +354,15 @@ function addBuilding(scene: THREE.Scene, bindings: Binding[], resources: Array<{
 
 function createFarTerrainGeometry(key: 'grassland' | 'sedimentary-rock') {
   const size = 8_200, half = size / 2, divisions = 220, step = size / divisions;
-  const positions: number[] = [], uvs: number[] = [];
-  const add = (x: number, z: number) => {
-    positions.push(x, heightAt(x, z), z);
-    uvs.push(x / 110, z / 110);
-  };
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  for (let iz = 0; iz <= divisions; iz++) {
+    for (let ix = 0; ix <= divisions; ix++) {
+      const x = -half + ix * step, z = -half + iz * step;
+      positions.push(x, heightAt(x, z), z);
+      uvs.push(x / 110, z / 110);
+    }
+  }
+  const vertexIndex = (ix: number, iz: number) => iz * (divisions + 1) + ix;
   for (let iz = 0; iz < divisions; iz++) {
     for (let ix = 0; ix < divisions; ix++) {
       const x0 = -half + ix * step, x1 = x0 + step;
@@ -353,19 +372,20 @@ function createFarTerrainGeometry(key: 'grassland' | 'sedimentary-rock') {
       const elevation = heightAt(x, z);
       const rock = elevation > 105 || (elevation > 48 && Math.sin(x * 0.006 + z * 0.004) > 0.12);
       if ((key === 'sedimentary-rock') !== rock) continue;
-      add(x0, z0); add(x0, z1); add(x1, z0);
-      add(x0, z1); add(x1, z1); add(x1, z0);
+      const a = vertexIndex(ix, iz), b = vertexIndex(ix, iz + 1);
+      const c = vertexIndex(ix + 1, iz), d = vertexIndex(ix + 1, iz + 1);
+      indices.push(a, b, c, b, d, c);
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   withUv2(geometry);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
 }
-
 function addMountainRange(scene: THREE.Scene, resources: Array<{ dispose: () => void }>, depth: number, peakHeight: number, color: string, seed: number) {
   const segments = 180, width = 12_000;
   const positions: number[] = [], indices: number[] = [];
