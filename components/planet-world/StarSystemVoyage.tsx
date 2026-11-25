@@ -25,6 +25,77 @@ function seeded(seed: number) {
   return () => { value = (value * 1664525 + 1013904223) >>> 0; return value / 4294967296; };
 }
 
+function makePlanetSurfaceTexture(seed: number, atmosphereColor: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 1_091);
+  const ocean = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  ocean.addColorStop(0, '#102c49');
+  ocean.addColorStop(0.45, '#174f67');
+  ocean.addColorStop(1, '#071c35');
+  context.fillStyle = ocean;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const continents = [
+    [0.18, 0.37, 0.105, 0.19], [0.31, 0.63, 0.075, 0.17],
+    [0.47, 0.33, 0.14, 0.22], [0.63, 0.62, 0.12, 0.2],
+    [0.79, 0.36, 0.12, 0.18], [0.9, 0.7, 0.06, 0.12],
+    [0.54, 0.79, 0.08, 0.1],
+  ];
+  for (const [cx, cy, rx, ry] of continents) {
+    const centerX = cx * canvas.width;
+    const centerY = cy * canvas.height;
+    context.beginPath();
+    for (let index = 0; index <= 80; index++) {
+      const angle = index / 80 * Math.PI * 2;
+      const irregular = 0.72 + random() * 0.28 + Math.sin(angle * 5 + cx * 11) * 0.09;
+      const x = centerX + Math.cos(angle) * rx * canvas.width * irregular;
+      const y = centerY + Math.sin(angle) * ry * canvas.height * irregular;
+      if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+    }
+    context.closePath();
+    context.fillStyle = random() > 0.5 ? '#6d9874' : '#8e9d70';
+    context.fill();
+    context.strokeStyle = 'rgba(201,217,160,0.32)';
+    context.lineWidth = 8;
+    context.stroke();
+    for (let patch = 0; patch < 24; patch++) {
+      const x = centerX + (random() - 0.5) * rx * canvas.width * 1.25;
+      const y = centerY + (random() - 0.5) * ry * canvas.height * 1.25;
+      context.fillStyle = random() > 0.5 ? 'rgba(35,89,70,0.26)' : 'rgba(194,177,122,0.2)';
+      context.beginPath();
+      context.ellipse(x, y, 8 + random() * 32, 4 + random() * 18, random() * Math.PI, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+
+  for (let index = 0; index < 180; index++) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height;
+    const width = 24 + random() * 110;
+    context.save();
+    context.translate(x, y);
+    context.rotate((random() - 0.5) * 0.42);
+    context.fillStyle = 'rgba(239,247,247,' + (0.018 + random() * 0.055).toFixed(3) + ')';
+    context.beginPath();
+    context.ellipse(0, 0, width, 3 + random() * 13, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+  const tint = new THREE.Color(atmosphereColor);
+  context.fillStyle = 'rgba(' + Math.round(tint.r * 255) + ',' + Math.round(tint.g * 255) + ',' + Math.round(tint.b * 255) + ',0.035)';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 8;
+  return texture;
+}
+
 function makeMoonTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -215,19 +286,30 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const planetPosition = new THREE.Vector3(-VOYAGE_SCALE.astronomicalUnit, 0, 0);
     const moonPosition = planetPosition.clone().add(new THREE.Vector3(0, 0, VOYAGE_SCALE.earthMoonDistance));
-    const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 72, 52);
+    const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 96, 72);
     const loader = new THREE.TextureLoader();
+    const fallbackPlanetTexture = makePlanetSurfaceTexture(Number.parseInt(system.id.slice(-3), 10) || 1, system.atmosphereColor);
+    let planetMaterial: THREE.MeshStandardMaterial;
     const planetTexture = loader.load(
       '/planet-assets/planets/' + system.id + (Number.parseInt(system.id.slice(-3), 10) >= 11 && Number.parseInt(system.id.slice(-3), 10) <= 20 ? '/surface.webp' : '/surface.jpg'),
+      (loaded) => {
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.wrapS = THREE.RepeatWrapping;
+        loaded.wrapT = THREE.ClampToEdgeWrapping;
+        loaded.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+        loaded.needsUpdate = true;
+      },
+      undefined,
+      () => { planetMaterial.map = fallbackPlanetTexture; planetMaterial.needsUpdate = true; },
     );
     planetTexture.colorSpace = THREE.SRGBColorSpace;
     planetTexture.wrapS = THREE.RepeatWrapping;
     planetTexture.wrapT = THREE.ClampToEdgeWrapping;
-    const planetMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: planetTexture, roughness: 0.96, metalness: 0 });
+    planetMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: planetTexture, roughness: 0.96, metalness: 0 });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial, planetTexture);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture);
 
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 64, 48),
