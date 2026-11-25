@@ -4466,7 +4466,7 @@ Supabaseの設定を確認してください。
     switch (activeTab) {
       case 'profile':
         return authUser?.id && !isGuestMode
-          ? <ProfileStudio userId={String(authUser.id)} studentName={studentName} userClass={userClass} isDarkMode={isDarkMode} />
+          ? <ProfileStudio userId={String(authUser.id)} studentName={studentName} studentId={studentId} userClass={userClass} contributionPoints={lifetimeContributionPoints} isDarkMode={isDarkMode} />
           : <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center"><User size={30} className="mx-auto text-cyan-700" /><h2 className="mt-3 font-black text-slate-900">プロフィールは学校アカウントでログインすると利用できます</h2></div>;
 
       case 'ai':
