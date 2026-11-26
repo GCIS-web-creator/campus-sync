@@ -985,6 +985,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
+      const cinematicEffectTime = timeSeconds / 3;
       const desiredFov = highSpeed ? 58
         : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
           : phaseId === 'star-orbit' ? 18
@@ -997,15 +998,15 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         camera.updateProjectionMatrix();
       }
       speedEffects.material.opacity = 0.04 + warpAmount * 0.9;
-      speedEffects.lines.rotation.z += deltaSeconds * (0.025 + warpAmount * 0.84);
-      warpOverlay.material.uniforms.uTime.value = timeSeconds;
+      speedEffects.lines.rotation.z += deltaSeconds * (0.001 + warpAmount * 0.036);
+      warpOverlay.material.uniforms.uTime.value = cinematicEffectTime;
       warpOverlay.material.uniforms.uWarp.value = warpAmount;
       warpRings.forEach((ring, ringIndex) => {
         const direction = ringIndex % 2 === 0 ? 1 : -1;
-        ring.mesh.rotation.z = timeSeconds * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
-        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(timeSeconds * 1.3 + ringIndex) * warpAmount * 0.48;
-        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(timeSeconds * 1.1 + ringIndex) * warpAmount * 0.42;
-        ring.mesh.scale.setScalar(1 + Math.sin(timeSeconds * 3.2 + ringIndex * 2) * warpAmount * 0.13);
+        ring.mesh.rotation.z = cinematicEffectTime * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
+        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(cinematicEffectTime * 1.3 + ringIndex) * warpAmount * 0.48;
+        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(cinematicEffectTime * 1.1 + ringIndex) * warpAmount * 0.42;
+        ring.mesh.scale.setScalar(1 + Math.sin(cinematicEffectTime * 3.2 + ringIndex * 2) * warpAmount * 0.13);
         ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
       });
 
@@ -1045,7 +1046,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
-      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
+      camera.rotateZ(Math.sin(cinematicEffectTime * 1.8) * warpAmount * 0.045 + Math.sin(cinematicEffectTime * 5.4) * warpAmount * 0.012);
       const cockpitQuaternion = camera.quaternion.clone();
 
       if (viewModeRef.current === 'chase') {
