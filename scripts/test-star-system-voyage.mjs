@@ -52,7 +52,7 @@ test('planet and moon camera paths are exactly 100 km above the physical surface
   const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
   assert.ok(Math.abs((planetOrbitRadius - VOYAGE_SCALE.earthRadius) * VOYAGE_SCALE.kilometersPerUnit - 100) < 1e-9);
   assert.ok(Math.abs((moonOrbitRadius - VOYAGE_SCALE.moonRadius) * VOYAGE_SCALE.kilometersPerUnit - 100) < 1e-9);
-  assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 10);
+  assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 100);
 });
 
 test('stellar path circles just outside the rendered corona', () => {
