@@ -229,6 +229,35 @@ try {
   await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
 
+  // Verify refresh and narrow-screen layout before entering the cinematic voyage.
+  const firstLoadCount = planetGetCalls;
+  const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
+  const refreshButton = planetHeader.locator('button').filter({ hasText: /更新|Refresh/ }).first();
+  const refreshCount = await refreshButton.count();
+  if (refreshCount !== 1) {
+    const visibleButtons = await page.locator('button').allTextContents();
+    const visibleHeaders = await page.locator('header').allTextContents();
+    throw new Error('Planet refresh button not found. buttons=' + JSON.stringify(visibleButtons) + ' headers=' + JSON.stringify(visibleHeaders));
+  }
+  assert.equal(await refreshButton.isEnabled(), true, 'Planet refresh button should be enabled after initial load');
+  await refreshButton.click();
+  for (let attempt = 0; attempt < 30 && planetGetCalls <= firstLoadCount; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(planetGetCalls > firstLoadCount, 'Update button should reload planet data');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  const mobileWidth = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth,
+  }));
+  assert.ok(
+    Math.max(mobileWidth.document, mobileWidth.body) <= mobileWidth.viewport + 2,
+    'Planet screen should not introduce horizontal overflow on a 390px viewport: ' + JSON.stringify(mobileWidth),
+  );
+
   // Exercise the new Verdia terrain view and the star-voyage purchase flow.
   await page.getByRole('button', { name: '地上視点', exact: true }).click();
   await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
@@ -266,33 +295,6 @@ try {
   await page.getByTestId('flight-exit-button').click();
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
-  const firstLoadCount = planetGetCalls;
-  const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
-  const refreshButton = planetHeader.locator('button').filter({ hasText: /更新|Refresh/ }).first();
-  const refreshCount = await refreshButton.count();
-  if (refreshCount !== 1) {
-    const visibleButtons = await page.locator('button').allTextContents();
-    const visibleHeaders = await page.locator('header').allTextContents();
-    throw new Error('Planet refresh button not found. buttons=' + JSON.stringify(visibleButtons) + ' headers=' + JSON.stringify(visibleHeaders));
-  }
-  assert.equal(await refreshButton.isEnabled(), true, 'Planet refresh button should be enabled after initial load');
-  await refreshButton.click();
-  for (let attempt = 0; attempt < 30 && planetGetCalls <= firstLoadCount; attempt += 1) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  assert.ok(planetGetCalls > firstLoadCount, 'Update button should reload planet data');
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(250);
-  const mobileWidth = await page.evaluate(() => ({
-    viewport: window.innerWidth,
-    document: document.documentElement.scrollWidth,
-    body: document.body.scrollWidth,
-  }));
-  assert.ok(
-    Math.max(mobileWidth.document, mobileWidth.body) <= mobileWidth.viewport + 2,
-    'Planet screen should not introduce horizontal overflow on a 390px viewport: ' + JSON.stringify(mobileWidth),
-  );
   await page.goto(origin + '/#study', { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '学習・テスト対策', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByRole('button', { name: '集中', exact: true }).click();
