@@ -136,11 +136,12 @@ const CORONA_FRAGMENT_SHADER = /* glsl */ `
     float rim = pow(max(0.0, 1.0 - facing), 1.75);
     float angle = atan(direction.y, direction.x);
     float turbulence = fbm(direction * 15.0 + uSeed + vec3(0.0, uTime * 0.003, 0.0));
-    float streamPhase = angle * 54.0 + turbulence * 8.0 + uTime * 0.12;
+    float streamPhase = angle * 48.0 + turbulence * 8.0 + uTime * 0.12;
     float streamers = pow(max(0.0, 0.5 + 0.5 * sin(streamPhase)), 8.0);
-    float fineRays = pow(max(0.0, 0.5 + 0.5 * sin(angle * 103.0 - turbulence * 11.0 - uTime * 0.08)), 14.0);
-    float alpha = rim * (0.035 + streamers * 0.23 + fineRays * 0.13 + turbulence * 0.07);
-    vec3 color = uCoronaColor * (1.1 + streamers * 1.8 + fineRays * 1.4);
+    float longProminences = pow(max(0.0, 0.5 + 0.5 * sin(angle * 23.0 - turbulence * 5.0 + uTime * 0.055)), 13.0);
+    float fineRays = pow(max(0.0, 0.5 + 0.5 * sin(angle * 109.0 - turbulence * 11.0 - uTime * 0.08)), 16.0);
+    float alpha = rim * (0.028 + streamers * 0.20 + longProminences * 0.15 + fineRays * 0.16 + turbulence * 0.065);
+    vec3 color = uCoronaColor * (1.15 + streamers * 1.7 + longProminences * 1.5 + fineRays * 1.65);
     gl_FragColor = vec4(color, alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
