@@ -5,6 +5,7 @@ import {
   getLowOrbitLookAngle,
   getLowOrbitRadius,
   MOON_ORBIT_COCKPIT_FOV_DEGREES,
+  MOON_ORBIT_VIEW_BISECTOR_DEGREES,
   getStarCoronaClearanceKm,
   getStarCoronaOuterRadius,
   getStarDepartureClearanceKm,
@@ -75,15 +76,17 @@ test('orbit views keep the body horizon and parent planet inside the cockpit fra
   assert.ok(Math.abs(planetLookAngle / planetHorizonAngle - 0.72) < 1e-12);
   assert.ok(Math.abs(moonLookAngle / moonHorizonAngle - 0.72) < 1e-12);
 
-  const moonLookDegrees = moonLookAngle * 180 / Math.PI;
-  const viewCenterAngle = (90 + moonLookDegrees) / 2;
-  const parentDirectionOffset = 90 - viewCenterAngle;
   const moonAngularRadius = Math.asin(VOYAGE_SCALE.moonRadius / moonOrbitRadius) * 180 / Math.PI;
-  const moonVisibleLimbOffset = Math.max(0, viewCenterAngle - moonAngularRadius);
+  const viewToNadirAngle = Math.acos(
+    Math.cos(MOON_ORBIT_VIEW_BISECTOR_DEGREES * Math.PI / 180) * Math.cos(moonLookAngle),
+  ) * 180 / Math.PI;
+  const parentDirectionOffset = MOON_ORBIT_VIEW_BISECTOR_DEGREES;
+  const moonVisibleLimbOffset = Math.max(0, viewToNadirAngle - moonAngularRadius);
   const parentPlanetDistance = VOYAGE_SCALE.earthMoonDistance - VOYAGE_SCALE.moonRadius - VOYAGE_SCALE.lowOrbitAltitude;
   const parentPlanetDiameter = getApparentAngularDiameterDegrees(VOYAGE_SCALE.earthRadius, parentPlanetDistance);
   const halfFov = MOON_ORBIT_COCKPIT_FOV_DEGREES / 2;
 
+  assert.equal(MOON_ORBIT_VIEW_BISECTOR_DEGREES, 45);
   assert.equal(MOON_ORBIT_COCKPIT_FOV_DEGREES, 100);
   assert.ok(parentDirectionOffset + parentPlanetDiameter / 2 < halfFov, 'parent planet remains visible above the lunar horizon');
   assert.ok(moonVisibleLimbOffset < halfFov, 'the lunar limb remains visible below the parent planet');
