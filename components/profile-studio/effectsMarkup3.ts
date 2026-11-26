@@ -29,7 +29,7 @@ function icon(kind:Theme,count=6){
   const colors=COLORS[kind];
   const dots=rep(Math.min(10,Math.max(2,count)),i=>{const angle=(i/Math.max(2,count))*Math.PI*2;const x=12+10*Math.cos(angle),y=12+10*Math.sin(angle);return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="1.1" fill="'+colors[i%colors.length]+'"/>';});
   const extras=kind==='glass'?rep(6,i=>'<path d="M12 12 12 1" stroke="'+colors[i]+'" transform="rotate('+(i*60)+' 12 12)" stroke-width="5"/>'):'';
-  return '<div class="ps-deco pn-icon-'+kind+'"><svg viewBox="0 0 24 24" aria-hidden="true">'+extras+shape[kind]+dots+'</svg></div>';
+  return '<div class="ps-deco pn-icon-'+kind+'"><svg class="pn-theme-glyph" style="position:absolute;left:72px;top:72px;width:96px;height:96px" viewBox="0 0 24 24" aria-hidden="true">'+extras+shape[kind]+dots+'</svg></div>';
 }
 function banner(kind:Theme,count=12){
   const colors=COLORS[kind];
