@@ -1183,10 +1183,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       if (movementDirection.lengthSq() < 1e-12) movementDirection.copy(pose.target).sub(pose.position);
       movementDirection.normalize();
 
-      const flightFrameTarget = pose.position.clone().add(movementDirection);
       warpFrame.position.copy(pose.position);
       warpFrame.up.copy(pose.up);
-      warpFrame.lookAt(flightFrameTarget);
+      // lookAt receives a world-space target. With the floating origin,
+      // the ship is at world zero, so use its relative movement direction.
+      warpFrame.lookAt(movementDirection);
       // Object3D.lookAt aligns local +Z toward the target, while this ship's
       // nose and the cockpit's forward axis are local -Z.
       warpFrame.rotateY(Math.PI);
