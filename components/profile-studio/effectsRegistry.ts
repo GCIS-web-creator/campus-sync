@@ -1,6 +1,6 @@
 import * as A from './effectsMarkup.js';
 import * as B from './effectsMarkup2.js';
-import * as C from './effectsMarkup3.js';
+import * as C from './effectsMarkup3';
 
 export type DecoKind =
   | 'sakura' | 'sea' | 'forest' | 'meadow' | 'space' | 'star' | 'mech'
