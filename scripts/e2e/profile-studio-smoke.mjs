@@ -191,8 +191,14 @@ try {
   for (const width of [320, 375, 414]) {
     await page.setViewportSize({ width, height: 900 });
     await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-light-' + width + '.png' });
+    const previewBox = await page.locator('#profile-preview').boundingBox();
+    const editorBox = await page.locator('#profile-basic').boundingBox();
+    assert.ok(previewBox && editorBox && previewBox.y < editorBox.y, 'On mobile, the preview should appear before the editor');
   }
+  await page.setViewportSize({ width: 320, height: 900 });
   await page.screenshot({ path: artifactDir + '/profile-editor-mobile-320.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: artifactDir + '/profile-editor-desktop-light.png', fullPage: true });
 
   // Image-present and configured bio state.
   mockProfile.avatar_url = 'https://profile-image.test/avatar.svg';
@@ -216,7 +222,14 @@ try {
   await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
   await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
-  await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-dark-375.png' });
+  for (const width of [320, 375, 414]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-dark-' + width + '.png' });
+  }
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.screenshot({ path: artifactDir + '/profile-editor-mobile-dark-375.png', fullPage: true });
+  const saveButtonPosition = await page.getByRole('button', { name: 'プロフィールを保存' }).last().evaluate(el => getComputedStyle(el).position);
+  assert.equal(saveButtonPosition, 'fixed', 'Mobile save action should stay fixed above the safe area');
   const motionState = await page.locator('.ps-banner-stars i').first().evaluate(el => getComputedStyle(el).animationName);
   assert.equal(motionState, 'none', 'Reduced-motion preference should disable the star animation');
 
