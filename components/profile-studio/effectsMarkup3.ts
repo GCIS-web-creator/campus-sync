@@ -27,13 +27,13 @@ const shape: Record<Theme,string> = {
 };
 function icon(kind:Theme,count=6){
   const colors=COLORS[kind];
-  const dots=rep(Math.min(10,Math.max(2,count)),i=>{const angle=(i/Math.max(2,count))*Math.PI*2;const x=12+10*Math.cos(angle),y=12+10*Math.sin(angle);return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="1.1" fill="'+colors[i%colors.length]+'"/>';});
-  const extras=kind==='glass'?rep(6,i=>'<path d="M12 12 12 1" stroke="'+colors[i]+'" transform="rotate('+(i*60)+' 12 12)" stroke-width="5"/>'):'';
+  const dots=rep(Math.min(10,Math.max(2,count)),(i: number)=>{const angle=(i/Math.max(2,count))*Math.PI*2;const x=12+10*Math.cos(angle),y=12+10*Math.sin(angle);return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="1.1" fill="'+colors[i%colors.length]+'"/>';});
+  const extras=kind==='glass'?rep(6,(i: number)=>'<path d="M12 12 12 1" stroke="'+colors[i]+'" transform="rotate('+(i*60)+' 12 12)" stroke-width="5"/>'):'';
   return '<div class="ps-deco pn-icon-'+kind+'"><svg class="pn-theme-glyph" style="position:absolute;left:72px;top:72px;width:96px;height:96px" viewBox="0 0 24 24" aria-hidden="true">'+extras+shape[kind]+dots+'</svg></div>';
 }
 function banner(kind:Theme,count=12){
   const colors=COLORS[kind];
-  const points=rep(Math.min(26,Math.max(4,count)),i=>{
+  const points=rep(Math.min(26,Math.max(4,count)),(i: number)=>{
     const left=(i*37+11)%100, top=(i*23+17)%86, size=3+(i%4)*2;
     const symbol=kind==='momiji'?'<span class="pn-t3-leaf">✦</span>':kind==='snow'?'<span class="pn-t3-flake">✳</span>':kind==='ocean'?'<span class="pn-t3-bubble"></span>':kind==='glass'?'<span class="pn-t3-diamond"></span>':'<span class="pn-t3-dot"></span>';
     return '<i class="pn-t3-particle" style="left:'+left+'%;top:'+top+'%;--t3-size:'+size+'px;--t3-color:'+colors[i%colors.length]+';--t3-delay:-'+(i%7)+'s">'+symbol+'</i>';
