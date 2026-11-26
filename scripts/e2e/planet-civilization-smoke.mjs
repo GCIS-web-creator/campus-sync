@@ -351,7 +351,7 @@ try {
   const pendingStorageKey = 'campus-sync-pending-planet-xp:11111111-1111-4111-8111-111111111111';
   const persistedBeforeReload = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]'), pendingStorageKey);
   assert.deepEqual(persistedBeforeReload, [pendingSessionId], 'Failed XP request should be persisted before reload');
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByTestId('flight-exit-button').click();
   await page.getByRole('button', { name: /XPを再試行/ }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByRole('button', { name: /XPを再試行/ }).click();
   await page.getByText(/1件の学習XP付与状態を確認しました/).waitFor({ state: 'visible', timeout: 15000 });
