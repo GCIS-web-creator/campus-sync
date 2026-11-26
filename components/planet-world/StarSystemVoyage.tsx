@@ -428,9 +428,9 @@ function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
       new THREE.Vector3(x, -height * 0.02, length * 0.453),
     );
     addPart(
-      new THREE.ConeGeometry(width * 0.072, length * 0.085, 16),
+      new THREE.ConeGeometry(width * 0.072, length * 0.07, 16),
       engineGlow,
-      new THREE.Vector3(x, -height * 0.02, length * 0.48),
+      new THREE.Vector3(x, -height * 0.02, length * 0.465),
       new THREE.Euler(Math.PI / 2, 0, 0),
     );
     addPart(
@@ -458,9 +458,9 @@ function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
     new THREE.Vector3(0, -height * 0.035, length * 0.448),
   );
   addPart(
-    new THREE.ConeGeometry(width * 0.09, length * 0.09, 18),
+    new THREE.ConeGeometry(width * 0.09, length * 0.07, 18),
     engineGlow,
-    new THREE.Vector3(0, -height * 0.035, length * 0.485),
+    new THREE.Vector3(0, -height * 0.035, length * 0.465),
     new THREE.Euler(Math.PI / 2, 0, 0),
   );
 
