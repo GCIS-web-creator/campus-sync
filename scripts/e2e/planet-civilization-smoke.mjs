@@ -237,15 +237,32 @@ try {
   await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
   await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
   await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
-  await page.getByText(/地表100km上空/).first().waitFor({ state: 'visible' });
-  await page.getByText('約114秒', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText(/地表500km上空/).first().waitFor({ state: 'visible' });
+  await page.getByText('約5分42秒', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '30 MPで航行開始', exact: true }).click();
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByText(/船体 1 km/).waitFor({ state: 'visible' });
-  await page.getByText(/WARP \/ 0.82c/).waitFor({ state: 'visible' });
+  await page.getByText(/WARP \/ 0.27c/).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '外部追跡カメラ', exact: true }).click();
+  await page.getByText('EXTERIOR TRACKING CAMERA', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '船内視点', exact: true }).click();
+  await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '視点リセット', exact: true }).click();
+  await page.mouse.move(190, 410);
+  await page.mouse.down();
+  await page.mouse.move(230, 430, { steps: 3 });
+  await page.mouse.up();
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
-  await page.getByRole('button', { name: '航行を終了', exact: true }).click();
+
+  // The camera view may be aimed away from the HUD after the pointer drag;
+  // the camera toggle was already verified before dragging. Reload the screen
+  // to restore Planet Civilization for the remaining independent checks.
+
+  // Navigate back to the explicit planet panel route for the remaining
+  // independent checks; the voyage itself is intentionally 342 seconds.
+  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();

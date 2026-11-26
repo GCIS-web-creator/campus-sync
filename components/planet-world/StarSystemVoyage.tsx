@@ -7,7 +7,7 @@ import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
   getLowOrbitRadius,
   getStarCoronaClearanceKm,
-  getStarDepartureRadius,
+  getStarTangentFlybyGeometry,
   getStarOrbitRadius,
   getVoyageStarRadius,
   getWarpIntensity,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/planet-star-voyage';
 
 type PurchaseResult = { success: boolean; balance?: number; message?: string };
+type ViewMode = 'cockpit' | 'chase';
 type Props = {
   system: PlanetSystemSpec;
   starClass: StarClass | null;
@@ -144,6 +145,227 @@ function makeNightLightsTexture(seed: number) {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.anisotropy = 4;
   return texture;
+}
+
+
+function makeStarGranulationTexture(color: string, seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 8_821);
+  const tint = new THREE.Color(color);
+  const hue = tint.getHSL({ h: 0, s: 0, l: 0 });
+  const base = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  if (hue.h < 0.12 || hue.h > 0.92) {
+    base.addColorStop(0, '#ffedaa');
+    base.addColorStop(0.28, '#ffb64d');
+    base.addColorStop(0.65, '#eb6a2d');
+    base.addColorStop(1, '#ad3218');
+  } else {
+    const hex = '#' + tint.getHexString();
+    base.addColorStop(0, '#fff0c4');
+    base.addColorStop(0.45, hex);
+    base.addColorStop(1, '#6c547e');
+  }
+  context.fillStyle = base;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Dense, irregular convection cells: bright granule centres surrounded by
+  // darker intergranular lanes, rather than a flat emissive sphere.
+  for (let index = 0; index < 2_800; index += 1) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height;
+    const rx = 2.4 + random() * 7.6;
+    const ry = rx * (0.42 + random() * 0.72);
+    const turn = random() * Math.PI;
+    const warm = random();
+    const gradient = context.createRadialGradient(x, y, 0, x, y, rx * 1.5);
+    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.42)' : 'rgba(255,195,104,0.34)');
+    gradient.addColorStop(0.55, 'rgba(255,150,61,0.16)');
+    gradient.addColorStop(1, 'rgba(103,35,18,0.03)');
+    context.save();
+    context.translate(x, y);
+    context.rotate(turn);
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.ellipse(0, 0, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = 'rgba(95,34,16,' + (0.04 + random() * 0.08).toFixed(3) + ')';
+    context.lineWidth = 0.5 + random() * 1.1;
+    context.beginPath();
+    context.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  }
+
+  // A few subtle sunspot groups help make surface rotation legible.
+  for (let spot = 0; spot < 18; spot += 1) {
+    const x = random() * canvas.width;
+    const y = 28 + random() * (canvas.height - 56);
+    const radius = 4 + random() * 13;
+    context.save();
+    context.translate(x, y);
+    context.rotate((random() - 0.5) * 0.8);
+    context.fillStyle = 'rgba(74,28,16,0.34)';
+    context.beginPath();
+    context.ellipse(0, 0, radius * 1.65, radius * 0.62, 0, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = 'rgba(45,20,16,0.62)';
+    context.beginPath();
+    context.ellipse(0, 0, radius, radius * 0.42, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirection: THREE.Vector3) {
+  const geometry = new THREE.SphereGeometry(radius * 1.002, 256, 128);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uNightMap: { value: texture },
+      uSunDirection: { value: sunDirection.clone().normalize() },
+    },
+    vertexShader: [
+      'varying vec2 vUv;',
+      'varying vec3 vWorldNormal;',
+      'void main(){',
+      '  vUv = uv;',
+      '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
+      '  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);',
+      '}',
+    ].join('\\n'),
+    fragmentShader: [
+      'uniform sampler2D uNightMap;',
+      'uniform vec3 uSunDirection;',
+      'varying vec2 vUv;',
+      'varying vec3 vWorldNormal;',
+      'void main(){',
+      '  float daylight = dot(normalize(vWorldNormal), normalize(uSunDirection));',
+      '  float night = 1.0 - smoothstep(-0.12, 0.10, daylight);',
+      '  float city = texture2D(uNightMap, vUv).a;',
+      '  float glow = city * night * 0.96;',
+      '  if (glow < 0.008) discard;',
+      '  gl_FragColor = vec4(vec3(1.0, 0.66, 0.34), glow);',
+      '}',
+    ].join('\\n'),
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+  return { geometry, material, mesh: new THREE.Mesh(geometry, material) };
+}
+
+function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
+  const ship = new THREE.Group();
+  ship.name = 'CampusSync Deep Space Explorer';
+  const length = VOYAGE_SCALE.spacecraftLength;
+  const width = length * 0.42;
+  const height = length * 0.12;
+  const hull = new THREE.MeshStandardMaterial({ color: '#9fb4c7', metalness: 0.78, roughness: 0.32 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#17283a', metalness: 0.7, roughness: 0.42 });
+  const wingMaterial = new THREE.MeshStandardMaterial({ color: '#627e96', metalness: 0.72, roughness: 0.38, side: THREE.DoubleSide });
+  const accent = new THREE.MeshStandardMaterial({ color: '#b9d9e8', metalness: 0.84, roughness: 0.24 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#102e49', emissive: '#1f83ad', emissiveIntensity: 0.7, metalness: 0.45, roughness: 0.16 });
+  const engineGlow = new THREE.MeshBasicMaterial({ color: '#66dfff', toneMapped: false });
+  const navGlow = new THREE.MeshBasicMaterial({ color: '#ffb779', toneMapped: false });
+  resources.push(hull, dark, wingMaterial, accent, glass, engineGlow, navGlow);
+
+  const addPart = (
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    position: THREE.Vector3,
+    rotation = new THREE.Euler(),
+    scale = new THREE.Vector3(1, 1, 1),
+  ) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position);
+    mesh.rotation.copy(rotation);
+    mesh.scale.copy(scale);
+    ship.add(mesh);
+    resources.push(geometry);
+    return mesh;
+  };
+
+  // Long central pressure hull and pointed forward command section.
+  addPart(new THREE.CylinderGeometry(width * 0.105, width * 0.14, length * 0.76, 14), hull,
+    new THREE.Vector3(0, 0, length * 0.045), new THREE.Euler(Math.PI / 2, 0, 0));
+  addPart(new THREE.ConeGeometry(width * 0.14, length * 0.27, 14), accent,
+    new THREE.Vector3(0, 0, -length * 0.455), new THREE.Euler(-Math.PI / 2, 0, 0));
+  addPart(new THREE.CylinderGeometry(width * 0.095, width * 0.12, length * 0.22, 12), dark,
+    new THREE.Vector3(0, 0, length * 0.48), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Swept delta wings and stabilizers create a recognisable, fast explorer profile.
+  const wing = new THREE.Shape();
+  wing.moveTo(-width * 0.13, -length * 0.2);
+  wing.lineTo(width * 0.13, -length * 0.2);
+  wing.lineTo(width * 0.5, length * 0.31);
+  wing.lineTo(width * 0.46, length * 0.43);
+  wing.lineTo(width * 0.19, length * 0.34);
+  wing.lineTo(0, length * 0.14);
+  wing.lineTo(-width * 0.19, length * 0.34);
+  wing.lineTo(-width * 0.46, length * 0.43);
+  wing.lineTo(-width * 0.5, length * 0.31);
+  wing.closePath();
+  const wingGeometry = new THREE.ExtrudeGeometry(wing, { depth: height * 0.065, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: length * 0.002, bevelThickness: length * 0.002 });
+  addPart(wingGeometry, wingMaterial, new THREE.Vector3(0, -height * 0.04, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  const dorsalFin = new THREE.Shape();
+  dorsalFin.moveTo(-width * 0.07, length * 0.14);
+  dorsalFin.lineTo(width * 0.07, length * 0.14);
+  dorsalFin.lineTo(width * 0.045, length * 0.48);
+  dorsalFin.lineTo(0, length * 0.52);
+  dorsalFin.lineTo(-width * 0.045, length * 0.48);
+  dorsalFin.closePath();
+  addPart(new THREE.ExtrudeGeometry(dorsalFin, { depth: height * 0.48, bevelEnabled: false }), accent,
+    new THREE.Vector3(0, height * 0.12, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Twin outboard engine pods, central booster and glowing exhaust throats.
+  for (const side of [-1, 1]) {
+    const x = side * width * 0.3;
+    addPart(new THREE.CylinderGeometry(width * 0.052, width * 0.064, length * 0.48, 12), dark,
+      new THREE.Vector3(x, -height * 0.03, length * 0.28), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.CylinderGeometry(width * 0.058, width * 0.058, length * 0.055, 12), accent,
+      new THREE.Vector3(x, -height * 0.03, length * 0.535), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.ConeGeometry(width * 0.042, length * 0.18, 12), engineGlow,
+      new THREE.Vector3(x, -height * 0.03, length * 0.64), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.BoxGeometry(width * 0.14, height * 0.055, length * 0.16), hull,
+      new THREE.Vector3(side * width * 0.34, height * 0.17, length * 0.13));
+    addPart(new THREE.SphereGeometry(width * 0.018, 8, 6), navGlow,
+      new THREE.Vector3(side * width * 0.48, 0, length * 0.3));
+  }
+
+  addPart(new THREE.CylinderGeometry(width * 0.075, width * 0.09, length * 0.35, 12), dark,
+    new THREE.Vector3(0, -height * 0.01, length * 0.34), new THREE.Euler(Math.PI / 2, 0, 0));
+  addPart(new THREE.ConeGeometry(width * 0.065, length * 0.2, 12), engineGlow,
+    new THREE.Vector3(0, -height * 0.01, length * 0.58), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Raised bridge glazing, dorsal sensor blister and a spine of service modules.
+  addPart(new THREE.SphereGeometry(1, 18, 10), glass,
+    new THREE.Vector3(0, height * 0.72, -length * 0.19), new THREE.Euler(0, 0, 0),
+    new THREE.Vector3(width * 0.105, height * 0.42, length * 0.14));
+  addPart(new THREE.BoxGeometry(width * 0.13, height * 0.07, length * 0.26), accent,
+    new THREE.Vector3(0, height * 0.38, length * 0.12));
+  addPart(new THREE.SphereGeometry(width * 0.035, 10, 8), glass,
+    new THREE.Vector3(0, height * 0.57, length * 0.29));
+  for (let module = 0; module < 5; module += 1) {
+    addPart(new THREE.BoxGeometry(width * 0.16, height * 0.045, length * 0.06), dark,
+      new THREE.Vector3(0, height * 0.33, -length * 0.04 + module * length * 0.085));
+  }
+  return ship;
 }
 
 function makeWarpOverlay() {
@@ -357,6 +579,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const startAtRef = useRef(0);
   const purchaseLockRef = useRef(false);
   const pendingTravelIdRef = useRef<string | null>(null);
+  const viewModeRef = useRef<ViewMode>('cockpit');
+  const lookOffsetRef = useRef({ yaw: 0, pitch: 0 });
+  const [viewMode, setViewMode] = useState<ViewMode>('cockpit');
   const [purchasing, setPurchasing] = useState(false);
   const [started, setStarted] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -365,6 +590,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const [phaseProgress, setPhaseProgress] = useState(0);
   const [error, setError] = useState('');
   const starProfile = starClass ? STAR_PROFILES[starClass] : null;
+
+  const selectViewMode = (mode: ViewMode) => {
+    viewModeRef.current = mode;
+    setViewMode(mode);
+  };
+  const resetFlightView = () => {
+    lookOffsetRef.current = { yaw: 0, pitch: 0 };
+  };
 
   const beginVoyage = async () => {
     if (purchaseLockRef.current || purchasing || started || !starClass) return;
@@ -385,6 +618,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       setElapsed(0);
       setPhaseIndex(0);
       setPhaseProgress(0);
+      viewModeRef.current = 'cockpit';
+      lookOffsetRef.current = { yaw: 0, pitch: 0 };
+      setViewMode('cockpit');
       setStarted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '星系旅行を開始できませんでした。');
@@ -416,23 +652,62 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.18;
     renderer.setClearColor('#02050d', 1);
-    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;';
+    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;cursor:grab;';
     mount.appendChild(renderer.domElement);
+
+    let activePointerId: number | null = null;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    const pointerDown = (event: PointerEvent) => {
+      if (activePointerId !== null || event.button !== 0) return;
+      activePointerId = event.pointerId;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
+      renderer.domElement.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      const deltaX = event.clientX - lastPointerX;
+      const deltaY = event.clientY - lastPointerY;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      lookOffsetRef.current = {
+        yaw: THREE.MathUtils.clamp(lookOffsetRef.current.yaw - deltaX * 0.004, -Math.PI * 0.9, Math.PI * 0.9),
+        pitch: THREE.MathUtils.clamp(lookOffsetRef.current.pitch - deltaY * 0.0035, -1.18, 1.18),
+      };
+      event.preventDefault();
+    };
+    const pointerUp = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      activePointerId = null;
+      renderer.domElement.style.cursor = 'grab';
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    };
+    renderer.domElement.addEventListener('pointerdown', pointerDown);
+    renderer.domElement.addEventListener('pointermove', pointerMove);
+    renderer.domElement.addEventListener('pointerup', pointerUp);
+    renderer.domElement.addEventListener('pointercancel', pointerUp);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
     const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
     scene.add(camera);
     const resources: Array<{ dispose: () => void }> = [];
+    // Warp streaks and rings live in the ship's flight frame, not on the
+    // camera. Looking around therefore does not drag the acceleration lines.
+    const warpFrame = new THREE.Group();
+    scene.add(warpFrame);
     const speedEffects = makeSpeedStreaks();
-    camera.add(speedEffects.lines);
+    warpFrame.add(speedEffects.lines);
     resources.push(speedEffects.geometry, speedEffects.material);
     const warpOverlay = makeWarpOverlay();
-    camera.add(warpOverlay.mesh);
+    warpFrame.add(warpOverlay.mesh);
     resources.push(warpOverlay.geometry, warpOverlay.material);
     const warpRings = makeWarpRings();
     warpRings.forEach(ring => {
-      camera.add(ring.mesh);
+      warpFrame.add(ring.mesh);
       resources.push(ring.geometry, ring.material);
     });
 
@@ -441,11 +716,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     resources.push(starfield.geometry, starfield.material);
 
     const starRadius = getVoyageStarRadius(starClass);
-    const starGeometry = new THREE.SphereGeometry(starRadius, 256, 160);
-    const starMaterial = new THREE.MeshBasicMaterial({ color: starProfile.lightColor, toneMapped: false });
+    const starGeometry = new THREE.SphereGeometry(starRadius, 320, 192);
+    const starSurfaceTexture = makeStarGranulationTexture(starProfile.lightColor, Number.parseInt(system.id.slice(-3), 10) || 1);
+    const starMaterial = new THREE.MeshBasicMaterial({ map: starSurfaceTexture, color: '#ffffff', toneMapped: false });
     const star = new THREE.Mesh(starGeometry, starMaterial);
     scene.add(star);
-    resources.push(starGeometry, starMaterial);
+    resources.push(starGeometry, starSurfaceTexture, starMaterial);
 
     const coronaTexture = makeCorona(starProfile.color);
     const coronaMaterial = new THREE.SpriteMaterial({
@@ -502,16 +778,20 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     planetMaterial = new THREE.MeshStandardMaterial({
       color: '#ffffff',
       map: planetTexture,
-      emissive: '#ffc88e',
-      emissiveMap: nightLightsTexture,
-      emissiveIntensity: 0.82,
       roughness: 0.96,
       metalness: 0,
     });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture);
+    const nightOverlay = makeNightLightsOverlay(
+      VOYAGE_SCALE.earthRadius,
+      nightLightsTexture,
+      new THREE.Vector3().sub(planetPosition),
+    );
+    nightOverlay.mesh.position.copy(planetPosition);
+    scene.add(nightOverlay.mesh);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture, nightOverlay.geometry, nightOverlay.material);
 
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
@@ -525,9 +805,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const moonTexture = makeMoonTexture();
     const moonMaterial = new THREE.MeshStandardMaterial({
       map: moonTexture,
-      color: '#d9dce7',
-      emissive: '#9ca8c2',
-      emissiveIntensity: 0.42,
+      color: '#e3e5e9',
       roughness: 1,
       metalness: 0,
     });
@@ -550,20 +828,20 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(moonGlow);
     resources.push(moonGeometry, moonMaterial, moonTexture, moonGlowTexture, moonGlowMaterial);
 
-    const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 2.8);
+    const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 3.5);
     sunlight.position.set(0, 0, 0);
     sunlight.target.position.copy(planetPosition);
     scene.add(sunlight, sunlight.target);
-    scene.add(new THREE.HemisphereLight('#c4d6ef', '#344258', 0.56));
-    scene.add(new THREE.AmbientLight('#7787a6', 0.48));
-    const moonFill = new THREE.DirectionalLight('#d6e2ff', 0.72);
-    moonFill.position.copy(moonPosition).add(new THREE.Vector3(18, 12, 24));
-    moonFill.target.position.copy(moonPosition);
-    scene.add(moonFill, moonFill.target);
+    // Keep a restrained fill so the day/night terminator remains obvious.
+    scene.add(new THREE.HemisphereLight('#b6c9e3', '#18263b', 0.14));
+    scene.add(new THREE.AmbientLight('#64758e', 0.11));
+
+    const explorationVessel = makeExplorationVessel(resources);
+    explorationVessel.visible = false;
+    scene.add(explorationVessel);
 
     const worldUp = new THREE.Vector3(0, 1, 0);
     const starOrbitRadius = getStarOrbitRadius(starRadius);
-    const starDepartureRadius = getStarDepartureRadius(starRadius);
     const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
     const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
@@ -576,25 +854,22 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const moonToPlanetDirection = planetPosition.clone().sub(moonPosition).normalize();
     const moonOrbitBasisA = new THREE.Vector3(1, 0, 0);
     const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
-    const starApproachAngle = Math.atan2(moonPosition.z, moonPosition.x);
-    const starApproachRadial = new THREE.Vector3(Math.cos(starApproachAngle), 0, Math.sin(starApproachAngle));
-    const starSkimEndAngle = starApproachAngle + Math.PI * 0.66;
-    const starDepartureRadial = new THREE.Vector3(Math.cos(starSkimEndAngle), 0, Math.sin(starSkimEndAngle));
-    const starDepartureTangent = new THREE.Vector3(-Math.sin(starSkimEndAngle), 0, Math.cos(starSkimEndAngle));
-    const outerEnd = starDepartureRadial.clone().multiplyScalar(VOYAGE_SCALE.outerSystemDistance)
-      .addScaledVector(starDepartureTangent, 1_800)
-      .add(new THREE.Vector3(0, 520, 0));
+    const moonOrbitEndPosition = moonPosition.clone().add(new THREE.Vector3(moonOrbitRadius, 0, 0));
+    const tangentFlyby = getStarTangentFlybyGeometry(moonOrbitEndPosition.x, moonOrbitEndPosition.z, starRadius);
+    const starTangentPoint = new THREE.Vector3(tangentFlyby.tangentX, 0, tangentFlyby.tangentZ);
+    const starFlybyDirection = new THREE.Vector3(tangentFlyby.directionX, 0, tangentFlyby.directionZ);
+    const outerEnd = starTangentPoint.clone().addScaledVector(starFlybyDirection, VOYAGE_SCALE.outerSystemDistance * 2.4);
     const totalDuration = STAR_SYSTEM_VOYAGE_DURATION_MS;
 
     const getPlanetOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // 100 km altitude: aim just below the local horizon so the planet's
-      // curvature and illuminated surface occupy the lower half of the canopy.
+      // 500 km altitude: skim above the visible atmosphere and keep the
+      // horizon, day/night terminator and sunlit limb together in frame.
       const target = position.clone()
-        .addScaledVector(tangent, 2.8)
-        .addScaledVector(radial, -0.78);
+        .addScaledVector(tangent, 2.25)
+        .addScaledVector(radial, -0.15);
       return { position, target, up: radial };
     };
 
@@ -604,22 +879,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // Do not look back at the parent planet: face the lunar limb and its
-      // sunlit surface while the Moon itself fills the ship's forward canopy.
+      // At 500 km altitude, look close to the lunar horizon. The bright limb
+      // and the terminator stay in view without turning the Moon behind us.
       const target = position.clone()
-        .addScaledVector(tangent, 1.55)
-        .addScaledVector(radial, -0.68);
+        .addScaledVector(tangent, 0.82)
+        .addScaledVector(radial, -0.045);
       return { position, target, up: radial };
     };
 
     const getStarOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-      const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
       const position = radial.clone().multiplyScalar(starOrbitRadius);
-      // Lead the stellar centre slightly along the ship's tangent. The star
-      // stays large and in frame, while the view sweeps around its corona.
-      const target = tangent.clone().multiplyScalar(starRadius * 0.42);
-      return { position, target, up: worldUp };
+      // Keep the enlarged, granular stellar disc centred for the entire lap.
+      return { position, target: new THREE.Vector3(0, 0, 0), up: worldUp };
     };
 
     const getPose = (id: string, progress: number) => {
@@ -670,37 +942,31 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       if (id === 'star-skim') {
         const startPose = getMoonOrbitPose(Math.PI * 2);
-        const arrival = starApproachRadial.clone().multiplyScalar(starOrbitRadius);
-        const arrivalTarget = new THREE.Vector3(0, 0, 0);
-        if (progress < 0.56) {
-          const approach = ease(progress / 0.56);
-          const position = startPose.position.clone().lerp(arrival, approach);
-          const target = startPose.target.clone().lerp(arrivalTarget, approach);
-          return { position, target, up: worldUp };
-        }
-        const arcProgress = (progress - 0.56) / 0.44;
-        const angle = starApproachAngle + Math.PI * 0.66 * arcProgress;
-        const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-        const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
-        const position = radial.multiplyScalar(starOrbitRadius);
-        const target = tangent.clone().multiplyScalar(starRadius * 0.42);
-        return { position, target, up: worldUp };
+        // A mathematically tangent line reaches the edge of the game's
+        // stellar gravity boundary without crossing inside it.
+        const position = startPose.position.clone().lerp(starTangentPoint, t);
+        const towardStar = position.clone().negate().normalize();
+        const lookDirection = starFlybyDirection.clone().multiplyScalar(0.78)
+          .addScaledVector(towardStar, 0.22).normalize();
+        return {
+          position,
+          target: position.clone().addScaledVector(lookDirection, 1_200),
+          up: worldUp,
+        };
       }
-      const start = starDepartureRadial.clone().multiplyScalar(starOrbitRadius);
-      const radialTravel = starDepartureRadial.clone();
-      const position = start.clone().lerp(outerEnd, t);
-      // Departure moves outward along the star's radial direction. The camera
-      // looks ahead into open space, never back through the stellar centre.
-      const target = position.clone()
-        .addScaledVector(radialTravel, 8_000)
-        .addScaledVector(starDepartureTangent, 260);
+      // Continue on the exact same tangent vector and fly straight away.
+      const position = starTangentPoint.clone().lerp(outerEnd, t);
+      const target = position.clone().addScaledVector(starFlybyDirection, 4_000);
       return { position, target, up: worldUp };
     };
     let frame = 0;
     let lastUiUpdate = 0;
+    let lastFrameTime = 0;
     let alive = true;
     const render = (now: number) => {
       if (!alive) return;
+      const deltaSeconds = lastFrameTime === 0 ? 0 : Math.min(0.05, (now - lastFrameTime) / 1_000);
+      lastFrameTime = now;
       const current = Math.min(totalDuration, Math.max(0, now - startAtRef.current));
       let consumed = 0;
       let index = STAR_SYSTEM_VOYAGE_PHASES.length - 1;
@@ -719,34 +985,94 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
+      const cinematicEffectTime = timeSeconds / 3;
       const desiredFov = highSpeed ? 58
         : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
-          : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 38
-            : phaseId === 'moon-orbit' ? 44
-              : phaseId === 'planet-orbit' ? 50
-                : 46;
+          : phaseId === 'star-orbit' ? 18
+            : phaseId === 'star-skim' ? 26
+              : phaseId === 'moon-orbit' ? 42
+                : phaseId === 'planet-orbit' ? 48
+                  : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
       }
       speedEffects.material.opacity = 0.04 + warpAmount * 0.9;
-      speedEffects.lines.rotation.z += 0.00045 + warpAmount * 0.014;
-      warpOverlay.material.uniforms.uTime.value = timeSeconds;
+      speedEffects.lines.rotation.z += deltaSeconds * (0.001 + warpAmount * 0.036);
+      warpOverlay.material.uniforms.uTime.value = cinematicEffectTime;
       warpOverlay.material.uniforms.uWarp.value = warpAmount;
       warpRings.forEach((ring, ringIndex) => {
         const direction = ringIndex % 2 === 0 ? 1 : -1;
-        ring.mesh.rotation.z = timeSeconds * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
-        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(timeSeconds * 1.3 + ringIndex) * warpAmount * 0.48;
-        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(timeSeconds * 1.1 + ringIndex) * warpAmount * 0.42;
-        ring.mesh.scale.setScalar(1 + Math.sin(timeSeconds * 3.2 + ringIndex * 2) * warpAmount * 0.13);
+        ring.mesh.rotation.z = cinematicEffectTime * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
+        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(cinematicEffectTime * 1.3 + ringIndex) * warpAmount * 0.48;
+        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(cinematicEffectTime * 1.1 + ringIndex) * warpAmount * 0.42;
+        ring.mesh.scale.setScalar(1 + Math.sin(cinematicEffectTime * 3.2 + ringIndex * 2) * warpAmount * 0.13);
         ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
       });
+
+      // Derive the ship's true direction from the next point on the route.
+      // This is intentionally separate from what the pilot chooses to look at:
+      // in a solar orbit the camera can face the star while the ship flies tangent.
+      const sampleProgress = localProgress < 0.999
+        ? Math.min(1, localProgress + 0.001)
+        : Math.max(0, localProgress - 0.001);
+      const samplePose = getPose(phaseId, sampleProgress);
+      const movementDirection = localProgress < 0.999
+        ? samplePose.position.clone().sub(pose.position)
+        : pose.position.clone().sub(samplePose.position);
+      if (movementDirection.lengthSq() < 1e-12) movementDirection.copy(pose.target).sub(pose.position);
+      movementDirection.normalize();
+
+      const flightFrameTarget = pose.position.clone().add(movementDirection);
+      warpFrame.position.copy(pose.position);
+      warpFrame.up.copy(pose.up);
+      warpFrame.lookAt(flightFrameTarget);
+      // Object3D.lookAt aligns local +Z toward the target, while this ship's
+      // nose and the cockpit's forward axis are local -Z.
+      warpFrame.rotateY(Math.PI);
+      const flightQuaternion = warpFrame.quaternion.clone();
+
+      explorationVessel.position.copy(pose.position);
+      explorationVessel.quaternion.copy(flightQuaternion);
+      explorationVessel.visible = viewModeRef.current === 'chase';
+
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(flightQuaternion).normalize();
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(flightQuaternion).normalize();
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(flightQuaternion).normalize();
+      const lookOffset = lookOffsetRef.current;
+
+      // Cockpit gaze follows the active destination. It can differ from the
+      // ship heading without rotating the world-anchored warp streaks.
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
-      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
-      star.rotation.y += 0.0008;
-      moon.rotation.y += 0.00016;
+      camera.rotateZ(Math.sin(cinematicEffectTime * 1.8) * warpAmount * 0.045 + Math.sin(cinematicEffectTime * 5.4) * warpAmount * 0.012);
+      const cockpitQuaternion = camera.quaternion.clone();
+
+      if (viewModeRef.current === 'chase') {
+        // Broadcast-style exterior camera follows the one-kilometre ship from
+        // behind and above, with a slight lateral sweep along the route.
+        const cameraDrift = Math.sin(timeSeconds * 0.18) * VOYAGE_SCALE.spacecraftLength * 0.9;
+        camera.position.copy(pose.position)
+          .addScaledVector(forward, -VOYAGE_SCALE.spacecraftLength * 8.5)
+          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.6)
+          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (1.2 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
+        camera.up.copy(up);
+        camera.lookAt(pose.position.clone().addScaledVector(forward, VOYAGE_SCALE.spacecraftLength * 1.5));
+        camera.rotateY(lookOffset.yaw);
+        camera.rotateX(lookOffset.pitch);
+      } else {
+        camera.position.copy(pose.position);
+        camera.up.copy(pose.up);
+        camera.quaternion.copy(cockpitQuaternion);
+        camera.rotateY(lookOffset.yaw);
+        camera.rotateX(lookOffset.pitch);
+      }
+
+      // Granulation rotates with the stellar surface, rather than being a
+      // static featureless emissive sphere. Delta time keeps it FPS-independent.
+      star.rotation.y += deltaSeconds * 0.018;
+      moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
       if (now - lastUiUpdate > 130 || current >= totalDuration) {
@@ -777,6 +1103,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       alive = false;
       window.cancelAnimationFrame(frame);
       observer.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', pointerDown);
+      renderer.domElement.removeEventListener('pointermove', pointerMove);
+      renderer.domElement.removeEventListener('pointerup', pointerUp);
+      renderer.domElement.removeEventListener('pointercancel', pointerUp);
       resources.forEach(resource => resource.dispose());
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
@@ -787,20 +1117,26 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const remaining = Math.max(0, STAR_SYSTEM_VOYAGE_DURATION_MS - elapsed);
   const noStar = !starClass || !starProfile || system.rogue;
   const lowOrbitActive = activePhase?.id === 'planet-orbit' || activePhase?.id === 'moon-orbit';
-  const starOrbitActive = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim';
-  const destinationLabel = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
-    ? '目的地：恒星'
-    : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
-      ? '目的地：惑星'
-      : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
-        ? '目的地：衛星'
-        : '目的地：星系内縁';
+  const starOrbitActive = activePhase?.id === 'star-orbit';
+  const destinationLabel = activePhase?.id === 'star-orbit'
+    ? '目的地：恒星周回'
+    : activePhase?.id === 'star-skim'
+      ? '恒星脇を直進フライバイ'
+      : activePhase?.id === 'outer-departure'
+        ? '重力境界外から星系離脱'
+        : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
+          ? '目的地：惑星'
+          : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
+            ? '目的地：衛星'
+            : '目的地：星系内縁';
   const highSpeedActive = activePhase?.id === 'outer-cruise' || activePhase?.id === 'planet-flyby-inbound' || activePhase?.id === 'outer-departure';
   const orbitReadout = lowOrbitActive
-    ? '地表高度 100 km · 低軌道'
+    ? '地表高度 500 km · 低軌道'
     : starOrbitActive
       ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
-      : '宇宙船全長 1 km';
+      : activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
+        ? '恒星重力境界の外側'
+        : '宇宙船全長 1 km';
 
   return (
     <div className="absolute inset-0 z-40 overflow-hidden bg-[#02050d] text-white">
@@ -810,10 +1146,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約2分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表100km上空をゆっくり周回します。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約5分42秒の自動航行です。惑星・衛星は地表500km、恒星は従来の10倍の高度を周回。最後は恒星の重力境界を避けて直線フライバイします。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.82c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約114秒</p><p className="text-[9px] text-slate-500">低軌道はゆっくり周回</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.27c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約5分42秒</p><p className="text-[9px] text-slate-500">全航程を従来の1/3速度に</p></div>
               <div className="col-span-2 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-3 sm:col-span-1"><p className="text-[9px] text-cyan-200">航行費用</p><p className="mt-1 text-lg font-black">30 MP</p><p className="text-[9px] text-slate-400">開始時に一度だけ消費</p></div>
             </div>
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -828,7 +1164,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 ))}
               </ol>
             </div>
-            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、太陽は約139万倍。低軌道では表面の曲率が視界を横切る距離まで接近し、惑星・衛星を中心に船が周回する視点になります。実時間の重力シミュレーションではなく、物理寸法比を使った演出です。</p>
+            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、G型恒星は演出スケールで地球直径の約136倍。恒星表面には粒状斑を描き、ゆっくり自転させています。恒星フライバイは設定した重力境界の外側を接線方向に通過し、そのまま直進離脱します。</p>
             <p className="mt-2 text-[10px] font-bold text-amber-200">航行開始後に途中で終了しても、消費したMPは返還されません。</p>
             {noStar && <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">この惑星は恒星を持たない自由浮遊惑星のため、恒星を巡る航行はできません。</p>}
             {error && <p role="alert" className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
@@ -846,14 +1182,18 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       {started && (
         <>
           <div className="pointer-events-none absolute inset-0 z-10" style={{ background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,5,15,.26) 78%, rgba(0,3,10,.88) 100%)' }} />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[15%] bg-gradient-to-b from-slate-950/45 via-slate-900/15 to-transparent" />
-          <div className="pointer-events-none absolute left-0 top-[8%] z-10 h-[64%] w-[7%] border-r border-cyan-100/15 bg-gradient-to-r from-slate-950/65 to-transparent [clip-path:polygon(0_0,100%_8%,74%_100%,0_91%)] sm:w-[5%]" />
-          <div className="pointer-events-none absolute right-0 top-[8%] z-10 h-[64%] w-[7%] border-l border-cyan-100/15 bg-gradient-to-l from-slate-950/65 to-transparent [clip-path:polygon(0_8%,100%_0,100%_91%,26%_100%)] sm:w-[5%]" />
-          <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-[9%] w-[54%] -translate-x-1/2 rounded-b-[50%] border-b border-x border-cyan-100/20 bg-gradient-to-b from-slate-950/50 to-transparent" />
-          <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
+          {viewMode === 'cockpit' && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[15%] bg-gradient-to-b from-slate-950/45 via-slate-900/15 to-transparent" />
+              <div className="pointer-events-none absolute left-0 top-[8%] z-10 h-[64%] w-[7%] border-r border-cyan-100/15 bg-gradient-to-r from-slate-950/65 to-transparent [clip-path:polygon(0_0,100%_8%,74%_100%,0_91%)] sm:w-[5%]" />
+              <div className="pointer-events-none absolute right-0 top-[8%] z-10 h-[64%] w-[7%] border-l border-cyan-100/15 bg-gradient-to-l from-slate-950/65 to-transparent [clip-path:polygon(0_8%,100%_0,100%_91%,26%_100%)] sm:w-[5%]" />
+              <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-[9%] w-[54%] -translate-x-1/2 rounded-b-[50%] border-b border-x border-cyan-100/20 bg-gradient-to-b from-slate-950/50 to-transparent" />
+              <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
+            </>
+          )}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-5">
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
-              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
+              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">{viewMode === 'chase' ? 'EXTERIOR TRACKING CAMERA' : 'VESSEL SYSTEMS · AUTO PILOT'}</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
               <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
               <p className="mt-1 text-[9px] font-black tracking-wide text-amber-100">{destinationLabel}</p>
@@ -862,6 +1202,26 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <p className="text-[9px] font-bold text-slate-400">MISSION ELAPSED</p>
               <p className="mt-0.5 font-mono text-sm font-black tabular-nums">{formatClock(elapsed)}</p>
             </div>
+          </div>
+
+          <div className="pointer-events-auto absolute right-3 top-[15%] z-30 flex flex-col items-end gap-1.5 sm:right-5">
+            <div className="flex overflow-hidden rounded-xl border border-cyan-100/20 bg-slate-950/75 shadow-lg backdrop-blur-md">
+              <button
+                type="button"
+                aria-pressed={viewMode === 'cockpit'}
+                onClick={() => selectViewMode('cockpit')}
+                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >船内視点</button>
+              <button
+                type="button"
+                aria-pressed={viewMode === 'chase'}
+                onClick={() => selectViewMode('chase')}
+                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >外部追跡カメラ</button>
+            </div>
+            <button type="button" onClick={resetFlightView} className="rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-[9px] font-bold text-slate-200 backdrop-blur-md">視点リセット</button>
+            <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">画面をドラッグ／スワイプして見回す</p>
+            {!completed && <button type="button" data-testid="flight-exit-button" onClick={onExit} className="rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-md">航行を終了</button>}
           </div>
 
           <div className="pointer-events-none absolute left-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-xl border border-cyan-200/15 bg-slate-950/35 p-3 backdrop-blur-sm sm:block">
@@ -876,7 +1236,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <div className="min-w-0">
                 <p className="text-[8px] font-black tracking-[.22em] text-cyan-200">FLIGHT CONTROL</p>
                 <p className="mt-1 max-w-[240px] text-sm font-black leading-5 sm:max-w-sm">{completed ? '星系周遊航行を完了しました' : activePhase?.label}</p>
-                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
+                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.27c' : 'SLOW ORBITAL MANEUVER')}</p>
               </div>
               <div className="hidden grid-cols-3 gap-2 text-right sm:grid">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">DISTANCE UNIT</p><p className="mt-1 text-[10px] font-bold">10,000 km</p></div>
@@ -895,14 +1255,17 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
           )}
 
-          <div className="pointer-events-none absolute inset-x-[8%] bottom-[22%] z-10 h-[1px] bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent sm:inset-x-[18%]" />
-          <div className="pointer-events-none absolute left-1/2 top-[46%] z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/35 opacity-65">
-            <span className="absolute left-1/2 top-0 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
-            <span className="absolute bottom-0 left-1/2 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
-            <span className="absolute left-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
-            <span className="absolute right-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
-          </div>
-          {!completed && <button type="button" onClick={onExit} className="pointer-events-auto absolute bottom-[27%] right-3 z-30 rounded-lg border border-white/15 bg-slate-950/75 px-3 py-2 text-[10px] font-bold text-slate-200 backdrop-blur-md sm:right-5">航行を終了</button>}
+          {viewMode === 'cockpit' && (
+            <>
+              <div className="pointer-events-none absolute inset-x-[8%] bottom-[22%] z-10 h-[1px] bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent sm:inset-x-[18%]" />
+              <div className="pointer-events-none absolute left-1/2 top-[46%] z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/35 opacity-65">
+                <span className="absolute left-1/2 top-0 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
+                <span className="absolute bottom-0 left-1/2 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
+                <span className="absolute left-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
+                <span className="absolute right-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
