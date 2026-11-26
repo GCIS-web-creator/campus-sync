@@ -809,25 +809,22 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const moonToPlanetDirection = planetPosition.clone().sub(moonPosition).normalize();
     const moonOrbitBasisA = new THREE.Vector3(1, 0, 0);
     const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
-    const starApproachAngle = Math.atan2(moonPosition.z, moonPosition.x);
-    const starApproachRadial = new THREE.Vector3(Math.cos(starApproachAngle), 0, Math.sin(starApproachAngle));
-    const starSkimEndAngle = starApproachAngle + Math.PI * 0.66;
-    const starDepartureRadial = new THREE.Vector3(Math.cos(starSkimEndAngle), 0, Math.sin(starSkimEndAngle));
-    const starDepartureTangent = new THREE.Vector3(-Math.sin(starSkimEndAngle), 0, Math.cos(starSkimEndAngle));
-    const outerEnd = starDepartureRadial.clone().multiplyScalar(VOYAGE_SCALE.outerSystemDistance)
-      .addScaledVector(starDepartureTangent, 1_800)
-      .add(new THREE.Vector3(0, 520, 0));
+    const moonOrbitEndPosition = moonPosition.clone().add(new THREE.Vector3(moonOrbitRadius, 0, 0));
+    const tangentFlyby = getStarTangentFlybyGeometry(moonOrbitEndPosition.x, moonOrbitEndPosition.z, starRadius);
+    const starTangentPoint = new THREE.Vector3(tangentFlyby.tangentX, 0, tangentFlyby.tangentZ);
+    const starFlybyDirection = new THREE.Vector3(tangentFlyby.directionX, 0, tangentFlyby.directionZ);
+    const outerEnd = starTangentPoint.clone().addScaledVector(starFlybyDirection, VOYAGE_SCALE.outerSystemDistance * 2.4);
     const totalDuration = STAR_SYSTEM_VOYAGE_DURATION_MS;
 
     const getPlanetOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // 100 km altitude: aim just below the local horizon so the planet's
-      // curvature and illuminated surface occupy the lower half of the canopy.
+      // 500 km altitude: skim above the visible atmosphere and keep the
+      // horizon, day/night terminator and sunlit limb together in frame.
       const target = position.clone()
-        .addScaledVector(tangent, 2.8)
-        .addScaledVector(radial, -0.78);
+        .addScaledVector(tangent, 2.25)
+        .addScaledVector(radial, -0.15);
       return { position, target, up: radial };
     };
 
@@ -837,11 +834,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // Do not look back at the parent planet: face the lunar limb and its
-      // sunlit surface while the Moon itself fills the ship's forward canopy.
+      // At 500 km altitude, look close to the lunar horizon. The bright limb
+      // and the terminator stay in view without turning the Moon behind us.
       const target = position.clone()
-        .addScaledVector(tangent, 1.55)
-        .addScaledVector(radial, -0.68);
+        .addScaledVector(tangent, 0.82)
+        .addScaledVector(radial, -0.045);
       return { position, target, up: radial };
     };
 
@@ -851,8 +848,8 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const position = radial.clone().multiplyScalar(starOrbitRadius);
       // Lead the stellar centre slightly along the ship's tangent. The star
       // stays large and in frame, while the view sweeps around its corona.
-      const target = tangent.clone().multiplyScalar(starRadius * 0.42);
-      return { position, target, up: worldUp };
+      // Keep the star centred while it rotates through the panoramic view.
+      return { position, target: new THREE.Vector3(0, 0, 0), up: worldUp };
     };
 
     const getPose = (id: string, progress: number) => {
@@ -903,30 +900,21 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       if (id === 'star-skim') {
         const startPose = getMoonOrbitPose(Math.PI * 2);
-        const arrival = starApproachRadial.clone().multiplyScalar(starOrbitRadius);
-        const arrivalTarget = new THREE.Vector3(0, 0, 0);
-        if (progress < 0.56) {
-          const approach = ease(progress / 0.56);
-          const position = startPose.position.clone().lerp(arrival, approach);
-          const target = startPose.target.clone().lerp(arrivalTarget, approach);
-          return { position, target, up: worldUp };
-        }
-        const arcProgress = (progress - 0.56) / 0.44;
-        const angle = starApproachAngle + Math.PI * 0.66 * arcProgress;
-        const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-        const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
-        const position = radial.multiplyScalar(starOrbitRadius);
-        const target = tangent.clone().multiplyScalar(starRadius * 0.42);
-        return { position, target, up: worldUp };
+        // A mathematically tangent line reaches the edge of the game's
+        // stellar gravity boundary without crossing inside it.
+        const position = startPose.position.clone().lerp(starTangentPoint, t);
+        const towardStar = position.clone().negate().normalize();
+        const lookDirection = starFlybyDirection.clone().multiplyScalar(0.78)
+          .addScaledVector(towardStar, 0.22).normalize();
+        return {
+          position,
+          target: position.clone().addScaledVector(lookDirection, 1_200),
+          up: worldUp,
+        };
       }
-      const start = starDepartureRadial.clone().multiplyScalar(starOrbitRadius);
-      const radialTravel = starDepartureRadial.clone();
-      const position = start.clone().lerp(outerEnd, t);
-      // Departure moves outward along the star's radial direction. The camera
-      // looks ahead into open space, never back through the stellar centre.
-      const target = position.clone()
-        .addScaledVector(radialTravel, 8_000)
-        .addScaledVector(starDepartureTangent, 260);
+      // Continue on the exact same tangent vector and fly straight away.
+      const position = starTangentPoint.clone().lerp(outerEnd, t);
+      const target = position.clone().addScaledVector(starFlybyDirection, 4_000);
       return { position, target, up: worldUp };
     };
     let frame = 0;
