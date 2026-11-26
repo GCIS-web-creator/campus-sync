@@ -2,10 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, History,
+  ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, History, Search,
   RotateCcw, Shuffle, Target, Timer, Trophy, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { filterMathPracticeQuestions, paginateMathPracticeQuestions } from '@/lib/math-practice-catalog';
 
 type MathCourse = '数学I' | '数学A' | '数学II' | '数学B' | '数学III' | '数学C';
 type Option = { id: string; text: string };
@@ -67,6 +68,9 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
   const [section, setSection] = useState<Section>('practice');
   const [course, setCourse] = useState<MathCourse>('数学I');
   const [unit, setUnit] = useState('');
+  const [questionSearch, setQuestionSearch] = useState('');
+  const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'basic' | 'normal' | 'challenge'>('all');
+  const [questionPage, setQuestionPage] = useState(1);
   const [mode, setMode] = useState<PracticeMode>('unit');
   const [questions, setQuestions] = useState<MathQuestion[]>([]);
   const [current, setCurrent] = useState<MathQuestion | null>(null);
@@ -154,6 +158,14 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
 
   const units = useMemo(() => Array.from(new Set(questions.filter(q => q.subject === course).map(q => q.unit))), [questions, course]);
   const selectedQuestions = useMemo(() => questions.filter(q => q.subject === course && (!unit || q.unit === unit)), [questions, course, unit]);
+  const searchedQuestions = useMemo(
+    () => filterMathPracticeQuestions(selectedQuestions, questionSearch, difficultyFilter),
+    [selectedQuestions, questionSearch, difficultyFilter],
+  );
+  const questionPageData = useMemo(
+    () => paginateMathPracticeQuestions(searchedQuestions, questionPage, 30),
+    [searchedQuestions, questionPage],
+  );
   const courseCounts = useMemo(() => COURSES.map(name => ({ name, count: questions.filter(q => q.subject === name).length })), [questions]);
 
   const mistakeQuestions = useMemo(() => {
@@ -175,6 +187,8 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
     setUnit(question.unit);
     setAnswer('');
     setShowResult(false);
+    setGradingResult(null);
+    setLastCorrect(false);
     questionStartedAt.current = Date.now();
     setSection('practice');
   };
@@ -438,7 +452,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
               <label className="block"><span className={'mb-1.5 block text-xs font-bold ' + muted}>科目</span>
                 <select value={course} onChange={e => {
                   const nextCourse = e.target.value as MathCourse;
-                  setCourse(nextCourse); setUnit(''); setMode('unit'); setTimedActive(false); setTimedExpired(false);
+                  setCourse(nextCourse); setUnit(''); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === nextCourse);
                   if (next) {
                     setCurrent(next); setAnswer(''); setShowResult(false);
@@ -451,7 +465,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
               <label className="block"><span className={'mb-1.5 block text-xs font-bold ' + muted}>単元</span>
                 <select value={unit} onChange={e => {
                   const nextUnit = e.target.value;
-                  setUnit(nextUnit); setMode('unit'); setTimedActive(false); setTimedExpired(false);
+                  setUnit(nextUnit); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === course && (!nextUnit || q.unit === nextUnit));
                   if (next) {
                     setCurrent(next); setAnswer(''); setShowResult(false);
@@ -466,6 +480,54 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
               <button type="button" onClick={() => { setMode('unit'); setTimedActive(false); setTimedExpired(false); nextQuestion(current?.id); }} className={mode === 'unit' ? primary : secondary}><BookOpen size={15} />単元順に解く</button>
               <button type="button" onClick={() => { setMode('random'); setTimedActive(false); setTimedExpired(false); nextQuestion(current?.id); }} className={mode === 'random' ? primary : secondary}><Shuffle size={15} />ランダム演習</button>
               <button type="button" onClick={startTimedPractice} className={mode === 'timed' && timedActive ? primary : secondary}><Clock3 size={15} />15分チャレンジ</button>
+            </div>
+
+            <div className={'mt-4 rounded-2xl border p-3 sm:p-4 ' + (dark ? 'border-slate-700 bg-slate-950/70' : 'border-slate-200 bg-slate-50/80')}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><h3 className="text-sm font-black">演習問題一覧から選ぶ</h3><p className={'mt-0.5 text-[10px] ' + muted}>問題を検索して、好きな問題を直接開けます。</p></div>
+                <span className="rounded-full bg-cyan-500/10 px-2.5 py-1 text-[10px] font-black text-cyan-700 dark:text-cyan-300">{searchedQuestions.length.toLocaleString('ja-JP')}問</span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
+                <label className="relative block">
+                  <span className="sr-only">問題を検索</span>
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input value={questionSearch} onChange={event => { setQuestionSearch(event.target.value); setQuestionPage(1); }} placeholder="問題名・本文・単元で検索…" className={'w-full rounded-xl py-2.5 pl-9 pr-3 text-xs ' + field} />
+                </label>
+                <select value={difficultyFilter} onChange={event => { setDifficultyFilter(event.target.value as typeof difficultyFilter); setQuestionPage(1); }} className={'w-full rounded-xl px-3 py-2.5 text-xs font-bold ' + field} aria-label="難易度で絞り込む">
+                  <option value="all">すべての難易度</option><option value="basic">基礎</option><option value="normal">標準</option><option value="challenge">発展</option>
+                </select>
+              </div>
+              {questionPageData.items.length === 0 ? (
+                <div className={'mt-3 rounded-xl border border-dashed p-5 text-center text-xs ' + muted}>条件に一致する問題がありません。検索語や単元を変更してください。</div>
+              ) : (
+                <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1" aria-label="選択できる演習問題">
+                  {questionPageData.items.map((q,index) => <button key={q.id} type="button" onClick={() => {
+                    setMode('unit');
+                    setTimedActive(false);
+                    setTimedExpired(false);
+                    setMockActive(false);
+                    openQuestion(q);
+                  }} aria-current={current?.id === q.id ? 'true' : undefined} className={'w-full rounded-xl border p-3 text-left transition hover:border-cyan-500 hover:shadow-sm ' + (current?.id === q.id ? (dark ? 'border-cyan-500 bg-cyan-950/40' : 'border-cyan-500 bg-cyan-50') : (dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'))}>
+                    <div className="flex items-start gap-3">
+                      <span className={'mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-lg px-1 text-[10px] font-black ' + (dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600')}>{questionPageData.start + index + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-cyan-700 dark:text-cyan-300"><span>{q.subject}</span><span>·</span><span>{q.unit}</span><span>·</span><span>{q.difficulty === 'challenge' ? '発展' : q.difficulty === 'normal' ? '標準' : '基礎'}</span></span>
+                        <span className="mt-1 block truncate text-xs font-black">{q.title || 'タイトルなし'}</span>
+                        <span className={'mt-1 block line-clamp-2 text-[11px] leading-5 ' + muted}>{q.prompt}</span>
+                      </span>
+                      <span className="mt-1 shrink-0 text-[10px] font-black text-cyan-700 dark:text-cyan-300">{current?.id === q.id ? '選択中' : 'この問題を開く'}</span>
+                    </div>
+                  </button>)}
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className={'text-[10px] ' + muted}>{searchedQuestions.length ? (questionPageData.start + 1) + '〜' + questionPageData.end + '問目を表示' : '0問'}</span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setQuestionPage(page => Math.max(1, page - 1))} disabled={questionPageData.page <= 1} className={secondary + ' px-3 py-1.5 text-xs'}>前へ</button>
+                  <span className={'text-[10px] font-bold ' + muted}>{questionPageData.page} / {questionPageData.pageCount}</span>
+                  <button type="button" onClick={() => setQuestionPage(page => Math.min(questionPageData.pageCount, page + 1))} disabled={questionPageData.page >= questionPageData.pageCount} className={secondary + ' px-3 py-1.5 text-xs'}>次へ</button>
+                </div>
+              </div>
             </div>
 
             {loading ? <div className={'py-16 text-center text-sm ' + muted}>問題データを読み込んでいます…</div> : !current ? (
