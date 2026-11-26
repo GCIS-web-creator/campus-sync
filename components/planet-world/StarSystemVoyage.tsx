@@ -1407,7 +1407,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">REMAINING</p><p className="mt-1 text-[10px] font-bold tabular-nums">{formatClock(remaining)}</p></div>
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">MP SPENT</p><p className="mt-1 text-[10px] font-bold">30 MP</p></div>
               </div>
-              {completed && <button type="button" onClick={onExit} className="pointer-events-auto shrink-0 rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-black text-slate-950">惑星視点へ戻る</button>}
+              {completed && <button type="button" data-testid="flight-exit-button" onClick={onExit} className="pointer-events-auto shrink-0 rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-black text-slate-950">惑星視点へ戻る</button>}
             </div>
           </div>
 
