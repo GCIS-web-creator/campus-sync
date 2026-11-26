@@ -172,7 +172,8 @@ test('stellar photosphere uses a self-luminous shader with no day/night terminat
   assert.match(surface.fragmentShader, /convection/);
   assert.match(surface.fragmentShader, /intergranularLanes/);
   assert.match(surface.fragmentShader, /vec4\(emission, 1\.0\)/);
-  assert.doesNotMatch(surface.fragmentShader, /uSunDirection|daylight|nightMask|terminator/i);
+  const executableSurfaceShader = surface.fragmentShader.replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(executableSurfaceShader, /uSunDirection|daylight|nightMask|sunFacing|terminator/i);
   assert.equal(corona.transparent, true);
   assert.equal(corona.blending, 2, 'corona should use additive blending');
   surface.dispose();
