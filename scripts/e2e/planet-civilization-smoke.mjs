@@ -237,9 +237,12 @@ try {
   await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
   await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
   await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
+  await page.getByText(/地表100km上空/).first().waitFor({ state: 'visible' });
+  await page.getByText('約114秒', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '30 MPで航行開始', exact: true }).click();
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByText(/船体 1 km/).waitFor({ state: 'visible' });
+  await page.getByText(/WARP \/ 0.82c/).waitFor({ state: 'visible' });
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
   await page.getByRole('button', { name: '航行を終了', exact: true }).click();

@@ -7,8 +7,10 @@ import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
   getLowOrbitRadius,
   getStarCoronaClearanceKm,
+  getStarDepartureRadius,
   getStarOrbitRadius,
   getVoyageStarRadius,
+  getWarpIntensity,
   STAR_SYSTEM_VOYAGE_DURATION_MS,
   STAR_SYSTEM_VOYAGE_PHASES,
   VOYAGE_SCALE,
@@ -97,6 +99,120 @@ function makePlanetSurfaceTexture(seed: number, atmosphereColor: string) {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.anisotropy = 8;
   return texture;
+}
+
+function makeNightLightsTexture(seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 2_071);
+  const clusters = [
+    [0.18, 0.37, 0.105, 0.19], [0.31, 0.63, 0.075, 0.17],
+    [0.47, 0.33, 0.14, 0.22], [0.63, 0.62, 0.12, 0.2],
+    [0.79, 0.36, 0.12, 0.18], [0.9, 0.7, 0.06, 0.12],
+    [0.54, 0.79, 0.08, 0.1],
+  ];
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  for (const [cx, cy, rx, ry] of clusters) {
+    const centerX = cx * canvas.width;
+    const centerY = cy * canvas.height;
+    for (let city = 0; city < 58; city++) {
+      const angle = random() * Math.PI * 2;
+      const radius = Math.sqrt(random());
+      const x = centerX + Math.cos(angle) * rx * canvas.width * radius;
+      const y = centerY + Math.sin(angle) * ry * canvas.height * radius;
+      const glow = 1.5 + random() * 4.5;
+      const gradient = context.createRadialGradient(x, y, 0, x, y, glow * 4);
+      gradient.addColorStop(0, 'rgba(255,239,185,0.95)');
+      gradient.addColorStop(0.24, 'rgba(255,177,91,0.62)');
+      gradient.addColorStop(1, 'rgba(255,136,54,0)');
+      context.fillStyle = gradient;
+      context.beginPath();
+      context.arc(x, y, glow * 4, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = random() > 0.25 ? 'rgba(255,230,174,0.88)' : 'rgba(255,177,128,0.8)';
+      context.beginPath();
+      context.arc(x, y, 0.6 + random() * 1.1, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function makeWarpOverlay() {
+  const geometry = new THREE.PlaneGeometry(52, 32);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uWarp: { value: 0 },
+    },
+    vertexShader: [
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vUv = uv;',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+      '}',
+    ].join('\\n'),
+    fragmentShader: [
+      'uniform float uTime;',
+      'uniform float uWarp;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec2 p = (vUv - 0.5) * vec2(1.65, 1.0);',
+      '  float radius = length(p);',
+      '  float angle = atan(p.y, p.x);',
+      '  float twist = angle + radius * (9.0 + uWarp * 22.0) - uTime * (0.45 + uWarp * 4.2);',
+      '  float spiral = pow(max(0.0, cos(twist * 7.0 + sin(radius * 18.0 - uTime * 2.2))), 15.0);',
+      '  float radial = pow(max(0.0, cos(radius * 78.0 - uTime * 18.0 + angle * 4.0)), 18.0);',
+      '  float sweep = 0.5 + 0.5 * sin(uTime * 7.0 + radius * 34.0 - angle * 9.0);',
+      '  float edge = 1.0 - smoothstep(0.58, 0.98, radius);',
+      '  float center = smoothstep(0.045, 0.26, radius);',
+      '  float filaments = spiral * 0.34 + radial * 0.12 + sweep * 0.055;',
+      '  float alpha = clamp(filaments * edge * center * uWarp, 0.0, 0.42);',
+      '  vec3 cyan = vec3(0.18, 0.78, 1.0);',
+      '  vec3 violet = vec3(0.67, 0.34, 1.0);',
+      '  vec3 color = mix(cyan, violet, 0.5 + 0.5 * sin(twist + uTime));',
+      '  gl_FragColor = vec4(color, alpha);',
+      '}',
+    ].join('\\n'),
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(0, 0, -18);
+  mesh.renderOrder = 100;
+  return { mesh, geometry, material };
+}
+
+function makeWarpRings() {
+  return [0, 1, 2].map(index => {
+    const geometry = new THREE.TorusGeometry(3.6 + index * 2.2, 0.025 + index * 0.008, 6, 144);
+    const material = new THREE.MeshBasicMaterial({
+      color: index === 1 ? '#c39aff' : '#86eaff',
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, 0, -7 - index * 8);
+    mesh.rotation.set(0.16 * (index + 1), 0.27 * (index + 1), 0);
+    return { mesh, geometry, material, index };
+  });
 }
 
 function makeMoonTexture() {
@@ -311,6 +427,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const speedEffects = makeSpeedStreaks();
     camera.add(speedEffects.lines);
     resources.push(speedEffects.geometry, speedEffects.material);
+    const warpOverlay = makeWarpOverlay();
+    camera.add(warpOverlay.mesh);
+    resources.push(warpOverlay.geometry, warpOverlay.material);
+    const warpRings = makeWarpRings();
+    warpRings.forEach(ring => {
+      camera.add(ring.mesh);
+      resources.push(ring.geometry, ring.material);
+    });
 
     const starfield = makeStarfield(Number.parseInt(system.id.slice(-3), 10) || 1);
     scene.add(starfield);
@@ -358,6 +482,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 512, 256);
     const loader = new THREE.TextureLoader();
     const fallbackPlanetTexture = makePlanetSurfaceTexture(Number.parseInt(system.id.slice(-3), 10) || 1, system.atmosphereColor);
+    const nightLightsTexture = makeNightLightsTexture(Number.parseInt(system.id.slice(-3), 10) || 1);
     let planetMaterial: THREE.MeshStandardMaterial;
     const planetTexture = loader.load(
       '/planet-assets/planets/' + system.id + (Number.parseInt(system.id.slice(-3), 10) >= 11 && Number.parseInt(system.id.slice(-3), 10) <= 20 ? '/surface.webp' : '/surface.jpg'),
@@ -374,11 +499,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     planetTexture.colorSpace = THREE.SRGBColorSpace;
     planetTexture.wrapS = THREE.RepeatWrapping;
     planetTexture.wrapT = THREE.ClampToEdgeWrapping;
-    planetMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: planetTexture, roughness: 0.96, metalness: 0 });
+    planetMaterial = new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      map: planetTexture,
+      emissive: '#ffc88e',
+      emissiveMap: nightLightsTexture,
+      emissiveIntensity: 0.82,
+      roughness: 0.96,
+      metalness: 0,
+    });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture);
 
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
@@ -390,20 +523,47 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 256, 128);
     const moonTexture = makeMoonTexture();
-    const moonMaterial = new THREE.MeshStandardMaterial({ map: moonTexture, roughness: 1, metalness: 0 });
+    const moonMaterial = new THREE.MeshStandardMaterial({
+      map: moonTexture,
+      color: '#d9dce7',
+      emissive: '#9ca8c2',
+      emissiveIntensity: 0.42,
+      roughness: 1,
+      metalness: 0,
+    });
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
     moon.position.copy(moonPosition);
     scene.add(moon);
-    resources.push(moonGeometry, moonMaterial, moonTexture);
+    const moonGlowTexture = makeCorona('#aabfe8');
+    const moonGlowMaterial = new THREE.SpriteMaterial({
+      map: moonGlowTexture,
+      color: '#b8c8ef',
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const moonGlow = new THREE.Sprite(moonGlowMaterial);
+    moonGlow.position.copy(moonPosition);
+    moonGlow.scale.setScalar(VOYAGE_SCALE.moonRadius * 3.6);
+    scene.add(moonGlow);
+    resources.push(moonGeometry, moonMaterial, moonTexture, moonGlowTexture, moonGlowMaterial);
 
     const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 2.8);
     sunlight.position.set(0, 0, 0);
     sunlight.target.position.copy(planetPosition);
     scene.add(sunlight, sunlight.target);
-    scene.add(new THREE.AmbientLight('#9eafc8', 0.25));
+    scene.add(new THREE.HemisphereLight('#c4d6ef', '#344258', 0.56));
+    scene.add(new THREE.AmbientLight('#7787a6', 0.48));
+    const moonFill = new THREE.DirectionalLight('#d6e2ff', 0.72);
+    moonFill.position.copy(moonPosition).add(new THREE.Vector3(18, 12, 24));
+    moonFill.target.position.copy(moonPosition);
+    scene.add(moonFill, moonFill.target);
 
     const worldUp = new THREE.Vector3(0, 1, 0);
     const starOrbitRadius = getStarOrbitRadius(starRadius);
+    const starDepartureRadius = getStarDepartureRadius(starRadius);
     const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
     const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
@@ -413,22 +573,28 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       planetFlybyRadius * 0.36,
       planetFlybyRadius * 0.42,
     ));
-    const starSkimPoint = new THREE.Vector3(-starOrbitRadius, 0, 0);
-    const outerEnd = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 520, 3_800);
     const moonToPlanetDirection = planetPosition.clone().sub(moonPosition).normalize();
     const moonOrbitBasisA = new THREE.Vector3(1, 0, 0);
     const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
+    const starApproachAngle = Math.atan2(moonPosition.z, moonPosition.x);
+    const starApproachRadial = new THREE.Vector3(Math.cos(starApproachAngle), 0, Math.sin(starApproachAngle));
+    const starSkimEndAngle = starApproachAngle + Math.PI * 0.66;
+    const starDepartureRadial = new THREE.Vector3(Math.cos(starSkimEndAngle), 0, Math.sin(starSkimEndAngle));
+    const starDepartureTangent = new THREE.Vector3(-Math.sin(starSkimEndAngle), 0, Math.cos(starSkimEndAngle));
+    const outerEnd = starDepartureRadial.clone().multiplyScalar(VOYAGE_SCALE.outerSystemDistance)
+      .addScaledVector(starDepartureTangent, 1_800)
+      .add(new THREE.Vector3(0, 520, 0));
     const totalDuration = STAR_SYSTEM_VOYAGE_DURATION_MS;
 
     const getPlanetOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // Aim a few degrees below the local tangent so the immense curved
-      // surface and atmospheric limb fill the lower part of the canopy.
+      // 100 km altitude: aim just below the local horizon so the planet's
+      // curvature and illuminated surface occupy the lower half of the canopy.
       const target = position.clone()
-        .addScaledVector(tangent, 16)
-        .addScaledVector(radial, -1.05);
+        .addScaledVector(tangent, 2.8)
+        .addScaledVector(radial, -0.78);
       return { position, target, up: radial };
     };
 
@@ -438,22 +604,22 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // The orbit plane is perpendicular to the parent-planet direction.
-      // The ship keeps its parent world in view while skimming the moon's limb.
+      // Do not look back at the parent planet: face the lunar limb and its
+      // sunlit surface while the Moon itself fills the ship's forward canopy.
       const target = position.clone()
-        .addScaledVector(moonToPlanetDirection, 80)
-        .addScaledVector(tangent, 4);
+        .addScaledVector(tangent, 1.55)
+        .addScaledVector(radial, -0.68);
       return { position, target, up: radial };
     };
 
     const getStarOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
       const position = radial.clone().multiplyScalar(starOrbitRadius);
-      return {
-        position,
-        target: new THREE.Vector3(0, 0, 0),
-        up: worldUp,
-      };
+      // Lead the stellar centre slightly along the ship's tangent. The star
+      // stays large and in frame, while the view sweeps around its corona.
+      const target = tangent.clone().multiplyScalar(starRadius * 0.42);
+      return { position, target, up: worldUp };
     };
 
     const getPose = (id: string, progress: number) => {
@@ -474,8 +640,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         };
       }
       if (id === 'star-orbit') {
-        const angle = Math.PI + Math.PI * 2 * progress;
-        return getStarOrbitPose(angle);
+        return getStarOrbitPose(Math.PI + Math.PI * 2 * progress);
       }
       if (id === 'planet-transfer') {
         const startPose = getStarOrbitPose(Math.PI);
@@ -494,7 +659,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         const startPose = getPlanetOrbitPose(Math.PI * 4);
         const endPose = getMoonOrbitPose(0);
         const position = startPose.position.clone().lerp(endPose.position, t);
-        const target = startPose.target.clone().lerp(endPose.target, t);
+        // Keep the Moon as the explicit destination. It begins as a tiny disk
+        // and grows toward the centre of the windscreen throughout the transfer.
+        const target = planetPosition.clone().lerp(moonPosition, ease(progress * 1.06));
         const up = startPose.up.clone().lerp(endPose.up, t).normalize();
         return { position, target, up };
       }
@@ -503,18 +670,31 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       if (id === 'star-skim') {
         const startPose = getMoonOrbitPose(Math.PI * 2);
-        const position = startPose.position.clone().lerp(starSkimPoint, t);
-        position.z += Math.sin(Math.PI * progress) * 28;
-        position.y += Math.sin(Math.PI * progress) * 14;
-        const target = position.clone().lerp(new THREE.Vector3(0, 0, 0), 0.72);
+        const arrival = starApproachRadial.clone().multiplyScalar(starOrbitRadius);
+        const arrivalTarget = new THREE.Vector3(0, 0, 0);
+        if (progress < 0.56) {
+          const approach = ease(progress / 0.56);
+          const position = startPose.position.clone().lerp(arrival, approach);
+          const target = startPose.target.clone().lerp(arrivalTarget, approach);
+          return { position, target, up: worldUp };
+        }
+        const arcProgress = (progress - 0.56) / 0.44;
+        const angle = starApproachAngle + Math.PI * 0.66 * arcProgress;
+        const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+        const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
+        const position = radial.multiplyScalar(starOrbitRadius);
+        const target = tangent.clone().multiplyScalar(starRadius * 0.42);
         return { position, target, up: worldUp };
       }
-      const position = starSkimPoint.clone().lerp(outerEnd, t);
-      return {
-        position,
-        target: position.clone().add(new THREE.Vector3(-5_000, 120, 1_800)),
-        up: worldUp,
-      };
+      const start = starDepartureRadial.clone().multiplyScalar(starOrbitRadius);
+      const radialTravel = starDepartureRadial.clone();
+      const position = start.clone().lerp(outerEnd, t);
+      // Departure moves outward along the star's radial direction. The camera
+      // looks ahead into open space, never back through the stellar centre.
+      const target = position.clone()
+        .addScaledVector(radialTravel, 8_000)
+        .addScaledVector(starDepartureTangent, 260);
+      return { position, target, up: worldUp };
     };
     let frame = 0;
     let lastUiUpdate = 0;
@@ -537,20 +717,36 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
-      const desiredFov = phaseId === 'moon-orbit' ? 18
-        : phaseId === 'planet-orbit' ? 48
-        : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 42
-        : 46;
+      const warpAmount = getWarpIntensity(phaseId, localProgress);
+      const timeSeconds = current / 1_000;
+      const desiredFov = highSpeed ? 58
+        : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
+          : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 38
+            : phaseId === 'moon-orbit' ? 44
+              : phaseId === 'planet-orbit' ? 50
+                : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
       }
-      speedEffects.material.opacity = highSpeed ? 0.72 : phaseId === 'star-skim' ? 0.24 : 0.025;
-      speedEffects.lines.rotation.z += highSpeed ? 0.0018 : 0.00035;
+      speedEffects.material.opacity = 0.04 + warpAmount * 0.9;
+      speedEffects.lines.rotation.z += 0.00045 + warpAmount * 0.014;
+      warpOverlay.material.uniforms.uTime.value = timeSeconds;
+      warpOverlay.material.uniforms.uWarp.value = warpAmount;
+      warpRings.forEach((ring, ringIndex) => {
+        const direction = ringIndex % 2 === 0 ? 1 : -1;
+        ring.mesh.rotation.z = timeSeconds * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
+        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(timeSeconds * 1.3 + ringIndex) * warpAmount * 0.48;
+        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(timeSeconds * 1.1 + ringIndex) * warpAmount * 0.42;
+        ring.mesh.scale.setScalar(1 + Math.sin(timeSeconds * 3.2 + ringIndex * 2) * warpAmount * 0.13);
+        ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
+      });
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
+      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
       star.rotation.y += 0.0008;
+      moon.rotation.y += 0.00016;
       renderer.render(scene, camera);
 
       if (now - lastUiUpdate > 130 || current >= totalDuration) {
@@ -592,8 +788,16 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const noStar = !starClass || !starProfile || system.rogue;
   const lowOrbitActive = activePhase?.id === 'planet-orbit' || activePhase?.id === 'moon-orbit';
   const starOrbitActive = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim';
+  const destinationLabel = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
+    ? '目的地：恒星'
+    : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
+      ? '目的地：惑星'
+      : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
+        ? '目的地：衛星'
+        : '目的地：星系内縁';
+  const highSpeedActive = activePhase?.id === 'outer-cruise' || activePhase?.id === 'planet-flyby-inbound' || activePhase?.id === 'outer-departure';
   const orbitReadout = lowOrbitActive
-    ? '地表高度 10 km · 低軌道'
+    ? '地表高度 100 km · 低軌道'
     : starOrbitActive
       ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
       : '宇宙船全長 1 km';
@@ -606,10 +810,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約1分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表10km上空を周回します。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約2分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表100km上空をゆっくり周回します。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.82c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約60秒</p><p className="text-[9px] text-slate-500">航行シーンを圧縮再生</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約114秒</p><p className="text-[9px] text-slate-500">低軌道はゆっくり周回</p></div>
               <div className="col-span-2 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-3 sm:col-span-1"><p className="text-[9px] text-cyan-200">航行費用</p><p className="mt-1 text-lg font-black">30 MP</p><p className="text-[9px] text-slate-400">開始時に一度だけ消費</p></div>
             </div>
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -652,6 +856,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
               <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
+              <p className="mt-1 text-[9px] font-black tracking-wide text-amber-100">{destinationLabel}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-right backdrop-blur-md">
               <p className="text-[9px] font-bold text-slate-400">MISSION ELAPSED</p>
@@ -671,7 +876,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <div className="min-w-0">
                 <p className="text-[8px] font-black tracking-[.22em] text-cyan-200">FLIGHT CONTROL</p>
                 <p className="mt-1 max-w-[240px] text-sm font-black leading-5 sm:max-w-sm">{completed ? '星系周遊航行を完了しました' : activePhase?.label}</p>
-                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · SUBLIGHT CRUISE · ' + (phaseIndex < 2 ? '0.82c' : 'ORBITAL MANEUVER')}</p>
+                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
               </div>
               <div className="hidden grid-cols-3 gap-2 text-right sm:grid">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">DISTANCE UNIT</p><p className="mt-1 text-[10px] font-bold">10,000 km</p></div>
@@ -682,7 +887,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
           </div>
 
-          {!completed && (
+          {!completed && highSpeedActive && (
             <div className="pointer-events-none absolute bottom-[27%] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[9px] text-cyan-100/80 sm:bottom-[28%]">
               <span className="h-1 w-1 rounded-full bg-cyan-200 shadow-[0_0_8px_#67e8f9]" />
               {activePhase?.label}
