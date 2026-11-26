@@ -557,15 +557,40 @@ export default function ProfileStudio({
           <div className={'rounded-2xl border p-8 text-center text-sm ' + darkCard}><RefreshCw size={20} className="mx-auto mb-2 animate-spin" />プロフィールを読み込み中…</div>
         ) : (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(330px,.9fr)]">
-          <nav aria-label="プロフィール編集カテゴリ" className="ps-profile-category-nav -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <nav aria-label="プロフィール編集カテゴリ" className="ps-profile-category-nav -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 xl:col-span-2 xl:row-start-1">
             {[
               ['基本情報','profile-basic'],['アイコン','profile-basic'],['フォント','profile-name'],['名前','profile-name'],
               ['バナー','profile-banner'],['枠','profile-banner'],['アニメーション','profile-banner'],
               ['ミニバッジ','profile-badges'],['公開設定','profile-privacy'],['実績','profile-achievements'],
             ].map(([label,id]) => <button key={label} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })} className="shrink-0 rounded-full border border-slate-300/35 bg-slate-500/5 px-3 py-2 text-[10px] font-black">{label}</button>)}
           </nav>
+            <div className="sticky top-2 z-20 space-y-4 xl:col-start-2 xl:row-start-2">
+              <section id="profile-preview" className={'scroll-mt-3 rounded-2xl border p-3 sm:p-4 ' + darkCard}>
+                <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-black">リアルタイムプレビュー</h3><span className="rounded-full border border-cyan-600/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-black text-cyan-700 dark:text-cyan-300">LIVE PREVIEW</span></div>
+                <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} onEditBio={() => document.getElementById('profile-bio-editor')?.focus()} />
+                <p className={'mt-3 text-[10px] leading-5 ' + muted}>装飾の変更内容は、保存前でもプレビューに反映されます。</p>
+              </section>
 
-            <div className="order-2 space-y-4 xl:order-1">
+              <section id="profile-achievements" className={'scroll-mt-3 rounded-2xl border p-4 ' + darkCard}>
+                <div className="mb-3 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Star size={17} className="text-amber-500" /><h3 className="text-sm font-black">実績と解放状況</h3></div><button type="button" onClick={() => void loadOwnProfile()} className={'rounded-lg p-2 ' + muted} aria-label="実績を再読み込み"><RefreshCw size={14} /></button></div>
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-cyan-500/10 p-2 text-center"><p className="text-xl font-black text-cyan-500">{metrics.study_sessions}</p><p className={'text-[9px] font-bold ' + muted}>学習回数</p></div>
+                  <div className="rounded-xl bg-violet-500/10 p-2 text-center"><p className="text-xl font-black text-violet-500">{metrics.focus_minutes}</p><p className={'text-[9px] font-bold ' + muted}>学習分数</p></div>
+                  <div className="rounded-xl bg-amber-500/10 p-2 text-center"><p className="text-xl font-black text-amber-500">{metrics.approved_contributions}</p><p className={'text-[9px] font-bold ' + muted}>貢献記録</p></div>
+                </div>
+                <div className="space-y-3">
+                  {COSMETICS.map(item => {
+                    const current = metricValue(item.metric);
+                    const achieved = unlockedIds.includes(item.id);
+                    const progress = Math.min(100, Math.round((current / item.target) * 100));
+                    return <div key={item.id} className={'rounded-xl border border-slate-300/20 p-3 ' + (recentlyUnlockedIds.includes(item.id) ? 'ps-achievement-unlocked' : '')}><div className="flex items-center gap-2"><BadgeIcon id={item.id} state={achieved ? 'unlocked' : 'locked'} size={26} /><div className="min-w-0 flex-1"><p className="text-xs font-black">{item.name}</p><p className={'mt-0.5 text-[10px] ' + muted}>{item.detail}</p></div><span className={'text-[9px] font-black ' + (achieved ? 'text-emerald-500' : muted)}>{achieved ? '解放済み' : current + '/' + item.target}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-500/15"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all" style={{ width: progress + '%' }} /></div></div>;
+                  })}
+                </div>
+                <p className={'mt-3 text-[10px] leading-5 ' + muted}>条件を満たした報酬は自動で解放状況に反映されます。解放条件そのものは既存の実績設定に従います。</p>
+              </section>
+            </div>
+            
+            <div className="space-y-4 xl:col-start-1 xl:row-start-2">
               <section id="profile-basic" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-4 flex items-center gap-2"><UserRound size={18} className="text-cyan-500" /><h3 className="text-sm font-black">基本プロフィール</h3></div>
                 <label className={'mb-1 block text-[11px] font-bold ' + muted}>表示名（本名ではなくニックネーム推奨）</label>
@@ -769,31 +794,6 @@ export default function ProfileStudio({
               <button type="button" onClick={() => void saveProfile()} disabled={saving} className="hidden w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-600 to-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-110 disabled:opacity-60 md:flex">{saving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}{saving ? '保存中…' : 'プロフィールを保存'}</button>
             </div>
 
-            <div className="order-1 sticky top-2 z-20 space-y-4 xl:order-2">
-              <section id="profile-preview" className={'scroll-mt-3 rounded-2xl border p-3 sm:p-4 ' + darkCard}>
-                <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-black">リアルタイムプレビュー</h3><span className="rounded-full border border-cyan-600/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-black text-cyan-700 dark:text-cyan-300">LIVE PREVIEW</span></div>
-                <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} onEditBio={() => document.getElementById('profile-bio-editor')?.focus()} />
-                <p className={'mt-3 text-[10px] leading-5 ' + muted}>装飾の変更内容は、保存前でもプレビューに反映されます。</p>
-              </section>
-
-              <section id="profile-achievements" className={'scroll-mt-3 rounded-2xl border p-4 ' + darkCard}>
-                <div className="mb-3 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Star size={17} className="text-amber-500" /><h3 className="text-sm font-black">実績と解放状況</h3></div><button type="button" onClick={() => void loadOwnProfile()} className={'rounded-lg p-2 ' + muted} aria-label="実績を再読み込み"><RefreshCw size={14} /></button></div>
-                <div className="mb-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-xl bg-cyan-500/10 p-2 text-center"><p className="text-xl font-black text-cyan-500">{metrics.study_sessions}</p><p className={'text-[9px] font-bold ' + muted}>学習回数</p></div>
-                  <div className="rounded-xl bg-violet-500/10 p-2 text-center"><p className="text-xl font-black text-violet-500">{metrics.focus_minutes}</p><p className={'text-[9px] font-bold ' + muted}>学習分数</p></div>
-                  <div className="rounded-xl bg-amber-500/10 p-2 text-center"><p className="text-xl font-black text-amber-500">{metrics.approved_contributions}</p><p className={'text-[9px] font-bold ' + muted}>貢献記録</p></div>
-                </div>
-                <div className="space-y-3">
-                  {COSMETICS.map(item => {
-                    const current = metricValue(item.metric);
-                    const achieved = unlockedIds.includes(item.id);
-                    const progress = Math.min(100, Math.round((current / item.target) * 100));
-                    return <div key={item.id} className={'rounded-xl border border-slate-300/20 p-3 ' + (recentlyUnlockedIds.includes(item.id) ? 'ps-achievement-unlocked' : '')}><div className="flex items-center gap-2"><BadgeIcon id={item.id} state={achieved ? 'unlocked' : 'locked'} size={26} /><div className="min-w-0 flex-1"><p className="text-xs font-black">{item.name}</p><p className={'mt-0.5 text-[10px] ' + muted}>{item.detail}</p></div><span className={'text-[9px] font-black ' + (achieved ? 'text-emerald-500' : muted)}>{achieved ? '解放済み' : current + '/' + item.target}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-500/15"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all" style={{ width: progress + '%' }} /></div></div>;
-                  })}
-                </div>
-                <p className={'mt-3 text-[10px] leading-5 ' + muted}>条件を満たした報酬は自動で解放状況に反映されます。解放条件そのものは既存の実績設定に従います。</p>
-              </section>
-            </div>
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-300/30 bg-white/95 px-4 pt-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,.12)] backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 md:hidden">
               <button type="button" onClick={() => void saveProfile()} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-600 to-violet-600 px-4 py-3 text-sm font-black text-white disabled:opacity-60">
                 {saving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}{saving ? '保存中…' : 'プロフィールを保存'}
