@@ -7,6 +7,7 @@ import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
   getLowOrbitRadius,
   getStarCoronaClearanceKm,
+  getStarTangentFlybyGeometry,
   getStarDepartureRadius,
   getStarOrbitRadius,
   getVoyageStarRadius,
@@ -17,6 +18,7 @@ import {
 } from '@/lib/planet-star-voyage';
 
 type PurchaseResult = { success: boolean; balance?: number; message?: string };
+type ViewMode = 'cockpit' | 'chase';
 type Props = {
   system: PlanetSystemSpec;
   starClass: StarClass | null;
@@ -578,6 +580,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const startAtRef = useRef(0);
   const purchaseLockRef = useRef(false);
   const pendingTravelIdRef = useRef<string | null>(null);
+  const viewModeRef = useRef<ViewMode>('cockpit');
+  const lookOffsetRef = useRef({ yaw: 0, pitch: 0 });
+  const [viewMode, setViewMode] = useState<ViewMode>('cockpit');
   const [purchasing, setPurchasing] = useState(false);
   const [started, setStarted] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -606,6 +611,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       setElapsed(0);
       setPhaseIndex(0);
       setPhaseProgress(0);
+      viewModeRef.current = 'cockpit';
+      lookOffsetRef.current = { yaw: 0, pitch: 0 };
+      setViewMode('cockpit');
       setStarted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '星系旅行を開始できませんでした。');
@@ -637,7 +645,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.18;
     renderer.setClearColor('#02050d', 1);
-    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;';
+    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;cursor:grab;';
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -645,15 +653,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
     scene.add(camera);
     const resources: Array<{ dispose: () => void }> = [];
+    // Warp streaks and rings live in the ship's flight frame, not on the
+    // camera. Looking around therefore does not drag the acceleration lines.
+    const warpFrame = new THREE.Group();
+    scene.add(warpFrame);
     const speedEffects = makeSpeedStreaks();
-    camera.add(speedEffects.lines);
+    warpFrame.add(speedEffects.lines);
     resources.push(speedEffects.geometry, speedEffects.material);
     const warpOverlay = makeWarpOverlay();
-    camera.add(warpOverlay.mesh);
+    warpFrame.add(warpOverlay.mesh);
     resources.push(warpOverlay.geometry, warpOverlay.material);
     const warpRings = makeWarpRings();
     warpRings.forEach(ring => {
-      camera.add(ring.mesh);
+      warpFrame.add(ring.mesh);
       resources.push(ring.geometry, ring.material);
     });
 
@@ -662,11 +674,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     resources.push(starfield.geometry, starfield.material);
 
     const starRadius = getVoyageStarRadius(starClass);
-    const starGeometry = new THREE.SphereGeometry(starRadius, 256, 160);
-    const starMaterial = new THREE.MeshBasicMaterial({ color: starProfile.lightColor, toneMapped: false });
+    const starGeometry = new THREE.SphereGeometry(starRadius, 320, 192);
+    const starSurfaceTexture = makeStarGranulationTexture(starProfile.lightColor, Number.parseInt(system.id.slice(-3), 10) || 1);
+    const starMaterial = new THREE.MeshBasicMaterial({ map: starSurfaceTexture, color: '#ffffff', toneMapped: false });
     const star = new THREE.Mesh(starGeometry, starMaterial);
     scene.add(star);
-    resources.push(starGeometry, starMaterial);
+    resources.push(starGeometry, starSurfaceTexture, starMaterial);
 
     const coronaTexture = makeCorona(starProfile.color);
     const coronaMaterial = new THREE.SpriteMaterial({
@@ -723,16 +736,20 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     planetMaterial = new THREE.MeshStandardMaterial({
       color: '#ffffff',
       map: planetTexture,
-      emissive: '#ffc88e',
-      emissiveMap: nightLightsTexture,
-      emissiveIntensity: 0.82,
       roughness: 0.96,
       metalness: 0,
     });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture);
+    const nightOverlay = makeNightLightsOverlay(
+      VOYAGE_SCALE.earthRadius,
+      nightLightsTexture,
+      new THREE.Vector3().sub(planetPosition),
+    );
+    nightOverlay.mesh.position.copy(planetPosition);
+    scene.add(nightOverlay.mesh);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture, nightOverlay.geometry, nightOverlay.material);
 
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
@@ -746,9 +763,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const moonTexture = makeMoonTexture();
     const moonMaterial = new THREE.MeshStandardMaterial({
       map: moonTexture,
-      color: '#d9dce7',
-      emissive: '#9ca8c2',
-      emissiveIntensity: 0.42,
+      color: '#e3e5e9',
       roughness: 1,
       metalness: 0,
     });
@@ -771,16 +786,13 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(moonGlow);
     resources.push(moonGeometry, moonMaterial, moonTexture, moonGlowTexture, moonGlowMaterial);
 
-    const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 2.8);
+    const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 3.5);
     sunlight.position.set(0, 0, 0);
     sunlight.target.position.copy(planetPosition);
     scene.add(sunlight, sunlight.target);
-    scene.add(new THREE.HemisphereLight('#c4d6ef', '#344258', 0.56));
-    scene.add(new THREE.AmbientLight('#7787a6', 0.48));
-    const moonFill = new THREE.DirectionalLight('#d6e2ff', 0.72);
-    moonFill.position.copy(moonPosition).add(new THREE.Vector3(18, 12, 24));
-    moonFill.target.position.copy(moonPosition);
-    scene.add(moonFill, moonFill.target);
+    // Keep a restrained fill so the day/night terminator remains obvious.
+    scene.add(new THREE.HemisphereLight('#b6c9e3', '#18263b', 0.14));
+    scene.add(new THREE.AmbientLight('#64758e', 0.11));
 
     const worldUp = new THREE.Vector3(0, 1, 0);
     const starOrbitRadius = getStarOrbitRadius(starRadius);
