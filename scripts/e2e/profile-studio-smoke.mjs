@@ -196,7 +196,7 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /プロフィール・バッジ/ }).first().click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
-  await page.locator('.ps-card img').waitFor({ state: 'visible' });
+  await page.locator('.ps-card img[src^="https://profile-image.test/"]').waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: '自己紹介を書く' }).count(), 0, 'A configured bio should hide the owner prompt');
   await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-image-bio-375.png' });
 
