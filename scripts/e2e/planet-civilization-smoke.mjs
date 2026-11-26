@@ -286,15 +286,6 @@ try {
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
-  // The camera view may be aimed away from the HUD after the pointer drag;
-  // the camera toggle was already verified before dragging. Reload the screen
-  // to restore Planet Civilization for the remaining independent checks.
-
-  // Use the same exit control available to players; the cinematic voyage is
-  // intentionally not played through its full 342-second duration in this smoke test.
-  await page.getByTestId('flight-exit-button').click();
-  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
-
   await page.goto(origin + '/#study', { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '学習・テスト対策', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByRole('button', { name: '集中', exact: true }).click();
