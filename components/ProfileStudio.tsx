@@ -103,12 +103,12 @@ const NAME_FONTS = [
 const DB_NAME_FONT_IDS = ['rounded','sans','serif','mono','marshmallow','sakura-pop','mainframe','modern','thunder-riot'];
 
 const COSMETICS = [
-  { id: 'badge_first_study', category: 'badge', name: 'はじめの一歩', icon: '📚', detail: '学習セッションを1回完了', target: 1, metric: 'study_sessions' },
-  { id: 'frame_aurora', category: 'frame', name: 'オーロラフレーム', icon: '🌌', detail: '学習セッションを5回完了', target: 5, metric: 'study_sessions' },
-  { id: 'badge_study_10', category: 'badge', name: '学びの継続者', icon: '🔥', detail: '学習セッションを10回完了', target: 10, metric: 'study_sessions' },
-  { id: 'effect_sparkle', category: 'effect', name: 'スターライト', icon: '✨', detail: '学習時間が合計120分に到達', target: 120, metric: 'focus_minutes' },
-  { id: 'badge_contribution_3', category: 'badge', name: 'キャンパスサポーター', icon: '🌟', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
-  { id: 'frame_prism', category: 'frame', name: 'プリズムフレーム', icon: '💎', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
+  { id: 'badge_first_study', category: 'badge', name: 'はじめの一歩', detail: '学習セッションを1回完了', target: 1, metric: 'study_sessions' },
+  { id: 'frame_aurora', category: 'frame', name: 'オーロラフレーム', detail: '学習セッションを5回完了', target: 5, metric: 'study_sessions' },
+  { id: 'badge_study_10', category: 'badge', name: '学びの継続者', detail: '学習セッションを10回完了', target: 10, metric: 'study_sessions' },
+  { id: 'effect_sparkle', category: 'effect', name: 'スターライト', detail: '学習時間が合計120分に到達', target: 120, metric: 'focus_minutes' },
+  { id: 'badge_contribution_3', category: 'badge', name: 'キャンパスサポーター', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
+  { id: 'frame_prism', category: 'frame', name: 'プリズムフレーム', detail: '貢献ポイント獲得の記録が3件', target: 3, metric: 'approved_contributions' },
 ] as const;
 
 const PROFILE_CSS = [
@@ -131,7 +131,7 @@ const PROFILE_CSS = [
   '.ps-avatar-wrap.ps-frame-prism{background:conic-gradient(from 0deg,#f0abfc,#67e8f9,#fcd34d,#a78bfa,#f0abfc);animation:ps-spin 9s linear infinite}',
   '.ps-avatar-inner{display:flex;width:100%;height:100%;align-items:center;justify-content:center;overflow:hidden;border:3px solid rgba(255,255,255,.8);border-radius:50%;background:linear-gradient(145deg,#243b66,#172343);font-size:42px}',
   '.ps-avatar-inner img{width:100%;height:100%;object-fit:cover}',
-  '.ps-avatar-sparkle:after{content:"✦";position:absolute;right:-5px;top:0;color:#bae6fd;font-size:28px;text-shadow:0 0 14px #67e8f9;animation:ps-twinkle 1.8s ease-in-out infinite}',
+  '.ps-avatar-sparkle:after{content:"";position:absolute;right:-5px;top:0;width:22px;height:22px;background:#bae6fd;clip-path:polygon(50% 0,61% 38%,100% 50%,61% 62%,50% 100%,39% 62%,0 50%,39% 38%);filter:drop-shadow(0 0 8px #67e8f9);animation:ps-twinkle 1.8s ease-in-out infinite}',
   '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8,0 0 34px rgba(129,140,248,.55)}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
   '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
   '.ps-font-m-plus-rounded{font-family:"M PLUS Rounded 1c","Noto Sans JP",sans-serif}.ps-font-zen-maru{font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif}.ps-font-kiwi-maru{font-family:"Kiwi Maru","Noto Serif JP",serif}.ps-font-zen-kaku{font-family:"Zen Kaku Gothic New","Noto Sans JP",sans-serif}.ps-font-shippori-mincho{font-family:"Shippori Mincho","Noto Serif JP",serif}.ps-font-mochiy-pop{font-family:"Mochiy Pop One","Noto Sans JP",sans-serif}.ps-font-dela-gothic{font-family:"Dela Gothic One","Noto Sans JP",sans-serif}.ps-font-dotgothic16{font-family:"DotGothic16","Noto Sans JP",monospace}.ps-font-yusei-magic{font-family:"Yusei Magic","Noto Sans JP",sans-serif}',
