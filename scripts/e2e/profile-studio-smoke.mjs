@@ -194,7 +194,22 @@ try {
     await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-light-' + width + '.png' });
     const previewBox = await page.locator('#profile-preview').boundingBox();
     const editorBox = await page.locator('#profile-basic').boundingBox();
-    assert.ok(previewBox && editorBox && previewBox.y < editorBox.y, 'On mobile, the preview should appear before the editor');
+    const layoutDebug = await page.evaluate(() => {
+      const preview = document.querySelector('#profile-preview');
+      const editor = document.querySelector('#profile-basic');
+      const grid = preview?.parentElement?.parentElement;
+      return {
+        scrollY: window.scrollY,
+        previewRect: preview?.getBoundingClientRect().toJSON(),
+        editorRect: editor?.getBoundingClientRect().toJSON(),
+        previewParentOrder: preview?.parentElement ? getComputedStyle(preview.parentElement).order : null,
+        editorParentOrder: editor?.parentElement ? getComputedStyle(editor.parentElement).order : null,
+        gridDisplay: grid ? getComputedStyle(grid).display : null,
+        gridColumns: grid ? getComputedStyle(grid).gridTemplateColumns : null,
+      };
+    });
+    console.log('PROFILE_MOBILE_LAYOUT ' + width + ' ' + JSON.stringify(layoutDebug));
+    assert.ok(previewBox && editorBox && previewBox.y < editorBox.y, 'On mobile, the preview should appear before the editor: ' + JSON.stringify({ previewBox, editorBox, layoutDebug }));
   }
   await page.setViewportSize({ width: 320, height: 900 });
   await page.screenshot({ path: artifactDir + '/profile-editor-mobile-320.png', fullPage: true });
