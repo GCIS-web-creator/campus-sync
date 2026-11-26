@@ -8,6 +8,7 @@ import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog'
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
 import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
+import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
 
 type Props = {
   stage: number;
@@ -138,23 +139,6 @@ function createSolarCoronaTexture(color: string, seed: number) {
   return texture;
 }
 
-function createStarField(seed: number) {
-  const random = seeded(seed + 701);
-  const positions: number[] = []; const colors: number[] = [];
-  const colorChoices = [0xc4d8ff, 0xffe4c3, 0xffffff, 0xffc6a6, 0xb9f0ff];
-  for (let index = 0; index < 1450; index += 1) {
-    const y = random() * 2 - 1; const angle = random() * Math.PI * 2;
-    const radius = Math.sqrt(1 - y * y); const distance = 44 + random() * 22;
-    positions.push(Math.cos(angle) * radius * distance, y * distance, Math.sin(angle) * radius * distance);
-    const color = new THREE.Color(colorChoices[Math.floor(random() * colorChoices.length)]);
-    colors.push(color.r, color.g, color.b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  return new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.12, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false }));
-}
-
 function createFallbackSurfaceTexture(seed: number, atmosphereColor: string) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024; canvas.height = 512;
@@ -273,7 +257,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#050914');
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 3000);
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 6500);
     const defaultCameraPosition = new THREE.Vector3(0.1, 0.42, 10.5);
     camera.position.copy(defaultCameraPosition);
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -318,9 +302,9 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
       };
       controls.enabled = false;
     };
-    const starField = createStarField(numericId);
-    scene.add(starField);
-    resources.push(starField.geometry, starField.material);
+    const galaxyBackdrop = createGalaxyBackdrop(numericId, { radius: 5_700, starCount: 18_000 });
+    scene.add(galaxyBackdrop.group);
+    resources.push({ dispose: () => galaxyBackdrop.dispose() });
 
     const system = new THREE.Group();
     scene.add(system);
@@ -566,6 +550,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     const render = () => {
       if (!active) return;
       const delta = Math.min(clock.getDelta(), 0.05);
+      galaxyBackdrop.update(performance.now() / 1_000);
       // 自転は惑星自身の座標系で進み、太陽光源の座標は変えない。
       system.rotation.y += delta * (spec.rogue ? 0.006 : 0.012);
       clouds.rotation.y += delta * 0.017;
