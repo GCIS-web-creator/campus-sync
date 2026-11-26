@@ -215,7 +215,7 @@ export function createGalaxyBackdrop(seed: number, options: GalaxyBackdropOption
     vertexShader: STAR_VERTEX_SHADER,
     fragmentShader: STAR_FRAGMENT_SHADER,
     transparent: true,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
