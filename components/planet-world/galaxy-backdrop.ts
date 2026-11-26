@@ -86,6 +86,7 @@ const NEBULA_FRAGMENT_SHADER = /* glsl */ `
     colour *= 1.0 - disk * dustLanes * 0.16;
 
     gl_FragColor = vec4(colour, 1.0);
+    #include <colorspace_fragment>
   }
 `;
 
@@ -126,6 +127,7 @@ const STAR_FRAGMENT_SHADER = /* glsl */ `
     if (alpha < 0.012) discard;
     vec3 colour = vStarColour * (0.74 + vStarTwinkle * 0.46);
     gl_FragColor = vec4(colour, alpha);
+    #include <colorspace_fragment>
   }
 `;
 
