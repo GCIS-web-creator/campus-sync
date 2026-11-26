@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ContributionRankBadge } from '@/components/ContributionRanks';
 import { BadgeCheck, Check, ChevronLeft, Compass, Eye, Lock, Medal, Palette, RefreshCw, Search, ShieldCheck, Sparkles, Star, UserRound, Users, SlidersHorizontal } from 'lucide-react';
@@ -140,6 +140,9 @@ const PROFILE_CSS = [
   '.ps-deco-thumb{display:inline-grid;flex:none;place-items:center;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:linear-gradient(140deg,rgba(255,255,255,.08),rgba(15,23,42,.28));width:68px;height:46px}',
   '.ps-deco-thumb svg{display:block;width:100%;height:100%}.ps-deco-thumb-avatar{width:46px;height:46px;border-radius:50%}.ps-deco-thumb-small{width:42px;height:34px;border-radius:9px}.ps-deco-thumb-avatar.ps-deco-thumb-small{width:34px;height:34px;border-radius:50%}.ps-deco-thumb-banner{width:66px;height:40px}',
   '.ps-profile-category-nav{scrollbar-width:none}.ps-profile-category-nav::-webkit-scrollbar{display:none}',
+  '.ps-achievement-unlocked{animation:ps-achievement-pop 1.2s ease-in-out 2;border-color:rgba(34,211,238,.65)!important;box-shadow:0 0 0 2px rgba(34,211,238,.12),0 0 22px rgba(34,211,238,.16)}@keyframes ps-achievement-pop{0%,100%{transform:scale(1)}45%{transform:scale(1.012);box-shadow:0 0 0 3px rgba(34,211,238,.22),0 0 28px rgba(139,92,246,.22)}}',
+  '@media(prefers-reduced-motion:reduce){.ps-achievement-unlocked{animation:none!important}}',
+
   '.ps-banner-pattern{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.26}',
   '.ps-banner-pattern-grid{background-image:linear-gradient(rgba(220,245,255,.55) 1px,transparent 1px),linear-gradient(90deg,rgba(220,245,255,.55) 1px,transparent 1px);background-size:24px 24px}',
   '.ps-banner-pattern-wave{background-image:repeating-radial-gradient(ellipse at 0 100%,transparent 0 16px,rgba(220,245,255,.6) 17px 18px,transparent 19px 34px)}',
@@ -310,6 +313,8 @@ export default function ProfileStudio({
   const [profile, setProfile] = useState<ProfileDraft>(DEFAULT_PROFILE);
   const [metrics, setMetrics] = useState<Metrics>({ study_sessions: 0, focus_minutes: 0, approved_contributions: 0 });
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
+  const [recentlyUnlockedIds, setRecentlyUnlockedIds] = useState<string[]>([]);
+  const previousUnlocksRef = useRef<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -397,6 +402,15 @@ export default function ProfileStudio({
       document.removeEventListener('visibilitychange', refresh);
     };
   }, [refreshUnlockedIds]);
+
+  useEffect(() => {
+    const newlyUnlocked = unlockedIds.filter(id => previousUnlocksRef.current.length > 0 && !previousUnlocksRef.current.includes(id));
+    previousUnlocksRef.current = unlockedIds;
+    if (!newlyUnlocked.length) return;
+    setRecentlyUnlockedIds(newlyUnlocked);
+    const timeout = window.setTimeout(() => setRecentlyUnlockedIds([]), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [unlockedIds]);
 
   const loadDirectory = useCallback(async () => {
     setDirectoryLoading(true);
@@ -773,7 +787,7 @@ export default function ProfileStudio({
                     const current = metricValue(item.metric);
                     const achieved = unlockedIds.includes(item.id);
                     const progress = Math.min(100, Math.round((current / item.target) * 100));
-                    return <div key={item.id} className="rounded-xl border border-slate-300/20 p-3"><div className="flex items-center gap-2"><BadgeIcon id={item.id} state={achieved ? 'unlocked' : 'locked'} size={26} /><div className="min-w-0 flex-1"><p className="text-xs font-black">{item.name}</p><p className={'mt-0.5 text-[10px] ' + muted}>{item.detail}</p></div><span className={'text-[9px] font-black ' + (achieved ? 'text-emerald-500' : muted)}>{achieved ? '解放済み' : current + '/' + item.target}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-500/15"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all" style={{ width: progress + '%' }} /></div></div>;
+                    return <div key={item.id} className={'rounded-xl border border-slate-300/20 p-3 ' + (recentlyUnlockedIds.includes(item.id) ? 'ps-achievement-unlocked' : '')}><div className="flex items-center gap-2"><BadgeIcon id={item.id} state={achieved ? 'unlocked' : 'locked'} size={26} /><div className="min-w-0 flex-1"><p className="text-xs font-black">{item.name}</p><p className={'mt-0.5 text-[10px] ' + muted}>{item.detail}</p></div><span className={'text-[9px] font-black ' + (achieved ? 'text-emerald-500' : muted)}>{achieved ? '解放済み' : current + '/' + item.target}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-500/15"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all" style={{ width: progress + '%' }} /></div></div>;
                   })}
                 </div>
                 <p className={'mt-3 text-[10px] leading-5 ' + muted}>条件を満たした報酬は自動で解放状況に反映されます。解放条件そのものは既存の実績設定に従います。</p>
