@@ -146,7 +146,7 @@ try {
 
   async function openProfile() {
     await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
-    await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+    await page.getByLabel('メニューを検索').fill('プロフィール・バッジ');
     await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
     await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
     await page.getByText('リアルタイムプレビュー', { exact: true }).waitFor({ state: 'visible' });
@@ -205,7 +205,7 @@ try {
   mockProfile.bio = '学習とものづくりを楽しんでいます。';
   await page.setViewportSize({ width: 375, height: 900 });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+  await page.getByLabel('メニューを検索').fill('プロフィール・バッジ');
   await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.locator('.ps-card img[src^="https://profile-image.test/"]').waitFor({ state: 'visible' });
@@ -219,7 +219,7 @@ try {
   });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+  await page.getByLabel('メニューを検索').fill('プロフィール・バッジ');
   await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   for (const width of [320, 375, 414]) {
@@ -241,7 +241,7 @@ try {
   for (const [points, rankName] of expectedRanks) {
     mockProfile.contribution_points = points;
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+    await page.getByLabel('メニューを検索').fill('プロフィール・バッジ');
   await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
     await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
     await page.locator('.ps-card').getByText(rankName, { exact: true }).waitFor({ state: 'visible' });
