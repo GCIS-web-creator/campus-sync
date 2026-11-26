@@ -1,8 +1,8 @@
 /* v4 additional 12 theme accents; thumbnails remain static unless the selected preview is animating. */
 .pn-t3-particle{position:absolute;display:block;width:var(--t3-size);height:var(--t3-size);color:var(--t3-color);pointer-events:none;opacity:.82;animation:pn-t3-float 8s ease-in-out var(--t3-delay,0s) infinite alternate}
 .pn-t3-dot{position:absolute;inset:0;border-radius:50%;background:var(--t3-color);box-shadow:0 0 9px var(--t3-color)}
-.pn-t3-leaf{font-size:var(--t3-size);line-height:1;color:var(--t3-color);text-shadow:0 0 6px var(--t3-color)}
-.pn-t3-flake{font-size:var(--t3-size);line-height:1;color:#fff;text-shadow:0 0 6px #a8dfff}
+.pn-t3-leaf{position:absolute;inset:0;display:block;background:var(--t3-color);clip-path:polygon(50% 0,61% 34%,94% 18%,72% 50%,100% 72%,63% 70%,50% 100%,37% 70%,0 72%,28% 50%,6% 18%,39% 34%);filter:drop-shadow(0 0 4px var(--t3-color))}
+.pn-t3-flake{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,#fff 0 1px,transparent 1.4px);box-shadow:0 -5px 0 -1px #fff,0 5px 0 -1px #fff,-5px 0 0 -1px #fff,5px 0 0 -1px #fff;filter:drop-shadow(0 0 4px #a8dfff)}
 .pn-t3-bubble{position:absolute;inset:0;border:1px solid #e6fbff;border-radius:50%;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.8),transparent 42%)}
 .pn-t3-diamond{position:absolute;inset:0;background:var(--t3-color);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);border:1px solid #fff}
 .pn-icon-lab .ps-ring,.pn-icon-fw .ps-ring,.pn-icon-momiji .ps-ring,.pn-icon-snow .ps-ring,.pn-icon-halloween .ps-ring,.pn-icon-neon .ps-ring,.pn-icon-magic .ps-ring,.pn-icon-ocean .ps-ring,.pn-icon-cat .ps-ring,.pn-icon-dog .ps-ring,.pn-icon-sweets .ps-ring,.pn-icon-glass .ps-ring{filter:drop-shadow(0 0 5px currentColor)}
