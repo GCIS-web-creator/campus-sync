@@ -261,9 +261,9 @@ try {
   // the camera toggle was already verified before dragging. Reload the screen
   // to restore Planet Civilization for the remaining independent checks.
 
-  // Navigate back to the explicit planet panel route for the remaining
-  // independent checks; the voyage itself is intentionally 342 seconds.
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  // Use the same exit control available to players; the cinematic voyage is
+  // intentionally not played through its full 342-second duration in this smoke test.
+  await page.getByTestId('flight-exit-button').click();
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
