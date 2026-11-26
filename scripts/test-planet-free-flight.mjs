@@ -96,7 +96,9 @@ test('the piloted explorer remains a small spacecraft at the simulation scale', 
   const simulator = readFileSync(new URL('../components/planet-world/FreeFlightSimulator.tsx', import.meta.url), 'utf8');
   assert.match(simulator, /CRAFT_VISUAL_LENGTH = 0\.00025/);
   assert.match(simulator, /logarithmicDepthBuffer: true/);
-  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: 0\.00065 \}\)/);
+  assert.match(simulator, /PerspectiveCamera\(72, width \/ height, 0\.000000001, 340_000\)/);
+  assert.match(simulator, /Math\.max\(0\.00000028, Math\.min\(0\.0000025/);
+  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: 0\.00000065 \}\)/);
   assert.match(simulator, /'arrowup'/);
   assert.match(simulator, /keyName: 'w'/);
   assert.match(simulator, /keyName: 'q'/);
