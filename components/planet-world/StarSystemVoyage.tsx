@@ -1365,14 +1365,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 type="button"
                 aria-pressed={viewMode === 'cockpit'}
                 data-testid="flight-view-cockpit"
-                onClick={() => selectViewMode('cockpit')
+                onClick={() => selectViewMode('cockpit')}
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >船内視点</button>
               <button
                 type="button"
                 aria-pressed={viewMode === 'chase'}
                 data-testid="flight-view-chase"
-                onClick={() => selectViewMode('chase')
+                onClick={() => selectViewMode('chase')}
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >外部追跡カメラ</button>
             </div>
