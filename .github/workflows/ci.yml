@@ -54,6 +54,10 @@ jobs:
         run: npm run test:chemistry-question-bank
       - name: Test planet MP technology tree catalog and prerequisites
         run: npm run test:planet-tree
+      - name: Test profile decoration catalog and approval boundary
+        run: node --test scripts/test-profile-studio-catalog.mjs
+      - name: Test math practice list search and pagination
+        run: node --experimental-strip-types --test scripts/test-math-practice-catalog.mjs
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime and Playwright for browser smoke tests
