@@ -15,7 +15,7 @@ export const VOYAGE_SCALE = {
 } as const;
 
 // The star is deliberately enlarged slightly for cinematic readability.
-// A G-class star remains more than 130 Earth diameters across in the scene.
+// A G-class star is enlarged to more than 150 Earth diameters across in the scene.
 export const STAR_VISUAL_RADIUS_MULTIPLIER = 1.4;
 export const STAR_CORONA_OUTER_RADIUS_SOLAR = 2.9;
 
