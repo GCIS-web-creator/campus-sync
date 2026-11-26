@@ -271,9 +271,12 @@ try {
   await page.getByRole('button', { name: '戦艦を縮小', exact: true }).click();
   const inspectionCanvas = page.locator('canvas').last();
   await inspectionCanvas.waitFor({ state: 'visible' });
-  await inspectionCanvas.hover();
+  const inspectionBounds = await inspectionCanvas.boundingBox();
+  assert.ok(inspectionBounds, '360-degree inspection canvas should have a visible hit area');
+  const dragStart = { x: inspectionBounds.x + inspectionBounds.width * 0.5, y: inspectionBounds.y + inspectionBounds.height * 0.5 };
+  await page.mouse.move(dragStart.x, dragStart.y);
   await page.mouse.down();
-  await page.mouse.move(260, 360, { steps: 5 });
+  await page.mouse.move(dragStart.x + 65, dragStart.y + 28, { steps: 5 });
   await page.mouse.up();
   await page.mouse.wheel(0, -120);
   await page.getByTestId('flight-view-cockpit').click();
