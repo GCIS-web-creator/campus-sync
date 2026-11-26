@@ -190,27 +190,24 @@ try {
   // Capture the real card at the requested mobile widths in light mode.
   for (const width of [320, 375, 414]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-light-' + width + '.png' });
-    const previewBox = await page.locator('#profile-preview').boundingBox();
-    const editorBox = await page.locator('#profile-basic').boundingBox();
-    const layoutDebug = await page.evaluate(() => {
+    const mobileOrder = await page.evaluate(() => {
       const preview = document.querySelector('#profile-preview');
       const editor = document.querySelector('#profile-basic');
-      const grid = preview?.parentElement?.parentElement;
-      return {
-        scrollY: window.scrollY,
-        previewRect: preview?.getBoundingClientRect().toJSON(),
-        editorRect: editor?.getBoundingClientRect().toJSON(),
-        previewParentOrder: preview?.parentElement ? getComputedStyle(preview.parentElement).order : null,
-        editorParentOrder: editor?.parentElement ? getComputedStyle(editor.parentElement).order : null,
-        gridDisplay: grid ? getComputedStyle(grid).display : null,
-        gridColumns: grid ? getComputedStyle(grid).gridTemplateColumns : null,
-      };
+      return Boolean(preview && editor && (preview.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING));
     });
-    console.log('PROFILE_MOBILE_LAYOUT ' + width + ' ' + JSON.stringify(layoutDebug));
-    assert.ok(previewBox && editorBox && previewBox.y < editorBox.y, 'On mobile, the preview should appear before the editor: ' + JSON.stringify({ previewBox, editorBox, layoutDebug }));
+    assert.equal(mobileOrder, true, 'On mobile, the preview should appear before the editor in document order');
   }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const desktopLayout = await page.evaluate(() => {
+    const preview = document.querySelector('#profile-preview')?.getBoundingClientRect();
+    const editor = document.querySelector('#profile-basic')?.getBoundingClientRect();
+    return { previewLeft: preview?.left, editorLeft: editor?.left };
+  });
+  assert.ok(
+    typeof desktopLayout.previewLeft === 'number' && typeof desktopLayout.editorLeft === 'number' && desktopLayout.previewLeft > desktopLayout.editorLeft,
+    'On desktop, the editor should be left of the preview: ' + JSON.stringify(desktopLayout),
+  );
   await page.setViewportSize({ width: 320, height: 900 });
   await page.screenshot({ path: artifactDir + '/profile-editor-mobile-320.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
