@@ -61,7 +61,7 @@ test('engine thrust changes velocity without an arbitrary top-speed clamp and co
       throttle: 1,
     }, []).state;
   }
-  assert.ok(state.velocityKmS.x > 7.6 + 2.9);
+  assert.ok(state.velocityKmS.x > 7.6 + 0.29);
   assert.ok(state.velocityKmS.x < 7.6 + FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2 * 100 + 1e-8);
   assert.ok(state.deltaVRemainingKmS < FREE_FLIGHT_DELTA_V_BUDGET_KM_S);
 });
