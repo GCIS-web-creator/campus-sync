@@ -1,10 +1,10 @@
 export type MathCatalogItem = {
   id: string;
-  title: string;
-  prompt: string;
-  subject: string;
-  unit: string;
-  difficulty: string;
+  title?: string | null;
+  prompt?: string | null;
+  subject?: string | null;
+  unit?: string | null;
+  difficulty?: string | null;
 };
 
 export function filterMathPracticeQuestions<T extends MathCatalogItem>(
@@ -14,9 +14,9 @@ export function filterMathPracticeQuestions<T extends MathCatalogItem>(
 ): T[] {
   const needle = query.trim().toLocaleLowerCase('ja-JP').replace(/\s+/g, ' ');
   return items.filter(item => {
-    if (difficulty !== 'all' && item.difficulty !== difficulty) return false;
+    if (difficulty !== 'all' && (item.difficulty || '') !== difficulty) return false;
     if (!needle) return true;
-    const haystack = [item.id, item.title, item.prompt, item.subject, item.unit]
+    const haystack = [item.id, item.title || '', item.prompt || '', item.subject || '', item.unit || '']
       .join(' ')
       .toLocaleLowerCase('ja-JP')
       .replace(/\s+/g, ' ');
