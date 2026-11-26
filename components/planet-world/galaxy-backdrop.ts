@@ -52,6 +52,7 @@ const GALAXY_NOISE = /* glsl */ `
 `;
 
 const NEBULA_FRAGMENT_SHADER = /* glsl */ `
+  #include <common>
   uniform float uTime;
   uniform vec3 uSeed;
   varying vec3 vGalaxyDirection;
@@ -111,6 +112,7 @@ const STAR_VERTEX_SHADER = /* glsl */ `
 `;
 
 const STAR_FRAGMENT_SHADER = /* glsl */ `
+  #include <common>
   varying vec3 vStarColour;
   varying float vStarTwinkle;
   varying float vPointSize;
