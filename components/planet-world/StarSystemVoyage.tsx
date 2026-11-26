@@ -174,7 +174,7 @@ function makeStarGranulationTexture(color: string, seed: number) {
 
   // Dense, irregular convection cells: bright granule centres surrounded by
   // darker intergranular lanes, rather than a flat emissive sphere.
-  for (let index = 0; index < 2_800; index += 1) {
+  for (let index = 0; index < 5_600; index += 1) {
     const x = random() * canvas.width;
     const y = random() * canvas.height;
     const rx = 2.4 + random() * 7.6;
@@ -182,8 +182,8 @@ function makeStarGranulationTexture(color: string, seed: number) {
     const turn = random() * Math.PI;
     const warm = random();
     const gradient = context.createRadialGradient(x, y, 0, x, y, rx * 1.5);
-    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.42)' : 'rgba(255,195,104,0.34)');
-    gradient.addColorStop(0.55, 'rgba(255,150,61,0.16)');
+    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.62)' : 'rgba(255,195,104,0.50)');
+    gradient.addColorStop(0.55, 'rgba(255,150,61,0.24)');
     gradient.addColorStop(1, 'rgba(103,35,18,0.03)');
     context.save();
     context.translate(x, y);
@@ -192,7 +192,7 @@ function makeStarGranulationTexture(color: string, seed: number) {
     context.beginPath();
     context.ellipse(0, 0, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
     context.fill();
-    context.strokeStyle = 'rgba(95,34,16,' + (0.04 + random() * 0.08).toFixed(3) + ')';
+    context.strokeStyle = 'rgba(95,34,16,' + (0.08 + random() * 0.16).toFixed(3) + ')';
     context.lineWidth = 0.5 + random() * 1.1;
     context.beginPath();
     context.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -201,10 +201,10 @@ function makeStarGranulationTexture(color: string, seed: number) {
   }
 
   // A few subtle sunspot groups help make surface rotation legible.
-  for (let spot = 0; spot < 18; spot += 1) {
+  for (let spot = 0; spot < 26; spot += 1) {
     const x = random() * canvas.width;
     const y = 28 + random() * (canvas.height - 56);
-    const radius = 4 + random() * 13;
+    const radius = 6 + random() * 16;
     context.save();
     context.translate(x, y);
     context.rotate((random() - 0.5) * 0.8);
@@ -271,18 +271,26 @@ function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirec
 
 function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
   const ship = new THREE.Group();
-  ship.name = 'CampusSync Deep Space Explorer';
+  ship.name = 'CampusSync Long Range Exploration Freighter';
+
+  // The ship's complete nose-to-engine length remains exactly 1 km.
+  // Its broad modular silhouette is inspired by industrial deep-space vessels:
+  // a protected command bow, central pressure/cargo hull, twin outboard drives,
+  // exposed service trusses and layered armour panels.
   const length = VOYAGE_SCALE.spacecraftLength;
-  const width = length * 0.42;
-  const height = length * 0.12;
-  const hull = new THREE.MeshStandardMaterial({ color: '#9fb4c7', metalness: 0.78, roughness: 0.32 });
-  const dark = new THREE.MeshStandardMaterial({ color: '#17283a', metalness: 0.7, roughness: 0.42 });
-  const wingMaterial = new THREE.MeshStandardMaterial({ color: '#627e96', metalness: 0.72, roughness: 0.38, side: THREE.DoubleSide });
-  const accent = new THREE.MeshStandardMaterial({ color: '#b9d9e8', metalness: 0.84, roughness: 0.24 });
-  const glass = new THREE.MeshStandardMaterial({ color: '#102e49', emissive: '#1f83ad', emissiveIntensity: 0.7, metalness: 0.45, roughness: 0.16 });
-  const engineGlow = new THREE.MeshBasicMaterial({ color: '#66dfff', toneMapped: false });
-  const navGlow = new THREE.MeshBasicMaterial({ color: '#ffb779', toneMapped: false });
-  resources.push(hull, dark, wingMaterial, accent, glass, engineGlow, navGlow);
+  const width = length * 0.68;
+  const height = length * 0.22;
+
+  const hull = new THREE.MeshStandardMaterial({ color: '#9baab7', metalness: 0.82, roughness: 0.34 });
+  const darkHull = new THREE.MeshStandardMaterial({ color: '#263644', metalness: 0.76, roughness: 0.46 });
+  const armour = new THREE.MeshStandardMaterial({ color: '#596d7d', metalness: 0.78, roughness: 0.4 });
+  const lightArmour = new THREE.MeshStandardMaterial({ color: '#c2ced5', metalness: 0.82, roughness: 0.29 });
+  const frame = new THREE.MeshStandardMaterial({ color: '#384b59', metalness: 0.86, roughness: 0.38 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#102a40', emissive: '#17688e', emissiveIntensity: 0.72, metalness: 0.52, roughness: 0.14 });
+  const engineGlow = new THREE.MeshBasicMaterial({ color: '#65e5ff', toneMapped: false });
+  const warmGlow = new THREE.MeshBasicMaterial({ color: '#ffad70', toneMapped: false });
+  const warning = new THREE.MeshStandardMaterial({ color: '#d8a34d', metalness: 0.58, roughness: 0.62 });
+  resources.push(hull, darkHull, armour, lightArmour, frame, glass, engineGlow, warmGlow, warning);
 
   const addPart = (
     geometry: THREE.BufferGeometry,
@@ -295,79 +303,223 @@ function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
     mesh.position.copy(position);
     mesh.rotation.copy(rotation);
     mesh.scale.copy(scale);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     ship.add(mesh);
     resources.push(geometry);
     return mesh;
   };
 
-  // Long central pressure hull and pointed forward command section.
-  addPart(new THREE.CylinderGeometry(width * 0.105, width * 0.14, length * 0.76, 14), hull,
-    new THREE.Vector3(0, 0, length * 0.045), new THREE.Euler(Math.PI / 2, 0, 0));
-  addPart(new THREE.ConeGeometry(width * 0.14, length * 0.27, 14), accent,
-    new THREE.Vector3(0, 0, -length * 0.455), new THREE.Euler(-Math.PI / 2, 0, 0));
-  addPart(new THREE.CylinderGeometry(width * 0.095, width * 0.12, length * 0.22, 12), dark,
-    new THREE.Vector3(0, 0, length * 0.48), new THREE.Euler(Math.PI / 2, 0, 0));
+  const alongZ = new THREE.Euler(Math.PI / 2, 0, 0);
+  const addBeam = (from: THREE.Vector3, to: THREE.Vector3, radius: number, material: THREE.Material) => {
+    const direction = to.clone().sub(from);
+    const beam = addPart(
+      new THREE.CylinderGeometry(radius, radius * 1.08, direction.length(), 8, 1),
+      material,
+      from.clone().add(to).multiplyScalar(0.5),
+    );
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    return beam;
+  };
 
-  // Swept delta wings and stabilizers create a recognisable, fast explorer profile.
-  const wing = new THREE.Shape();
-  wing.moveTo(-width * 0.13, -length * 0.2);
-  wing.lineTo(width * 0.13, -length * 0.2);
-  wing.lineTo(width * 0.5, length * 0.31);
-  wing.lineTo(width * 0.46, length * 0.43);
-  wing.lineTo(width * 0.19, length * 0.34);
-  wing.lineTo(0, length * 0.14);
-  wing.lineTo(-width * 0.19, length * 0.34);
-  wing.lineTo(-width * 0.46, length * 0.43);
-  wing.lineTo(-width * 0.5, length * 0.31);
-  wing.closePath();
-  const wingGeometry = new THREE.ExtrudeGeometry(wing, { depth: height * 0.065, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: length * 0.002, bevelThickness: length * 0.002 });
-  addPart(wingGeometry, wingMaterial, new THREE.Vector3(0, -height * 0.04, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+  // Main pressure hull, cargo spine and tapered forward command bow.
+  addPart(
+    new THREE.CylinderGeometry(width * 0.18, width * 0.235, length * 0.62, 20, 2),
+    hull,
+    new THREE.Vector3(0, 0, length * 0.025),
+    alongZ,
+  );
+  addPart(
+    new THREE.BoxGeometry(width * 0.58, height * 0.66, length * 0.38),
+    darkHull,
+    new THREE.Vector3(0, -height * 0.015, length * 0.075),
+  );
+  addPart(
+    new THREE.CylinderGeometry(width * 0.12, width * 0.18, length * 0.16, 16, 1),
+    lightArmour,
+    new THREE.Vector3(0, height * 0.015, -length * 0.34),
+    alongZ,
+  );
+  addPart(
+    new THREE.ConeGeometry(width * 0.15, length * 0.16, 18),
+    lightArmour,
+    new THREE.Vector3(0, height * 0.015, -length * 0.42),
+    new THREE.Euler(-Math.PI / 2, 0, 0),
+  );
 
-  const dorsalFin = new THREE.Shape();
-  dorsalFin.moveTo(-width * 0.07, length * 0.14);
-  dorsalFin.lineTo(width * 0.07, length * 0.14);
-  dorsalFin.lineTo(width * 0.045, length * 0.48);
-  dorsalFin.lineTo(0, length * 0.52);
-  dorsalFin.lineTo(-width * 0.045, length * 0.48);
-  dorsalFin.closePath();
-  addPart(new THREE.ExtrudeGeometry(dorsalFin, { depth: height * 0.48, bevelEnabled: false }), accent,
-    new THREE.Vector3(0, height * 0.12, 0), new THREE.Euler(Math.PI / 2, 0, 0));
-
-  // Twin outboard engine pods, central booster and glowing exhaust throats.
+  // Raised command bridge and broad dark viewing windows.
+  addPart(
+    new THREE.BoxGeometry(width * 0.34, height * 0.28, length * 0.15),
+    armour,
+    new THREE.Vector3(0, height * 0.34, -length * 0.205),
+  );
+  addPart(
+    new THREE.SphereGeometry(1, 22, 14),
+    glass,
+    new THREE.Vector3(0, height * 0.57, -length * 0.225),
+    new THREE.Euler(0, 0, 0),
+    new THREE.Vector3(width * 0.16, height * 0.22, length * 0.085),
+  );
   for (const side of [-1, 1]) {
-    const x = side * width * 0.3;
-    addPart(new THREE.CylinderGeometry(width * 0.052, width * 0.064, length * 0.48, 12), dark,
-      new THREE.Vector3(x, -height * 0.03, length * 0.28), new THREE.Euler(Math.PI / 2, 0, 0));
-    addPart(new THREE.CylinderGeometry(width * 0.058, width * 0.058, length * 0.055, 12), accent,
-      new THREE.Vector3(x, -height * 0.03, length * 0.535), new THREE.Euler(Math.PI / 2, 0, 0));
-    addPart(new THREE.ConeGeometry(width * 0.042, length * 0.18, 12), engineGlow,
-      new THREE.Vector3(x, -height * 0.03, length * 0.64), new THREE.Euler(Math.PI / 2, 0, 0));
-    addPart(new THREE.BoxGeometry(width * 0.14, height * 0.055, length * 0.16), hull,
-      new THREE.Vector3(side * width * 0.34, height * 0.17, length * 0.13));
-    addPart(new THREE.SphereGeometry(width * 0.018, 8, 6), navGlow,
-      new THREE.Vector3(side * width * 0.48, 0, length * 0.3));
+    addPart(
+      new THREE.BoxGeometry(width * 0.085, height * 0.09, length * 0.055),
+      warmGlow,
+      new THREE.Vector3(side * width * 0.12, height * 0.31, -length * 0.282),
+    );
   }
 
-  addPart(new THREE.CylinderGeometry(width * 0.075, width * 0.09, length * 0.35, 12), dark,
-    new THREE.Vector3(0, -height * 0.01, length * 0.34), new THREE.Euler(Math.PI / 2, 0, 0));
-  addPart(new THREE.ConeGeometry(width * 0.065, length * 0.2, 12), engineGlow,
-    new THREE.Vector3(0, -height * 0.01, length * 0.58), new THREE.Euler(Math.PI / 2, 0, 0));
+  // Two bulky cargo/crew modules sit outboard of the central hull.
+  for (const side of [-1, 1]) {
+    const x = side * width * 0.255;
+    addPart(
+      new THREE.BoxGeometry(width * 0.19, height * 0.56, length * 0.29),
+      armour,
+      new THREE.Vector3(x, -height * 0.01, length * 0.075),
+    );
+    addPart(
+      new THREE.BoxGeometry(width * 0.155, height * 0.12, length * 0.22),
+      lightArmour,
+      new THREE.Vector3(x, height * 0.34, length * 0.075),
+    );
+    addPart(
+      new THREE.BoxGeometry(width * 0.155, height * 0.13, length * 0.22),
+      darkHull,
+      new THREE.Vector3(x, -height * 0.34, length * 0.075),
+    );
+    addPart(
+      new THREE.BoxGeometry(width * 0.205, height * 0.055, length * 0.15),
+      warning,
+      new THREE.Vector3(x, height * 0.405, length * 0.075),
+    );
 
-  // Raised bridge glazing, dorsal sensor blister and a spine of service modules.
-  addPart(new THREE.SphereGeometry(1, 18, 10), glass,
-    new THREE.Vector3(0, height * 0.72, -length * 0.19), new THREE.Euler(0, 0, 0),
-    new THREE.Vector3(width * 0.105, height * 0.42, length * 0.14));
-  addPart(new THREE.BoxGeometry(width * 0.13, height * 0.07, length * 0.26), accent,
-    new THREE.Vector3(0, height * 0.38, length * 0.12));
-  addPart(new THREE.SphereGeometry(width * 0.035, 10, 8), glass,
-    new THREE.Vector3(0, height * 0.57, length * 0.29));
-  for (let module = 0; module < 5; module += 1) {
-    addPart(new THREE.BoxGeometry(width * 0.16, height * 0.045, length * 0.06), dark,
-      new THREE.Vector3(0, height * 0.33, -length * 0.04 + module * length * 0.085));
+    // Outboard pressure struts, radiator frames and engine supports.
+    addBeam(
+      new THREE.Vector3(side * width * 0.12, 0, length * 0.12),
+      new THREE.Vector3(side * width * 0.29, 0, length * 0.22),
+      height * 0.045,
+      frame,
+    );
+    addBeam(
+      new THREE.Vector3(side * width * 0.12, -height * 0.08, length * 0.25),
+      new THREE.Vector3(side * width * 0.28, -height * 0.08, length * 0.3),
+      height * 0.035,
+      lightArmour,
+    );
   }
+
+  // Twin cylindrical engines, circular nozzle collars and luminous exhausts.
+  for (const side of [-1, 1]) {
+    const x = side * width * 0.285;
+    addPart(
+      new THREE.CylinderGeometry(width * 0.095, width * 0.12, length * 0.31, 18, 2),
+      darkHull,
+      new THREE.Vector3(x, -height * 0.02, length * 0.285),
+      alongZ,
+    );
+    addPart(
+      new THREE.CylinderGeometry(width * 0.105, width * 0.105, length * 0.045, 18),
+      lightArmour,
+      new THREE.Vector3(x, -height * 0.02, length * 0.438),
+      alongZ,
+    );
+    addPart(
+      new THREE.TorusGeometry(width * 0.09, width * 0.014, 10, 28),
+      frame,
+      new THREE.Vector3(x, -height * 0.02, length * 0.453),
+    );
+    addPart(
+      new THREE.ConeGeometry(width * 0.072, length * 0.07, 16),
+      engineGlow,
+      new THREE.Vector3(x, -height * 0.02, length * 0.465),
+      new THREE.Euler(Math.PI / 2, 0, 0),
+    );
+    addPart(
+      new THREE.SphereGeometry(width * 0.022, 10, 8),
+      warmGlow,
+      new THREE.Vector3(side * width * 0.48, height * 0.04, length * 0.24),
+    );
+    addPart(
+      new THREE.SphereGeometry(width * 0.022, 10, 8),
+      engineGlow,
+      new THREE.Vector3(side * width * 0.48, -height * 0.04, length * 0.24),
+    );
+  }
+
+  // Central heavy-lift engine and its larger segmented nozzle ring.
+  addPart(
+    new THREE.CylinderGeometry(width * 0.115, width * 0.15, length * 0.21, 20, 2),
+    darkHull,
+    new THREE.Vector3(0, -height * 0.035, length * 0.34),
+    alongZ,
+  );
+  addPart(
+    new THREE.TorusGeometry(width * 0.12, width * 0.018, 12, 32),
+    lightArmour,
+    new THREE.Vector3(0, -height * 0.035, length * 0.448),
+  );
+  addPart(
+    new THREE.ConeGeometry(width * 0.09, length * 0.07, 18),
+    engineGlow,
+    new THREE.Vector3(0, -height * 0.035, length * 0.465),
+    new THREE.Euler(Math.PI / 2, 0, 0),
+  );
+
+  // Hull ribs and panel seams make the exterior read as a large engineered vessel.
+  for (let rib = 0; rib < 7; rib += 1) {
+    const z = -length * 0.14 + rib * length * 0.065;
+    addPart(
+      new THREE.BoxGeometry(width * 0.56, height * 0.025, length * 0.012),
+      frame,
+      new THREE.Vector3(0, -height * 0.19, z),
+    );
+  }
+  for (const side of [-1, 1]) {
+    for (let panel = 0; panel < 5; panel += 1) {
+      const z = -length * 0.115 + panel * length * 0.075;
+      addPart(
+        new THREE.BoxGeometry(width * 0.018, height * 0.14, length * 0.048),
+        lightArmour,
+        new THREE.Vector3(side * width * 0.305, height * 0.015, z),
+      );
+      addPart(
+        new THREE.BoxGeometry(width * 0.012, height * 0.045, length * 0.052),
+        warning,
+        new THREE.Vector3(side * width * 0.315, -height * 0.06, z),
+      );
+    }
+  }
+
+  // Radiator fins, dorsal sensor mast, aerials and small service hardware.
+  for (const side of [-1, 1]) {
+    for (let fin = 0; fin < 5; fin += 1) {
+      addPart(
+        new THREE.BoxGeometry(width * 0.085, height * 0.015, length * 0.025),
+        armour,
+        new THREE.Vector3(side * width * 0.26, height * 0.27, length * 0.06 + fin * length * 0.045),
+      );
+    }
+  }
+  addPart(
+    new THREE.CylinderGeometry(height * 0.025, height * 0.035, height * 0.62, 10),
+    frame,
+    new THREE.Vector3(0, height * 0.78, length * 0.035),
+  );
+  addPart(
+    new THREE.SphereGeometry(height * 0.12, 12, 8),
+    glass,
+    new THREE.Vector3(0, height * 1.08, length * 0.035),
+  );
+  for (const side of [-1, 1]) {
+    addPart(
+      new THREE.CylinderGeometry(height * 0.012, height * 0.012, length * 0.12, 8),
+      lightArmour,
+      new THREE.Vector3(side * width * 0.13, height * 0.56, -length * 0.07),
+      new THREE.Euler(0, 0, side * 0.22),
+    );
+  }
+
   return ship;
 }
-
 function makeWarpOverlay() {
   const geometry = new THREE.PlaneGeometry(52, 32);
   const material = new THREE.ShaderMaterial({
@@ -693,7 +845,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
     const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
-    scene.add(camera);
+    // Keep the camera outside the scene graph. The scene is re-centred around
+    // the ship every frame (floating origin), preserving the 1 km hull detail
+    // even while the absolute star-system coordinates are tens of millions km.
     const resources: Array<{ dispose: () => void }> = [];
     // Warp streaks and rings live in the ship's flight frame, not on the
     // camera. Looking around therefore does not drag the acceleration lines.
@@ -865,11 +1019,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // 500 km altitude: skim above the visible atmosphere and keep the
-      // horizon, day/night terminator and sunlit limb together in frame.
+      // At 2,500 km the camera looks ~31 degrees below the local horizon,
+      // revealing both the curved limb and the day/night terminator.
       const target = position.clone()
-        .addScaledVector(tangent, 2.25)
-        .addScaledVector(radial, -0.15);
+        .addScaledVector(tangent, 1.1)
+        .addScaledVector(radial, -0.66);
       return { position, target, up: radial };
     };
 
@@ -879,11 +1033,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // At 500 km altitude, look close to the lunar horizon. The bright limb
-      // and the terminator stay in view without turning the Moon behind us.
+      // The 2,500 km lunar orbit uses a steeper look angle so the Moon fills
+      // the frame, with its sunlit half and night-side terminator both visible.
       const target = position.clone()
-        .addScaledVector(tangent, 0.82)
-        .addScaledVector(radial, -0.045);
+        .addScaledVector(tangent, 0.45)
+        .addScaledVector(radial, -0.9);
       return { position, target, up: radial };
     };
 
@@ -944,7 +1098,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         const startPose = getMoonOrbitPose(Math.PI * 2);
         // A mathematically tangent line reaches the edge of the game's
         // stellar gravity boundary without crossing inside it.
-        const position = startPose.position.clone().lerp(starTangentPoint, t);
+        const position = startPose.position.clone().lerp(starTangentPoint, progress);
         const towardStar = position.clone().negate().normalize();
         const lookDirection = starFlybyDirection.clone().multiplyScalar(0.78)
           .addScaledVector(towardStar, 0.22).normalize();
@@ -955,7 +1109,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         };
       }
       // Continue on the exact same tangent vector and fly straight away.
-      const position = starTangentPoint.clone().lerp(outerEnd, t);
+      const position = starTangentPoint.clone().lerp(outerEnd, progress);
       const target = position.clone().addScaledVector(starFlybyDirection, 4_000);
       return { position, target, up: worldUp };
     };
@@ -982,17 +1136,23 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
+      // Floating origin: move the entire celestial scene by -ship position,
+      // leaving the camera at local zero. This avoids float precision loss
+      // between kilometre-sized hull details and AU-scale world coordinates.
+      scene.position.copy(pose.position).negate();
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
       const cinematicEffectTime = timeSeconds / 3;
-      const desiredFov = highSpeed ? 58
-        : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
-          : phaseId === 'star-orbit' ? 18
-            : phaseId === 'star-skim' ? 26
-              : phaseId === 'moon-orbit' ? 42
-                : phaseId === 'planet-orbit' ? 48
-                  : 46;
+      const desiredFov = viewModeRef.current === 'chase'
+        ? (highSpeed ? 42 : 36)
+        : highSpeed ? 58
+          : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
+            : phaseId === 'star-orbit' ? 12
+              : phaseId === 'star-skim' ? 20
+                : phaseId === 'moon-orbit' ? 42
+                  : phaseId === 'planet-orbit' ? 48
+                    : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
@@ -1023,10 +1183,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       if (movementDirection.lengthSq() < 1e-12) movementDirection.copy(pose.target).sub(pose.position);
       movementDirection.normalize();
 
-      const flightFrameTarget = pose.position.clone().add(movementDirection);
       warpFrame.position.copy(pose.position);
       warpFrame.up.copy(pose.up);
-      warpFrame.lookAt(flightFrameTarget);
+      // lookAt receives a world-space target. With the floating origin,
+      // the ship is at world zero, so use its relative movement direction.
+      warpFrame.lookAt(movementDirection);
       // Object3D.lookAt aligns local +Z toward the target, while this ship's
       // nose and the cockpit's forward axis are local -Z.
       warpFrame.rotateY(Math.PI);
@@ -1043,26 +1204,27 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
       // Cockpit gaze follows the active destination. It can differ from the
       // ship heading without rotating the world-anchored warp streaks.
-      camera.position.copy(pose.position);
+      camera.position.set(0, 0, 0);
       camera.up.copy(pose.up);
-      camera.lookAt(pose.target);
+      camera.lookAt(pose.target.clone().sub(pose.position));
       camera.rotateZ(Math.sin(cinematicEffectTime * 1.8) * warpAmount * 0.045 + Math.sin(cinematicEffectTime * 5.4) * warpAmount * 0.012);
       const cockpitQuaternion = camera.quaternion.clone();
 
       if (viewModeRef.current === 'chase') {
         // Broadcast-style exterior camera follows the one-kilometre ship from
         // behind and above, with a slight lateral sweep along the route.
-        const cameraDrift = Math.sin(timeSeconds * 0.18) * VOYAGE_SCALE.spacecraftLength * 0.9;
-        camera.position.copy(pose.position)
-          .addScaledVector(forward, -VOYAGE_SCALE.spacecraftLength * 8.5)
-          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.6)
-          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (1.2 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
+        const cameraDrift = Math.sin(cinematicEffectTime * 0.16) * VOYAGE_SCALE.spacecraftLength * 1.1;
+        const chaseDistance = VOYAGE_SCALE.spacecraftLength * (highSpeed ? 8.0 : 6.2);
+        camera.position.set(0, 0, 0)
+          .addScaledVector(forward, -chaseDistance)
+          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.2)
+          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (0.9 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
         camera.up.copy(up);
-        camera.lookAt(pose.position.clone().addScaledVector(forward, VOYAGE_SCALE.spacecraftLength * 1.5));
+        camera.lookAt(forward.clone().multiplyScalar(VOYAGE_SCALE.spacecraftLength * 1.5));
         camera.rotateY(lookOffset.yaw);
         camera.rotateX(lookOffset.pitch);
       } else {
-        camera.position.copy(pose.position);
+        camera.position.set(0, 0, 0);
         camera.up.copy(pose.up);
         camera.quaternion.copy(cockpitQuaternion);
         camera.rotateY(lookOffset.yaw);
@@ -1071,7 +1233,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
       // Granulation rotates with the stellar surface, rather than being a
       // static featureless emissive sphere. Delta time keeps it FPS-independent.
-      star.rotation.y += deltaSeconds * 0.018;
+      star.rotation.y += deltaSeconds * 0.026;
       moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
@@ -1131,7 +1293,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             : '目的地：星系内縁';
   const highSpeedActive = activePhase?.id === 'outer-cruise' || activePhase?.id === 'planet-flyby-inbound' || activePhase?.id === 'outer-departure';
   const orbitReadout = lowOrbitActive
-    ? '地表高度 500 km · 低軌道'
+    ? '地表高度 2,500 km · 低軌道'
     : starOrbitActive
       ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
       : activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
@@ -1146,7 +1308,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約5分42秒の自動航行です。惑星・衛星は地表500km、恒星は従来の10倍の高度を周回。最後は恒星の重力境界を避けて直線フライバイします。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約5分42秒の自動航行です。惑星・衛星は地表2,500km、恒星は従来の10倍の高度を周回。最後は恒星の重力境界を避けて直線フライバイします。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.27c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約5分42秒</p><p className="text-[9px] text-slate-500">全航程を従来の1/3速度に</p></div>
@@ -1164,7 +1326,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 ))}
               </ol>
             </div>
-            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、G型恒星は演出スケールで地球直径の約136倍。恒星表面には粒状斑を描き、ゆっくり自転させています。恒星フライバイは設定した重力境界の外側を接線方向に通過し、そのまま直進離脱します。</p>
+            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、G型恒星は演出スケールで地球直径の約153倍。恒星表面には粒状斑を描き、ゆっくり自転させています。恒星フライバイは設定した重力境界の外側を接線方向に通過し、そのまま直進離脱します。</p>
             <p className="mt-2 text-[10px] font-bold text-amber-200">航行開始後に途中で終了しても、消費したMPは返還されません。</p>
             {noStar && <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">この惑星は恒星を持たない自由浮遊惑星のため、恒星を巡る航行はできません。</p>}
             {error && <p role="alert" className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
@@ -1209,12 +1371,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <button
                 type="button"
                 aria-pressed={viewMode === 'cockpit'}
+                data-testid="flight-view-cockpit"
                 onClick={() => selectViewMode('cockpit')}
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >船内視点</button>
               <button
                 type="button"
                 aria-pressed={viewMode === 'chase'}
+                data-testid="flight-view-chase"
                 onClick={() => selectViewMode('chase')}
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >外部追跡カメラ</button>
