@@ -1138,13 +1138,15 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
       const cinematicEffectTime = timeSeconds / 3;
-      const desiredFov = highSpeed ? 58
-        : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
-          : phaseId === 'star-orbit' ? 12
-            : phaseId === 'star-skim' ? 26
-              : phaseId === 'moon-orbit' ? 42
-                : phaseId === 'planet-orbit' ? 48
-                  : 46;
+      const desiredFov = viewModeRef.current === 'chase'
+        ? (highSpeed ? 42 : 36)
+        : highSpeed ? 58
+          : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
+            : phaseId === 'star-orbit' ? 12
+              : phaseId === 'star-skim' ? 20
+                : phaseId === 'moon-orbit' ? 42
+                  : phaseId === 'planet-orbit' ? 48
+                    : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
@@ -1204,11 +1206,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       if (viewModeRef.current === 'chase') {
         // Broadcast-style exterior camera follows the one-kilometre ship from
         // behind and above, with a slight lateral sweep along the route.
-        const cameraDrift = Math.sin(timeSeconds * 0.18) * VOYAGE_SCALE.spacecraftLength * 0.9;
+        const cameraDrift = Math.sin(cinematicEffectTime * 0.16) * VOYAGE_SCALE.spacecraftLength * 1.1;
+        const chaseDistance = VOYAGE_SCALE.spacecraftLength * (highSpeed ? 8.0 : 6.2);
         camera.position.copy(pose.position)
-          .addScaledVector(forward, -VOYAGE_SCALE.spacecraftLength * 8.5)
-          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.6)
-          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (1.2 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
+          .addScaledVector(forward, -chaseDistance)
+          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.2)
+          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (0.9 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
         camera.up.copy(up);
         camera.lookAt(pose.position.clone().addScaledVector(forward, VOYAGE_SCALE.spacecraftLength * 1.5));
         camera.rotateY(lookOffset.yaw);
@@ -1223,7 +1226,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
       // Granulation rotates with the stellar surface, rather than being a
       // static featureless emissive sphere. Delta time keeps it FPS-independent.
-      star.rotation.y += deltaSeconds * 0.018;
+      star.rotation.y += deltaSeconds * 0.026;
       moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
@@ -1361,13 +1364,15 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <button
                 type="button"
                 aria-pressed={viewMode === 'cockpit'}
-                onClick={() => selectViewMode('cockpit')}
+                data-testid="flight-view-cockpit"
+                onClick={() => selectViewMode('cockpit')
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >船内視点</button>
               <button
                 type="button"
                 aria-pressed={viewMode === 'chase'}
-                onClick={() => selectViewMode('chase')}
+                data-testid="flight-view-chase"
+                onClick={() => selectViewMode('chase')
                 className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >外部追跡カメラ</button>
             </div>
