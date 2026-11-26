@@ -578,7 +578,6 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
     const starApproachAngle = Math.atan2(moonPosition.z, moonPosition.x);
     const starApproachRadial = new THREE.Vector3(Math.cos(starApproachAngle), 0, Math.sin(starApproachAngle));
-    const starApproachTangent = new THREE.Vector3(-Math.sin(starApproachAngle), 0, Math.cos(starApproachAngle));
     const starSkimEndAngle = starApproachAngle + Math.PI * 0.66;
     const starDepartureRadial = new THREE.Vector3(Math.cos(starSkimEndAngle), 0, Math.sin(starSkimEndAngle));
     const starDepartureTangent = new THREE.Vector3(-Math.sin(starSkimEndAngle), 0, Math.cos(starSkimEndAngle));
