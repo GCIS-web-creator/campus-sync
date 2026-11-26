@@ -43,21 +43,21 @@ test('voyage retains Earth–Moon–Sun and 1 km ship scale ratios', () => {
   assert.ok(VOYAGE_SCALE.astronomicalUnit / VOYAGE_SCALE.earthRadius > 23_000);
   assert.ok(VOYAGE_SCALE.outerSystemDistance > VOYAGE_SCALE.astronomicalUnit * 2);
   assert.equal(VOYAGE_SCALE.spacecraftLengthKm, 1);
-  assert.equal(VOYAGE_SCALE.lowOrbitAltitudeKm, 500);
+  assert.equal(VOYAGE_SCALE.lowOrbitAltitudeKm, 2_500);
   assert.equal((VOYAGE_SCALE.earthRadius * 2) / VOYAGE_SCALE.spacecraftLength, 12_742);
   assert.ok(Math.abs((VOYAGE_SCALE.moonRadius * 2) / VOYAGE_SCALE.spacecraftLength - 3_474.8) < 0.01);
-  assert.ok(Math.abs((getVoyageStarRadius('G') * 2) / VOYAGE_SCALE.spacecraftLength - 1_739_250) < 1);
-  assert.ok(getVoyageStarRadius('G') / VOYAGE_SCALE.earthRadius > 130);
-  assert.equal(STAR_VISUAL_RADIUS_MULTIPLIER, 1.25);
+  assert.ok(Math.abs((getVoyageStarRadius('G') * 2) / VOYAGE_SCALE.spacecraftLength - 1_947_960) < 1);
+  assert.ok(getVoyageStarRadius('G') / VOYAGE_SCALE.earthRadius > 150);
+  assert.equal(STAR_VISUAL_RADIUS_MULTIPLIER, 1.4);
   assert.ok(getVoyageStarRadius('K') / VOYAGE_SCALE.earthRadius > 70);
 });
 
-test('planet and moon camera paths are exactly 500 km above the physical surface', () => {
+test('planet and moon camera paths are exactly 2,500 km above the physical surface', () => {
   const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
   const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
-  assert.ok(Math.abs((planetOrbitRadius - VOYAGE_SCALE.earthRadius) * VOYAGE_SCALE.kilometersPerUnit - 500) < 1e-9);
-  assert.ok(Math.abs((moonOrbitRadius - VOYAGE_SCALE.moonRadius) * VOYAGE_SCALE.kilometersPerUnit - 500) < 1e-9);
-  assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 500);
+  assert.ok(Math.abs((planetOrbitRadius - VOYAGE_SCALE.earthRadius) * VOYAGE_SCALE.kilometersPerUnit - 2_500) < 1e-9);
+  assert.ok(Math.abs((moonOrbitRadius - VOYAGE_SCALE.moonRadius) * VOYAGE_SCALE.kilometersPerUnit - 2_500) < 1e-9);
+  assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 2_500);
 });
 
 test('stellar path circles just outside the rendered corona', () => {
@@ -108,7 +108,7 @@ test('the parent planet remains visible from a low lunar orbit at physical scale
   assert.ok(apparentDiameter > 1.8 && apparentDiameter < 2.1);
 });
 
-test('journey is long enough to read as a multi-stage automated flight', () => {
+test('journey keeps the requested one-third speed and five-minute-forty-two-second duration', () => {
   assert.equal(STAR_SYSTEM_VOYAGE_DURATION_MS, 342_000);
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'planet-orbit')?.durationMs, 72_000);
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'moon-orbit')?.durationMs, 42_000);
