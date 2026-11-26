@@ -288,9 +288,11 @@ export default function ProfileStudio({
   const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null);
   const [previewAvatarKind, setPreviewAvatarKind] = useState<DecoKind | null | undefined>(undefined);
   const [previewBannerKind, setPreviewBannerKind] = useState<DecoKind | null | undefined>(undefined);
+  const [activeDecoGroup, setActiveDecoGroup] = useState<DecoGroup | 'all'>('all');
 
   const darkCard = isDarkMode ? 'border-slate-700 bg-slate-800 text-slate-100' : 'border-slate-200 bg-white text-slate-800';
   const muted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
+  const decoGroups: DecoGroup[] = ['自然', '宇宙・科学', '季節', '動物', 'アート・スイーツ'];
 
   const loadOwnProfile = useCallback(async () => {
     setLoading(true);
@@ -383,6 +385,8 @@ export default function ProfileStudio({
     () => COSMETICS.filter(item => unlockedIds.includes(item.id)),
     [unlockedIds],
   );
+  const visibleAvatarDecorations = useMemo(() => DECO_ITEMS.filter(item => item.slot === 'avatar_deco' && (activeDecoGroup === 'all' || item.group === activeDecoGroup)), [activeDecoGroup]);
+  const visibleBannerDecorations = useMemo(() => DECO_ITEMS.filter(item => item.slot === 'profile_effect' && (activeDecoGroup === 'all' || item.group === activeDecoGroup)), [activeDecoGroup]);
 
   const saveProfile = async () => {
     const cleanName = profile.display_name.trim().slice(0, 32);
