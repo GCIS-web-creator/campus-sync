@@ -1,3 +1,4 @@
+import { createGalaxyBackdrop } from '../components/planet-world/galaxy-backdrop.ts';
 import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '../components/planet-world/stellar-surface-shader.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -178,4 +179,23 @@ test('stellar photosphere uses a self-luminous shader with no day/night terminat
   assert.equal(corona.blending, 2, 'corona should use additive blending');
   surface.dispose();
   corona.dispose();
+});
+
+
+test('galaxy backdrop builds a deep nebula shell and a dense animated star belt', () => {
+  const galaxy = createGalaxyBackdrop(23, { radius: 116_000, starCount: 26_000 });
+  assert.equal(galaxy.stars.geometry.attributes.position.count, 26_000);
+  assert.equal(galaxy.stars.geometry.attributes.aColor.count, 26_000);
+  assert.equal(galaxy.stars.geometry.attributes.aSize.count, 26_000);
+  assert.equal(galaxy.stars.geometry.attributes.aPhase.count, 26_000);
+  assert.equal(galaxy.nebula.material.depthTest, false);
+  assert.equal(galaxy.nebula.material.depthWrite, false);
+  assert.match(galaxy.nebula.material.fragmentShader, /galacticNormal/);
+  assert.match(galaxy.nebula.material.fragmentShader, /galaxyFbm/);
+  assert.match(galaxy.stars.material.vertexShader, /uTime/);
+  assert.match(galaxy.stars.material.fragmentShader, /gl_PointCoord/);
+  galaxy.update(14.5);
+  assert.equal(galaxy.nebula.material.uniforms.uTime.value, 14.5);
+  assert.equal(galaxy.stars.material.uniforms.uTime.value, 14.5);
+  galaxy.dispose();
 });
