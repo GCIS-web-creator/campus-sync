@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createGalaxyBackdrop } from '../components/planet-world/galaxy-backdrop.ts';
-import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '../components/planet-world/stellar-surface-shader.ts';
+import { makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '../components/planet-world/space-effects.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -165,56 +164,40 @@ test('journey keeps the requested one-third speed and five-minute-forty-two-seco
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'star-orbit')?.durationMs, 48_000);
 });
 
-test('stellar photosphere uses a self-luminous shader with no day/night terminator', () => {
-  const surface = createStellarSurfaceMaterial('#ffb45a', 17);
-  const corona = createStellarCoronaMaterial('#ff8a4c', 17);
-  assert.equal(surface.lights, false, 'stellar plasma must not depend on scene lighting');
-  assert.equal(surface.toneMapped, false, 'stellar emission must remain bright');
-  assert.match(surface.vertexShader, /logdepthbuf_vertex/);
-  assert.match(surface.fragmentShader, /convection/);
-  assert.match(surface.fragmentShader, /intergranularLanes/);
-  assert.match(surface.fragmentShader, /vec4\(emission, 1\.0\)/);
-  const executableSurfaceShader = surface.fragmentShader.replace(/\/\/.*$/gm, '');
-  assert.doesNotMatch(executableSurfaceShader, /uSunDirection|daylight|nightMask|sunFacing|terminator/i);
-  assert.equal(corona.transparent, true);
-  assert.equal(corona.blending, 2, 'corona should use additive blending');
-  surface.dispose();
-  corona.dispose();
+test('star surface and corona are animated self-luminous shaders', () => {
+  const resources = [];
+  const surface = makeStarSurfaceMaterial('#ffb45a', 17, resources);
+  const corona = makeStarCorona(10, 29, '#ff8a4c', 17, resources);
+  assert.equal(surface.material.lights, false);
+  assert.match(surface.material.fragmentShader, /logdepthbuf_fragment/);
+  assert.doesNotMatch(surface.material.fragmentShader, /uSun|daylight|terminator/i);
+  assert.equal(corona.mesh.material.transparent, true);
+  assert.equal(corona.mesh.material.depthWrite, false);
+  assert.equal(corona.mesh.geometry.parameters.radius, 29);
+  surface.update(14.5);
+  corona.update(14.5);
+  assert.equal(surface.material.uniforms.uTime.value, 14.5);
+  assert.equal(corona.mesh.material.uniforms.uTime.value, 14.5);
+  resources.forEach(resource => resource.dispose());
 });
 
-
-test('galaxy backdrop builds a deep nebula shell and a dense animated star belt', () => {
-  const galaxy = createGalaxyBackdrop(23, { radius: 116_000, starCount: 26_000 });
-  assert.equal(galaxy.stars.geometry.attributes.position.count, 26_000);
-  assert.equal(galaxy.stars.geometry.attributes.aColor.count, 26_000);
-  assert.equal(galaxy.stars.geometry.attributes.aSize.count, 26_000);
-  assert.equal(galaxy.stars.geometry.attributes.aPhase.count, 26_000);
-  assert.equal(galaxy.nebula.material.depthTest, false);
-  assert.equal(galaxy.nebula.material.depthWrite, false);
-  assert.match(galaxy.nebula.material.fragmentShader, /galacticNormal/);
-  assert.match(galaxy.nebula.material.fragmentShader, /galaxyFbm/);
-  assert.match(galaxy.stars.material.vertexShader, /uTime/);
-  assert.match(galaxy.stars.material.fragmentShader, /gl_PointCoord/);
-  galaxy.update(14.5);
-  assert.equal(galaxy.nebula.material.uniforms.uTime.value, 14.5);
-  assert.equal(galaxy.stars.material.uniforms.uTime.value, 14.5);
-  galaxy.dispose();
+test('deep sky is drawn behind every body and converts colours for display', () => {
+  const resources = [];
+  const sky = makeDeepSky(31, resources);
+  assert.ok(sky.renderOrder < 0);
+  assert.equal(sky.frustumCulled, false);
+  assert.equal(sky.material.transparent, false);
+  assert.equal(sky.material.depthTest, false);
+  assert.equal(sky.material.depthWrite, false);
+  assert.match(sky.material.fragmentShader, /#include <colorspace_fragment>/);
+  resources.forEach(resource => resource.dispose());
 });
 
-
-test('planet orbit view shares the self-luminous stellar shader and visible corona', () => {
-  const panelSource = readFileSync(new URL('../components/Planet3DPanel.tsx', import.meta.url), 'utf8');
-  assert.match(panelSource, /createStellarSurfaceMaterial/);
-  assert.match(panelSource, /createStellarCoronaMaterial/);
-  assert.match(panelSource, /const starCoreRadius = 36 \* profile\.radius/);
-  assert.match(panelSource, /stellarSurfaceMaterials\.forEach/);
-  assert.match(panelSource, /stellarCoronaMaterials\.forEach/);
-  assert.doesNotMatch(panelSource, /1px前後の小ささ/);
-});
-
-test('galaxy nebula and star shaders convert linear colours for the display output', () => {
-  const galaxy = createGalaxyBackdrop(31, { radius: 5_700, starCount: 18_000 });
-  assert.match(galaxy.nebula.material.fragmentShader, /#include <colorspace_fragment>/);
-  assert.match(galaxy.stars.material.fragmentShader, /#include <colorspace_fragment>/);
-  galaxy.dispose();
+test('planet orbit, voyage and free flight share the same space shaders', () => {
+  for (const file of ['Planet3DPanel.tsx', 'planet-world/StarSystemVoyage.tsx', 'planet-world/FreeFlightSimulator.tsx']) {
+    const source = readFileSync(new URL('../components/' + file, import.meta.url), 'utf8');
+    for (const name of ['makeDeepSky', 'makeStarSurfaceMaterial', 'makeStarCorona']) {
+      assert.ok(source.includes(name + '('), file + ' should use ' + name);
+    }
+  }
 });
