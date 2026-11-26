@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
 import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
+import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
@@ -339,34 +340,6 @@ function makeSpeedStreaks() {
   });
   return { lines: new THREE.LineSegments(geometry, material), geometry, material };
 }
-function makeStarfield(seed: number) {
-  const random = seeded(seed + 91);
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const choices = [0xa9c9ff, 0xffe2c2, 0xffffff, 0xffc8a9, 0xc0f0ff];
-  for (let index = 0; index < 3_600; index += 1) {
-    const y = random() * 2 - 1;
-    const angle = random() * Math.PI * 2;
-    const radius = Math.sqrt(1 - y * y);
-    const distance = 48_000 + random() * 48_000;
-    positions.push(Math.cos(angle) * radius * distance, y * distance, Math.sin(angle) * radius * distance);
-    const color = new THREE.Color(choices[Math.floor(random() * choices.length)]);
-    colors.push(color.r, color.g, color.b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({
-    size: 8,
-    sizeAttenuation: true,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.92,
-    depthWrite: false,
-  });
-  return new THREE.Points(geometry, material);
-}
-
 function ease(value: number) {
   return value * value * (3 - 2 * value);
 }
@@ -469,7 +442,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     renderer.setSize(Math.max(1, mount.clientWidth), Math.max(1, mount.clientHeight));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.26;
     renderer.setClearColor('#02050d', 1);
     renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;cursor:grab;';
     mount.appendChild(renderer.domElement);
@@ -530,7 +503,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
-    const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
+    const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 130_000);
     // Keep the camera outside the scene graph. The scene is re-centred around
     // the ship every frame (floating origin), preserving the 1 km hull detail
     // even while the absolute star-system coordinates are tens of millions km.
@@ -551,9 +524,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       resources.push(ring.geometry, ring.material);
     });
 
-    const starfield = makeStarfield(Number.parseInt(system.id.slice(-3), 10) || 1);
-    scene.add(starfield);
-    resources.push(starfield.geometry, starfield.material);
+    const galaxyBackdrop = createGalaxyBackdrop(Number.parseInt(system.id.slice(-3), 10) || 1, { radius: 116_000, starCount: 26_000 });
+    scene.add(galaxyBackdrop.group);
+    resources.push({ dispose: () => galaxyBackdrop.dispose() });
 
     const starSeed = Number.parseInt(system.id.slice(-3), 10) || 1;
     const starRadius = getVoyageStarRadius(starClass);
@@ -577,7 +550,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       toneMapped: false,
     });
     const corona = new THREE.Sprite(coronaMaterial);
-    corona.scale.setScalar(starRadius * 5.8);
+    corona.scale.setScalar(starRadius * 7.2);
     scene.add(corona);
     resources.push(coronaTexture, coronaMaterial);
 
@@ -592,7 +565,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       toneMapped: false,
     });
     const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(starRadius * 6.0);
+    halo.scale.setScalar(starRadius * 8.4);
     scene.add(halo);
     resources.push(haloTexture, haloMaterial);
 
@@ -852,6 +825,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
       const cinematicEffectTime = timeSeconds / 3;
+      galaxyBackdrop.update(cinematicEffectTime);
       const desiredFov = viewModeRef.current === 'inspection'
         ? 48
         : viewModeRef.current === 'chase'
