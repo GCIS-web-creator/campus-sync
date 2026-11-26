@@ -39,7 +39,7 @@ type HudState = {
 };
 
 const KM_PER_SCENE_UNIT = 1_000;
-const CRAFT_VISUAL_LENGTH = 0.26;
+const CRAFT_VISUAL_LENGTH = 0.00025; // Approximately 100 m nose-to-tail at the current geometry scale.
 
 function seeded(seed: number) {
   let value = seed >>> 0;
@@ -116,6 +116,7 @@ function makeAtmosphere(radius: number, color: string) {
     new THREE.ShaderMaterial({
       uniforms: { uAtmosphereColor: { value: new THREE.Color(color) } },
       vertexShader: [
+        '#include <logdepthbuf_pars_vertex>',
         'varying vec3 vNormal;',
         'varying vec3 vViewDirection;',
         'void main(){',
@@ -123,13 +124,16 @@ function makeAtmosphere(radius: number, color: string) {
         '  vNormal = normalize(mat3(modelMatrix) * normal);',
         '  vViewDirection = normalize(cameraPosition - worldPosition.xyz);',
         '  gl_Position = projectionMatrix * viewMatrix * worldPosition;',
+        '  #include <logdepthbuf_vertex>',
         '}',
       ].join('\n'),
       fragmentShader: [
+        '#include <logdepthbuf_pars_fragment>',
         'uniform vec3 uAtmosphereColor;',
         'varying vec3 vNormal;',
         'varying vec3 vViewDirection;',
         'void main(){',
+        '  #include <logdepthbuf_fragment>',
         '  float rim = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDirection)), 0.0), 2.25);',
         '  float alpha = smoothstep(0.03, 0.92, rim) * 0.34;',
         '  gl_FragColor = vec4(uAtmosphereColor, alpha);',
@@ -272,7 +276,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     status: '軌道投入済み · 慣性飛行',
   });
   const cameraModeRef = useRef<CameraMode>('chase');
-  const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: 0.72 });
+  const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: 0.00065 });
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -280,7 +284,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
     } catch {
       setHud((current) => ({ ...current, status: 'この端末ではWebGLを初期化できません' }));
       return;
@@ -301,7 +305,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     renderer.domElement.style.touchAction = 'none';
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(72, width / height, 0.03, 340_000);
+    const camera = new THREE.PerspectiveCamera(72, width / height, 0.000001, 340_000);
     camera.position.set(0, 0.5, 10);
     const resources: Array<{ dispose: () => void }> = [];
     const backdrop = createGalaxyBackdrop(Number.parseInt(system.id.slice(-3), 10) || 1, {
@@ -463,7 +467,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const onWheel = (event: WheelEvent) => {
       if (cameraModeRef.current !== 'inspection') return;
       event.preventDefault();
-      inspectionRef.current.distance = Math.max(0.34, Math.min(2.4, inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
+      inspectionRef.current.distance = Math.max(0.00025, Math.min(0.0025, inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -570,7 +574,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
       const selectedCamera = cameraModeRef.current;
       if (selectedCamera === 'cockpit') {
-        camera.position.copy(shipPosition).add(new THREE.Vector3(0, 0.012, 0).applyQuaternion(craft.quaternion));
+        camera.position.copy(shipPosition).add(new THREE.Vector3(0, 0.000007, 0).applyQuaternion(craft.quaternion));
         camera.quaternion.copy(craft.quaternion);
       } else if (selectedCamera === 'inspection') {
         const angles = inspectionRef.current;
@@ -586,9 +590,9 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       } else {
         unitRadial.set(shipPosition.x, shipPosition.y, shipPosition.z).normalize();
         const trailingDirection = forward.clone().negate();
-        cameraOffset.copy(unitRadial).multiplyScalar(0.62).addScaledVector(trailingDirection, 1.18);
+        cameraOffset.copy(unitRadial).multiplyScalar(0.0006).addScaledVector(trailingDirection, 0.0014);
         camera.position.copy(shipPosition).add(cameraOffset);
-        cameraTarget.copy(shipPosition).addScaledVector(forward, 1.1).addScaledVector(unitRadial, -0.24);
+        cameraTarget.copy(shipPosition).addScaledVector(forward, 0.0013).addScaledVector(unitRadial, -0.00025);
         camera.up.set(0, 1, 0);
         camera.lookAt(cameraTarget);
       }
