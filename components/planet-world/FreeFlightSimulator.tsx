@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
 import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
@@ -15,7 +15,6 @@ import {
   FREE_FLIGHT_REFERENCE_PLANET_MU_KM3_S2,
   FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM,
   FREE_FLIGHT_START_ALTITUDE_KM,
-  calculateGravityAccelerationKmS2,
   createInitialFreeFlightMotionState,
   stepFreeFlightMotion,
   type FreeFlightMotionState,
@@ -239,7 +238,7 @@ function ControlButton({
 }: {
   label: string;
   keyName: string;
-  keysRef: React.MutableRefObject<Set<string>>;
+  keysRef: MutableRefObject<Set<string>>;
 }) {
   return (
     <button
@@ -274,7 +273,6 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
   });
   const cameraModeRef = useRef<CameraMode>('chase');
   const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: 0.72 });
-  const touchControlsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -349,6 +347,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       { x: 0, y: 0, z: FREE_FLIGHT_REFERENCE_MOON_DISTANCE_KM * 1.78 },
     ];
     const moonMeshes: THREE.Mesh[] = [];
+    const starPositionKm = { x: 149_597_870.7, y: 0, z: -80_000_000 };
     const gravitySources: GravitySource[] = [{
       positionKm: { x: 0, y: 0, z: 0 },
       gravitationalParameterKm3S2: FREE_FLIGHT_REFERENCE_PLANET_MU_KM3_S2,
@@ -377,27 +376,34 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       });
     }
 
-    const activeStarClass = starClass ?? 'G';
-    const starProfile = STAR_PROFILES[activeStarClass];
-    const starRadiusKm = 695_700 * (activeStarClass === 'DA' ? 0.012 : starProfile.radius);
-    const starPosition = new THREE.Vector3(149_597_870.7 / KM_PER_SCENE_UNIT, 0, -80_000);
-    const starRadius = starRadiusKm / KM_PER_SCENE_UNIT;
-    const starGeometry = new THREE.SphereGeometry(starRadius, 160, 120);
-    const starMaterial = createStellarSurfaceMaterial(starProfile.lightColor, 4_721);
-    const star = new THREE.Mesh(starGeometry, starMaterial);
-    star.position.copy(starPosition);
-    star.name = 'Distant self-luminous star';
-    scene.add(star);
-    resources.push(starGeometry, starMaterial);
-    const coronaGeometry = new THREE.SphereGeometry(starRadius * 1.25, 96, 72);
-    const coronaMaterial = createStellarCoronaMaterial(starProfile.color, 8_413);
-    const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
-    corona.position.copy(starPosition);
-    scene.add(corona);
-    resources.push(coronaGeometry, coronaMaterial);
-    const starLight = new THREE.DirectionalLight(starProfile.lightColor, 1.55);
-    starLight.position.copy(starPosition);
-    scene.add(starLight);
+    const starProfile = starClass ? STAR_PROFILES[starClass] : null;
+    const starPosition = new THREE.Vector3(starPositionKm.x / KM_PER_SCENE_UNIT, starPositionKm.y / KM_PER_SCENE_UNIT, starPositionKm.z / KM_PER_SCENE_UNIT);
+    let star: THREE.Mesh | null = null;
+    let starMaterial: THREE.ShaderMaterial | null = null;
+    let coronaMaterial: THREE.ShaderMaterial | null = null;
+    if (starProfile && starClass) {
+      const starMassSolar: Record<StarClass, number> = { M: 0.25, K: 0.7, G: 1, F: 1.35, A: 2.1, B: 7.5, DA: 0.6 };
+      const starMu = 132_712_440_018 * starMassSolar[starClass];
+      gravitySources.push({ positionKm: starPositionKm, gravitationalParameterKm3S2: starMu });
+      const starRadiusKm = 695_700 * (starClass === 'DA' ? 0.012 : starProfile.radius);
+      const starRadius = starRadiusKm / KM_PER_SCENE_UNIT;
+      const starGeometry = new THREE.SphereGeometry(starRadius, 160, 120);
+      starMaterial = createStellarSurfaceMaterial(starProfile.lightColor, 4_721);
+      star = new THREE.Mesh(starGeometry, starMaterial);
+      star.position.copy(starPosition);
+      star.name = 'Distant self-luminous star';
+      scene.add(star);
+      resources.push(starGeometry, starMaterial);
+      const coronaGeometry = new THREE.SphereGeometry(starRadius * 1.25, 96, 72);
+      coronaMaterial = createStellarCoronaMaterial(starProfile.color, 8_413);
+      const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+      corona.position.copy(starPosition);
+      scene.add(corona);
+      resources.push(coronaGeometry, coronaMaterial);
+      const starLight = new THREE.DirectionalLight(starProfile.lightColor, 1.55);
+      starLight.position.copy(starPosition);
+      scene.add(starLight);
+    }
     scene.add(new THREE.AmbientLight('#92a8c8', 0.15));
 
     const { craft, exhaustMaterials } = makeFreeFlightCraft(resources);
@@ -405,7 +411,6 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
     let motion: FreeFlightMotionState = createInitialFreeFlightMotionState();
     const shipPosition = new THREE.Vector3();
-    const shipVelocity = new THREE.Vector3();
     const forward = new THREE.Vector3();
     const thrustDirection = new THREE.Vector3();
     const localThrust = new THREE.Vector3();
@@ -413,8 +418,6 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const cameraOffset = new THREE.Vector3();
     const unitRadial = new THREE.Vector3();
     const acceleration = new THREE.Vector3();
-    const starPositionKm = { x: 149_597_870.7, y: 0, z: -80_000_000 };
-
     const initialVelocity = new THREE.Vector3(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z);
     craft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), initialVelocity.normalize());
 
@@ -558,9 +561,11 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       });
       planet.rotation.y += dt * 0.00017;
       moonMeshes.forEach((moon, index) => { moon.rotation.y += dt * (0.00018 + index * 0.00004); });
-      star.rotation.y += dt * 0.000025;
-      starMaterial.uniforms.uTime.value = elapsed;
-      coronaMaterial.uniforms.uTime.value = elapsed;
+      if (star && starMaterial && coronaMaterial) {
+        star.rotation.y += dt * 0.000025;
+        starMaterial.uniforms.uTime.value = elapsed;
+        coronaMaterial.uniforms.uTime.value = elapsed;
+      }
       backdrop.update(elapsed);
 
       const selectedCamera = cameraModeRef.current;
@@ -599,12 +604,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
             motion.positionKm.z - moonPositionsKm[0].z,
           )
           : null;
-        const gravity = calculateGravityAccelerationKmS2(motion.positionKm, gravitySources);
-        const totalAcceleration = Math.hypot(
-          gravity.x + acceleration.x - stepped.gravityAccelerationKmS2.x,
-          gravity.y + acceleration.y - stepped.gravityAccelerationKmS2.y,
-          gravity.z + acceleration.z - stepped.gravityAccelerationKmS2.z,
-        );
+        const totalAcceleration = acceleration.length();
         setHud({
           speed: Math.hypot(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z),
           altitude,
