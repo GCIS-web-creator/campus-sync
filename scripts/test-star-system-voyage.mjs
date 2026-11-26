@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getApparentAngularDiameterDegrees,
+  getLowOrbitLookAngle,
   getLowOrbitRadius,
+  MOON_ORBIT_COCKPIT_FOV_DEGREES,
   getStarCoronaClearanceKm,
   getStarCoronaOuterRadius,
   getStarDepartureClearanceKm,
@@ -60,6 +62,34 @@ test('planet and moon camera paths are exactly 2,500 km above the physical surfa
   assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 2_500);
 });
 
+test('orbit views keep the body horizon and parent planet inside the cockpit frame', () => {
+  const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
+  const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
+  const planetHorizonAngle = Math.asin(VOYAGE_SCALE.earthRadius / planetOrbitRadius);
+  const moonHorizonAngle = Math.asin(VOYAGE_SCALE.moonRadius / moonOrbitRadius);
+  const planetLookAngle = getLowOrbitLookAngle(VOYAGE_SCALE.earthRadius, planetOrbitRadius);
+  const moonLookAngle = getLowOrbitLookAngle(VOYAGE_SCALE.moonRadius, moonOrbitRadius);
+
+  assert.ok(planetLookAngle > 0 && planetLookAngle < planetHorizonAngle);
+  assert.ok(moonLookAngle > 0 && moonLookAngle < moonHorizonAngle);
+  assert.ok(Math.abs(planetLookAngle / planetHorizonAngle - 0.72) < 1e-12);
+  assert.ok(Math.abs(moonLookAngle / moonHorizonAngle - 0.72) < 1e-12);
+
+  const moonLookDegrees = moonLookAngle * 180 / Math.PI;
+  const viewCenterAngle = (90 + moonLookDegrees) / 2;
+  const parentDirectionOffset = 90 - viewCenterAngle;
+  const moonAngularRadius = Math.asin(VOYAGE_SCALE.moonRadius / moonOrbitRadius) * 180 / Math.PI;
+  const moonVisibleLimbOffset = Math.max(0, viewCenterAngle - moonAngularRadius);
+  const parentPlanetDistance = VOYAGE_SCALE.earthMoonDistance - VOYAGE_SCALE.moonRadius - VOYAGE_SCALE.lowOrbitAltitude;
+  const parentPlanetDiameter = getApparentAngularDiameterDegrees(VOYAGE_SCALE.earthRadius, parentPlanetDistance);
+  const halfFov = MOON_ORBIT_COCKPIT_FOV_DEGREES / 2;
+
+  assert.equal(MOON_ORBIT_COCKPIT_FOV_DEGREES, 100);
+  assert.ok(parentDirectionOffset + parentPlanetDiameter / 2 < halfFov, 'parent planet remains visible above the lunar horizon');
+  assert.ok(moonVisibleLimbOffset < halfFov, 'the lunar limb remains visible below the parent planet');
+  assert.ok(parentPlanetDiameter > 1.8 && parentPlanetDiameter < 2.1);
+});
+
 test('stellar path circles just outside the rendered corona', () => {
   const starRadius = getVoyageStarRadius('G');
   const coronaRadius = getStarCoronaOuterRadius(starRadius);
@@ -92,6 +122,20 @@ test('final stellar pass is a straight tangent outside the gravity boundary', ()
   assert.ok(Math.abs(tangentDistance - path.safeRadius) < 1e-6);
   assert.ok(path.safeRadius > starRadius * STAR_GRAVITY_BOUNDARY_RADIUS_SOLAR);
   assert.ok(Math.abs(tangentDot) < 1e-6, 'route direction must be tangent to the stellar boundary');
+
+  // The inbound segment, tangent point and long outbound leg all share one
+  // straight vector and remain outside the stellar exclusion circle.
+  const inboundLength = Math.hypot(path.tangentX - startX, path.tangentZ - startZ);
+  const outboundLength = VOYAGE_SCALE.outerSystemDistance * 2.4;
+  for (let step = 0; step <= 100; step += 1) {
+    const t = step / 100;
+    const inboundX = startX + path.directionX * inboundLength * t;
+    const inboundZ = startZ + path.directionZ * inboundLength * t;
+    const outboundX = path.tangentX + path.directionX * outboundLength * t;
+    const outboundZ = path.tangentZ + path.directionZ * outboundLength * t;
+    assert.ok(Math.hypot(inboundX, inboundZ) >= path.safeRadius - 1e-6);
+    assert.ok(Math.hypot(outboundX, outboundZ) >= path.safeRadius - 1e-6);
+  }
 });
 
 test('warp animation ramps up and fades smoothly around acceleration phases', () => {
