@@ -8,7 +8,6 @@ import {
   getLowOrbitRadius,
   getStarCoronaClearanceKm,
   getStarTangentFlybyGeometry,
-  getStarDepartureRadius,
   getStarOrbitRadius,
   getVoyageStarRadius,
   getWarpIntensity,
@@ -648,6 +647,41 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;cursor:grab;';
     mount.appendChild(renderer.domElement);
 
+    let activePointerId: number | null = null;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    const pointerDown = (event: PointerEvent) => {
+      if (activePointerId !== null || event.button !== 0) return;
+      activePointerId = event.pointerId;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
+      renderer.domElement.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      const deltaX = event.clientX - lastPointerX;
+      const deltaY = event.clientY - lastPointerY;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      lookOffsetRef.current = {
+        yaw: THREE.MathUtils.clamp(lookOffsetRef.current.yaw - deltaX * 0.004, -Math.PI * 0.9, Math.PI * 0.9),
+        pitch: THREE.MathUtils.clamp(lookOffsetRef.current.pitch - deltaY * 0.0035, -1.18, 1.18),
+      };
+      event.preventDefault();
+    };
+    const pointerUp = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      activePointerId = null;
+      renderer.domElement.style.cursor = 'grab';
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    };
+    renderer.domElement.addEventListener('pointerdown', pointerDown);
+    renderer.domElement.addEventListener('pointermove', pointerMove);
+    renderer.domElement.addEventListener('pointerup', pointerUp);
+    renderer.domElement.addEventListener('pointercancel', pointerUp);
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
     const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
@@ -794,9 +828,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(new THREE.HemisphereLight('#b6c9e3', '#18263b', 0.14));
     scene.add(new THREE.AmbientLight('#64758e', 0.11));
 
+    const explorationVessel = makeExplorationVessel(resources);
+    explorationVessel.visible = false;
+    scene.add(explorationVessel);
+
     const worldUp = new THREE.Vector3(0, 1, 0);
     const starOrbitRadius = getStarOrbitRadius(starRadius);
-    const starDepartureRadius = getStarDepartureRadius(starRadius);
     const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
     const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
@@ -844,11 +881,8 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const getStarOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-      const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
       const position = radial.clone().multiplyScalar(starOrbitRadius);
-      // Lead the stellar centre slightly along the ship's tangent. The star
-      // stays large and in frame, while the view sweeps around its corona.
-      // Keep the star centred while it rotates through the panoramic view.
+      // Keep the enlarged, granular stellar disc centred for the entire lap.
       return { position, target: new THREE.Vector3(0, 0, 0), up: worldUp };
     };
 
@@ -919,9 +953,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     };
     let frame = 0;
     let lastUiUpdate = 0;
+    let lastFrameTime = 0;
     let alive = true;
     const render = (now: number) => {
       if (!alive) return;
+      const deltaSeconds = lastFrameTime === 0 ? 0 : Math.min(0.05, (now - lastFrameTime) / 1_000);
+      lastFrameTime = now;
       const current = Math.min(totalDuration, Math.max(0, now - startAtRef.current));
       let consumed = 0;
       let index = STAR_SYSTEM_VOYAGE_PHASES.length - 1;
@@ -942,16 +979,17 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const timeSeconds = current / 1_000;
       const desiredFov = highSpeed ? 58
         : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
-          : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 38
-            : phaseId === 'moon-orbit' ? 44
-              : phaseId === 'planet-orbit' ? 50
-                : 46;
+          : phaseId === 'star-orbit' ? 18
+            : phaseId === 'star-skim' ? 26
+              : phaseId === 'moon-orbit' ? 42
+                : phaseId === 'planet-orbit' ? 48
+                  : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
       }
       speedEffects.material.opacity = 0.04 + warpAmount * 0.9;
-      speedEffects.lines.rotation.z += 0.00045 + warpAmount * 0.014;
+      speedEffects.lines.rotation.z += deltaSeconds * (0.025 + warpAmount * 0.84);
       warpOverlay.material.uniforms.uTime.value = timeSeconds;
       warpOverlay.material.uniforms.uWarp.value = warpAmount;
       warpRings.forEach((ring, ringIndex) => {
@@ -962,12 +1000,50 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         ring.mesh.scale.setScalar(1 + Math.sin(timeSeconds * 3.2 + ringIndex * 2) * warpAmount * 0.13);
         ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
       });
+
+      // This is the autopilot's fixed flight direction. Warp streaks and rings
+      // inherit this frame before any manual camera rotation is applied.
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
       camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
-      star.rotation.y += 0.0008;
-      moon.rotation.y += 0.00016;
+      const flightQuaternion = camera.quaternion.clone();
+      warpFrame.position.copy(pose.position);
+      warpFrame.quaternion.copy(flightQuaternion);
+
+      explorationVessel.position.copy(pose.position);
+      explorationVessel.quaternion.copy(flightQuaternion);
+      explorationVessel.visible = viewModeRef.current === 'chase';
+
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(flightQuaternion).normalize();
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(flightQuaternion).normalize();
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(flightQuaternion).normalize();
+      const lookOffset = lookOffsetRef.current;
+
+      if (viewModeRef.current === 'chase') {
+        // Broadcast-style exterior camera follows the one-kilometre ship from
+        // behind and above, with a slight lateral sweep along the route.
+        const cameraDrift = Math.sin(timeSeconds * 0.18) * VOYAGE_SCALE.spacecraftLength * 0.9;
+        camera.position.copy(pose.position)
+          .addScaledVector(forward, -VOYAGE_SCALE.spacecraftLength * 8.5)
+          .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.6)
+          .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (1.2 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
+        camera.up.copy(up);
+        camera.lookAt(pose.position.clone().addScaledVector(forward, VOYAGE_SCALE.spacecraftLength * 1.5));
+        camera.rotateY(lookOffset.yaw);
+        camera.rotateX(lookOffset.pitch);
+      } else {
+        camera.position.copy(pose.position);
+        camera.up.copy(pose.up);
+        camera.quaternion.copy(flightQuaternion);
+        camera.rotateY(lookOffset.yaw);
+        camera.rotateX(lookOffset.pitch);
+      }
+
+      // Granulation rotates with the stellar surface, rather than being a
+      // static featureless emissive sphere. Delta time keeps it FPS-independent.
+      star.rotation.y += deltaSeconds * 0.018;
+      moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
       if (now - lastUiUpdate > 130 || current >= totalDuration) {
@@ -998,6 +1074,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       alive = false;
       window.cancelAnimationFrame(frame);
       observer.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', pointerDown);
+      renderer.domElement.removeEventListener('pointermove', pointerMove);
+      renderer.domElement.removeEventListener('pointerup', pointerUp);
+      renderer.domElement.removeEventListener('pointercancel', pointerUp);
       resources.forEach(resource => resource.dispose());
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
