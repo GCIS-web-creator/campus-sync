@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
@@ -56,25 +57,6 @@ function createCityLightsTexture(seed: number) {
       context.fillStyle = 'rgba(255,' + Math.floor(165 + random() * 78) + ',105,' + (0.35 + random() * 0.65).toFixed(2) + ')';
       context.beginPath(); context.arc(x, y, 0.7 + random() * 1.7, 0, Math.PI * 2); context.fill();
     }
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace; texture.wrapS = THREE.RepeatWrapping; texture.needsUpdate = true;
-  return texture;
-}
-
-function createMoonTexture(seed: number, base: string) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 256;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-  const random = seeded(seed + 307);
-  context.fillStyle = base; context.fillRect(0, 0, canvas.width, canvas.height);
-  for (let index = 0; index < 320; index += 1) {
-    const x = random() * canvas.width; const y = random() * canvas.height;
-    const radius = 1 + Math.pow(random(), 2) * 14;
-    context.fillStyle = random() > 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.19)';
-    context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
-    context.strokeStyle = 'rgba(0,0,0,0.15)'; context.lineWidth = 1; context.stroke();
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace; texture.wrapS = THREE.RepeatWrapping; texture.needsUpdate = true;
@@ -236,14 +218,14 @@ function addOrbitAndMoon(scene: THREE.Scene, index: number, seed: number, moonCo
   resources.push(orbitGeometry, orbitMaterial);
 
   const moonRadius = 0.095 + (seeded(seed + index * 31)() * 0.045);
-  const moonGeometry = new THREE.SphereGeometry(moonRadius, 28, 20);
-  const moonTexture = createMoonTexture(seed + index * 13, moonColor);
-  const moonMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: moonTexture, bumpMap: moonTexture, bumpScale: 0.035, roughness: 0.98, metalness: 0.01 });
+  const moonGeometry = new THREE.SphereGeometry(moonRadius, 128, 96);
+  const moonMaterial = new THREE.MeshStandardMaterial({ color: moonColor, roughness: 0.98, metalness: 0.01 });
+  applyMoonSurfaceDetail(moonMaterial, seed + index * 13);
   const moon = new THREE.Mesh(moonGeometry, moonMaterial);
   moon.position.set(orbitRadius, 0, 0);
   plane.add(moon);
   scene.add(plane);
-  resources.push(moonGeometry, moonMaterial, moonTexture);
+  resources.push(moonGeometry, moonMaterial);
   return { plane, moon, speed: 0.16 / (1 + index * 0.58) * (index % 2 === 0 ? 1 : -1), orbitRadius, moonRadius };
 }
 
@@ -278,7 +260,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -345,7 +327,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     scene.add(new THREE.AmbientLight('#8298bd', spec.rogue ? 0.42 : 0.22));
 
     const planetRadius = 1.52;
-    const surfaceGeometry = new THREE.SphereGeometry(planetRadius, 112, 80);
+    const surfaceGeometry = new THREE.SphereGeometry(planetRadius, 256, 192);
     const loader = new THREE.TextureLoader();
     const fallbackTexture = createFallbackSurfaceTexture(numericId, spec.atmosphereColor);
     let surfaceMaterial: THREE.MeshStandardMaterial;
@@ -485,13 +467,14 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     };
     surfaceMaterial.customProgramCacheKey = () => 'campussync-distant-star-corona-wide-moon-orbits-v2';
 
+    applyPlanetSurfaceDetail(surfaceMaterial, numericId);
     const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
     system.add(surface);
     resources.push(surfaceGeometry, surfaceMaterial, surfaceTexture, fallbackTexture, cityTexture);
 
     const cloudTexture = createCloudTexture(numericId);
     const cloudMaterial = new THREE.MeshStandardMaterial({ map: cloudTexture, transparent: true, opacity: 0.5, roughness: 1, metalness: 0, depthWrite: false, side: THREE.FrontSide });
-    const clouds = new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.012, 96, 64), cloudMaterial);
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.012, 192, 128), cloudMaterial);
     clouds.rotation.set(0.1, numericId * 0.31, 0.03);
     system.add(clouds);
     resources.push(clouds.geometry, cloudMaterial, cloudTexture);

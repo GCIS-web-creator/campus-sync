@@ -215,8 +215,19 @@ try {
     localStorage.setItem('campus-sync-display-mode-v2', 'light');
   });
 
-  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  const returnResponse = await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  try {
+    await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  } catch (error) {
+    const debug = {
+      status: returnResponse?.status(),
+      url: page.url(),
+      title: await page.title().catch(() => ''),
+      body: (await page.locator('body').innerText().catch(() => '')).slice(0, 1800),
+      pageErrors,
+    };
+    throw new Error(`Planet panel did not return after voyage: ${error.message}; state=${JSON.stringify(debug)}`);
+  }
   await page.getByText('わたしの惑星', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('非公開', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('根拠となる学習記録', { exact: true }).waitFor({ state: 'visible' });
