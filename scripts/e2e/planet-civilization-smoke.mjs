@@ -257,14 +257,9 @@ try {
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
-  // The camera view may be aimed away from the HUD after the pointer drag;
-  // the camera toggle was already verified before dragging. Reload the screen
-  // to restore Planet Civilization for the remaining independent checks.
-
-  // Navigate back to the explicit planet panel route for the remaining
-  // independent checks; the voyage itself is intentionally 342 seconds.
-  await page.goto('about:blank');
-  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  // Return through the same in-app exit control used by players. The 342-second
+  // voyage is intentionally not played to completion in this smoke test.
+  await page.getByTestId('flight-exit-button').click();
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
@@ -351,7 +346,7 @@ try {
   const pendingStorageKey = 'campus-sync-pending-planet-xp:11111111-1111-4111-8111-111111111111';
   const persistedBeforeReload = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]'), pendingStorageKey);
   assert.deepEqual(persistedBeforeReload, [pendingSessionId], 'Failed XP request should be persisted before reload');
-  await page.getByTestId('flight-exit-button').click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /XPを再試行/ }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByRole('button', { name: /XPを再試行/ }).click();
   await page.getByText(/1件の学習XP付与状態を確認しました/).waitFor({ state: 'visible', timeout: 15000 });
