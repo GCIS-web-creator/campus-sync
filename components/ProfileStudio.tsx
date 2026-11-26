@@ -150,7 +150,7 @@ const PROFILE_CSS = [
   '.ps-banner-pattern-stars{background-image:radial-gradient(circle at 18% 28%,rgba(255,255,255,.95) 0 1.3px,transparent 2px),radial-gradient(circle at 72% 16%,rgba(255,255,255,.8) 0 1.5px,transparent 2.2px),radial-gradient(circle at 90% 55%,rgba(255,255,255,.85) 0 1.1px,transparent 2px)}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
-  '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism,.ps-banner:after{animation:none!important}}',
+  '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism,.ps-banner:after,.ps-banner-stars i{animation:none!important}}',
 ].join('\n');
 
 function safeHttpsUrl(value: string): string {
