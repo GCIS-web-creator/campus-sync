@@ -9,7 +9,8 @@ import { GradientEditor } from '@/components/profile-studio/GradientEditor';
 import { BadgeIcon } from '@/components/profile-studio/BadgeIcon';
 import { AvatarGlyph } from '@/components/profile-studio/AvatarGlyph';
 import { AvatarDeco, BannerEffect, type DecoKind } from '@/components/profile-studio/NatureEffects';
-import { DECO_ITEMS } from '@/components/profile-studio/catalog';
+import { DECO_ITEMS, type DecoGroup } from '@/components/profile-studio/catalog';
+import { DecoThumbnail } from '@/components/profile-studio/DecoThumbnail';
 import { DEFAULT_PROFILE_STUDIO, normalizeProfileStudio, nameCss, type ProfileStudioSettings } from '@/components/profile-studio/nameStyle';
 
 type ProfileDraft = {
