@@ -97,6 +97,7 @@ jobs:
             exit 1
           fi
           node scripts/e2e/planet-civilization-smoke.mjs
+          node --check scripts/e2e/profile-studio-smoke.mjs
           node scripts/e2e/profile-studio-smoke.mjs
       - name: Upload Profile Studio responsive screenshots
         if: always() && (github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration'))
