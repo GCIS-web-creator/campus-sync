@@ -822,7 +822,7 @@ export default function ProfileStudio({
                     <div className="relative -mt-7 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-4 border-slate-800 bg-gradient-to-br from-cyan-400 to-violet-500 text-2xl">{safeHttpsUrl(item.avatar_url) ? <img src={safeHttpsUrl(item.avatar_url)} alt="" className="h-full w-full object-cover" /> : <AvatarGlyph value={item.avatar_emoji} size={26} />}</div>
                     <p className="mt-2 truncate text-sm font-black">{item.display_name}</p>
                     {item.show_class && item.class_label && <p className={'mt-0.5 text-[10px] ' + muted}>{item.class_label}組</p>}
-                    <p className={'mt-2 line-clamp-2 min-h-9 text-[11px] leading-5 ' + muted}>{item.bio || '自己紹介はありません。'}</p>
+                    {item.bio ? <p className={'mt-2 line-clamp-2 text-[11px] leading-5 ' + muted}>{item.bio}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-1.5">{COSMETICS.filter(badge => badge.category === 'badge' && item.equipped_badges.includes(badge.id)).slice(0, 3).map(badge => <span key={badge.id} className="rounded-full bg-cyan-500/10 px-2 py-1 text-[9px] font-black"><BadgeIcon id={badge.id} size={16} /> {badge.name}</span>)}</div>
                     <span className="mt-3 inline-flex items-center gap-1 text-[10px] font-black text-cyan-500">プロフィールを見る <ChevronLeft size={12} className="rotate-180" /></span>
                   </div>
