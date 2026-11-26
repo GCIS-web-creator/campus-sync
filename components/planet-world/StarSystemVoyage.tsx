@@ -845,7 +845,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
     const camera = new THREE.PerspectiveCamera(46, mount.clientWidth / Math.max(1, mount.clientHeight), 0.00001, 120_000);
-    scene.add(camera);
+    // Keep the camera outside the scene graph. The scene is re-centred around
+    // the ship every frame (floating origin), preserving the 1 km hull detail
+    // even while the absolute star-system coordinates are tens of millions km.
     const resources: Array<{ dispose: () => void }> = [];
     // Warp streaks and rings live in the ship's flight frame, not on the
     // camera. Looking around therefore does not drag the acceleration lines.
@@ -1134,6 +1136,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
+      // Floating origin: move the entire celestial scene by -ship position,
+      // leaving the camera at local zero. This avoids float precision loss
+      // between kilometre-sized hull details and AU-scale world coordinates.
+      scene.position.copy(pose.position).negate();
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
@@ -1197,9 +1203,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
       // Cockpit gaze follows the active destination. It can differ from the
       // ship heading without rotating the world-anchored warp streaks.
-      camera.position.copy(pose.position);
+      camera.position.set(0, 0, 0);
       camera.up.copy(pose.up);
-      camera.lookAt(pose.target);
+      camera.lookAt(pose.target.clone().sub(pose.position));
       camera.rotateZ(Math.sin(cinematicEffectTime * 1.8) * warpAmount * 0.045 + Math.sin(cinematicEffectTime * 5.4) * warpAmount * 0.012);
       const cockpitQuaternion = camera.quaternion.clone();
 
@@ -1208,16 +1214,16 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         // behind and above, with a slight lateral sweep along the route.
         const cameraDrift = Math.sin(cinematicEffectTime * 0.16) * VOYAGE_SCALE.spacecraftLength * 1.1;
         const chaseDistance = VOYAGE_SCALE.spacecraftLength * (highSpeed ? 8.0 : 6.2);
-        camera.position.copy(pose.position)
+        camera.position.set(0, 0, 0)
           .addScaledVector(forward, -chaseDistance)
           .addScaledVector(up, VOYAGE_SCALE.spacecraftLength * 2.2)
           .addScaledVector(right, VOYAGE_SCALE.spacecraftLength * (0.9 + cameraDrift / VOYAGE_SCALE.spacecraftLength));
         camera.up.copy(up);
-        camera.lookAt(pose.position.clone().addScaledVector(forward, VOYAGE_SCALE.spacecraftLength * 1.5));
+        camera.lookAt(forward.clone().multiplyScalar(VOYAGE_SCALE.spacecraftLength * 1.5));
         camera.rotateY(lookOffset.yaw);
         camera.rotateX(lookOffset.pitch);
       } else {
-        camera.position.copy(pose.position);
+        camera.position.set(0, 0, 0);
         camera.up.copy(pose.up);
         camera.quaternion.copy(cockpitQuaternion);
         camera.rotateY(lookOffset.yaw);
