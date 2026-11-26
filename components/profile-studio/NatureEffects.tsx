@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useId } from 'react';
 import './effects.css';
 import './nature.css';
 import './themes2.css';
+import './themes3.css';
 import './effects-overrides.css';
 import './motion-pause.css';
 import { ICON, BANNER, type DecoKind } from './effectsRegistry';
