@@ -77,14 +77,21 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     // A star is a self-luminous plasma sphere. There is deliberately no
     // directional-light, daylight, or night-side calculation in this shader.
     float broadFlow = fbm(direction * 7.5 + uSeed * 0.31 + drift);
-    float convection = fbm(direction * 38.0 + uSeed + drift * 4.0);
+    float convection = fbm(direction * 34.0 + uSeed + drift * 4.0);
     float fineGranules = fbm(direction * 112.0 + uSeed * 2.7 - drift * 8.0);
     float superGranules = fbm(direction * 18.0 + uSeed * 1.7 + drift * 1.8);
+    // Higher-frequency convection cells create the mottled, granular texture
+    // of a photosphere instead of broad, blurry noise patches.
+    float granuleField = noise3(direction * 178.0 + uSeed * 2.3 + drift * 9.0);
+    float microGranules = noise3(direction * 312.0 + uSeed * 3.7 - drift * 12.0);
 
     float brightCells = smoothstep(0.27, 0.76, convection);
     float intergranularLanes = 1.0 - smoothstep(0.015, 0.14, abs(convection - 0.48));
     float plasmaFilaments = 1.0 - abs(fineGranules * 2.0 - 1.0);
     float turbulentRidges = smoothstep(0.36, 0.78, superGranules);
+    float granuleHighlights = smoothstep(0.28, 0.73, granuleField);
+    float granuleBoundaries = 1.0 - smoothstep(0.012, 0.09, abs(granuleField - 0.48));
+    float microTexture = 0.5 + 0.5 * (microGranules * 2.0 - 1.0);
 
     // Small, low-contrast sunspot groups; never a hemisphere-wide shadow.
     float spotField = fbm(direction * 13.0 + uSeed * 3.1);
@@ -92,15 +99,16 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     sunspot *= smoothstep(0.28, 0.62, broadFlow);
 
     vec3 color = mix(uDeepColor, uBaseColor, smoothstep(0.10, 0.72, broadFlow));
-    color = mix(color, uHotColor, clamp(brightCells * 0.48 + turbulentRidges * 0.24, 0.0, 0.78));
-    color *= 0.93 + brightCells * 0.28 + plasmaFilaments * 0.10 - intergranularLanes * 0.055;
-    color *= 1.0 - sunspot * 0.17;
+    color = mix(color, uHotColor, clamp(brightCells * 0.20 + turbulentRidges * 0.12 + granuleHighlights * 0.48, 0.0, 0.82));
+    color *= 0.84 + brightCells * 0.19 + plasmaFilaments * 0.08 + granuleHighlights * 0.34 + microTexture * 0.09;
+    color *= 1.0 - intergranularLanes * 0.075 - granuleBoundaries * 0.12;
+    color *= 1.0 - sunspot * 0.25;
 
     // Mild limb darkening adds spherical depth without creating a day/night edge.
     float viewFacing = max(0.0, dot(normalize(vStarViewNormal), normalize(vStarViewPosition)));
     float limb = 0.88 + 0.12 * sqrt(viewFacing);
     float pulse = 0.985 + 0.015 * sin(uTime * 0.22 + broadFlow * 8.0);
-    vec3 emission = color * limb * pulse * 1.42;
+    vec3 emission = color * limb * pulse * 1.58;
 
     gl_FragColor = vec4(emission, 1.0);
     #include <tonemapping_fragment>
@@ -128,11 +136,12 @@ const CORONA_FRAGMENT_SHADER = /* glsl */ `
     float rim = pow(max(0.0, 1.0 - facing), 1.75);
     float angle = atan(direction.y, direction.x);
     float turbulence = fbm(direction * 15.0 + uSeed + vec3(0.0, uTime * 0.003, 0.0));
-    float streamPhase = angle * 54.0 + turbulence * 8.0 + uTime * 0.12;
+    float streamPhase = angle * 48.0 + turbulence * 8.0 + uTime * 0.12;
     float streamers = pow(max(0.0, 0.5 + 0.5 * sin(streamPhase)), 8.0);
-    float fineRays = pow(max(0.0, 0.5 + 0.5 * sin(angle * 103.0 - turbulence * 11.0 - uTime * 0.08)), 14.0);
-    float alpha = rim * (0.035 + streamers * 0.23 + fineRays * 0.13 + turbulence * 0.07);
-    vec3 color = uCoronaColor * (1.1 + streamers * 1.8 + fineRays * 1.4);
+    float longProminences = pow(max(0.0, 0.5 + 0.5 * sin(angle * 23.0 - turbulence * 5.0 + uTime * 0.055)), 13.0);
+    float fineRays = pow(max(0.0, 0.5 + 0.5 * sin(angle * 109.0 - turbulence * 11.0 - uTime * 0.08)), 16.0);
+    float alpha = rim * (0.028 + streamers * 0.20 + longProminences * 0.15 + fineRays * 0.16 + turbulence * 0.065);
+    vec3 color = uCoronaColor * (1.15 + streamers * 1.7 + longProminences * 1.5 + fineRays * 1.65);
     gl_FragColor = vec4(color, alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -149,9 +158,11 @@ function makeSeed(seed: number) {
 
 export function createStellarSurfaceMaterial(color: string, seed: number) {
   const tint = new THREE.Color(color);
-  const hotColor = tint.clone().lerp(new THREE.Color('#fff4d5'), 0.76);
-  const baseColor = tint.clone().lerp(new THREE.Color('#ff9b48'), 0.40);
-  const deepColor = tint.clone().lerp(new THREE.Color('#8f281b'), 0.46);
+  // Keep the hottest granules close to white, as in a real photosphere,
+  // while retaining the spectral tint of each star class.
+  const hotColor = new THREE.Color('#fffdf5').lerp(tint, 0.22);
+  const baseColor = new THREE.Color('#ffd17c').lerp(tint, 0.42);
+  const deepColor = new THREE.Color('#a33b20').lerp(tint, 0.55);
 
   return new THREE.ShaderMaterial({
     uniforms: {
