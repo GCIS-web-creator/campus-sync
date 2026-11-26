@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
@@ -63,98 +64,6 @@ function createCityLightsTexture(seed: number) {
   return texture;
 }
 
-function createGlowTexture(color: string) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128; canvas.height = 128;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-  const gradient = context.createRadialGradient(64, 64, 2, 64, 64, 62);
-  gradient.addColorStop(0, color); gradient.addColorStop(0.18, color + 'cc');
-  gradient.addColorStop(0.48, color + '55'); gradient.addColorStop(1, color + '00');
-  context.fillStyle = gradient; context.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(canvas);
-}
-
-function createSolarCoronaTexture(color: string, seed: number) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-
-  const random = seeded(seed + 503);
-  const rgb = new THREE.Color(color);
-  const red = Math.round(rgb.r * 255);
-  const green = Math.round(rgb.g * 255);
-  const blue = Math.round(rgb.b * 255);
-
-  // A bright stellar core fading into a broad, coloured corona.
-  const glow = context.createRadialGradient(256, 256, 2, 256, 256, 250);
-  glow.addColorStop(0, 'rgba(255,255,255,1)');
-  glow.addColorStop(0.035, 'rgba(' + red + ',' + green + ',' + blue + ',0.98)');
-  glow.addColorStop(0.12, 'rgba(' + red + ',' + green + ',' + blue + ',0.66)');
-  glow.addColorStop(0.28, 'rgba(' + red + ',' + green + ',' + blue + ',0.28)');
-  glow.addColorStop(0.52, 'rgba(' + red + ',' + green + ',' + blue + ',0.09)');
-  glow.addColorStop(0.78, 'rgba(' + red + ',' + green + ',' + blue + ',0.025)');
-  glow.addColorStop(1, 'rgba(' + red + ',' + green + ',' + blue + ',0)');
-  context.fillStyle = glow;
-  context.fillRect(0, 0, 512, 512);
-
-  // Fine, uneven coronal streamers instead of a simple uniform blur.
-  for (let ray = 0; ray < 230; ray += 1) {
-    const angle = random() * Math.PI * 2;
-    const inner = 54 + random() * 34;
-    const outer = 125 + random() * 125;
-    const bend = (random() - 0.5) * 48;
-    const alpha = 0.035 + random() * 0.16;
-    const startX = 256 + Math.cos(angle) * inner;
-    const startY = 256 + Math.sin(angle) * inner;
-    const endX = 256 + Math.cos(angle) * outer;
-    const endY = 256 + Math.sin(angle) * outer;
-    const controlX = 256 + Math.cos(angle) * (inner + outer) * 0.5 - Math.sin(angle) * bend;
-    const controlY = 256 + Math.sin(angle) * (inner + outer) * 0.5 + Math.cos(angle) * bend;
-    context.beginPath();
-    context.moveTo(startX, startY);
-    context.quadraticCurveTo(controlX, controlY, endX, endY);
-    context.strokeStyle = 'rgba(' + red + ',' + green + ',' + blue + ',' + alpha.toFixed(3) + ')';
-    context.lineWidth = 0.5 + random() * 1.8;
-    context.stroke();
-  }
-
-  // Long, soft prominences and delicate loops around the stellar limb.
-  for (let arc = 0; arc < 34; arc += 1) {
-    const angle = random() * Math.PI * 2;
-    const radius = 104 + random() * 70;
-    const span = 0.12 + random() * 0.5;
-    context.beginPath();
-    context.ellipse(256, 256, radius, radius * (0.78 + random() * 0.34), angle, -span, span);
-    context.strokeStyle = 'rgba(' + red + ',' + green + ',' + blue + ',' + (0.025 + random() * 0.09).toFixed(3) + ')';
-    context.lineWidth = 0.7 + random() * 1.4;
-    context.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function createStarField(seed: number) {
-  const random = seeded(seed + 701);
-  const positions: number[] = []; const colors: number[] = [];
-  const colorChoices = [0xc4d8ff, 0xffe4c3, 0xffffff, 0xffc6a6, 0xb9f0ff];
-  for (let index = 0; index < 1450; index += 1) {
-    const y = random() * 2 - 1; const angle = random() * Math.PI * 2;
-    const radius = Math.sqrt(1 - y * y); const distance = 44 + random() * 22;
-    positions.push(Math.cos(angle) * radius * distance, y * distance, Math.sin(angle) * radius * distance);
-    const color = new THREE.Color(colorChoices[Math.floor(random() * colorChoices.length)]);
-    colors.push(color.r, color.g, color.b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  return new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.12, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false }));
-}
-
 function createFallbackSurfaceTexture(seed: number, atmosphereColor: string) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024; canvas.height = 512;
@@ -172,33 +81,6 @@ function createFallbackSurfaceTexture(seed: number, atmosphereColor: string) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace; texture.wrapS = THREE.RepeatWrapping; texture.needsUpdate = true;
   return texture;
-}
-
-function makeAtmosphere(radius: number, color: string) {
-  return new THREE.Mesh(
-    new THREE.SphereGeometry(radius * 1.045, 64, 48),
-    new THREE.ShaderMaterial({
-      uniforms: { uAtmosphereColor: { value: new THREE.Color(color) } },
-      vertexShader: [
-        'varying vec3 vWorldNormal;', 'varying vec3 vViewDirection;',
-        'void main() {',
-        '  vec4 worldPosition = modelMatrix * vec4(position, 1.0);',
-        '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
-        '  vViewDirection = normalize(cameraPosition - worldPosition.xyz);',
-        '  gl_Position = projectionMatrix * viewMatrix * worldPosition;',
-        '}',
-      ].join('\n'),
-      fragmentShader: [
-        'uniform vec3 uAtmosphereColor;', 'varying vec3 vWorldNormal;', 'varying vec3 vViewDirection;',
-        'void main() {',
-        '  float fresnel = pow(1.0 - max(dot(normalize(vWorldNormal), normalize(vViewDirection)), 0.0), 2.45);',
-        '  float alpha = smoothstep(0.02, 0.95, fresnel) * 0.48;',
-        '  gl_FragColor = vec4(uAtmosphereColor, alpha);',
-        '}',
-      ].join('\n'),
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
-    }),
-  );
 }
 
 function addOrbitAndMoon(scene: THREE.Scene, index: number, seed: number, moonColor: string, resources: Array<{ dispose: () => void }>) {
@@ -318,9 +200,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
       };
       controls.enabled = false;
     };
-    const starField = createStarField(numericId);
-    scene.add(starField);
-    resources.push(starField.geometry, starField.material);
+    scene.add(makeDeepSky(numericId, resources));
 
     const system = new THREE.Group();
     scene.add(system);
@@ -355,6 +235,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     });
 
     const sunPositions: THREE.Vector3[] = [];
+    const stellarEffects: Array<{ update: (seconds: number) => void }> = [];
     if (!spec.rogue) {
       spec.starClasses.forEach((starClass, index) => {
         const profile = STAR_PROFILES[starClass];
@@ -368,13 +249,11 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
         // 光球は1px前後の小ささに抑え、コロナとプロミネンスを見せる。
         const starCoreRadius = 1.6 * profile.radius;
-        const star = new THREE.Mesh(
-          new THREE.SphereGeometry(starCoreRadius, 32, 24),
-          new THREE.MeshBasicMaterial({ color: profile.lightColor, toneMapped: false }),
-        );
+        const starSurface = makeStarSurfaceMaterial(profile.lightColor, numericId * 7 + index, resources);
+        const star = new THREE.Mesh(new THREE.SphereGeometry(starCoreRadius * 5, 96, 64), starSurface.material);
         star.position.copy(position);
         scene.add(star);
-        resources.push(star.geometry, star.material);
+        resources.push(star.geometry);
 
         const starHit = new THREE.Mesh(
           new THREE.SphereGeometry(Math.max(24, starCoreRadius * 14), 18, 14),
@@ -395,41 +274,10 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         interactiveTargets.push(starHit);
         resources.push(starHit.geometry, starHit.material);
 
-        const coronaTexture = createSolarCoronaTexture(profile.color, numericId * 17 + index);
-        const coronaMaterial = new THREE.SpriteMaterial({
-          map: coronaTexture,
-          color: '#ffffff',
-          transparent: true,
-          opacity: 0.96,
-          depthWrite: false,
-          depthTest: true,
-          blending: THREE.AdditiveBlending,
-          toneMapped: false,
-        });
-        const corona = new THREE.Sprite(coronaMaterial);
-        corona.position.copy(position);
-        corona.scale.setScalar(92 + profile.radius * 12);
-        corona.renderOrder = 3;
-        scene.add(corona);
-        resources.push(corona.material, coronaTexture);
-
-        const haloTexture = createGlowTexture(profile.color);
-        const haloMaterial = new THREE.SpriteMaterial({
-          map: haloTexture,
-          color: profile.color,
-          transparent: true,
-          opacity: 0.48,
-          depthWrite: false,
-          depthTest: true,
-          blending: THREE.AdditiveBlending,
-          toneMapped: false,
-        });
-        const halo = new THREE.Sprite(haloMaterial);
-        halo.position.copy(position);
-        halo.scale.setScalar(128 + profile.radius * 16);
-        halo.renderOrder = 2;
-        scene.add(halo);
-        resources.push(halo.material, haloTexture);
+        const corona = makeStarCorona(starCoreRadius * 5, 120 + profile.radius * 30, profile.color, numericId * 17 + index, resources);
+        corona.mesh.position.copy(position);
+        scene.add(corona.mesh);
+        stellarEffects.push(starSurface, corona);
 
         const light = new THREE.DirectionalLight(profile.lightColor, profile.intensity);
         light.position.copy(position);
@@ -479,9 +327,11 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     system.add(clouds);
     resources.push(clouds.geometry, cloudMaterial, cloudTexture);
 
-    const atmosphere = makeAtmosphere(planetRadius, spec.atmosphereColor);
-    system.add(atmosphere);
-    resources.push(atmosphere.geometry, atmosphere.material);
+    if (!spec.rogue) {
+      system.add(makeAtmosphereShell(planetRadius, spec.atmosphereColor, primarySunDirection, resources));
+    } else {
+      system.add(makeAtmosphereShell(planetRadius, spec.atmosphereColor, defaultCameraPosition, resources));
+    }
 
     if (spec.hasRings) {
       const ringGeometry = new THREE.RingGeometry(planetRadius * 1.58, planetRadius * 2.45, 144);
@@ -566,6 +416,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     const render = () => {
       if (!active) return;
       const delta = Math.min(clock.getDelta(), 0.05);
+      stellarEffects.forEach(effect => effect.update(clock.elapsedTime));
       // 自転は惑星自身の座標系で進み、太陽光源の座標は変えない。
       system.rotation.y += delta * (spec.rogue ? 0.006 : 0.012);
       clouds.rotation.y += delta * 0.017;

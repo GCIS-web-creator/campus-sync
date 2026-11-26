@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
+import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
@@ -12,6 +13,7 @@ import {
   MOON_ORBIT_COCKPIT_FOV_DEGREES,
   MOON_ORBIT_VIEW_BISECTOR_DEGREES,
   getStarCoronaClearanceKm,
+  getStarCoronaOuterRadius,
   getStarTangentFlybyGeometry,
   getStarOrbitRadius,
   getVoyageStarRadius,
@@ -153,85 +155,6 @@ function makeNightLightsTexture(seed: number) {
 }
 
 
-function makeStarGranulationTexture(color: string, seed: number) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 512;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-  const random = seeded(seed + 8_821);
-  const tint = new THREE.Color(color);
-  const hue = tint.getHSL({ h: 0, s: 0, l: 0 });
-  const base = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-  if (hue.h < 0.12 || hue.h > 0.92) {
-    base.addColorStop(0, '#ffedaa');
-    base.addColorStop(0.28, '#ffb64d');
-    base.addColorStop(0.65, '#eb6a2d');
-    base.addColorStop(1, '#ad3218');
-  } else {
-    const hex = '#' + tint.getHexString();
-    base.addColorStop(0, '#fff0c4');
-    base.addColorStop(0.45, hex);
-    base.addColorStop(1, '#6c547e');
-  }
-  context.fillStyle = base;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Dense, irregular convection cells: bright granule centres surrounded by
-  // darker intergranular lanes, rather than a flat emissive sphere.
-  for (let index = 0; index < 5_600; index += 1) {
-    const x = random() * canvas.width;
-    const y = random() * canvas.height;
-    const rx = 2.4 + random() * 7.6;
-    const ry = rx * (0.42 + random() * 0.72);
-    const turn = random() * Math.PI;
-    const warm = random();
-    const gradient = context.createRadialGradient(x, y, 0, x, y, rx * 1.5);
-    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.62)' : 'rgba(255,195,104,0.50)');
-    gradient.addColorStop(0.55, 'rgba(255,150,61,0.24)');
-    gradient.addColorStop(1, 'rgba(103,35,18,0.03)');
-    context.save();
-    context.translate(x, y);
-    context.rotate(turn);
-    context.fillStyle = gradient;
-    context.beginPath();
-    context.ellipse(0, 0, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = 'rgba(95,34,16,' + (0.08 + random() * 0.16).toFixed(3) + ')';
-    context.lineWidth = 0.5 + random() * 1.1;
-    context.beginPath();
-    context.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-    context.stroke();
-    context.restore();
-  }
-
-  // A few subtle sunspot groups help make surface rotation legible.
-  for (let spot = 0; spot < 26; spot += 1) {
-    const x = random() * canvas.width;
-    const y = 28 + random() * (canvas.height - 56);
-    const radius = 6 + random() * 16;
-    context.save();
-    context.translate(x, y);
-    context.rotate((random() - 0.5) * 0.8);
-    context.fillStyle = 'rgba(74,28,16,0.34)';
-    context.beginPath();
-    context.ellipse(0, 0, radius * 1.65, radius * 0.62, 0, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = 'rgba(45,20,16,0.62)';
-    context.beginPath();
-    context.ellipse(0, 0, radius, radius * 0.42, 0, 0, Math.PI * 2);
-    context.fill();
-    context.restore();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.anisotropy = 8;
-  return texture;
-}
-
 function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirection: THREE.Vector3) {
   const geometry = new THREE.SphereGeometry(radius * 1.002, 256, 128);
   const material = new THREE.ShaderMaterial({
@@ -247,7 +170,7 @@ function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirec
       '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
       '  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     fragmentShader: [
       'uniform sampler2D uNightMap;',
       'uniform vec3 uSunDirection;',
@@ -261,7 +184,7 @@ function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirec
       '  if (glow < 0.008) discard;',
       '  gl_FragColor = vec4(vec3(1.0, 0.66, 0.34), glow);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     transparent: true,
     depthTest: true,
     depthWrite: false,
@@ -287,7 +210,7 @@ function makeWarpOverlay() {
       '  vUv = uv;',
       '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     fragmentShader: [
       'uniform float uTime;',
       'uniform float uWarp;',
@@ -309,7 +232,7 @@ function makeWarpOverlay() {
       '  vec3 color = mix(cyan, violet, 0.5 + 0.5 * sin(twist + uTime));',
       '  gl_FragColor = vec4(color, alpha);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     transparent: true,
     depthTest: false,
     depthWrite: false,
@@ -417,34 +340,6 @@ function makeSpeedStreaks() {
   });
   return { lines: new THREE.LineSegments(geometry, material), geometry, material };
 }
-function makeStarfield(seed: number) {
-  const random = seeded(seed + 91);
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const choices = [0xa9c9ff, 0xffe2c2, 0xffffff, 0xffc8a9, 0xc0f0ff];
-  for (let index = 0; index < 3_600; index += 1) {
-    const y = random() * 2 - 1;
-    const angle = random() * Math.PI * 2;
-    const radius = Math.sqrt(1 - y * y);
-    const distance = 48_000 + random() * 48_000;
-    positions.push(Math.cos(angle) * radius * distance, y * distance, Math.sin(angle) * radius * distance);
-    const color = new THREE.Color(choices[Math.floor(random() * choices.length)]);
-    colors.push(color.r, color.g, color.b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({
-    size: 8,
-    sizeAttenuation: true,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.92,
-    depthWrite: false,
-  });
-  return new THREE.Points(geometry, material);
-}
-
 function ease(value: number) {
   return value * value * (3 - 2 * value);
 }
@@ -595,47 +490,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       resources.push(ring.geometry, ring.material);
     });
 
-    const starfield = makeStarfield(Number.parseInt(system.id.slice(-3), 10) || 1);
+    const starfield = makeDeepSky(Number.parseInt(system.id.slice(-3), 10) || 1, resources);
     scene.add(starfield);
-    resources.push(starfield.geometry, starfield.material);
 
     const starRadius = getVoyageStarRadius(starClass);
     const starGeometry = new THREE.SphereGeometry(starRadius, 320, 192);
-    const starSurfaceTexture = makeStarGranulationTexture(starProfile.lightColor, Number.parseInt(system.id.slice(-3), 10) || 1);
-    const starMaterial = new THREE.MeshBasicMaterial({ map: starSurfaceTexture, color: '#ffffff', toneMapped: false });
-    const star = new THREE.Mesh(starGeometry, starMaterial);
+    const starSeed = Number.parseInt(system.id.slice(-3), 10) || 1;
+    const starSurface = makeStarSurfaceMaterial(starProfile.lightColor, starSeed, resources);
+    const star = new THREE.Mesh(starGeometry, starSurface.material);
     scene.add(star);
-    resources.push(starGeometry, starSurfaceTexture, starMaterial);
+    resources.push(starGeometry);
 
-    const coronaTexture = makeCorona(starProfile.color);
-    const coronaMaterial = new THREE.SpriteMaterial({
-      map: coronaTexture,
-      color: '#ffffff',
-      transparent: true,
-      opacity: 0.94,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    });
-    const corona = new THREE.Sprite(coronaMaterial);
-    corona.scale.setScalar(starRadius * 5.8);
-    scene.add(corona);
-    resources.push(coronaTexture, coronaMaterial);
-
-    const haloTexture = makeCorona(starProfile.lightColor);
-    const haloMaterial = new THREE.SpriteMaterial({
-      map: haloTexture,
-      color: starProfile.lightColor,
-      transparent: true,
-      opacity: 0.52,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    });
-    const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(starRadius * 6.0);
-    scene.add(halo);
-    resources.push(haloTexture, haloMaterial);
+    const corona = makeStarCorona(starRadius, getStarCoronaOuterRadius(starRadius), starProfile.color, starSeed, resources);
+    scene.add(corona.mesh);
 
     const planetPosition = new THREE.Vector3(-VOYAGE_SCALE.astronomicalUnit, 0, 0);
     const moonPosition = planetPosition.clone().add(new THREE.Vector3(0, 0, VOYAGE_SCALE.earthMoonDistance));
@@ -678,13 +545,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(nightOverlay.mesh);
     resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture, nightOverlay.geometry, nightOverlay.material);
 
-    const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
-      new THREE.MeshBasicMaterial({ color: system.atmosphereColor, transparent: true, opacity: 0.14, side: THREE.BackSide, depthWrite: false }),
-    );
+    const atmosphere = makeAtmosphereShell(VOYAGE_SCALE.earthRadius, system.atmosphereColor, planetPosition.clone().negate(), resources);
     atmosphere.position.copy(planetPosition);
     scene.add(atmosphere);
-    resources.push(atmosphere.geometry, atmosphere.material);
 
     const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 384, 256);
     const moonMaterial = new THREE.MeshStandardMaterial({
@@ -976,6 +839,8 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       // Granulation rotates with the stellar surface, rather than being a
       // static featureless emissive sphere. Delta time keeps it FPS-independent.
       star.rotation.y += deltaSeconds * 0.026;
+      starSurface.update(now / 1_000);
+      corona.update(now / 1_000);
       moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
