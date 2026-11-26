@@ -344,6 +344,28 @@ export default function ProfileStudio({
     void loadOwnProfile();
   }, [loadOwnProfile]);
 
+  const refreshUnlockedIds = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('student_profile_unlocks')
+      .select('cosmetic_id')
+      .eq('user_id', userId);
+    if (!error) setUnlockedIds((data || []).map((row: any) => String(row.cosmetic_id)));
+  }, [userId]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void refreshUnlockedIds();
+    };
+    const interval = window.setInterval(refresh, 12000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [refreshUnlockedIds]);
+
   const loadDirectory = useCallback(async () => {
     setDirectoryLoading(true);
     setSelectedProfile(null);
