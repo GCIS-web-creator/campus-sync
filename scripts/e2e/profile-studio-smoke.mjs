@@ -154,7 +154,7 @@ try {
   }
 
   await openProfile();
-  assert.equal(await page.getByRole('button', { name: '自己紹介を書く' }).count(), 1, 'Only the owner's empty profile preview should show the bio action');
+  assert.equal(await page.getByRole('button', { name: '自己紹介を書く' }).count(), 1, 'Only the profile owner should see the empty-bio action');
   const initialCardText = await page.locator('.ps-card').innerText();
   assert.equal(initialCardText.includes('💎'), false, 'The default diamond avatar is rendered as SVG rather than emoji');
   assert.equal(/123456|tokyo\.soka\.ed\.jp/.test(initialCardText), false, 'School email and student ID must not appear on the card');
