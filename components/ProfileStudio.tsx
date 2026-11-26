@@ -7,6 +7,7 @@ import { BadgeCheck, Check, ChevronLeft, Compass, Eye, Medal, Palette, RefreshCw
 import { ProfileMediaEditor } from '@/components/profile-studio/ProfileMediaEditor';
 import { GradientEditor } from '@/components/profile-studio/GradientEditor';
 import { BadgeIcon } from '@/components/profile-studio/BadgeIcon';
+import { AvatarGlyph } from '@/components/profile-studio/AvatarGlyph';
 import { AvatarDeco, BannerEffect, type DecoKind } from '@/components/profile-studio/NatureEffects';
 import { DECO_ITEMS } from '@/components/profile-studio/catalog';
 import { DEFAULT_PROFILE_STUDIO, normalizeProfileStudio, nameCss, type ProfileStudioSettings } from '@/components/profile-studio/nameStyle';
@@ -190,11 +191,13 @@ function ProfileCard({
   compact = false,
   previewAvatarKind,
   previewBannerKind,
+  onEditBio,
 }: {
   profile: ProfileDraft;
   compact?: boolean;
   previewAvatarKind?: DecoKind | null;
   previewBannerKind?: DecoKind | null;
+  onEditBio?: () => void;
 }) {
   const avatarUrl = safeHttpsUrl(profile.avatar_url);
   const bannerUrl = safeHttpsUrl(profile.banner_url);
@@ -212,14 +215,14 @@ function ProfileCard({
     <div className="ps-card">
       <div className={'ps-banner ps-banner-' + profile.banner_theme} style={bannerStyle}>
         {bannerKind && <BannerEffect kind={bannerKind} count={compact ? 8 : 18} paused={studio.motionPaused} intensity={0.16} />}
-        <div className="absolute inset-0 z-[5] bg-gradient-to-b from-transparent via-transparent to-[#0e1a35]/75" />
+        <div className="absolute inset-0 z-[4] bg-gradient-to-b from-transparent via-transparent to-[#0e1a35]/65 pointer-events-none" />
         {!compact && <span className="absolute bottom-3 right-4 z-10 rounded-full border border-white/20 bg-slate-950/25 px-3 py-1 text-[9px] font-black tracking-[.2em] text-white/80">CAMPUSSYNC PROFILE</span>}
       </div>
       <div className="ps-profile-body">
         <div className="flex items-end justify-between gap-3">
           <div className={'ps-avatar-wrap ' + frameClass + (profile.avatar_effect === 'sparkle' ? ' ps-avatar-sparkle' : '')}>
             <div className="ps-avatar-inner">
-              {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{profile.avatar_emoji || '🌸'}</span>}
+              {avatarUrl ? <img src={avatarUrl} alt="" /> : <AvatarGlyph value={profile.avatar_emoji || '🌸'} size={48} />}
             </div>
             {avatarKind && <AvatarDeco kind={avatarKind} count={compact ? 6 : 10} paused={studio.motionPaused} />}
           </div>
@@ -228,14 +231,24 @@ function ProfileCard({
         <div className="mt-4 min-w-0">
           <h3 style={customNameStyle} className={'break-words text-3xl font-black tracking-tight drop-shadow-[0_0_12px_rgba(94,234,212,.28)] ' + nameStyleClass + ' ' + fontClass}>{profile.display_name || '名前未設定'}</h3>
           {profile.show_class && profile.class_label && <p className="mt-1 text-[11px] font-bold text-slate-300/75">{profile.class_label}組</p>}
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200/85">{profile.bio || '自己紹介はまだ設定されていません。'}</p>
+          {profile.bio ? (
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200/90">{profile.bio}</p>
+          ) : onEditBio ? (
+            <button type="button" onClick={onEditBio} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-dashed border-cyan-200/35 bg-white/[.04] px-3 py-2 text-xs font-bold text-cyan-100/90 transition hover:bg-white/[.08]">
+              <UserRound size={14} /> 自己紹介を書く
+            </button>
+          ) : null}
         </div>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[.04] p-2.5">
           <ContributionRankBadge points={profile.contribution_points} compact tone="onDark" />
         </div>
-        {badges.length > 0 && (
+        {badges.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {badges.map(badge => <span key={badge.id} className="ps-badge"><BadgeIcon id={badge.id} state="equipped" size={24} />{badge.name}</span>)}
+          </div>
+        ) : (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[.035] px-3 py-2 text-xs font-semibold text-slate-300/85">
+            <Medal size={16} className="text-cyan-200/80" /> バッジを装備しよう
           </div>
         )}
         <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/15 pt-3 text-xs font-semibold text-slate-200/85">
@@ -473,13 +486,13 @@ export default function ProfileStudio({
                 <input value={profile.display_name} maxLength={32} onChange={event => setProfile(prev => ({ ...prev, display_name: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-sm font-bold outline-none focus:border-cyan-400" placeholder="例：saku" />
                 <div className="mt-4">
                   <label className={'mb-1 block text-[11px] font-bold ' + muted}>自己紹介（160文字まで）</label>
-                  <textarea value={profile.bio} maxLength={160} rows={3} onChange={event => setProfile(prev => ({ ...prev, bio: event.target.value }))} className="w-full resize-y rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-sm outline-none focus:border-cyan-400" placeholder="好きなこと、CampusSyncで取り組んでいることなど" />
+                  <textarea id="profile-bio-editor" value={profile.bio} maxLength={160} rows={3} onChange={event => setProfile(prev => ({ ...prev, bio: event.target.value }))} className="w-full resize-y rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-sm outline-none focus:border-cyan-400" placeholder="好きなこと、CampusSyncで取り組んでいることなど" />
                   <p className={'mt-1 text-right text-[10px] ' + muted}>{profile.bio.length}/160</p>
                 </div>
                 <div className="mt-4">
                   <p className={'mb-2 text-[11px] font-bold ' + muted}>アイコン</p>
                   <div className="flex flex-wrap gap-2">
-                    {AVATARS.map(avatar => <button type="button" key={avatar} onClick={() => setProfile(prev => ({ ...prev, avatar_emoji: avatar, avatar_url: '', avatar_path: '' }))} aria-pressed={profile.avatar_emoji === avatar && !profile.avatar_url} className={'flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition ' + (profile.avatar_emoji === avatar && !profile.avatar_url ? 'border-cyan-400 bg-cyan-500/15 ring-2 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}>{avatar}</button>)}
+                    {AVATARS.map(avatar => <button type="button" key={avatar} onClick={() => setProfile(prev => ({ ...prev, avatar_emoji: avatar, avatar_url: '', avatar_path: '' }))} aria-pressed={profile.avatar_emoji === avatar && !profile.avatar_url} aria-label={'アイコン ' + avatar + ' を選択'} className={'flex h-10 w-10 items-center justify-center rounded-xl border transition ' + (profile.avatar_emoji === avatar && !profile.avatar_url ? 'border-cyan-400 bg-cyan-500/15 ring-2 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}><AvatarGlyph value={avatar} size={22} /></button>)}
                   </div>
                   <label className={'mt-3 block text-[10px] font-bold ' + muted}>画像URL（任意・HTTPSのみ）</label>
                   <input maxLength={2048} value={profile.avatar_path ? '' : profile.avatar_url} onChange={event => setProfile(prev => ({ ...prev, avatar_url: event.target.value, avatar_path: '' }))} className="mt-1 w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2 text-xs outline-none focus:border-cyan-400" placeholder="https://example.com/avatar.png" />
@@ -626,7 +639,7 @@ export default function ProfileStudio({
             <div className="space-y-4">
               <section className={'rounded-2xl border p-3 sm:p-4 ' + darkCard}>
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-black">リアルタイムプレビュー</h3><span className="rounded-full border border-cyan-600/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-black text-cyan-700 dark:text-cyan-300">LIVE PREVIEW</span></div>
-                <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} />
+                <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} onEditBio={() => document.getElementById('profile-bio-editor')?.focus()} />
                 <p className={'mt-3 text-[10px] leading-5 ' + muted}>装飾の変更内容は、保存前でもプレビューに反映されます。</p>
               </section>
 
@@ -669,7 +682,7 @@ export default function ProfileStudio({
                 {directory.map(item => <button key={item.user_id} type="button" onClick={() => setSelectedProfile(item)} className="overflow-hidden rounded-2xl border border-slate-300/25 text-left transition hover:-translate-y-0.5 hover:border-cyan-400/60 hover:shadow-lg">
                   <div className={'h-16 ps-banner-' + item.banner_theme} />
                   <div className="relative px-3 pb-3 pt-0">
-                    <div className="relative -mt-7 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-4 border-slate-800 bg-gradient-to-br from-cyan-400 to-violet-500 text-2xl">{safeHttpsUrl(item.avatar_url) ? <img src={safeHttpsUrl(item.avatar_url)} alt="" className="h-full w-full object-cover" /> : item.avatar_emoji}</div>
+                    <div className="relative -mt-7 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-4 border-slate-800 bg-gradient-to-br from-cyan-400 to-violet-500 text-2xl">{safeHttpsUrl(item.avatar_url) ? <img src={safeHttpsUrl(item.avatar_url)} alt="" className="h-full w-full object-cover" /> : <AvatarGlyph value={item.avatar_emoji} size={26} />}</div>
                     <p className="mt-2 truncate text-sm font-black">{item.display_name}</p>
                     {item.show_class && item.class_label && <p className={'mt-0.5 text-[10px] ' + muted}>{item.class_label}組</p>}
                     <p className={'mt-2 line-clamp-2 min-h-9 text-[11px] leading-5 ' + muted}>{item.bio || '自己紹介はありません。'}</p>
