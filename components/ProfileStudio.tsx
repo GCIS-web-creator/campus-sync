@@ -111,20 +111,21 @@ const PROFILE_CSS = [
   '.ps-banner-sunset{background-image:radial-gradient(ellipse at 80% 10%,rgba(255,231,153,.85),transparent 34%),linear-gradient(125deg,#7c2d5a,#c65b75 48%,#f59e0b)}',
   '.ps-banner-midnight{background-image:radial-gradient(ellipse at 48% 4%,rgba(129,140,248,.65),transparent 38%),linear-gradient(125deg,#111827,#20285b 55%,#090c20)}',
   '.ps-banner-sakura{background-image:radial-gradient(ellipse at 25% 10%,rgba(255,205,231,.9),transparent 34%),linear-gradient(125deg,#743d70,#c06b9a 52%,#56357c)}',
-  '.ps-banner:after{content:"✦  ·  ✧       ✦       ·  ✧";position:absolute;inset:18px 22px auto auto;color:rgba(255,255,255,.75);font-size:22px;letter-spacing:12px;pointer-events:none}',
+  '.ps-banner:after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 58% 18%,rgba(255,255,255,.98) 0 1.5px,transparent 2.7px),radial-gradient(circle at 67% 38%,rgba(255,255,255,.78) 0 1px,transparent 2px),radial-gradient(circle at 76% 17%,rgba(255,255,255,.94) 0 1.5px,transparent 2.7px),radial-gradient(circle at 85% 30%,rgba(255,255,255,.72) 0 1px,transparent 2px),radial-gradient(circle at 92% 12%,rgba(186,230,253,.9) 0 2px,transparent 3px),radial-gradient(circle at 48% 22%,rgba(255,255,255,.5) 0 1px,transparent 2px);animation:ps-twinkle 4s ease-in-out infinite}',
+  '.ps-banner:before{content:"";position:absolute;inset:auto 0 0 0;height:64px;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(16,35,68,0),#102344)}',
   '.ps-profile-body{position:relative;padding:0 20px 20px;background:linear-gradient(180deg,#102344,#101936 65%,#0d1730)}',
-  '.ps-avatar-wrap{position:relative;width:98px;height:98px;margin-top:-48px;border-radius:50%;padding:4px;background:linear-gradient(135deg,#67e8f9,#818cf8,#f0abfc);box-shadow:0 8px 30px rgba(0,0,0,.3)}',
+  '.ps-avatar-wrap{position:relative;z-index:2;isolation:isolate;width:98px;height:98px;margin-top:-48px;border-radius:50%;padding:4px;background:linear-gradient(135deg,#67e8f9,#818cf8,#f0abfc);box-shadow:0 8px 30px rgba(0,0,0,.3)}',
   '.ps-avatar-wrap.ps-frame-aurora{background:linear-gradient(135deg,#67e8f9,#a78bfa,#f0abfc,#67e8f9);background-size:250% 250%;animation:ps-frame-flow 5s ease infinite}',
   '.ps-avatar-wrap.ps-frame-prism{background:conic-gradient(from 0deg,#f0abfc,#67e8f9,#fcd34d,#a78bfa,#f0abfc);animation:ps-spin 9s linear infinite}',
   '.ps-avatar-inner{display:flex;width:100%;height:100%;align-items:center;justify-content:center;overflow:hidden;border:3px solid rgba(255,255,255,.8);border-radius:50%;background:linear-gradient(145deg,#243b66,#172343);font-size:42px}',
   '.ps-avatar-inner img{width:100%;height:100%;object-fit:cover}',
   '.ps-avatar-sparkle:after{content:"✦";position:absolute;right:-5px;top:0;color:#bae6fd;font-size:28px;text-shadow:0 0 14px #67e8f9;animation:ps-twinkle 1.8s ease-in-out infinite}',
-  '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
+  '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8,0 0 34px rgba(129,140,248,.55)}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
   '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
   '.ps-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(191,219,254,.22);border-radius:999px;background:rgba(255,255,255,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#e0f2fe}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
-  '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism{animation:none!important}}',
+  '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism,.ps-banner:after{animation:none!important}}',
 ].join('\n');
 
 function safeHttpsUrl(value: string): string {
@@ -225,20 +226,20 @@ function ProfileCard({
           </div>
           {profile.is_public && <span className="mb-2 inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-200"><Eye size={12} /> 公開中</span>}
         </div>
-        <div className="mt-3 min-w-0">
-          <h3 style={customNameStyle} className={'break-words text-2xl font-black tracking-tight ' + nameStyleClass + ' ' + fontClass}>{profile.display_name || '名前未設定'}</h3>
+        <div className="mt-4 min-w-0">
+          <h3 style={customNameStyle} className={'break-words text-3xl font-black tracking-tight drop-shadow-[0_0_12px_rgba(94,234,212,.28)] ' + nameStyleClass + ' ' + fontClass}>{profile.display_name || '名前未設定'}</h3>
           {profile.show_class && profile.class_label && <p className="mt-1 text-[11px] font-bold text-slate-300/75">{profile.class_label}組</p>}
           <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200/85">{profile.bio || '自己紹介はまだ設定されていません。'}</p>
         </div>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[.04] p-2.5">
-          <ContributionRankBadge points={profile.contribution_points} compact />
+          <ContributionRankBadge points={profile.contribution_points} compact tone="onDark" />
         </div>
         {badges.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {badges.map(badge => <span key={badge.id} className="ps-badge"><BadgeIcon id={badge.id} state="equipped" size={24} />{badge.name}</span>)}
           </div>
         )}
-        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-[10px] font-semibold text-slate-300/65">
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/15 pt-3 text-xs font-semibold text-slate-200/85">
           <span>CampusSync</span><span>・</span><span>学びと活動の記録</span>
         </div>
       </div>
