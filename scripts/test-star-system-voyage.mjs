@@ -206,7 +206,7 @@ test('planet orbit view shares the self-luminous stellar shader and visible coro
   const panelSource = readFileSync(new URL('../components/Planet3DPanel.tsx', import.meta.url), 'utf8');
   assert.match(panelSource, /createStellarSurfaceMaterial/);
   assert.match(panelSource, /createStellarCoronaMaterial/);
-  assert.match(panelSource, /const starCoreRadius = 30 \* profile\.radius/);
+  assert.match(panelSource, /const starCoreRadius = 36 \* profile\.radius/);
   assert.match(panelSource, /stellarSurfaceMaterials\.forEach/);
   assert.match(panelSource, /stellarCoronaMaterials\.forEach/);
   assert.doesNotMatch(panelSource, /1px前後の小ささ/);
