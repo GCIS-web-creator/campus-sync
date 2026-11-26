@@ -888,7 +888,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
           </div>
 
-          {!completed && highSpeed && (
+          {!completed && highSpeedActive && (
             <div className="pointer-events-none absolute bottom-[27%] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[9px] text-cyan-100/80 sm:bottom-[28%]">
               <span className="h-1 w-1 rounded-full bg-cyan-200 shadow-[0_0_8px_#67e8f9]" />
               {activePhase?.label}
