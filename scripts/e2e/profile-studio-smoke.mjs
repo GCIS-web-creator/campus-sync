@@ -155,7 +155,9 @@ try {
 
   await openProfile();
   assert.equal(await page.getByRole('button', { name: '自己紹介を書く' }).count(), 1, 'Only the owner's empty profile preview should show the bio action');
-  assert.equal(await page.locator('.ps-card').innerText().then(text => text.includes('💎')), false, 'The default diamond avatar is rendered as SVG rather than emoji');
+  const initialCardText = await page.locator('.ps-card').innerText();
+  assert.equal(initialCardText.includes('💎'), false, 'The default diamond avatar is rendered as SVG rather than emoji');
+  assert.equal(/123456|tokyo\.soka\.ed\.jp/.test(initialCardText), false, 'School email and student ID must not appear on the card');
   assert.equal(await page.getByLabel('プロフィール枠').locator('option[value="aurora"]').isDisabled(), false, 'Unlocked aurora frame should be selectable');
   assert.equal(await page.getByLabel('プロフィール枠').locator('option[value="prism"]').isDisabled(), false, 'Unlocked prism frame should be selectable');
   assert.equal(await page.getByLabel('アイコン演出').locator('option[value="sparkle"]').isDisabled(), false, 'Unlocked sparkle effect should be selectable');
@@ -169,6 +171,8 @@ try {
   assert.equal(savedProfile.frame_style, 'aurora');
   assert.equal(savedProfile.avatar_effect, 'sparkle');
   assert.equal(savedProfile.studio.equipped.avatar_deco, null, 'Unapproved new theme must remain preview-only');
+  assert.equal(savedProfile.is_public, false, 'Private-by-default setting must remain unchanged');
+  assert.equal(savedProfile.show_class, false, 'Class visibility must remain off');
 
   // Existing unlocked decoration remains equipable and is persisted under its legacy ID.
   await page.getByRole('button', { name: /潮騒の波紋/ }).click();
