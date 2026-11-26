@@ -220,7 +220,7 @@ function ProfileCard({
   const bannerStyle = bannerUrl ? { backgroundImage: 'linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5)),url("' + bannerUrl.replace(/"/g, '%22') + '")' } : undefined;
   const studio = normalizeProfileStudio(profile.studio);
   const nameStyleClass = 'ps-name-' + profile.name_style;
-  const normalizedFont = profile.name_font === 'marshmallow' ? 'sakura-pop' : (profile.name_font || 'rounded');
+  const normalizedFont = studio.name_font_override || (profile.name_font === 'marshmallow' ? 'sakura-pop' : (profile.name_font || 'rounded'));
   const fontClass = 'ps-font-' + normalizedFont + (normalizedFont === 'modern' ? ' ps-font-modern-rainbow' : normalizedFont === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '');
   const frameClass = profile.frame_style === 'aurora' ? 'ps-frame-aurora' : profile.frame_style === 'prism' ? 'ps-frame-prism' : '';
   const badges = COSMETICS.filter(item => item.category === 'badge' && profile.equipped_badges.includes(item.id));
@@ -460,7 +460,11 @@ export default function ProfileStudio({
       banner_path: profile.banner_path || null,
       studio: normalizeProfileStudio(profile.studio),
       name_style: NAME_STYLES.some(item => item.id === profile.name_style) ? profile.name_style : 'gradient',
-      name_font: NAME_FONTS.some(item => item.id === profile.name_font) ? profile.name_font : 'rounded',
+      name_font: DB_NAME_FONT_IDS.includes(profile.name_font) ? profile.name_font : 'rounded',
+      studio: normalizeProfileStudio({
+        ...profile.studio,
+        name_font_override: DB_NAME_FONT_IDS.includes(profile.name_font) ? null : profile.name_font,
+      }),
       frame_style: ['basic', 'aurora', 'prism'].includes(profile.frame_style) ? profile.frame_style : 'basic',
       avatar_effect: ['none', 'sparkle'].includes(profile.avatar_effect) ? profile.avatar_effect : 'none',
       is_public: Boolean(profile.is_public),
@@ -565,17 +569,11 @@ export default function ProfileStudio({
                   <p className={'mb-2 text-[11px] font-bold ' + muted}>フォント</p>
                   <div className="grid grid-cols-2 gap-2">
                     {NAME_FONTS.map(font => {
-                      const previewClass = font.id === 'sakura-pop'
-                        ? ' ps-font-sakura-pop ps-font-sakura-pop-rainbow'
-                        : font.id === 'mainframe'
-                          ? ' ps-font-mainframe'
-                          : font.id === 'modern'
-                            ? ' ps-font-modern ps-font-modern-rainbow'
-                            : font.id === 'thunder-riot'
-                              ? ' ps-font-thunder-riot'
-                              : '';
-                      const selected = profile.name_font === font.id || (font.id === 'sakura-pop' && profile.name_font === 'marshmallow');
-                      return <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id }))} className={'rounded-xl border px-3 py-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>
+                      const previewClass = ' ps-font-' + font.id
+                        + (font.id === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '')
+                        + (font.id === 'modern' ? ' ps-font-modern-rainbow' : '');
+                      const selected = (profile.studio.name_font_override || profile.name_font) === font.id || (font.id === 'sakura-pop' && profile.name_font === 'marshmallow');
+                      return <button key={font.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_font: font.id, studio: { ...prev.studio, name_font_override: DB_NAME_FONT_IDS.includes(font.id) ? null : font.id } }))} className={'rounded-xl border px-3 py-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30 bg-slate-500/5')}>
                         <span className={'block text-xs font-black' + previewClass}>{font.label}</span>
                         <span className={'mt-1 block text-[10px] ' + muted + previewClass}>{font.sample}</span>
                       </button>;
