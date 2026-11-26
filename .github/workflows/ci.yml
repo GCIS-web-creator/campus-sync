@@ -97,6 +97,15 @@ jobs:
             exit 1
           fi
           node scripts/e2e/planet-civilization-smoke.mjs
+          node scripts/e2e/profile-studio-smoke.mjs
+      - name: Upload Profile Studio responsive screenshots
+        if: always() && (github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: campus-sync-profile-studio-screenshots
+          path: artifacts/profile-studio/
+          if-no-files-found: warn
+          retention-days: 7
       # PR/test builds keep the safe placeholder config above. Rebuild the production
       # artifact with the real public Supabase URL and publishable key before deployment.
       # The service_role key remains a Cloudflare secret and is never embedded in the bundle.
