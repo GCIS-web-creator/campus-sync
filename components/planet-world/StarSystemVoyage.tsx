@@ -743,7 +743,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(new THREE.HemisphereLight('#b6c9e3', '#18263b', 0.14));
     scene.add(new THREE.AmbientLight('#64758e', 0.11));
 
-    const explorationVessel = makeExplorationVessel(resources);
+    const explorationVessel = makeExplorationVessel(renderer, resources);
     explorationVessel.visible = false;
     scene.add(explorationVessel);
 
