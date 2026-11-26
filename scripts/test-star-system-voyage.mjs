@@ -1,3 +1,4 @@
+import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '../components/planet-world/stellar-surface-shader.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -160,4 +161,21 @@ test('journey keeps the requested one-third speed and five-minute-forty-two-seco
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'planet-orbit')?.durationMs, 72_000);
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'moon-orbit')?.durationMs, 42_000);
   assert.equal(STAR_SYSTEM_VOYAGE_PHASES.find(phase => phase.id === 'star-orbit')?.durationMs, 48_000);
+});
+
+test('stellar photosphere uses a self-luminous shader with no day/night terminator', () => {
+  const surface = createStellarSurfaceMaterial('#ffb45a', 17);
+  const corona = createStellarCoronaMaterial('#ff8a4c', 17);
+  assert.equal(surface.lights, false, 'stellar plasma must not depend on scene lighting');
+  assert.equal(surface.toneMapped, false, 'stellar emission must remain bright');
+  assert.match(surface.vertexShader, /logdepthbuf_vertex/);
+  assert.match(surface.fragmentShader, /convection/);
+  assert.match(surface.fragmentShader, /intergranularLanes/);
+  assert.match(surface.fragmentShader, /vec4\(emission, 1\.0\)/);
+  const executableSurfaceShader = surface.fragmentShader.replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(executableSurfaceShader, /uSunDirection|daylight|nightMask|sunFacing|terminator/i);
+  assert.equal(corona.transparent, true);
+  assert.equal(corona.blending, 2, 'corona should use additive blending');
+  surface.dispose();
+  corona.dispose();
 });

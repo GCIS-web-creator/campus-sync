@@ -77,7 +77,11 @@ try {
     reducedMotion: 'reduce',
   });
   const pageErrors = [];
+  const webglErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && /shader|webgl|glsl|program/i.test(message.text())) webglErrors.push(message.text());
+  });
 
   await page.route('**/*', async route => {
     const request = route.request();
@@ -257,6 +261,24 @@ try {
   await page.getByTestId('flight-view-chase').click();
   assert.equal(await page.getByTestId('flight-view-chase').getAttribute('aria-pressed'), 'true', 'External F1-style chase camera should activate');
   await page.getByText('EXTERIOR TRACKING CAMERA', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByTestId('flight-view-inspection').click();
+  assert.equal(await page.getByTestId('flight-view-inspection').getAttribute('aria-pressed'), 'true', '360-degree vessel inspection mode should activate');
+  await page.getByText('EXTERIOR 360° INSPECTION', { exact: true }).waitFor({ state: 'visible' });
+  for (const preset of ['艦首', '艦尾', '左舷', '右舷', '上面']) {
+    await page.getByRole('button', { name: preset, exact: true }).click();
+  }
+  await page.getByRole('button', { name: '戦艦を拡大', exact: true }).click();
+  await page.getByRole('button', { name: '戦艦を縮小', exact: true }).click();
+  const inspectionCanvas = page.locator('canvas').last();
+  await inspectionCanvas.waitFor({ state: 'visible' });
+  const inspectionBounds = await inspectionCanvas.boundingBox();
+  assert.ok(inspectionBounds, '360-degree inspection canvas should have a visible hit area');
+  const dragStart = { x: inspectionBounds.x + inspectionBounds.width * 0.5, y: inspectionBounds.y + inspectionBounds.height * 0.5 };
+  await page.mouse.move(dragStart.x, dragStart.y);
+  await page.mouse.down();
+  await page.mouse.move(dragStart.x + 65, dragStart.y + 28, { steps: 5 });
+  await page.mouse.up();
+  await page.mouse.wheel(0, -120);
   await page.getByTestId('flight-view-cockpit').click();
   assert.equal(await page.getByTestId('flight-view-cockpit').getAttribute('aria-pressed'), 'true', 'Cockpit view should reactivate without changing the world-anchored warp frame');
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible' });
@@ -377,6 +399,7 @@ try {
   await page.getByRole('heading', { name: 'Planetubeにログイン', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
 
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
+  assert.deepEqual(webglErrors, [], 'Stellar surface and corona shaders should compile without WebGL errors');
 
   console.log('PASS: planet screen, Verdia ground landing, star-voyage 30 MP purchase handoff, cockpit flight entry, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed, XP handoff, and retry recovery');
 } finally {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
+import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
@@ -22,7 +23,7 @@ import {
 } from '@/lib/planet-star-voyage';
 
 type PurchaseResult = { success: boolean; balance?: number; message?: string };
-type ViewMode = 'cockpit' | 'chase';
+type ViewMode = 'cockpit' | 'chase' | 'inspection';
 type Props = {
   system: PlanetSystemSpec;
   starClass: StarClass | null;
@@ -153,85 +154,6 @@ function makeNightLightsTexture(seed: number) {
 }
 
 
-function makeStarGranulationTexture(color: string, seed: number) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 512;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-  const random = seeded(seed + 8_821);
-  const tint = new THREE.Color(color);
-  const hue = tint.getHSL({ h: 0, s: 0, l: 0 });
-  const base = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-  if (hue.h < 0.12 || hue.h > 0.92) {
-    base.addColorStop(0, '#ffedaa');
-    base.addColorStop(0.28, '#ffb64d');
-    base.addColorStop(0.65, '#eb6a2d');
-    base.addColorStop(1, '#ad3218');
-  } else {
-    const hex = '#' + tint.getHexString();
-    base.addColorStop(0, '#fff0c4');
-    base.addColorStop(0.45, hex);
-    base.addColorStop(1, '#6c547e');
-  }
-  context.fillStyle = base;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Dense, irregular convection cells: bright granule centres surrounded by
-  // darker intergranular lanes, rather than a flat emissive sphere.
-  for (let index = 0; index < 5_600; index += 1) {
-    const x = random() * canvas.width;
-    const y = random() * canvas.height;
-    const rx = 2.4 + random() * 7.6;
-    const ry = rx * (0.42 + random() * 0.72);
-    const turn = random() * Math.PI;
-    const warm = random();
-    const gradient = context.createRadialGradient(x, y, 0, x, y, rx * 1.5);
-    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.62)' : 'rgba(255,195,104,0.50)');
-    gradient.addColorStop(0.55, 'rgba(255,150,61,0.24)');
-    gradient.addColorStop(1, 'rgba(103,35,18,0.03)');
-    context.save();
-    context.translate(x, y);
-    context.rotate(turn);
-    context.fillStyle = gradient;
-    context.beginPath();
-    context.ellipse(0, 0, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = 'rgba(95,34,16,' + (0.08 + random() * 0.16).toFixed(3) + ')';
-    context.lineWidth = 0.5 + random() * 1.1;
-    context.beginPath();
-    context.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-    context.stroke();
-    context.restore();
-  }
-
-  // A few subtle sunspot groups help make surface rotation legible.
-  for (let spot = 0; spot < 26; spot += 1) {
-    const x = random() * canvas.width;
-    const y = 28 + random() * (canvas.height - 56);
-    const radius = 6 + random() * 16;
-    context.save();
-    context.translate(x, y);
-    context.rotate((random() - 0.5) * 0.8);
-    context.fillStyle = 'rgba(74,28,16,0.34)';
-    context.beginPath();
-    context.ellipse(0, 0, radius * 1.65, radius * 0.62, 0, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = 'rgba(45,20,16,0.62)';
-    context.beginPath();
-    context.ellipse(0, 0, radius, radius * 0.42, 0, 0, Math.PI * 2);
-    context.fill();
-    context.restore();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.anisotropy = 8;
-  return texture;
-}
-
 function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirection: THREE.Vector3) {
   const geometry = new THREE.SphereGeometry(radius * 1.002, 256, 128);
   const material = new THREE.ShaderMaterial({
@@ -247,7 +169,7 @@ function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirec
       '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
       '  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     fragmentShader: [
       'uniform sampler2D uNightMap;',
       'uniform vec3 uSunDirection;',
@@ -261,7 +183,7 @@ function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirec
       '  if (glow < 0.008) discard;',
       '  gl_FragColor = vec4(vec3(1.0, 0.66, 0.34), glow);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     transparent: true,
     depthTest: true,
     depthWrite: false,
@@ -287,7 +209,7 @@ function makeWarpOverlay() {
       '  vUv = uv;',
       '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     fragmentShader: [
       'uniform float uTime;',
       'uniform float uWarp;',
@@ -309,7 +231,7 @@ function makeWarpOverlay() {
       '  vec3 color = mix(cyan, violet, 0.5 + 0.5 * sin(twist + uTime));',
       '  gl_FragColor = vec4(color, alpha);',
       '}',
-    ].join('\\n'),
+    ].join('\n'),
     transparent: true,
     depthTest: false,
     depthWrite: false,
@@ -463,6 +385,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const pendingTravelIdRef = useRef<string | null>(null);
   const viewModeRef = useRef<ViewMode>('cockpit');
   const lookOffsetRef = useRef({ yaw: 0, pitch: 0 });
+  const inspectionOrbitRef = useRef({ yaw: Math.PI, pitch: 0.22, distance: VOYAGE_SCALE.spacecraftLength * 2.45 });
   const [viewMode, setViewMode] = useState<ViewMode>('cockpit');
   const [purchasing, setPurchasing] = useState(false);
   const [started, setStarted] = useState(false);
@@ -475,10 +398,24 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
   const selectViewMode = (mode: ViewMode) => {
     viewModeRef.current = mode;
+    if (mode === 'inspection') {
+      inspectionOrbitRef.current = { yaw: Math.PI, pitch: 0.22, distance: VOYAGE_SCALE.spacecraftLength * 2.45 };
+    }
     setViewMode(mode);
   };
   const resetFlightView = () => {
     lookOffsetRef.current = { yaw: 0, pitch: 0 };
+    inspectionOrbitRef.current = { yaw: Math.PI, pitch: 0.22, distance: VOYAGE_SCALE.spacecraftLength * 2.45 };
+  };
+  const setInspectionPreset = (yaw: number, pitch: number) => {
+    inspectionOrbitRef.current = { ...inspectionOrbitRef.current, yaw, pitch };
+  };
+  const adjustInspectionZoom = (factor: number) => {
+    const orbit = inspectionOrbitRef.current;
+    inspectionOrbitRef.current = {
+      ...orbit,
+      distance: THREE.MathUtils.clamp(orbit.distance * factor, VOYAGE_SCALE.spacecraftLength * 1.35, VOYAGE_SCALE.spacecraftLength * 6.5),
+    };
   };
 
   const beginVoyage = async () => {
@@ -555,10 +492,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const deltaY = event.clientY - lastPointerY;
       lastPointerX = event.clientX;
       lastPointerY = event.clientY;
-      lookOffsetRef.current = {
-        yaw: THREE.MathUtils.clamp(lookOffsetRef.current.yaw - deltaX * 0.004, -Math.PI * 0.9, Math.PI * 0.9),
-        pitch: THREE.MathUtils.clamp(lookOffsetRef.current.pitch - deltaY * 0.0035, -1.18, 1.18),
-      };
+      if (viewModeRef.current === 'inspection') {
+        const orbit = inspectionOrbitRef.current;
+        inspectionOrbitRef.current = {
+          ...orbit,
+          yaw: orbit.yaw - deltaX * 0.007,
+          pitch: THREE.MathUtils.clamp(orbit.pitch - deltaY * 0.006, -1.38, 1.38),
+        };
+      } else {
+        lookOffsetRef.current = {
+          yaw: THREE.MathUtils.clamp(lookOffsetRef.current.yaw - deltaX * 0.004, -Math.PI * 0.9, Math.PI * 0.9),
+          pitch: THREE.MathUtils.clamp(lookOffsetRef.current.pitch - deltaY * 0.0035, -1.18, 1.18),
+        };
+      }
       event.preventDefault();
     };
     const pointerUp = (event: PointerEvent) => {
@@ -567,10 +513,20 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       renderer.domElement.style.cursor = 'grab';
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     };
+    const wheelZoom = (event: WheelEvent) => {
+      if (viewModeRef.current !== 'inspection') return;
+      event.preventDefault();
+      const orbit = inspectionOrbitRef.current;
+      inspectionOrbitRef.current = {
+        ...orbit,
+        distance: THREE.MathUtils.clamp(orbit.distance * Math.exp(event.deltaY * 0.001), VOYAGE_SCALE.spacecraftLength * 1.35, VOYAGE_SCALE.spacecraftLength * 6.5),
+      };
+    };
     renderer.domElement.addEventListener('pointerdown', pointerDown);
     renderer.domElement.addEventListener('pointermove', pointerMove);
     renderer.domElement.addEventListener('pointerup', pointerUp);
     renderer.domElement.addEventListener('pointercancel', pointerUp);
+    renderer.domElement.addEventListener('wheel', wheelZoom, { passive: false });
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#02050d');
@@ -599,13 +555,16 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(starfield);
     resources.push(starfield.geometry, starfield.material);
 
+    const starSeed = Number.parseInt(system.id.slice(-3), 10) || 1;
     const starRadius = getVoyageStarRadius(starClass);
-    const starGeometry = new THREE.SphereGeometry(starRadius, 320, 192);
-    const starSurfaceTexture = makeStarGranulationTexture(starProfile.lightColor, Number.parseInt(system.id.slice(-3), 10) || 1);
-    const starMaterial = new THREE.MeshBasicMaterial({ map: starSurfaceTexture, color: '#ffffff', toneMapped: false });
+    const starGeometry = new THREE.SphereGeometry(starRadius, 384, 256);
+    // A dedicated, self-luminous plasma shader drives convection cells and
+    // granulation. It does not receive sunlight and cannot have a night side.
+    const starMaterial = createStellarSurfaceMaterial(starProfile.lightColor, starSeed);
     const star = new THREE.Mesh(starGeometry, starMaterial);
+    star.name = 'Self-luminous stellar photosphere';
     scene.add(star);
-    resources.push(starGeometry, starSurfaceTexture, starMaterial);
+    resources.push(starGeometry, starMaterial);
 
     const coronaTexture = makeCorona(starProfile.color);
     const coronaMaterial = new THREE.SpriteMaterial({
@@ -636,6 +595,13 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     halo.scale.setScalar(starRadius * 6.0);
     scene.add(halo);
     resources.push(haloTexture, haloMaterial);
+
+    const coronaShellGeometry = new THREE.SphereGeometry(starRadius * 1.34, 192, 128);
+    const coronaShellMaterial = createStellarCoronaMaterial(starProfile.color, starSeed);
+    const coronaShell = new THREE.Mesh(coronaShellGeometry, coronaShellMaterial);
+    coronaShell.name = 'Animated stellar corona filaments';
+    scene.add(coronaShell);
+    resources.push(coronaShellGeometry, coronaShellMaterial);
 
     const planetPosition = new THREE.Vector3(-VOYAGE_SCALE.astronomicalUnit, 0, 0);
     const moonPosition = planetPosition.clone().add(new THREE.Vector3(0, 0, VOYAGE_SCALE.earthMoonDistance));
@@ -886,9 +852,11 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
       const cinematicEffectTime = timeSeconds / 3;
-      const desiredFov = viewModeRef.current === 'chase'
-        ? (highSpeed ? 42 : 36)
-        : highSpeed ? 58
+      const desiredFov = viewModeRef.current === 'inspection'
+        ? 48
+        : viewModeRef.current === 'chase'
+          ? (highSpeed ? 42 : 36)
+          : highSpeed ? 58
           : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
             : phaseId === 'star-orbit' ? 12
               : phaseId === 'star-skim' ? 20
@@ -937,7 +905,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
       explorationVessel.position.copy(pose.position);
       explorationVessel.quaternion.copy(flightQuaternion);
-      explorationVessel.visible = viewModeRef.current === 'chase';
+      explorationVessel.visible = viewModeRef.current !== 'cockpit';
+      // Clear the local space around the hull while the user inspects it.
+      warpFrame.visible = viewModeRef.current !== 'inspection';
 
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(flightQuaternion).normalize();
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(flightQuaternion).normalize();
@@ -965,6 +935,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         camera.lookAt(forward.clone().multiplyScalar(VOYAGE_SCALE.spacecraftLength * 1.5));
         camera.rotateY(lookOffset.yaw);
         camera.rotateX(lookOffset.pitch);
+      } else if (viewModeRef.current === 'inspection') {
+        // Orbit the camera around the ship in its own local frame. This makes
+        // a full 360-degree inspection possible without changing flight path.
+        const orbit = inspectionOrbitRef.current;
+        const horizontal = Math.cos(orbit.pitch);
+        const localOffset = new THREE.Vector3(
+          Math.sin(orbit.yaw) * horizontal,
+          Math.sin(orbit.pitch),
+          Math.cos(orbit.yaw) * horizontal,
+        ).multiplyScalar(orbit.distance);
+        camera.position.copy(localOffset.applyQuaternion(flightQuaternion));
+        camera.up.copy(up);
+        camera.lookAt(0, 0, 0);
       } else {
         camera.position.set(0, 0, 0);
         camera.up.copy(pose.up);
@@ -976,6 +959,8 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       // Granulation rotates with the stellar surface, rather than being a
       // static featureless emissive sphere. Delta time keeps it FPS-independent.
       star.rotation.y += deltaSeconds * 0.026;
+      starMaterial.uniforms.uTime.value = cinematicEffectTime;
+      coronaShellMaterial.uniforms.uTime.value = cinematicEffectTime;
       moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 
@@ -1011,6 +996,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       renderer.domElement.removeEventListener('pointermove', pointerMove);
       renderer.domElement.removeEventListener('pointerup', pointerUp);
       renderer.domElement.removeEventListener('pointercancel', pointerUp);
+      renderer.domElement.removeEventListener('wheel', wheelZoom);
       resources.forEach(resource => resource.dispose());
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
@@ -1097,7 +1083,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           )}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-5">
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
-              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">{viewMode === 'chase' ? 'EXTERIOR TRACKING CAMERA' : 'VESSEL SYSTEMS · AUTO PILOT'}</p>
+              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">{viewMode === 'inspection' ? 'EXTERIOR 360° INSPECTION' : viewMode === 'chase' ? 'EXTERIOR TRACKING CAMERA' : 'VESSEL SYSTEMS · AUTO PILOT'}</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
               <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
               <p className="mt-1 text-[9px] font-black tracking-wide text-amber-100">{destinationLabel}</p>
@@ -1115,18 +1101,40 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 aria-pressed={viewMode === 'cockpit'}
                 data-testid="flight-view-cockpit"
                 onClick={() => selectViewMode('cockpit')}
-                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+                className={`px-2.5 py-2 text-[9px] font-black transition sm:px-3 sm:text-[10px] ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
               >船内視点</button>
               <button
                 type="button"
                 aria-pressed={viewMode === 'chase'}
                 data-testid="flight-view-chase"
                 onClick={() => selectViewMode('chase')}
-                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
-              >外部追跡カメラ</button>
+                className={`px-2.5 py-2 text-[9px] font-black transition sm:px-3 sm:text-[10px] ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >追跡</button>
+              <button
+                type="button"
+                aria-pressed={viewMode === 'inspection'}
+                data-testid="flight-view-inspection"
+                onClick={() => selectViewMode('inspection')}
+                className={`px-2.5 py-2 text-[9px] font-black transition sm:px-3 sm:text-[10px] ${viewMode === 'inspection' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >360°観察</button>
             </div>
             <button type="button" onClick={resetFlightView} className="rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-[9px] font-bold text-slate-200 backdrop-blur-md">視点リセット</button>
-            <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">画面をドラッグ／スワイプして見回す</p>
+            {viewMode === 'inspection' ? (
+              <>
+                <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">ドラッグで360°回転 · スクロールでズーム</p>
+                <div className="flex max-w-[min(92vw,340px)] flex-wrap justify-end gap-1">
+                  <button type="button" onClick={() => setInspectionPreset(Math.PI, 0.16)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[9px] font-bold">艦首</button>
+                  <button type="button" onClick={() => setInspectionPreset(0, 0.16)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[9px] font-bold">艦尾</button>
+                  <button type="button" onClick={() => setInspectionPreset(-Math.PI / 2, 0.12)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[9px] font-bold">左舷</button>
+                  <button type="button" onClick={() => setInspectionPreset(Math.PI / 2, 0.12)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[9px] font-bold">右舷</button>
+                  <button type="button" onClick={() => setInspectionPreset(Math.PI, 1.18)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[9px] font-bold">上面</button>
+                  <button type="button" aria-label="戦艦を拡大" onClick={() => adjustInspectionZoom(0.82)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[10px] font-black">＋</button>
+                  <button type="button" aria-label="戦艦を縮小" onClick={() => adjustInspectionZoom(1.22)} className="rounded-md border border-white/15 bg-slate-950/75 px-2 py-1 text-[10px] font-black">－</button>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">画面をドラッグ／スワイプして見回す</p>
+            )}
             {!completed && <button type="button" data-testid="flight-exit-button" onClick={onExit} className="rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-md">航行を終了</button>}
           </div>
 
