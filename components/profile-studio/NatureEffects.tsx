@@ -40,5 +40,5 @@ export function BannerEffect({ kind, count = 14, paused = false, intensity = 0.1
   const visible = usePlayWhenVisible(ref);
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const html = useMemo(() => scopeSvgIds(BANNER[kind](Math.min(24, Math.max(1, count))), 'banner-' + reactId), [kind, count, reactId]);
-  return <div ref={ref} aria-hidden="true" style={{ ...overlay, zIndex: 2, ['--ps-sea-opacity' as string]: String(Math.min(0.4, Math.max(0, intensity))) } as React.CSSProperties} data-paused={paused || !visible ? 'true' : 'false'} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={ref} aria-hidden="true" style={{ ...overlay, zIndex: 3, ['--ps-sea-opacity' as string]: String(Math.min(0.4, Math.max(0, intensity))) } as React.CSSProperties} data-paused={paused || !visible ? 'true' : 'false'} dangerouslySetInnerHTML={{ __html: html }} />;
 }
