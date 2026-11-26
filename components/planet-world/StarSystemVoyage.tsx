@@ -1042,7 +1042,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       // both without enlarging either celestial body artificially.
       const nadir = radial.clone().negate();
       const towardParent = planetPosition.clone().sub(position).normalize();
-      const viewDirection = nadir.clone().add(towardParent).normalize();
+      const lookAngle = getLowOrbitLookAngle(VOYAGE_SCALE.moonRadius, moonOrbitRadius);
+      const surfaceDirection = nadir.clone().multiplyScalar(Math.cos(lookAngle))
+        .addScaledVector(tangent, Math.sin(lookAngle)).normalize();
+      const viewDirection = surfaceDirection.clone().add(towardParent).normalize();
       const up = towardParent.clone()
         .addScaledVector(viewDirection, -towardParent.dot(viewDirection))
         .normalize();
