@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createGalaxyBackdrop } from '../components/planet-world/galaxy-backdrop.ts';
 import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '../components/planet-world/stellar-surface-shader.ts';
 import test from 'node:test';
@@ -197,5 +198,23 @@ test('galaxy backdrop builds a deep nebula shell and a dense animated star belt'
   galaxy.update(14.5);
   assert.equal(galaxy.nebula.material.uniforms.uTime.value, 14.5);
   assert.equal(galaxy.stars.material.uniforms.uTime.value, 14.5);
+  galaxy.dispose();
+});
+
+
+test('planet orbit view shares the self-luminous stellar shader and visible corona', () => {
+  const panelSource = readFileSync(new URL('../components/Planet3DPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panelSource, /createStellarSurfaceMaterial/);
+  assert.match(panelSource, /createStellarCoronaMaterial/);
+  assert.match(panelSource, /const starCoreRadius = 30 \* profile\.radius/);
+  assert.match(panelSource, /stellarSurfaceMaterials\.forEach/);
+  assert.match(panelSource, /stellarCoronaMaterials\.forEach/);
+  assert.doesNotMatch(panelSource, /1px前後の小ささ/);
+});
+
+test('galaxy nebula and star shaders convert linear colours for the display output', () => {
+  const galaxy = createGalaxyBackdrop(31, { radius: 5_700, starCount: 18_000 });
+  assert.match(galaxy.nebula.material.fragmentShader, /#include <colorspace_fragment>/);
+  assert.match(galaxy.stars.material.fragmentShader, /#include <colorspace_fragment>/);
   galaxy.dispose();
 });
