@@ -718,20 +718,35 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const phaseId = STAR_SYSTEM_VOYAGE_PHASES[index].id;
       const pose = getPose(phaseId, localProgress);
       const highSpeed = phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure';
-      const desiredFov = phaseId === 'moon-orbit' ? 18
-        : phaseId === 'planet-orbit' ? 48
-        : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 42
-        : 46;
+      const warpAmount = getWarpIntensity(phaseId, localProgress);
+      const timeSeconds = current / 1_000;
+      const desiredFov = highSpeed ? 58
+        : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
+          : phaseId === 'star-orbit' || phaseId === 'star-skim' ? 38
+            : phaseId === 'moon-orbit' ? 44
+              : phaseId === 'planet-orbit' ? 50
+                : 46;
       if (camera.fov !== desiredFov) {
         camera.fov = desiredFov;
         camera.updateProjectionMatrix();
       }
-      speedEffects.material.opacity = highSpeed ? 0.72 : phaseId === 'star-skim' ? 0.24 : 0.025;
-      speedEffects.lines.rotation.z += highSpeed ? 0.0018 : 0.00035;
+      speedEffects.material.opacity = 0.04 + warpAmount * 0.9;
+      speedEffects.lines.rotation.z += 0.00045 + warpAmount * 0.014;
+      warpOverlay.material.uniforms.uTime.value = timeSeconds;
+      warpOverlay.material.uniforms.uWarp.value = warpAmount;
+      warpRings.forEach((ring, ringIndex) => {
+        const direction = ringIndex % 2 === 0 ? 1 : -1;
+        ring.mesh.rotation.z = timeSeconds * (0.18 + warpAmount * 1.7) * direction + ringIndex * 0.8;
+        ring.mesh.rotation.x = 0.16 * (ringIndex + 1) + Math.sin(timeSeconds * 1.3 + ringIndex) * warpAmount * 0.48;
+        ring.mesh.rotation.y = 0.27 * (ringIndex + 1) + Math.cos(timeSeconds * 1.1 + ringIndex) * warpAmount * 0.42;
+        ring.mesh.scale.setScalar(1 + Math.sin(timeSeconds * 3.2 + ringIndex * 2) * warpAmount * 0.13);
+        ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
+      });
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
       star.rotation.y += 0.0008;
+      moon.rotation.y += 0.00016;
       renderer.render(scene, camera);
 
       if (now - lastUiUpdate > 130 || current >= totalDuration) {
@@ -773,8 +788,15 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const noStar = !starClass || !starProfile || system.rogue;
   const lowOrbitActive = activePhase?.id === 'planet-orbit' || activePhase?.id === 'moon-orbit';
   const starOrbitActive = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim';
+  const destinationLabel = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
+    ? '目的地：恒星'
+    : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
+      ? '目的地：惑星'
+      : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
+        ? '目的地：衛星'
+        : '目的地：星系内縁';
   const orbitReadout = lowOrbitActive
-    ? '地表高度 10 km · 低軌道'
+    ? '地表高度 100 km · 低軌道'
     : starOrbitActive
       ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
       : '宇宙船全長 1 km';
@@ -787,10 +809,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約1分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表10km上空を周回します。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約2分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表100km上空をゆっくり周回します。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.82c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約60秒</p><p className="text-[9px] text-slate-500">航行シーンを圧縮再生</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約114秒</p><p className="text-[9px] text-slate-500">低軌道はゆっくり周回</p></div>
               <div className="col-span-2 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-3 sm:col-span-1"><p className="text-[9px] text-cyan-200">航行費用</p><p className="mt-1 text-lg font-black">30 MP</p><p className="text-[9px] text-slate-400">開始時に一度だけ消費</p></div>
             </div>
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -833,6 +855,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
               <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
+              <p className="mt-1 text-[9px] font-black tracking-wide text-amber-100">{destinationLabel}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-right backdrop-blur-md">
               <p className="text-[9px] font-bold text-slate-400">MISSION ELAPSED</p>
@@ -852,7 +875,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <div className="min-w-0">
                 <p className="text-[8px] font-black tracking-[.22em] text-cyan-200">FLIGHT CONTROL</p>
                 <p className="mt-1 max-w-[240px] text-sm font-black leading-5 sm:max-w-sm">{completed ? '星系周遊航行を完了しました' : activePhase?.label}</p>
-                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · SUBLIGHT CRUISE · ' + (phaseIndex < 2 ? '0.82c' : 'ORBITAL MANEUVER')}</p>
+                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeed ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
               </div>
               <div className="hidden grid-cols-3 gap-2 text-right sm:grid">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">DISTANCE UNIT</p><p className="mt-1 text-[10px] font-bold">10,000 km</p></div>
@@ -863,7 +886,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
           </div>
 
-          {!completed && (
+          {!completed && highSpeed && (
             <div className="pointer-events-none absolute bottom-[27%] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[9px] text-cyan-100/80 sm:bottom-[28%]">
               <span className="h-1 w-1 rounded-full bg-cyan-200 shadow-[0_0_8px_#67e8f9]" />
               {activePhase?.label}
