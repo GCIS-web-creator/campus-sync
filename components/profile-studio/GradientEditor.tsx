@@ -32,7 +32,7 @@ export function GradientEditor({ stops, angle, onChange }: Props) {
               className="h-7 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
             />
             <span>{index + 1}</span>
-            {colors.length > 1 && (
+            {colors.length > 2 && (
               <button type="button" onClick={() => onChange(colors.filter((_, i) => i !== index), angle)} aria-label={'色 ' + (index + 1) + ' を削除'} className="ml-1 rounded px-1 text-rose-500">×</button>
             )}
           </label>
