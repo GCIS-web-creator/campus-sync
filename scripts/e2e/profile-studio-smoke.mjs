@@ -146,7 +146,8 @@ try {
 
   async function openProfile() {
     await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: /プロフィール・バッジ/ }).first().click();
+    await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+    await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
     await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
     await page.getByText('リアルタイムプレビュー', { exact: true }).waitFor({ state: 'visible' });
     await page.getByText('Ted', { exact: true }).waitFor({ state: 'visible' });
@@ -194,7 +195,8 @@ try {
   mockProfile.bio = '学習とものづくりを楽しんでいます。';
   await page.setViewportSize({ width: 375, height: 900 });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: /プロフィール・バッジ/ }).first().click();
+  await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+  await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.locator('.ps-card img[src^="https://profile-image.test/"]').waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: '自己紹介を書く' }).count(), 0, 'A configured bio should hide the owner prompt');
@@ -207,7 +209,8 @@ try {
   });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: /プロフィール・バッジ/ }).first().click();
+  await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+  await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
   await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-dark-375.png' });
   const motionState = await page.locator('.ps-banner-stars i').first().evaluate(el => getComputedStyle(el).animationName);
@@ -221,7 +224,8 @@ try {
   for (const [points, rankName] of expectedRanks) {
     mockProfile.contribution_points = points;
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: /プロフィール・バッジ/ }).first().click();
+    await page.getByLabel('メニュー内を検索').fill('プロフィール・バッジ');
+  await page.getByRole('button', { name: 'プロフィール・バッジ', exact: true }).click();
     await page.getByRole('heading', { name: 'プロフィールカスタマイズ', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
     await page.locator('.ps-card').getByText(rankName, { exact: true }).waitFor({ state: 'visible' });
   }
