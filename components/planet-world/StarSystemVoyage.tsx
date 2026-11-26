@@ -745,6 +745,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       camera.position.copy(pose.position);
       camera.up.copy(pose.up);
       camera.lookAt(pose.target);
+      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
       star.rotation.y += 0.0008;
       moon.rotation.y += 0.00016;
       renderer.render(scene, camera);
@@ -795,6 +796,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
         ? '目的地：衛星'
         : '目的地：星系内縁';
+  const highSpeedActive = activePhase?.id === 'outer-cruise' || activePhase?.id === 'planet-flyby-inbound' || activePhase?.id === 'outer-departure';
   const orbitReadout = lowOrbitActive
     ? '地表高度 100 km · 低軌道'
     : starOrbitActive
@@ -875,7 +877,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <div className="min-w-0">
                 <p className="text-[8px] font-black tracking-[.22em] text-cyan-200">FLIGHT CONTROL</p>
                 <p className="mt-1 max-w-[240px] text-sm font-black leading-5 sm:max-w-sm">{completed ? '星系周遊航行を完了しました' : activePhase?.label}</p>
-                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeed ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
+                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
               </div>
               <div className="hidden grid-cols-3 gap-2 text-right sm:grid">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">DISTANCE UNIT</p><p className="mt-1 text-[10px] font-bold">10,000 km</p></div>
