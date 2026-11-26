@@ -591,6 +591,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const [error, setError] = useState('');
   const starProfile = starClass ? STAR_PROFILES[starClass] : null;
 
+  const selectViewMode = (mode: ViewMode) => {
+    viewModeRef.current = mode;
+    setViewMode(mode);
+  };
+  const resetFlightView = () => {
+    lookOffsetRef.current = { yaw: 0, pitch: 0 };
+  };
+
   const beginVoyage = async () => {
     if (purchaseLockRef.current || purchasing || started || !starClass) return;
     if (mpBalance < 30) {
@@ -1088,20 +1096,26 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
   const remaining = Math.max(0, STAR_SYSTEM_VOYAGE_DURATION_MS - elapsed);
   const noStar = !starClass || !starProfile || system.rogue;
   const lowOrbitActive = activePhase?.id === 'planet-orbit' || activePhase?.id === 'moon-orbit';
-  const starOrbitActive = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim';
-  const destinationLabel = activePhase?.id === 'star-orbit' || activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
-    ? '目的地：恒星'
-    : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
-      ? '目的地：惑星'
-      : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
-        ? '目的地：衛星'
-        : '目的地：星系内縁';
+  const starOrbitActive = activePhase?.id === 'star-orbit';
+  const destinationLabel = activePhase?.id === 'star-orbit'
+    ? '目的地：恒星周回'
+    : activePhase?.id === 'star-skim'
+      ? '恒星脇を直進フライバイ'
+      : activePhase?.id === 'outer-departure'
+        ? '重力境界外から星系離脱'
+        : activePhase?.id === 'planet-orbit' || activePhase?.id === 'planet-transfer' || activePhase?.id === 'planet-flyby-inbound'
+          ? '目的地：惑星'
+          : activePhase?.id === 'moon-orbit' || activePhase?.id === 'moon-transfer'
+            ? '目的地：衛星'
+            : '目的地：星系内縁';
   const highSpeedActive = activePhase?.id === 'outer-cruise' || activePhase?.id === 'planet-flyby-inbound' || activePhase?.id === 'outer-departure';
   const orbitReadout = lowOrbitActive
-    ? '地表高度 100 km · 低軌道'
+    ? '地表高度 500 km · 低軌道'
     : starOrbitActive
       ? 'コロナ外縁 + ' + Math.round(coronaClearanceKm).toLocaleString('ja-JP') + ' km'
-      : '宇宙船全長 1 km';
+      : activePhase?.id === 'star-skim' || activePhase?.id === 'outer-departure'
+        ? '恒星重力境界の外側'
+        : '宇宙船全長 1 km';
 
   return (
     <div className="absolute inset-0 z-40 overflow-hidden bg-[#02050d] text-white">
@@ -1111,10 +1125,10 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="w-full max-w-xl rounded-3xl border border-cyan-200/20 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
             <p className="text-[9px] font-black tracking-[.26em] text-cyan-200">CAMPUSSYNC · DEEP SPACE FLIGHT</p>
             <h2 className="mt-2 text-2xl font-black">星系周遊航行</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約2分の自動航行です。船体全長1kmの視点で、恒星はコロナ外縁のすぐ外、惑星と衛星は地表100km上空をゆっくり周回します。</p>
+            <p className="mt-2 text-xs leading-6 text-slate-300">{system.name}の外縁から出発し、恒星・惑星・衛星を順番に巡る約5分42秒の自動航行です。惑星・衛星は地表500km、恒星は従来の10倍の高度を周回。最後は恒星の重力境界を避けて直線フライバイします。</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.82c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約114秒</p><p className="text-[9px] text-slate-500">低軌道はゆっくり周回</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">巡航速度</p><p className="mt-1 text-lg font-black text-cyan-100">0.27c</p><p className="text-[9px] text-slate-500">演出上の速度表示</p></div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="text-[9px] text-slate-400">飛行時間</p><p className="mt-1 text-lg font-black">約5分42秒</p><p className="text-[9px] text-slate-500">全航程を従来の1/3速度に</p></div>
               <div className="col-span-2 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-3 sm:col-span-1"><p className="text-[9px] text-cyan-200">航行費用</p><p className="mt-1 text-lg font-black">30 MP</p><p className="text-[9px] text-slate-400">開始時に一度だけ消費</p></div>
             </div>
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -1129,7 +1143,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
                 ))}
               </ol>
             </div>
-            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、太陽は約139万倍。低軌道では表面の曲率が視界を横切る距離まで接近し、惑星・衛星を中心に船が周回する視点になります。実時間の重力シミュレーションではなく、物理寸法比を使った演出です。</p>
+            <p className="mt-3 text-[10px] leading-5 text-slate-400">1ワールド単位=10,000km。地球直径は船体長の約12,742倍、月は約3,475倍、G型恒星は演出スケールで地球直径の約136倍。恒星表面には粒状斑を描き、ゆっくり自転させています。恒星フライバイは設定した重力境界の外側を接線方向に通過し、そのまま直進離脱します。</p>
             <p className="mt-2 text-[10px] font-bold text-amber-200">航行開始後に途中で終了しても、消費したMPは返還されません。</p>
             {noStar && <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-200">この惑星は恒星を持たない自由浮遊惑星のため、恒星を巡る航行はできません。</p>}
             {error && <p role="alert" className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
@@ -1154,7 +1168,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-5">
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
-              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">VESSEL SYSTEMS · AUTO PILOT</p>
+              <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">{viewMode === 'chase' ? 'EXTERIOR TRACKING CAMERA' : 'VESSEL SYSTEMS · AUTO PILOT'}</p>
               <p className="mt-1 text-xs font-black">{system.name} · {starProfile?.label}</p>
               <p className="mt-1 text-[9px] font-bold text-cyan-100/80">船体 1 km · {orbitReadout}</p>
               <p className="mt-1 text-[9px] font-black tracking-wide text-amber-100">{destinationLabel}</p>
@@ -1177,7 +1191,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <div className="min-w-0">
                 <p className="text-[8px] font-black tracking-[.22em] text-cyan-200">FLIGHT CONTROL</p>
                 <p className="mt-1 max-w-[240px] text-sm font-black leading-5 sm:max-w-sm">{completed ? '星系周遊航行を完了しました' : activePhase?.label}</p>
-                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.82c' : 'SLOW ORBITAL MANEUVER')}</p>
+                <p className="mt-1 text-[9px] text-slate-400">{completed ? '全航行フェーズを完了。帰還可能です。' : 'AUTOPILOT · ' + (highSpeedActive ? 'WARP / 0.27c' : 'SLOW ORBITAL MANEUVER')}</p>
               </div>
               <div className="hidden grid-cols-3 gap-2 text-right sm:grid">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"><p className="text-[8px] text-slate-500">DISTANCE UNIT</p><p className="mt-1 text-[10px] font-bold">10,000 km</p></div>
