@@ -427,6 +427,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const speedEffects = makeSpeedStreaks();
     camera.add(speedEffects.lines);
     resources.push(speedEffects.geometry, speedEffects.material);
+    const warpOverlay = makeWarpOverlay();
+    camera.add(warpOverlay.mesh);
+    resources.push(warpOverlay.geometry, warpOverlay.material);
+    const warpRings = makeWarpRings();
+    warpRings.forEach(ring => {
+      camera.add(ring.mesh);
+      resources.push(ring.geometry, ring.material);
+    });
 
     const starfield = makeStarfield(Number.parseInt(system.id.slice(-3), 10) || 1);
     scene.add(starfield);
@@ -474,6 +482,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     const planetGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius, 512, 256);
     const loader = new THREE.TextureLoader();
     const fallbackPlanetTexture = makePlanetSurfaceTexture(Number.parseInt(system.id.slice(-3), 10) || 1, system.atmosphereColor);
+    const nightLightsTexture = makeNightLightsTexture(Number.parseInt(system.id.slice(-3), 10) || 1);
     let planetMaterial: THREE.MeshStandardMaterial;
     const planetTexture = loader.load(
       '/planet-assets/planets/' + system.id + (Number.parseInt(system.id.slice(-3), 10) >= 11 && Number.parseInt(system.id.slice(-3), 10) <= 20 ? '/surface.webp' : '/surface.jpg'),
@@ -490,11 +499,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     planetTexture.colorSpace = THREE.SRGBColorSpace;
     planetTexture.wrapS = THREE.RepeatWrapping;
     planetTexture.wrapT = THREE.ClampToEdgeWrapping;
-    planetMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: planetTexture, roughness: 0.96, metalness: 0 });
+    planetMaterial = new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      map: planetTexture,
+      emissive: '#ffc88e',
+      emissiveMap: nightLightsTexture,
+      emissiveIntensity: 0.82,
+      roughness: 0.96,
+      metalness: 0,
+    });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture);
 
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
@@ -506,20 +523,47 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
 
     const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 256, 128);
     const moonTexture = makeMoonTexture();
-    const moonMaterial = new THREE.MeshStandardMaterial({ map: moonTexture, roughness: 1, metalness: 0 });
+    const moonMaterial = new THREE.MeshStandardMaterial({
+      map: moonTexture,
+      color: '#d9dce7',
+      emissive: '#9ca8c2',
+      emissiveIntensity: 0.42,
+      roughness: 1,
+      metalness: 0,
+    });
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
     moon.position.copy(moonPosition);
     scene.add(moon);
-    resources.push(moonGeometry, moonMaterial, moonTexture);
+    const moonGlowTexture = makeCorona('#aabfe8');
+    const moonGlowMaterial = new THREE.SpriteMaterial({
+      map: moonGlowTexture,
+      color: '#b8c8ef',
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const moonGlow = new THREE.Sprite(moonGlowMaterial);
+    moonGlow.position.copy(moonPosition);
+    moonGlow.scale.setScalar(VOYAGE_SCALE.moonRadius * 3.6);
+    scene.add(moonGlow);
+    resources.push(moonGeometry, moonMaterial, moonTexture, moonGlowTexture, moonGlowMaterial);
 
     const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 2.8);
     sunlight.position.set(0, 0, 0);
     sunlight.target.position.copy(planetPosition);
     scene.add(sunlight, sunlight.target);
-    scene.add(new THREE.AmbientLight('#9eafc8', 0.25));
+    scene.add(new THREE.HemisphereLight('#c4d6ef', '#344258', 0.56));
+    scene.add(new THREE.AmbientLight('#7787a6', 0.48));
+    const moonFill = new THREE.DirectionalLight('#d6e2ff', 0.72);
+    moonFill.position.copy(moonPosition).add(new THREE.Vector3(18, 12, 24));
+    moonFill.target.position.copy(moonPosition);
+    scene.add(moonFill, moonFill.target);
 
     const worldUp = new THREE.Vector3(0, 1, 0);
     const starOrbitRadius = getStarOrbitRadius(starRadius);
+    const starDepartureRadius = getStarDepartureRadius(starRadius);
     const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
     const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
     const outerStart = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 160, 3_600);
@@ -529,22 +573,29 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       planetFlybyRadius * 0.36,
       planetFlybyRadius * 0.42,
     ));
-    const starSkimPoint = new THREE.Vector3(-starOrbitRadius, 0, 0);
-    const outerEnd = new THREE.Vector3(-VOYAGE_SCALE.outerSystemDistance, 520, 3_800);
     const moonToPlanetDirection = planetPosition.clone().sub(moonPosition).normalize();
     const moonOrbitBasisA = new THREE.Vector3(1, 0, 0);
     const moonOrbitBasisB = new THREE.Vector3().crossVectors(moonToPlanetDirection, moonOrbitBasisA).normalize();
+    const starApproachAngle = Math.atan2(moonPosition.z, moonPosition.x);
+    const starApproachRadial = new THREE.Vector3(Math.cos(starApproachAngle), 0, Math.sin(starApproachAngle));
+    const starApproachTangent = new THREE.Vector3(-Math.sin(starApproachAngle), 0, Math.cos(starApproachAngle));
+    const starSkimEndAngle = starApproachAngle + Math.PI * 0.66;
+    const starDepartureRadial = new THREE.Vector3(Math.cos(starSkimEndAngle), 0, Math.sin(starSkimEndAngle));
+    const starDepartureTangent = new THREE.Vector3(-Math.sin(starSkimEndAngle), 0, Math.cos(starSkimEndAngle));
+    const outerEnd = starDepartureRadial.clone().multiplyScalar(VOYAGE_SCALE.outerSystemDistance)
+      .addScaledVector(starDepartureTangent, 1_800)
+      .add(new THREE.Vector3(0, 520, 0));
     const totalDuration = STAR_SYSTEM_VOYAGE_DURATION_MS;
 
     const getPlanetOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // Aim a few degrees below the local tangent so the immense curved
-      // surface and atmospheric limb fill the lower part of the canopy.
+      // 100 km altitude: aim just below the local horizon so the planet's
+      // curvature and illuminated surface occupy the lower half of the canopy.
       const target = position.clone()
-        .addScaledVector(tangent, 16)
-        .addScaledVector(radial, -1.05);
+        .addScaledVector(tangent, 2.8)
+        .addScaledVector(radial, -0.78);
       return { position, target, up: radial };
     };
 
@@ -554,22 +605,22 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // The orbit plane is perpendicular to the parent-planet direction.
-      // The ship keeps its parent world in view while skimming the moon's limb.
+      // Do not look back at the parent planet: face the lunar limb and its
+      // sunlit surface while the Moon itself fills the ship's forward canopy.
       const target = position.clone()
-        .addScaledVector(moonToPlanetDirection, 80)
-        .addScaledVector(tangent, 4);
+        .addScaledVector(tangent, 1.55)
+        .addScaledVector(radial, -0.68);
       return { position, target, up: radial };
     };
 
     const getStarOrbitPose = (angle: number) => {
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
       const position = radial.clone().multiplyScalar(starOrbitRadius);
-      return {
-        position,
-        target: new THREE.Vector3(0, 0, 0),
-        up: worldUp,
-      };
+      // Lead the stellar centre slightly along the ship's tangent. The star
+      // stays large and in frame, while the view sweeps around its corona.
+      const target = tangent.clone().multiplyScalar(starRadius * 0.42);
+      return { position, target, up: worldUp };
     };
 
     const getPose = (id: string, progress: number) => {
@@ -590,8 +641,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         };
       }
       if (id === 'star-orbit') {
-        const angle = Math.PI + Math.PI * 2 * progress;
-        return getStarOrbitPose(angle);
+        return getStarOrbitPose(Math.PI + Math.PI * 2 * progress);
       }
       if (id === 'planet-transfer') {
         const startPose = getStarOrbitPose(Math.PI);
@@ -610,7 +660,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         const startPose = getPlanetOrbitPose(Math.PI * 4);
         const endPose = getMoonOrbitPose(0);
         const position = startPose.position.clone().lerp(endPose.position, t);
-        const target = startPose.target.clone().lerp(endPose.target, t);
+        // Keep the Moon as the explicit destination. It begins as a tiny disk
+        // and grows toward the centre of the windscreen throughout the transfer.
+        const target = planetPosition.clone().lerp(moonPosition, ease(progress * 1.06));
         const up = startPose.up.clone().lerp(endPose.up, t).normalize();
         return { position, target, up };
       }
@@ -619,18 +671,31 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       }
       if (id === 'star-skim') {
         const startPose = getMoonOrbitPose(Math.PI * 2);
-        const position = startPose.position.clone().lerp(starSkimPoint, t);
-        position.z += Math.sin(Math.PI * progress) * 28;
-        position.y += Math.sin(Math.PI * progress) * 14;
-        const target = position.clone().lerp(new THREE.Vector3(0, 0, 0), 0.72);
+        const arrival = starApproachRadial.clone().multiplyScalar(starOrbitRadius);
+        const arrivalTarget = new THREE.Vector3(0, 0, 0);
+        if (progress < 0.56) {
+          const approach = ease(progress / 0.56);
+          const position = startPose.position.clone().lerp(arrival, approach);
+          const target = startPose.target.clone().lerp(arrivalTarget, approach);
+          return { position, target, up: worldUp };
+        }
+        const arcProgress = (progress - 0.56) / 0.44;
+        const angle = starApproachAngle + Math.PI * 0.66 * arcProgress;
+        const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+        const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
+        const position = radial.multiplyScalar(starOrbitRadius);
+        const target = tangent.clone().multiplyScalar(starRadius * 0.42);
         return { position, target, up: worldUp };
       }
-      const position = starSkimPoint.clone().lerp(outerEnd, t);
-      return {
-        position,
-        target: position.clone().add(new THREE.Vector3(-5_000, 120, 1_800)),
-        up: worldUp,
-      };
+      const start = starDepartureRadial.clone().multiplyScalar(starOrbitRadius);
+      const radialTravel = starDepartureRadial.clone();
+      const position = start.clone().lerp(outerEnd, t);
+      // Departure moves outward along the star's radial direction. The camera
+      // looks ahead into open space, never back through the stellar centre.
+      const target = position.clone()
+        .addScaledVector(radialTravel, 8_000)
+        .addScaledVector(starDepartureTangent, 260);
+      return { position, target, up: worldUp };
     };
     let frame = 0;
     let lastUiUpdate = 0;
