@@ -306,10 +306,18 @@ try {
   assert.equal(await page.getByTestId('flight-view-cockpit').getAttribute('aria-pressed'), 'true', 'Cockpit view should reactivate without changing the world-anchored warp frame');
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '視点リセット', exact: true }).click();
-  await page.mouse.move(190, 410);
+  const voyageCanvas = page.locator('canvas').last();
+  const voyageBounds = await voyageCanvas.boundingBox();
+  assert.ok(voyageBounds, 'Star-voyage canvas should have a visible hit area');
+  const voyageDragStart = {
+    x: voyageBounds.x + voyageBounds.width * 0.5,
+    y: voyageBounds.y + voyageBounds.height * 0.5,
+  };
+  await page.mouse.move(voyageDragStart.x, voyageDragStart.y);
   await page.mouse.down();
-  await page.mouse.move(230, 430, { steps: 3 });
+  await page.mouse.move(voyageDragStart.x + 40, voyageDragStart.y + 20, { steps: 3 });
   await page.mouse.up();
+  assert.match(page.url(), /#planet$/, '3D ship drag must stay within the planet route and not click the side navigation');
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
