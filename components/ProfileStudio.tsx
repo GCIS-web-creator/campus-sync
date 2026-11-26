@@ -614,26 +614,50 @@ export default function ProfileStudio({
                 </div>
                  <div className="mt-4 rounded-xl border border-slate-300/25 p-3">
                    <div className="mb-2 flex items-center gap-2"><SlidersHorizontal size={14} className="text-cyan-500" /><p className="text-xs font-black">新しい装飾テーマ</p></div>
-                   <p className={'mb-3 text-[10px] leading-5 ' + muted}>22種類の見本をプレビューできます。解放条件はまだ設定されていないため、今は見本表示のみで、装備・保存はできません。</p>
-                   <label className="mb-2 block text-[10px] font-black">アイコン装飾（プレビュー）</label>
-                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                     <button type="button" onClick={() => setPreviewAvatarKind(null)} className={'rounded-lg border p-2 text-[10px] font-bold ' + (previewAvatarKind === null ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし</button>
-                     {DECO_ITEMS.filter(item => item.slot === 'avatar_deco').map(item => {
-                       const unlocked = unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId));
-                       const selected = previewAvatarKind === item.kind;
-                       return <button key={item.id} type="button" onClick={() => setPreviewAvatarKind(selected ? undefined : item.kind)} className={'rounded-lg border p-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>
-                         <span className="block text-[10px] font-black">{item.name}</span><span className={'mt-1 block text-[9px] ' + (unlocked ? 'text-emerald-500' : 'text-amber-500')}>{unlocked ? '解放済み' : '🔒 見本プレビュー'}</span>
+                   <p className={'mb-3 text-[10px] leading-5 ' + muted}>全46アイテム・23テーマを静止サムネイルで確認できます。未解放の装飾もプレビューできますが、装備・保存はできません。新規12テーマは解放条件の承認待ちです。</p>
+                   <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
+                     <button type="button" onClick={() => setActiveDecoGroup('all')} className={'shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-black ' + (activeDecoGroup === 'all' ? 'border-cyan-400 bg-cyan-500/10 text-cyan-600' : 'border-slate-300/30')}>すべて</button>
+                     {decoGroups.map(group => <button key={group} type="button" onClick={() => setActiveDecoGroup(group)} className={'shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-black ' + (activeDecoGroup === group ? 'border-cyan-400 bg-cyan-500/10 text-cyan-600' : 'border-slate-300/30')}>{group}</button>)}
+                   </div>
+                   <label className="mb-2 block text-[10px] font-black">アイコン装飾（プレビュー／装備）</label>
+                   <div className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+                     <button type="button" onClick={() => { setPreviewAvatarKind(undefined); setProfile(prev => ({ ...prev, studio: { ...prev.studio, equipped: { ...prev.studio.equipped, avatar_deco: null } } })); }} className={'rounded-xl border p-2 text-left text-[10px] font-bold ' + (!profile.studio.equipped.avatar_deco && previewAvatarKind === undefined ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし（初期状態）</button>
+                     {visibleAvatarDecorations.map(item => {
+                       const unlocked = !item.approvalPending && (unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId)));
+                       const equipped = profile.studio.equipped.avatar_deco === item.id;
+                       const selected = previewAvatarKind === item.kind || (previewAvatarKind === undefined && equipped);
+                       return <button key={item.id} type="button" onClick={() => {
+                         if (unlocked) {
+                           setProfile(prev => ({ ...prev, studio: { ...prev.studio, equipped: { ...prev.studio.equipped, avatar_deco: equipped ? null : item.id } } }));
+                           setPreviewAvatarKind(undefined);
+                         } else {
+                           setPreviewAvatarKind(selected ? undefined : item.kind);
+                         }
+                       }} className={'min-w-0 rounded-xl border p-2 text-left transition ' + (selected ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5')}>
+                         <div className="flex items-center gap-2"><DecoThumbnail kind={item.kind} slot="avatar_deco" size="small" /><span className="min-w-0 flex-1 truncate text-[10px] font-black">{item.name}</span></div>
+                         <div className="mt-1 flex items-center justify-between gap-1"><span className="text-[9px] font-bold text-violet-500">{({ common: 'コモン', rare: 'レア', epic: 'エピック', legendary: 'レジェンダリー' } as Record<string,string>)[item.rarity]}</span><span className={'text-[9px] font-black ' + (equipped ? 'text-cyan-600' : unlocked ? 'text-emerald-600' : 'text-amber-600')}>{equipped ? '装備中' : unlocked ? '解放済み' : item.approvalPending ? '承認待ち' : '見本プレビュー'}</span></div>
+                         <p className={'mt-1 line-clamp-2 text-[9px] leading-4 ' + muted}>{item.unlockCondition}</p>
                        </button>;
                      })}
                    </div>
-                   <label className="mb-2 mt-4 block text-[10px] font-black">バナー効果（プレビュー）</label>
-                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                     <button type="button" onClick={() => setPreviewBannerKind(null)} className={'rounded-lg border p-2 text-[10px] font-bold ' + (previewBannerKind === null ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし</button>
-                     {DECO_ITEMS.filter(item => item.slot === 'profile_effect').map(item => {
-                       const unlocked = unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId));
-                       const selected = previewBannerKind === item.kind;
-                       return <button key={item.id} type="button" onClick={() => setPreviewBannerKind(selected ? undefined : item.kind)} className={'rounded-lg border p-2 text-left ' + (selected ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>
-                         <span className="block text-[10px] font-black">{item.name}</span><span className={'mt-1 block text-[9px] ' + (unlocked ? 'text-emerald-500' : 'text-amber-500')}>{unlocked ? '解放済み' : '🔒 見本プレビュー'}</span>
+                   <label className="mb-2 mt-4 block text-[10px] font-black">バナー効果（プレビュー／装備）</label>
+                   <div className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+                     <button type="button" onClick={() => { setPreviewBannerKind(undefined); setProfile(prev => ({ ...prev, studio: { ...prev.studio, equipped: { ...prev.studio.equipped, profile_effect: null } } })); }} className={'rounded-xl border p-2 text-left text-[10px] font-bold ' + (!profile.studio.equipped.profile_effect && previewBannerKind === undefined ? 'border-cyan-400 bg-cyan-500/10' : 'border-slate-300/30')}>なし（初期状態）</button>
+                     {visibleBannerDecorations.map(item => {
+                       const unlocked = !item.approvalPending && (unlockedIds.includes(item.id) || Boolean(item.unlockId && unlockedIds.includes(item.unlockId)));
+                       const equipped = profile.studio.equipped.profile_effect === item.id;
+                       const selected = previewBannerKind === item.kind || (previewBannerKind === undefined && equipped);
+                       return <button key={item.id} type="button" onClick={() => {
+                         if (unlocked) {
+                           setProfile(prev => ({ ...prev, studio: { ...prev.studio, equipped: { ...prev.studio.equipped, profile_effect: equipped ? null : item.id } } }));
+                           setPreviewBannerKind(undefined);
+                         } else {
+                           setPreviewBannerKind(selected ? undefined : item.kind);
+                         }
+                       }} className={'min-w-0 rounded-xl border p-2 text-left transition ' + (selected ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5')}>
+                         <div className="flex items-center gap-2"><DecoThumbnail kind={item.kind} slot="profile_effect" size="small" /><span className="min-w-0 flex-1 truncate text-[10px] font-black">{item.name}</span></div>
+                         <div className="mt-1 flex items-center justify-between gap-1"><span className="text-[9px] font-bold text-violet-500">{({ common: 'コモン', rare: 'レア', epic: 'エピック', legendary: 'レジェンダリー' } as Record<string,string>)[item.rarity]}</span><span className={'text-[9px] font-black ' + (equipped ? 'text-cyan-600' : unlocked ? 'text-emerald-600' : 'text-amber-600')}>{equipped ? '装備中' : unlocked ? '解放済み' : item.approvalPending ? '承認待ち' : '見本プレビュー'}</span></div>
+                         <p className={'mt-1 line-clamp-2 text-[9px] leading-4 ' + muted}>{item.unlockCondition}</p>
                        </button>;
                      })}
                    </div>
