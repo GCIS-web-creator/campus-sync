@@ -254,7 +254,14 @@ try {
   await page.mouse.up();
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
-  await page.getByRole('button', { name: '航行を終了', exact: true }).click();
+
+  const manualExit = page.getByTestId('flight-exit-button');
+  if (await manualExit.isVisible().catch(() => false)) {
+    await manualExit.click();
+  } else {
+    // The 342-second voyage may already be complete on a slow CI runner.
+    await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
+  }
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
