@@ -102,3 +102,4 @@ const requiredFiles = [
 ];
 if (requiredFiles.some((path) => !existsSync(path))) throw new Error('惑星キットの展開結果が不完全です。');
 console.log('惑星キットを展開しました: ' + extracted + ' ファイル (' + extractedBytes.toLocaleString('ja-JP') + ' bytes)');
+await import('./build-planet-kit-assets.mjs');
