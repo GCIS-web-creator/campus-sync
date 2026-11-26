@@ -8,6 +8,7 @@ import {
   getLowOrbitLookAngle,
   getLowOrbitRadius,
   MOON_ORBIT_COCKPIT_FOV_DEGREES,
+  MOON_ORBIT_VIEW_BISECTOR_DEGREES,
   getStarCoronaClearanceKm,
   getStarTangentFlybyGeometry,
   getStarOrbitRadius,
@@ -1045,7 +1046,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const lookAngle = getLowOrbitLookAngle(VOYAGE_SCALE.moonRadius, moonOrbitRadius);
       const surfaceDirection = nadir.clone().multiplyScalar(Math.cos(lookAngle))
         .addScaledVector(tangent, Math.sin(lookAngle)).normalize();
-      const viewDirection = surfaceDirection.clone().add(towardParent).normalize();
+      const parentBlend = THREE.MathUtils.degToRad(MOON_ORBIT_VIEW_BISECTOR_DEGREES);
+      const viewDirection = surfaceDirection.clone().multiplyScalar(Math.cos(parentBlend))
+        .addScaledVector(towardParent, Math.sin(parentBlend)).normalize();
       const up = towardParent.clone()
         .addScaledVector(viewDirection, -towardParent.dot(viewDirection))
         .normalize();
