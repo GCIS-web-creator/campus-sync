@@ -9,6 +9,7 @@ import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDet
 import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
 import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
+import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
 
 type Props = {
   stage: number;
@@ -271,6 +272,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     controls.autoRotate = false;
 
     const resources: Array<{ dispose: () => void }> = [];
+    const stellarSurfaceMaterials: THREE.ShaderMaterial[] = [];
+    const stellarCoronaMaterials: THREE.ShaderMaterial[] = [];
     const interactiveTargets: THREE.Object3D[] = [];
     let cameraTransition: {
       startedAt: number;
@@ -350,18 +353,31 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         const position = direction.clone().multiplyScalar(stellarDistance);
         sunPositions.push(direction.clone());
 
-        // 光球は1px前後の小ささに抑え、コロナとプロミネンスを見せる。
-        const starCoreRadius = 1.6 * profile.radius;
-        const star = new THREE.Mesh(
-          new THREE.SphereGeometry(starCoreRadius, 32, 24),
-          new THREE.MeshBasicMaterial({ color: profile.lightColor, toneMapped: false }),
-        );
+        // 惑星軌道画面でも航行画面と同じ自発光・粒状斑シェーダーを使う。
+        // 表面に昼夜境界を作らず、画面上でも対流模様を視認できる大きさにする。
+        const starCoreRadius = 36 * profile.radius;
+        const starGeometry = new THREE.SphereGeometry(starCoreRadius, 256, 192);
+        const starMaterial = createStellarSurfaceMaterial(profile.lightColor, numericId * 37 + index);
+        stellarSurfaceMaterials.push(starMaterial);
+        const star = new THREE.Mesh(starGeometry, starMaterial);
+        star.name = 'Self-luminous stellar photosphere';
         star.position.copy(position);
+        star.renderOrder = 1;
         scene.add(star);
-        resources.push(star.geometry, star.material);
+        resources.push(starGeometry, starMaterial);
+
+        const coronaShellGeometry = new THREE.SphereGeometry(starCoreRadius * 1.34, 128, 96);
+        const coronaShellMaterial = createStellarCoronaMaterial(profile.color, numericId * 53 + index);
+        stellarCoronaMaterials.push(coronaShellMaterial);
+        const coronaShell = new THREE.Mesh(coronaShellGeometry, coronaShellMaterial);
+        coronaShell.name = 'Animated stellar corona filaments';
+        coronaShell.position.copy(position);
+        coronaShell.renderOrder = 3;
+        scene.add(coronaShell);
+        resources.push(coronaShellGeometry, coronaShellMaterial);
 
         const starHit = new THREE.Mesh(
-          new THREE.SphereGeometry(Math.max(24, starCoreRadius * 14), 18, 14),
+          new THREE.SphereGeometry(Math.max(24, starCoreRadius * 2.2), 24, 18),
           new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false }),
         );
         starHit.position.copy(position);
@@ -393,7 +409,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         const corona = new THREE.Sprite(coronaMaterial);
         corona.position.copy(position);
         corona.scale.setScalar(92 + profile.radius * 12);
-        corona.renderOrder = 3;
+        corona.renderOrder = 4;
         scene.add(corona);
         resources.push(corona.material, coronaTexture);
 
@@ -550,7 +566,10 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     const render = () => {
       if (!active) return;
       const delta = Math.min(clock.getDelta(), 0.05);
-      galaxyBackdrop.update(performance.now() / 1_000);
+      const effectTime = performance.now() / 1_000;
+      galaxyBackdrop.update(effectTime);
+      stellarSurfaceMaterials.forEach((material) => { material.uniforms.uTime.value = effectTime; });
+      stellarCoronaMaterials.forEach((material) => { material.uniforms.uTime.value = effectTime; });
       // 自転は惑星自身の座標系で進み、太陽光源の座標は変えない。
       system.rotation.y += delta * (spec.rogue ? 0.006 : 0.012);
       clouds.rotation.y += delta * 0.017;

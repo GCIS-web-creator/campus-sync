@@ -52,6 +52,7 @@ const GALAXY_NOISE = /* glsl */ `
 `;
 
 const NEBULA_FRAGMENT_SHADER = /* glsl */ `
+  #include <common>
   uniform float uTime;
   uniform vec3 uSeed;
   varying vec3 vGalaxyDirection;
@@ -86,6 +87,7 @@ const NEBULA_FRAGMENT_SHADER = /* glsl */ `
     colour *= 1.0 - disk * dustLanes * 0.16;
 
     gl_FragColor = vec4(colour, 1.0);
+    #include <colorspace_fragment>
   }
 `;
 
@@ -110,6 +112,7 @@ const STAR_VERTEX_SHADER = /* glsl */ `
 `;
 
 const STAR_FRAGMENT_SHADER = /* glsl */ `
+  #include <common>
   varying vec3 vStarColour;
   varying float vStarTwinkle;
   varying float vPointSize;
@@ -126,6 +129,7 @@ const STAR_FRAGMENT_SHADER = /* glsl */ `
     if (alpha < 0.012) discard;
     vec3 colour = vStarColour * (0.74 + vStarTwinkle * 0.46);
     gl_FragColor = vec4(colour, alpha);
+    #include <colorspace_fragment>
   }
 `;
 
