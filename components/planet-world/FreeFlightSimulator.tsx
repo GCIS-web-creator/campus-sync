@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
+import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
 import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
@@ -107,6 +108,37 @@ function makePlanetTexture(seed: number, atmosphereColor: string) {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.anisotropy = 8;
+  return texture;
+}
+
+
+function makeCloudTexture(seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 97);
+  for (let index = 0; index < 230; index += 1) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height;
+    const width = 18 + random() * 82;
+    const height = 5 + random() * 22;
+    context.save();
+    context.translate(x, y);
+    context.rotate((random() - 0.5) * 0.9);
+    context.fillStyle = 'rgba(255,255,255,' + (0.06 + random() * 0.16).toFixed(3) + ')';
+    context.shadowColor = 'rgba(255,255,255,0.55)';
+    context.shadowBlur = 10 + random() * 16;
+    context.beginPath();
+    context.ellipse(0, 0, width, height, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -317,18 +349,54 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
     const planetRadiusKm = FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM;
     const planetRadius = planetRadiusKm / KM_PER_SCENE_UNIT;
-    const planetTexture = makePlanetTexture(Number.parseInt(system.id.slice(-3), 10) || 1, system.atmosphereColor);
-    resources.push(planetTexture);
-    const planetMaterial = new THREE.MeshStandardMaterial({
+    const numericPlanetId = Number.parseInt(system.id.slice(-3), 10) || 1;
+    const fallbackTexture = makePlanetTexture(numericPlanetId, system.atmosphereColor);
+    const loader = new THREE.TextureLoader();
+    let planetMaterial: THREE.MeshStandardMaterial;
+    const planetTexture = loader.load(
+      '/planet-assets/planets/' + system.id + (numericPlanetId >= 11 && numericPlanetId <= 20 ? '/surface.webp' : '/surface.jpg'),
+      (loaded) => {
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.wrapS = THREE.RepeatWrapping;
+        loaded.wrapT = THREE.ClampToEdgeWrapping;
+        loaded.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+        loaded.needsUpdate = true;
+      },
+      undefined,
+      () => {
+        planetMaterial.map = fallbackTexture;
+        planetMaterial.needsUpdate = true;
+      },
+    );
+    planetTexture.colorSpace = THREE.SRGBColorSpace;
+    planetTexture.wrapS = THREE.RepeatWrapping;
+    planetTexture.wrapT = THREE.ClampToEdgeWrapping;
+    planetMaterial = new THREE.MeshStandardMaterial({
       map: planetTexture,
-      roughness: 0.92,
-      metalness: 0.015,
+      roughness: 0.9,
+      metalness: 0.025,
+      emissive: system.rogue ? '#291c48' : '#000000',
+      emissiveIntensity: system.rogue ? 0.12 : 0,
     });
+    applyPlanetSurfaceDetail(planetMaterial, numericPlanetId);
     const planetGeometry = new THREE.SphereGeometry(planetRadius, 160, 128);
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.name = system.name + ' · reference planet';
     scene.add(planet);
-    resources.push(planetGeometry, planetMaterial);
+    resources.push(planetGeometry, planetMaterial, planetTexture, fallbackTexture);
+
+    const cloudTexture = makeCloudTexture(numericPlanetId);
+    const cloudMaterial = new THREE.MeshStandardMaterial({
+      map: cloudTexture,
+      transparent: true,
+      opacity: 0.5,
+      roughness: 1,
+      metalness: 0,
+      depthWrite: false,
+    });
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.012, 128, 96), cloudMaterial);
+    scene.add(clouds);
+    resources.push(clouds.geometry, cloudMaterial, cloudTexture);
 
     const atmosphere = makeAtmosphere(planetRadius, system.atmosphereColor);
     scene.add(atmosphere);
@@ -365,6 +433,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
           roughness: 0.97,
           metalness: 0.01,
         });
+        applyMoonSurfaceDetail(moonMaterial, numericPlanetId + index * 31);
         const moon = new THREE.Mesh(moonGeometry, moonMaterial);
         moon.position.set(positionKm.x / KM_PER_SCENE_UNIT, positionKm.y / KM_PER_SCENE_UNIT, positionKm.z / KM_PER_SCENE_UNIT);
         moon.userData.index = index;
@@ -408,7 +477,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       starLight.position.copy(starPosition);
       scene.add(starLight);
     }
-    scene.add(new THREE.AmbientLight('#92a8c8', 0.15));
+    scene.add(new THREE.AmbientLight('#92a8c8', system.rogue ? 0.42 : 0.22));
 
     const { craft, exhaustMaterials } = makeFreeFlightCraft(resources);
     scene.add(craft);
@@ -564,6 +633,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         material.opacity = thrustIntensity;
       });
       planet.rotation.y += dt * 0.00017;
+      clouds.rotation.y += dt * 0.00019;
       moonMeshes.forEach((moon, index) => { moon.rotation.y += dt * (0.00018 + index * 0.00004); });
       if (star && starMaterial && coronaMaterial) {
         star.rotation.y += dt * 0.000025;
