@@ -146,6 +146,227 @@ function makeNightLightsTexture(seed: number) {
   return texture;
 }
 
+
+function makeStarGranulationTexture(color: string, seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 8_821);
+  const tint = new THREE.Color(color);
+  const hue = tint.getHSL({ h: 0, s: 0, l: 0 });
+  const base = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  if (hue.h < 0.12 || hue.h > 0.92) {
+    base.addColorStop(0, '#ffedaa');
+    base.addColorStop(0.28, '#ffb64d');
+    base.addColorStop(0.65, '#eb6a2d');
+    base.addColorStop(1, '#ad3218');
+  } else {
+    const hex = '#' + tint.getHexString();
+    base.addColorStop(0, '#fff0c4');
+    base.addColorStop(0.45, hex);
+    base.addColorStop(1, '#6c547e');
+  }
+  context.fillStyle = base;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Dense, irregular convection cells: bright granule centres surrounded by
+  // darker intergranular lanes, rather than a flat emissive sphere.
+  for (let index = 0; index < 2_800; index += 1) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height;
+    const rx = 2.4 + random() * 7.6;
+    const ry = rx * (0.42 + random() * 0.72);
+    const turn = random() * Math.PI;
+    const warm = random();
+    const gradient = context.createRadialGradient(x, y, 0, x, y, rx * 1.5);
+    gradient.addColorStop(0, warm > 0.52 ? 'rgba(255,250,204,0.42)' : 'rgba(255,195,104,0.34)');
+    gradient.addColorStop(0.55, 'rgba(255,150,61,0.16)');
+    gradient.addColorStop(1, 'rgba(103,35,18,0.03)');
+    context.save();
+    context.translate(x, y);
+    context.rotate(turn);
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.ellipse(0, 0, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = 'rgba(95,34,16,' + (0.04 + random() * 0.08).toFixed(3) + ')';
+    context.lineWidth = 0.5 + random() * 1.1;
+    context.beginPath();
+    context.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  }
+
+  // A few subtle sunspot groups help make surface rotation legible.
+  for (let spot = 0; spot < 18; spot += 1) {
+    const x = random() * canvas.width;
+    const y = 28 + random() * (canvas.height - 56);
+    const radius = 4 + random() * 13;
+    context.save();
+    context.translate(x, y);
+    context.rotate((random() - 0.5) * 0.8);
+    context.fillStyle = 'rgba(74,28,16,0.34)';
+    context.beginPath();
+    context.ellipse(0, 0, radius * 1.65, radius * 0.62, 0, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = 'rgba(45,20,16,0.62)';
+    context.beginPath();
+    context.ellipse(0, 0, radius, radius * 0.42, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function makeNightLightsOverlay(radius: number, texture: THREE.Texture, sunDirection: THREE.Vector3) {
+  const geometry = new THREE.SphereGeometry(radius * 1.002, 256, 128);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uNightMap: { value: texture },
+      uSunDirection: { value: sunDirection.clone().normalize() },
+    },
+    vertexShader: [
+      'varying vec2 vUv;',
+      'varying vec3 vWorldNormal;',
+      'void main(){',
+      '  vUv = uv;',
+      '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
+      '  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);',
+      '}',
+    ].join('\\n'),
+    fragmentShader: [
+      'uniform sampler2D uNightMap;',
+      'uniform vec3 uSunDirection;',
+      'varying vec2 vUv;',
+      'varying vec3 vWorldNormal;',
+      'void main(){',
+      '  float daylight = dot(normalize(vWorldNormal), normalize(uSunDirection));',
+      '  float night = 1.0 - smoothstep(-0.12, 0.10, daylight);',
+      '  float city = texture2D(uNightMap, vUv).a;',
+      '  float glow = city * night * 0.96;',
+      '  if (glow < 0.008) discard;',
+      '  gl_FragColor = vec4(vec3(1.0, 0.66, 0.34), glow);',
+      '}',
+    ].join('\\n'),
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+  return { geometry, material, mesh: new THREE.Mesh(geometry, material) };
+}
+
+function makeExplorationVessel(resources: Array<{ dispose: () => void }>) {
+  const ship = new THREE.Group();
+  ship.name = 'CampusSync Deep Space Explorer';
+  const length = VOYAGE_SCALE.spacecraftLength;
+  const width = length * 0.42;
+  const height = length * 0.12;
+  const hull = new THREE.MeshStandardMaterial({ color: '#9fb4c7', metalness: 0.78, roughness: 0.32 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#17283a', metalness: 0.7, roughness: 0.42 });
+  const wingMaterial = new THREE.MeshStandardMaterial({ color: '#627e96', metalness: 0.72, roughness: 0.38, side: THREE.DoubleSide });
+  const accent = new THREE.MeshStandardMaterial({ color: '#b9d9e8', metalness: 0.84, roughness: 0.24 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#102e49', emissive: '#1f83ad', emissiveIntensity: 0.7, metalness: 0.45, roughness: 0.16 });
+  const engineGlow = new THREE.MeshBasicMaterial({ color: '#66dfff', toneMapped: false });
+  const navGlow = new THREE.MeshBasicMaterial({ color: '#ffb779', toneMapped: false });
+  resources.push(hull, dark, wingMaterial, accent, glass, engineGlow, navGlow);
+
+  const addPart = (
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    position: THREE.Vector3,
+    rotation = new THREE.Euler(),
+    scale = new THREE.Vector3(1, 1, 1),
+  ) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position);
+    mesh.rotation.copy(rotation);
+    mesh.scale.copy(scale);
+    ship.add(mesh);
+    resources.push(geometry);
+    return mesh;
+  };
+
+  // Long central pressure hull and pointed forward command section.
+  addPart(new THREE.CylinderGeometry(width * 0.105, width * 0.14, length * 0.76, 14), hull,
+    new THREE.Vector3(0, 0, length * 0.045), new THREE.Euler(Math.PI / 2, 0, 0));
+  addPart(new THREE.ConeGeometry(width * 0.14, length * 0.27, 14), accent,
+    new THREE.Vector3(0, 0, -length * 0.455), new THREE.Euler(-Math.PI / 2, 0, 0));
+  addPart(new THREE.CylinderGeometry(width * 0.095, width * 0.12, length * 0.22, 12), dark,
+    new THREE.Vector3(0, 0, length * 0.48), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Swept delta wings and stabilizers create a recognisable, fast explorer profile.
+  const wing = new THREE.Shape();
+  wing.moveTo(-width * 0.13, -length * 0.2);
+  wing.lineTo(width * 0.13, -length * 0.2);
+  wing.lineTo(width * 0.5, length * 0.31);
+  wing.lineTo(width * 0.46, length * 0.43);
+  wing.lineTo(width * 0.19, length * 0.34);
+  wing.lineTo(0, length * 0.14);
+  wing.lineTo(-width * 0.19, length * 0.34);
+  wing.lineTo(-width * 0.46, length * 0.43);
+  wing.lineTo(-width * 0.5, length * 0.31);
+  wing.closePath();
+  const wingGeometry = new THREE.ExtrudeGeometry(wing, { depth: height * 0.065, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: length * 0.002, bevelThickness: length * 0.002 });
+  addPart(wingGeometry, wingMaterial, new THREE.Vector3(0, -height * 0.04, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  const dorsalFin = new THREE.Shape();
+  dorsalFin.moveTo(-width * 0.07, length * 0.14);
+  dorsalFin.lineTo(width * 0.07, length * 0.14);
+  dorsalFin.lineTo(width * 0.045, length * 0.48);
+  dorsalFin.lineTo(0, length * 0.52);
+  dorsalFin.lineTo(-width * 0.045, length * 0.48);
+  dorsalFin.closePath();
+  addPart(new THREE.ExtrudeGeometry(dorsalFin, { depth: height * 0.48, bevelEnabled: false }), accent,
+    new THREE.Vector3(0, height * 0.12, 0), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Twin outboard engine pods, central booster and glowing exhaust throats.
+  for (const side of [-1, 1]) {
+    const x = side * width * 0.3;
+    addPart(new THREE.CylinderGeometry(width * 0.052, width * 0.064, length * 0.48, 12), dark,
+      new THREE.Vector3(x, -height * 0.03, length * 0.28), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.CylinderGeometry(width * 0.058, width * 0.058, length * 0.055, 12), accent,
+      new THREE.Vector3(x, -height * 0.03, length * 0.535), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.ConeGeometry(width * 0.042, length * 0.18, 12), engineGlow,
+      new THREE.Vector3(x, -height * 0.03, length * 0.64), new THREE.Euler(Math.PI / 2, 0, 0));
+    addPart(new THREE.BoxGeometry(width * 0.14, height * 0.055, length * 0.16), hull,
+      new THREE.Vector3(side * width * 0.34, height * 0.17, length * 0.13));
+    addPart(new THREE.SphereGeometry(width * 0.018, 8, 6), navGlow,
+      new THREE.Vector3(side * width * 0.48, 0, length * 0.3));
+  }
+
+  addPart(new THREE.CylinderGeometry(width * 0.075, width * 0.09, length * 0.35, 12), dark,
+    new THREE.Vector3(0, -height * 0.01, length * 0.34), new THREE.Euler(Math.PI / 2, 0, 0));
+  addPart(new THREE.ConeGeometry(width * 0.065, length * 0.2, 12), engineGlow,
+    new THREE.Vector3(0, -height * 0.01, length * 0.58), new THREE.Euler(Math.PI / 2, 0, 0));
+
+  // Raised bridge glazing, dorsal sensor blister and a spine of service modules.
+  addPart(new THREE.SphereGeometry(1, 18, 10), glass,
+    new THREE.Vector3(0, height * 0.72, -length * 0.19), new THREE.Euler(0, 0, 0),
+    new THREE.Vector3(width * 0.105, height * 0.42, length * 0.14));
+  addPart(new THREE.BoxGeometry(width * 0.13, height * 0.07, length * 0.26), accent,
+    new THREE.Vector3(0, height * 0.38, length * 0.12));
+  addPart(new THREE.SphereGeometry(width * 0.035, 10, 8), glass,
+    new THREE.Vector3(0, height * 0.57, length * 0.29));
+  for (let module = 0; module < 5; module += 1) {
+    addPart(new THREE.BoxGeometry(width * 0.16, height * 0.045, length * 0.06), dark,
+      new THREE.Vector3(0, height * 0.33, -length * 0.04 + module * length * 0.085));
+  }
+  return ship;
+}
+
 function makeWarpOverlay() {
   const geometry = new THREE.PlaneGeometry(52, 32);
   const material = new THREE.ShaderMaterial({
