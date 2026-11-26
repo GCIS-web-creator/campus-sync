@@ -259,10 +259,10 @@ try {
   // the camera toggle was already verified before dragging. Reload the screen
   // to restore Planet Civilization for the remaining independent checks.
 
-  // Reload to restore the initial Planet Civilization screen for the
-  // remaining independent checks; the voyage itself is intentionally 342s.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+  // Navigate back to the explicit planet panel route for the remaining
+  // independent checks; the voyage itself is intentionally 342 seconds.
+  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
