@@ -285,7 +285,7 @@ function makeCorona(color: string) {
   context.fillStyle = gradient;
   context.fillRect(0, 0, 512, 512);
 
-  for (let ray = 0; ray < 260; ray++) {
+  for (let ray = 0; ray < 440; ray++) {
     const angle = random() * Math.PI * 2;
     const inner = 52 + random() * 38;
     const outer = 132 + random() * 118;
@@ -298,11 +298,11 @@ function makeCorona(color: string) {
       256 + Math.cos(angle) * outer,
       256 + Math.sin(angle) * outer,
     );
-    context.strokeStyle = rgb + (0.025 + random() * 0.16).toFixed(3) + ')';
+    context.strokeStyle = rgb + (0.035 + random() * 0.19).toFixed(3) + ')';
     context.lineWidth = 0.5 + random() * 2;
     context.stroke();
   }
-  for (let arc = 0; arc < 42; arc++) {
+  for (let arc = 0; arc < 68; arc++) {
     const angle = random() * Math.PI * 2;
     const radius = 116 + random() * 72;
     const span = 0.12 + random() * 0.58;
@@ -310,6 +310,20 @@ function makeCorona(color: string) {
     context.ellipse(256, 256, radius, radius * (0.76 + random() * 0.4), angle, -span, span);
     context.strokeStyle = rgb + (0.018 + random() * 0.1).toFixed(3) + ')';
     context.lineWidth = 0.6 + random() * 1.5;
+    context.stroke();
+  }
+
+  // A second, hotter layer makes delicate loop prominences visible beyond
+  // the photospheric edge, instead of leaving a flat orange halo.
+  for (let loop = 0; loop < 28; loop++) {
+    const angle = random() * Math.PI * 2;
+    const radius = 88 + random() * 55;
+    const span = 0.16 + random() * 0.44;
+    const stretch = 1.05 + random() * 0.55;
+    context.beginPath();
+    context.ellipse(256, 256, radius, radius * stretch, angle, -span, span);
+    context.strokeStyle = 'rgba(255,239,198,' + (0.045 + random() * 0.14).toFixed(3) + ')';
+    context.lineWidth = 0.75 + random() * 1.8;
     context.stroke();
   }
   const texture = new THREE.CanvasTexture(canvas);
