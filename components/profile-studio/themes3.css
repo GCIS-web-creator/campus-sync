@@ -1,5 +1,5 @@
 /* v4 additional 12 theme accents; thumbnails remain static unless the selected preview is animating. */
-.pn-t3-particle{position:absolute;display:block;width:var(--t3-size);height:var(--t3-size);color:var(--t3-color);pointer-events:none;opacity:.82}
+.pn-t3-particle{position:absolute;display:block;width:var(--t3-size);height:var(--t3-size);color:var(--t3-color);pointer-events:none;opacity:.82;animation:pn-t3-float 8s ease-in-out var(--t3-delay,0s) infinite alternate}
 .pn-t3-dot{position:absolute;inset:0;border-radius:50%;background:var(--t3-color);box-shadow:0 0 9px var(--t3-color)}
 .pn-t3-leaf{font-size:var(--t3-size);line-height:1;color:var(--t3-color);text-shadow:0 0 6px var(--t3-color)}
 .pn-t3-flake{font-size:var(--t3-size);line-height:1;color:#fff;text-shadow:0 0 6px #a8dfff}
@@ -17,4 +17,5 @@
 .pn-theme-dog{background:radial-gradient(circle at 50% 100%,rgba(185,130,79,.18),transparent 60%)}
 .pn-theme-sweets{background:radial-gradient(circle at 50% 50%,rgba(255,179,207,.2),transparent 55%)}
 .pn-theme-glass{background:linear-gradient(135deg,rgba(226,72,61,.1),rgba(61,123,226,.14),rgba(242,194,48,.1))}
-@media(prefers-reduced-motion:reduce){.pn-theme-* *{animation:none!important}}
+@keyframes pn-t3-float{from{transform:translate3d(-4px,2px,0) rotate(-8deg);opacity:.5}to{transform:translate3d(5px,-8px,0) rotate(12deg);opacity:1}}
+@media(prefers-reduced-motion:reduce){.pn-t3-particle,.pn-theme-neon,.pn-theme-fw{animation:none!important}}
