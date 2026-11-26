@@ -59,8 +59,9 @@ export function getLowOrbitLookAngle(bodyRadius: number, orbitRadius: number) {
   return Math.asin(bodyRadius / orbitRadius) * 0.72;
 }
 
-// The lunar cockpit uses a panoramic composition that keeps both the Moon's
-// limb and its parent planet in the same window.
+// The lunar cockpit bisects the local surface and parent-planet directions.
+// Its 100° vertical field of view keeps both visible at physical scale.
+export const MOON_ORBIT_VIEW_BISECTOR_DEGREES = 45;
 export const MOON_ORBIT_COCKPIT_FOV_DEGREES = 100;
 
 export function getStarCoronaOuterRadius(starRadius: number) {
