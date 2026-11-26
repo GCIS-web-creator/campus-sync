@@ -69,7 +69,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
   const [course, setCourse] = useState<MathCourse>('数学I');
   const [unit, setUnit] = useState('');
   const [questionSearch, setQuestionSearch] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'basic' | 'normal' | 'challenge'>('all');
+  const [difficultyFilter, setDifficultyFilter] = useState('all');
   const [questionPage, setQuestionPage] = useState(1);
   const [mode, setMode] = useState<PracticeMode>('unit');
   const [questions, setQuestions] = useState<MathQuestion[]>([]);
@@ -158,6 +158,11 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
 
   const units = useMemo(() => Array.from(new Set(questions.filter(q => q.subject === course).map(q => q.unit))), [questions, course]);
   const selectedQuestions = useMemo(() => questions.filter(q => q.subject === course && (!unit || q.unit === unit)), [questions, course, unit]);
+  const availableDifficulties = useMemo(
+    () => Array.from(new Set(selectedQuestions.map(q => q.difficulty).filter((value): value is string => Boolean(value)))),
+    [selectedQuestions],
+  );
+  const difficultyLabel = (value: string) => value === 'basic' ? '基礎' : ['normal','standard','medium'].includes(value) ? '標準' : ['challenge','advanced','hard'].includes(value) ? '発展' : value;
   const searchedQuestions = useMemo(
     () => filterMathPracticeQuestions(selectedQuestions, questionSearch, difficultyFilter),
     [selectedQuestions, questionSearch, difficultyFilter],
@@ -453,7 +458,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
               <label className="block"><span className={'mb-1.5 block text-xs font-bold ' + muted}>科目</span>
                 <select value={course} onChange={e => {
                   const nextCourse = e.target.value as MathCourse;
-                  setCourse(nextCourse); setUnit(''); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
+                  setCourse(nextCourse); setUnit(''); setDifficultyFilter('all'); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === nextCourse);
                   if (next) {
                     setCurrent(next); setAnswer(''); setShowResult(false);
@@ -466,7 +471,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
               <label className="block"><span className={'mb-1.5 block text-xs font-bold ' + muted}>単元</span>
                 <select value={unit} onChange={e => {
                   const nextUnit = e.target.value;
-                  setUnit(nextUnit); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
+                  setUnit(nextUnit); setDifficultyFilter('all'); setQuestionPage(1); setMode('unit'); setTimedActive(false); setTimedExpired(false);
                   const next = questions.find(q => q.subject === course && (!nextUnit || q.unit === nextUnit));
                   if (next) {
                     setCurrent(next); setAnswer(''); setShowResult(false);
@@ -495,7 +500,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
                   <input value={questionSearch} onChange={event => { setQuestionSearch(event.target.value); setQuestionPage(1); }} placeholder="問題名・本文・単元で検索…" className={'w-full rounded-xl py-2.5 pl-9 pr-3 text-xs ' + field} />
                 </label>
                 <select value={difficultyFilter} onChange={event => { setDifficultyFilter(event.target.value as typeof difficultyFilter); setQuestionPage(1); }} className={'w-full rounded-xl px-3 py-2.5 text-xs font-bold ' + field} aria-label="難易度で絞り込む">
-                  <option value="all">すべての難易度</option><option value="basic">基礎</option><option value="normal">標準</option><option value="challenge">発展</option>
+                  <option value="all">すべての難易度</option>{availableDifficulties.map(value => <option key={value} value={value}>{difficultyLabel(value)}</option>)}
                 </select>
               </div>
               {questionPageData.items.length === 0 ? (
