@@ -124,6 +124,9 @@ const PROFILE_CSS = [
   '.ps-name-solid{color:#fff}.ps-name-gradient{background:linear-gradient(90deg,#a5f3fc,#c4b5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-name-neon{color:#cffafe;text-shadow:0 0 6px #22d3ee,0 0 18px #818cf8,0 0 34px rgba(129,140,248,.55)}.ps-name-toon{color:#fff;text-shadow:2px 2px 0 #7c3aed,-1px -1px 0 #0891b2}.ps-name-pop{color:#fde68a;text-shadow:0 0 12px rgba(251,191,36,.35);letter-spacing:.04em}',
   '.ps-font-rounded{font-family:ui-rounded,"Hiragino Maru Gothic ProN",sans-serif}.ps-font-sans{font-family:ui-sans-serif,system-ui,sans-serif}.ps-font-serif{font-family:ui-serif,Georgia,serif}.ps-font-mono{font-family:ui-monospace,SFMono-Regular,monospace}.ps-font-sakura-pop,.ps-font-marshmallow{font-family:"Sakura Pop","Noto Sans JP","Noto Sans CJK JP",sans-serif;font-weight:800;letter-spacing:-.04em}.ps-font-sakura-pop-rainbow{background-image:linear-gradient(90deg,#f56fb1 0%,#faa36f 18%,#edcf5d 36%,#9cd865 54%,#57c3b3 72%,#718fe5 88%,#be74db 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}.ps-font-mainframe{font-family:"MainFrame","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:500;letter-spacing:.025em}.ps-font-modern{font-family:"CampusSync Modern","Noto Sans JP","Noto Sans CJK JP",ui-sans-serif,system-ui,sans-serif;font-weight:400;letter-spacing:.01em}.ps-font-modern-rainbow{background-image:linear-gradient(90deg,#8ee46b 0%,#f2d05b 22%,#ed82a6 44%,#a68ceb 62%,#6db8e8 80%,#75dcaa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.ps-font-thunder-riot{font-family:"Thunder Riot","Noto Sans JP","Noto Sans CJK JP",Impact,"Arial Black",sans-serif;font-weight:900;letter-spacing:.015em;-webkit-text-stroke:.45px #111827;text-shadow:1px 1px 0 #111827,2px 2px 0 #facc15,-1px -1px 0 #facc15,0 0 12px rgba(250,204,21,.38)}',
   '.ps-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(191,219,254,.22);border-radius:999px;background:rgba(255,255,255,.08);padding:6px 10px;font-size:11px;font-weight:800;color:#e0f2fe}',
+  '.ps-deco-thumb{display:inline-grid;flex:none;place-items:center;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:linear-gradient(140deg,rgba(255,255,255,.08),rgba(15,23,42,.28));width:68px;height:46px}',
+  '.ps-deco-thumb svg{display:block;width:100%;height:100%}.ps-deco-thumb-avatar{width:46px;height:46px;border-radius:50%}.ps-deco-thumb-small{width:42px;height:34px;border-radius:9px}.ps-deco-thumb-avatar.ps-deco-thumb-small{width:34px;height:34px;border-radius:50%}.ps-deco-thumb-banner{width:66px;height:40px}',
+  '.ps-profile-category-nav{scrollbar-width:none}.ps-profile-category-nav::-webkit-scrollbar{display:none}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
   '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism,.ps-banner:after{animation:none!important}}',
@@ -507,9 +510,16 @@ export default function ProfileStudio({
         loading ? (
           <div className={'rounded-2xl border p-8 text-center text-sm ' + darkCard}><RefreshCw size={20} className="mx-auto mb-2 animate-spin" />プロフィールを読み込み中…</div>
         ) : (
+          <nav aria-label="プロフィール編集カテゴリ" className="ps-profile-category-nav -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            {[
+              ['基本情報','profile-basic'],['アイコン','profile-basic'],['フォント','profile-name'],['名前','profile-name'],
+              ['バナー','profile-banner'],['枠','profile-banner'],['アニメーション','profile-banner'],
+              ['ミニバッジ','profile-badges'],['公開設定','profile-privacy'],['実績','profile-achievements'],
+            ].map(([label,id]) => <button key={label} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })} className="shrink-0 rounded-full border border-slate-300/35 bg-slate-500/5 px-3 py-2 text-[10px] font-black">{label}</button>)}
+          </nav>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(330px,.9fr)]">
             <div className="order-2 space-y-4 xl:order-1">
-              <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
+              <section id="profile-basic" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-4 flex items-center gap-2"><UserRound size={18} className="text-cyan-500" /><h3 className="text-sm font-black">基本プロフィール</h3></div>
                 <label className={'mb-1 block text-[11px] font-bold ' + muted}>表示名（本名ではなくニックネーム推奨）</label>
                 <input value={profile.display_name} maxLength={32} onChange={event => setProfile(prev => ({ ...prev, display_name: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-sm font-bold outline-none focus:border-cyan-400" placeholder="例：saku" />
@@ -534,7 +544,7 @@ export default function ProfileStudio({
                 </div>
               </section>
 
-              <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
+              <section id="profile-name" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-4 flex items-center gap-2"><Palette size={18} className="text-violet-500" /><h3 className="text-sm font-black">名前のフォント・デコ</h3></div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {NAME_STYLES.map(style => <button key={style.id} type="button" onClick={() => setProfile(prev => ({ ...prev, name_style: style.id }))} className={'rounded-xl border p-3 text-left transition ' + (profile.name_style === style.id ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/20' : 'border-slate-300/30 bg-slate-500/5 hover:bg-slate-500/10')}><span className={'block text-sm font-black ' + (style.id === 'gradient' ? 'bg-gradient-to-r from-cyan-400 via-violet-400 to-pink-400 bg-clip-text text-transparent' : style.id === 'neon' ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,.9)]' : style.id === 'toon' ? 'text-white [text-shadow:1px_1px_0_#8b5cf6]' : style.id === 'pop' ? 'text-amber-400' : 'text-slate-500')}>{style.label}</span><span className={'mt-1 block text-[10px] ' + muted}>{style.description}</span></button>)}
@@ -581,7 +591,7 @@ export default function ProfileStudio({
                  </div>
               </section>
 
-              <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
+              <section id="profile-banner" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-4 flex items-center gap-2"><Sparkles size={18} className="text-pink-500" /><h3 className="text-sm font-black">バナー・アニメーション</h3></div>
                 <p className={'mb-2 text-[11px] font-bold ' + muted}>プロフィールのバナー</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -666,7 +676,7 @@ export default function ProfileStudio({
                  </div>
               </section>
 
-              <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
+              <section id="profile-badges" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-3 flex items-center gap-2"><Medal size={18} className="text-amber-500" /><h3 className="text-sm font-black">解放済みミニバッジ</h3></div>
                 <p className={'mb-3 text-[10px] ' + muted}>プロフィールに表示するバッジを最大5個まで選べる。</p>
                 {unlockedCosmetics.filter(item => item.category === 'badge').length ? (
@@ -676,7 +686,7 @@ export default function ProfileStudio({
                 ) : <p className={'rounded-xl border border-dashed border-slate-300/30 p-4 text-center text-xs ' + muted}>まだバッジはありません。下の実績を達成すると解放されるよ。</p>}
               </section>
 
-              <section className={'rounded-2xl border p-4 sm:p-5 ' + darkCard}>
+              <section id="profile-privacy" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-3 flex items-center gap-2"><ShieldCheck size={18} className="text-emerald-500" /><h3 className="text-sm font-black">公開範囲・プライバシー</h3></div>
                 <label className="flex items-start gap-3 rounded-xl border border-slate-300/30 bg-slate-500/5 p-3">
                   <input type="checkbox" checked={profile.is_public} onChange={event => setProfile(prev => ({ ...prev, is_public: event.target.checked, show_class: event.target.checked ? prev.show_class : false }))} className="mt-0.5 h-4 w-4 accent-cyan-500" />
@@ -690,13 +700,13 @@ export default function ProfileStudio({
             </div>
 
             <div className="order-1 sticky top-2 z-20 space-y-4 xl:order-2">
-              <section className={'rounded-2xl border p-3 sm:p-4 ' + darkCard}>
+              <section id="profile-preview" className={'scroll-mt-3 rounded-2xl border p-3 sm:p-4 ' + darkCard}>
                 <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-black">リアルタイムプレビュー</h3><span className="rounded-full border border-cyan-600/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-black text-cyan-700 dark:text-cyan-300">LIVE PREVIEW</span></div>
                 <ProfileCard profile={profile} previewAvatarKind={previewAvatarKind} previewBannerKind={previewBannerKind} onEditBio={() => document.getElementById('profile-bio-editor')?.focus()} />
                 <p className={'mt-3 text-[10px] leading-5 ' + muted}>装飾の変更内容は、保存前でもプレビューに反映されます。</p>
               </section>
 
-              <section className={'rounded-2xl border p-4 ' + darkCard}>
+              <section id="profile-achievements" className={'scroll-mt-3 rounded-2xl border p-4 ' + darkCard}>
                 <div className="mb-3 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Star size={17} className="text-amber-500" /><h3 className="text-sm font-black">実績と解放状況</h3></div><button type="button" onClick={() => void loadOwnProfile()} className={'rounded-lg p-2 ' + muted} aria-label="実績を再読み込み"><RefreshCw size={14} /></button></div>
                 <div className="mb-4 grid grid-cols-3 gap-2">
                   <div className="rounded-xl bg-cyan-500/10 p-2 text-center"><p className="text-xl font-black text-cyan-500">{metrics.study_sessions}</p><p className={'text-[9px] font-bold ' + muted}>学習回数</p></div>
