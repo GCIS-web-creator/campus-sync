@@ -93,7 +93,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 
     vec3 color = mix(uDeepColor, uBaseColor, smoothstep(0.10, 0.72, broadFlow));
     color = mix(color, uHotColor, clamp(brightCells * 0.48 + turbulentRidges * 0.24, 0.0, 0.78));
-    color *= 0.93 + brightCells * 0.28 + plasmaFilaments * 0.10 + intergranularLanes * 0.045;
+    color *= 0.93 + brightCells * 0.28 + plasmaFilaments * 0.10 - intergranularLanes * 0.055;
     color *= 1.0 - sunspot * 0.17;
 
     // Mild limb darkening adds spherical depth without creating a day/night edge.
