@@ -215,7 +215,7 @@ try {
     localStorage.setItem('campus-sync-display-mode-v2', 'light');
   });
 
-  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByText('わたしの惑星', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('非公開', { exact: true }).waitFor({ state: 'visible' });
