@@ -49,6 +49,21 @@ export function getLowOrbitRadius(bodyRadius: number) {
   return bodyRadius + VOYAGE_SCALE.lowOrbitAltitude;
 }
 
+// Aim just inside the geometric horizon, measured from the local nadir.
+// This keeps the destination body in the cockpit frame while preserving a
+// visible strip of sky and the day/night boundary.
+export function getLowOrbitLookAngle(bodyRadius: number, orbitRadius: number) {
+  if (!Number.isFinite(bodyRadius) || !Number.isFinite(orbitRadius) || bodyRadius <= 0 || orbitRadius <= bodyRadius) {
+    throw new RangeError('Low-orbit framing requires a positive body radius and a higher orbit radius.');
+  }
+  return Math.asin(bodyRadius / orbitRadius) * 0.72;
+}
+
+// The lunar cockpit bisects the local surface and parent-planet directions.
+// Its 100° vertical field of view keeps both visible at physical scale.
+export const MOON_ORBIT_VIEW_BISECTOR_DEGREES = 45;
+export const MOON_ORBIT_COCKPIT_FOV_DEGREES = 100;
+
 export function getStarCoronaOuterRadius(starRadius: number) {
   return starRadius * STAR_CORONA_OUTER_RADIUS_SOLAR;
 }
