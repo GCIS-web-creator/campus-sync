@@ -36,7 +36,7 @@ function banner(kind:Theme,count=12){
   const points=rep(Math.min(26,Math.max(4,count)),i=>{
     const left=(i*37+11)%100, top=(i*23+17)%86, size=3+(i%4)*2;
     const symbol=kind==='momiji'?'<span class="pn-t3-leaf">✦</span>':kind==='snow'?'<span class="pn-t3-flake">✳</span>':kind==='ocean'?'<span class="pn-t3-bubble"></span>':kind==='glass'?'<span class="pn-t3-diamond"></span>':'<span class="pn-t3-dot"></span>';
-    return '<i class="pn-t3-particle" style="left:'+left+'%;top:'+top+'%;--t3-size:'+size+'px;--t3-color:'+colors[i%colors.length]+'">'+symbol+'</i>';
+    return '<i class="pn-t3-particle" style="left:'+left+'%;top:'+top+'%;--t3-size:'+size+'px;--t3-color:'+colors[i%colors.length]+';--t3-delay:-'+(i%7)+'s">'+symbol+'</i>';
   });
   return '<div class="pn-fx pn-theme-'+kind+'">'+points+'</div>';
 }
