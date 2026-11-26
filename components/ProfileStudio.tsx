@@ -458,7 +458,6 @@ export default function ProfileStudio({
       banner_theme: BANNERS.some(item => item.id === profile.banner_theme) ? profile.banner_theme : 'aurora',
       banner_url: profile.banner_path ? null : (bannerUrl || null),
       banner_path: profile.banner_path || null,
-      studio: normalizeProfileStudio(profile.studio),
       name_style: NAME_STYLES.some(item => item.id === profile.name_style) ? profile.name_style : 'gradient',
       name_font: DB_NAME_FONT_IDS.includes(profile.name_font) ? profile.name_font : 'rounded',
       studio: normalizeProfileStudio({
