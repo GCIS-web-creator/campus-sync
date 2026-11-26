@@ -97,8 +97,12 @@ test('the piloted explorer remains a small spacecraft at the simulation scale', 
   assert.match(simulator, /CRAFT_VISUAL_LENGTH = 0\.00025/);
   assert.match(simulator, /logarithmicDepthBuffer: true/);
   assert.match(simulator, /PerspectiveCamera\(72, width \/ height, 0\.000000001, 340_000\)/);
-  assert.match(simulator, /Math\.max\(0\.00000028, Math\.min\(0\.0000025/);
-  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: 0\.00000065 \}\)/);
+  assert.match(simulator, /const metersToSceneUnits = \(meters: number\) => meters \/ \(KM_PER_SCENE_UNIT \* 1_000\)/);
+  assert.match(simulator, /distance: metersToSceneUnits\(650\)/);
+  assert.match(simulator, /Math\.max\(metersToSceneUnits\(280\), Math\.min\(metersToSceneUnits\(2_500\)/);
+  assert.match(simulator, /multiplyScalar\(metersToSceneUnits\(600\)\)\.addScaledVector\(trailingDirection, metersToSceneUnits\(1_400\)\)/);
+  assert.match(simulator, /addScaledVector\(forward, metersToSceneUnits\(1_300\)\)\.addScaledVector\(unitRadial, -metersToSceneUnits\(250\)\)/);
+  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: metersToSceneUnits\(650\) \}\)/);
   assert.match(simulator, /'arrowup'/);
   assert.match(simulator, /keyName: 'w'/);
   assert.match(simulator, /keyName: 'q'/);

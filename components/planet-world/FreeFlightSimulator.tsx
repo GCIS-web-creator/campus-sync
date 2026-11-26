@@ -40,6 +40,7 @@ type HudState = {
 };
 
 const KM_PER_SCENE_UNIT = 1_000;
+const metersToSceneUnits = (meters: number) => meters / (KM_PER_SCENE_UNIT * 1_000);
 const CRAFT_VISUAL_LENGTH = 0.00025; // Approximately 100 m nose-to-tail at the current geometry scale.
 
 function seeded(seed: number) {
@@ -310,7 +311,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     status: '軌道投入済み · 慣性飛行',
   });
   const cameraModeRef = useRef<CameraMode>('chase');
-  const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: 0.00000065 });
+  const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: metersToSceneUnits(650) });
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -538,7 +539,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const onWheel = (event: WheelEvent) => {
       if (cameraModeRef.current !== 'inspection') return;
       event.preventDefault();
-      inspectionRef.current.distance = Math.max(0.00000028, Math.min(0.0000025, inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
+      inspectionRef.current.distance = Math.max(metersToSceneUnits(280), Math.min(metersToSceneUnits(2_500), inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -646,7 +647,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
       const selectedCamera = cameraModeRef.current;
       if (selectedCamera === 'cockpit') {
-        camera.position.copy(shipPosition).add(new THREE.Vector3(0, 0.000007, 0).applyQuaternion(craft.quaternion));
+        camera.position.copy(shipPosition).add(new THREE.Vector3(0, metersToSceneUnits(7), 0).applyQuaternion(craft.quaternion));
         camera.quaternion.copy(craft.quaternion);
       } else if (selectedCamera === 'inspection') {
         const angles = inspectionRef.current;
@@ -662,9 +663,9 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       } else {
         unitRadial.set(shipPosition.x, shipPosition.y, shipPosition.z).normalize();
         const trailingDirection = forward.clone().negate();
-        cameraOffset.copy(unitRadial).multiplyScalar(0.0000006).addScaledVector(trailingDirection, 0.0000014);
+        cameraOffset.copy(unitRadial).multiplyScalar(metersToSceneUnits(600)).addScaledVector(trailingDirection, metersToSceneUnits(1_400));
         camera.position.copy(shipPosition).add(cameraOffset);
-        cameraTarget.copy(shipPosition).addScaledVector(forward, 0.0000013).addScaledVector(unitRadial, -0.00000025);
+        cameraTarget.copy(shipPosition).addScaledVector(forward, metersToSceneUnits(1_300)).addScaledVector(unitRadial, -metersToSceneUnits(250));
         camera.up.set(0, 1, 0);
         camera.lookAt(cameraTarget);
       }
