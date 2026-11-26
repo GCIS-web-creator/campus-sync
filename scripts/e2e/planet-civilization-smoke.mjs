@@ -257,9 +257,16 @@ try {
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
-  // Return through the same in-app exit control used by players. The 342-second
-  // voyage is intentionally not played to completion in this smoke test.
-  await page.getByTestId('flight-exit-button').click();
+  // Return through the same in-app control used by players. During a flight
+  // the control is "航行を終了"; after the 342-second mission completes it
+  // becomes "惑星視点へ戻る". Accept either state so the smoke test checks the
+  // real return path instead of assuming a fixed mission progress.
+  const flightExitButton = page.getByTestId('flight-exit-button');
+  if (await flightExitButton.count()) {
+    await flightExitButton.click();
+  } else {
+    await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
+  }
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
