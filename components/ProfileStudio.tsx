@@ -677,7 +677,7 @@ export default function ProfileStudio({
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className={'mb-2 text-[11px] font-bold ' + muted}>プロフィール枠</p>
-                    <select value={profile.frame_style} onChange={event => setProfile(prev => ({ ...prev, frame_style: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-xs font-bold">
+                    <select aria-label="プロフィール枠" value={profile.frame_style} onChange={event => setProfile(prev => ({ ...prev, frame_style: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-xs font-bold">
                       <option value="basic">ベーシック（初期）</option>
                       <option value="aurora" disabled={!unlockedIds.includes('frame_aurora')}>オーロラフレーム（{unlockedIds.includes('frame_aurora') ? '解放済み' : '学習5回で解放'}）</option>
                       <option value="prism" disabled={!unlockedIds.includes('frame_prism')}>プリズムフレーム（{unlockedIds.includes('frame_prism') ? '解放済み' : '貢献3件で解放'}）</option>
@@ -685,7 +685,7 @@ export default function ProfileStudio({
                   </div>
                   <div>
                     <p className={'mb-2 text-[11px] font-bold ' + muted}>アイコン演出</p>
-                    <select value={profile.avatar_effect} onChange={event => setProfile(prev => ({ ...prev, avatar_effect: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-xs font-bold">
+                    <select aria-label="アイコン演出" value={profile.avatar_effect} onChange={event => setProfile(prev => ({ ...prev, avatar_effect: event.target.value }))} className="w-full rounded-xl border border-slate-300/40 bg-slate-500/5 px-3 py-2.5 text-xs font-bold">
                       <option value="none">なし</option>
                       <option value="sparkle" disabled={!unlockedIds.includes('effect_sparkle')}>スターライト（{unlockedIds.includes('effect_sparkle') ? '解放済み' : '学習120分で解放'}）</option>
                     </select>
