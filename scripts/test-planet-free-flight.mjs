@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   FREE_FLIGHT_DELTA_V_BUDGET_KM_S,
@@ -81,4 +82,24 @@ test('braking thrust is directed opposite the current velocity', () => {
   assert.ok(result.thrustAccelerationKmS2.x < 0);
   assert.ok(result.thrustAccelerationKmS2.y > 0);
   assert.ok(length(result.state.velocityKmS) < length(state.velocityKmS));
+});
+
+test('free-flight mode is separate from the existing MP cinematic voyage', () => {
+  const panel = readFileSync(new URL('../components/Planet3DPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /viewMode==='free-flight'/);
+  assert.match(panel, /<FreeFlightSimulator/);
+  assert.match(panel, /<StarSystemVoyage/);
+  assert.match(panel, /星系旅行 · 30MP/);
+});
+
+test('the piloted explorer remains a small spacecraft at the simulation scale', () => {
+  const simulator = readFileSync(new URL('../components/planet-world/FreeFlightSimulator.tsx', import.meta.url), 'utf8');
+  assert.match(simulator, /CRAFT_VISUAL_LENGTH = 0\.00025/);
+  assert.match(simulator, /logarithmicDepthBuffer: true/);
+  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: 0\.00065 \}\)/);
+  assert.match(simulator, /'arrowup'/);
+  assert.match(simulator, /keyName: 'w'/);
+  assert.match(simulator, /keyName: 'q'/);
+  assert.match(simulator, /keyName: ' '/);
+  assert.match(simulator, /NON-COMBAT EXPLORATION SIMULATOR/);
 });
