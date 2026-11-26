@@ -1009,15 +1009,24 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
         ring.material.opacity = warpAmount * (0.19 - ringIndex * 0.035);
       });
 
-      // This is the autopilot's fixed flight direction. Warp streaks and rings
-      // inherit this frame before any manual camera rotation is applied.
-      camera.position.copy(pose.position);
-      camera.up.copy(pose.up);
-      camera.lookAt(pose.target);
-      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
-      const flightQuaternion = camera.quaternion.clone();
+      // Derive the ship's true direction from the next point on the route.
+      // This is intentionally separate from what the pilot chooses to look at:
+      // in a solar orbit the camera can face the star while the ship flies tangent.
+      const sampleProgress = localProgress < 0.999
+        ? Math.min(1, localProgress + 0.001)
+        : Math.max(0, localProgress - 0.001);
+      const samplePose = getPose(phaseId, sampleProgress);
+      const movementDirection = localProgress < 0.999
+        ? samplePose.position.clone().sub(pose.position)
+        : pose.position.clone().sub(samplePose.position);
+      if (movementDirection.lengthSq() < 1e-12) movementDirection.copy(pose.target).sub(pose.position);
+      movementDirection.normalize();
+
+      const flightFrameTarget = pose.position.clone().add(movementDirection);
       warpFrame.position.copy(pose.position);
-      warpFrame.quaternion.copy(flightQuaternion);
+      warpFrame.up.copy(pose.up);
+      warpFrame.lookAt(flightFrameTarget);
+      const flightQuaternion = warpFrame.quaternion.clone();
 
       explorationVessel.position.copy(pose.position);
       explorationVessel.quaternion.copy(flightQuaternion);
@@ -1027,6 +1036,14 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(flightQuaternion).normalize();
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(flightQuaternion).normalize();
       const lookOffset = lookOffsetRef.current;
+
+      // Cockpit gaze follows the active destination. It can differ from the
+      // ship heading without rotating the world-anchored warp streaks.
+      camera.position.copy(pose.position);
+      camera.up.copy(pose.up);
+      camera.lookAt(pose.target);
+      camera.rotateZ(Math.sin(timeSeconds * 1.8) * warpAmount * 0.045 + Math.sin(timeSeconds * 5.4) * warpAmount * 0.012);
+      const cockpitQuaternion = camera.quaternion.clone();
 
       if (viewModeRef.current === 'chase') {
         // Broadcast-style exterior camera follows the one-kilometre ship from
@@ -1043,7 +1060,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       } else {
         camera.position.copy(pose.position);
         camera.up.copy(pose.up);
-        camera.quaternion.copy(flightQuaternion);
+        camera.quaternion.copy(cockpitQuaternion);
         camera.rotateY(lookOffset.yaw);
         camera.rotateX(lookOffset.pitch);
       }
