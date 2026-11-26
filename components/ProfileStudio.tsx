@@ -139,6 +139,11 @@ const PROFILE_CSS = [
   '.ps-deco-thumb{display:inline-grid;flex:none;place-items:center;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:linear-gradient(140deg,rgba(255,255,255,.08),rgba(15,23,42,.28));width:68px;height:46px}',
   '.ps-deco-thumb svg{display:block;width:100%;height:100%}.ps-deco-thumb-avatar{width:46px;height:46px;border-radius:50%}.ps-deco-thumb-small{width:42px;height:34px;border-radius:9px}.ps-deco-thumb-avatar.ps-deco-thumb-small{width:34px;height:34px;border-radius:50%}.ps-deco-thumb-banner{width:66px;height:40px}',
   '.ps-profile-category-nav{scrollbar-width:none}.ps-profile-category-nav::-webkit-scrollbar{display:none}',
+  '.ps-banner-pattern{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.26}',
+  '.ps-banner-pattern-grid{background-image:linear-gradient(rgba(220,245,255,.55) 1px,transparent 1px),linear-gradient(90deg,rgba(220,245,255,.55) 1px,transparent 1px);background-size:24px 24px}',
+  '.ps-banner-pattern-wave{background-image:repeating-radial-gradient(ellipse at 0 100%,transparent 0 16px,rgba(220,245,255,.6) 17px 18px,transparent 19px 34px)}',
+  '.ps-banner-pattern-dots{background-image:radial-gradient(rgba(255,255,255,.8) 1px,transparent 1.8px);background-size:18px 18px}',
+  '.ps-banner-pattern-stars{background-image:radial-gradient(circle at 18% 28%,rgba(255,255,255,.95) 0 1.3px,transparent 2px),radial-gradient(circle at 72% 16%,rgba(255,255,255,.8) 0 1.5px,transparent 2.2px),radial-gradient(circle at 90% 55%,rgba(255,255,255,.85) 0 1.1px,transparent 2px)}',
   '.ps-frame-flow{animation:ps-frame-flow 5s ease infinite}.ps-twinkle{animation:ps-twinkle 1.8s ease-in-out infinite}',
   '@keyframes ps-frame-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}@keyframes ps-spin{to{transform:rotate(360deg)}}@keyframes ps-twinkle{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.12)}}',
   '@media(prefers-reduced-motion:reduce){.ps-frame-flow,.ps-twinkle,.ps-avatar-wrap.ps-frame-aurora,.ps-avatar-wrap.ps-frame-prism,.ps-banner:after{animation:none!important}}',
@@ -217,8 +222,17 @@ function ProfileCard({
 }) {
   const avatarUrl = safeHttpsUrl(profile.avatar_url);
   const bannerUrl = safeHttpsUrl(profile.banner_url);
-  const bannerStyle = bannerUrl ? { backgroundImage: 'linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5)),url("' + bannerUrl.replace(/"/g, '%22') + '")' } : undefined;
   const studio = normalizeProfileStudio(profile.studio);
+  const bannerAppearance = studio.banner_appearance;
+  const bannerGradient = 'linear-gradient(' + bannerAppearance.angle + 'deg,' + bannerAppearance.stops.map(color => bannerUrl ? color + '99' : color).join(',') + ')';
+  const bannerLayers = bannerAppearance.enabled
+    ? [bannerGradient, ...(bannerUrl ? ['url("' + bannerUrl.replace(/"/g, '%22') + '")'] : [])]
+    : (bannerUrl ? ['linear-gradient(135deg,rgba(8,18,44,.12),rgba(8,18,44,.5))', 'url("' + bannerUrl.replace(/"/g, '%22') + '")'] : []);
+  const bannerStyle: React.CSSProperties | undefined = bannerLayers.length ? {
+    backgroundImage: bannerLayers.join(','),
+    backgroundPosition: bannerUrl ? (bannerAppearance.positionX + '% ' + bannerAppearance.positionY + '%') : 'center',
+    backgroundSize: bannerUrl ? (bannerAppearance.scale + '% auto') : 'cover',
+  } : undefined;
   const nameStyleClass = 'ps-name-' + profile.name_style;
   const normalizedFont = studio.name_font_override || (profile.name_font === 'marshmallow' ? 'sakura-pop' : (profile.name_font || 'rounded'));
   const fontClass = 'ps-font-' + normalizedFont + (normalizedFont === 'modern' ? ' ps-font-modern-rainbow' : normalizedFont === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '');
@@ -232,6 +246,7 @@ function ProfileCard({
   return (
     <div className="ps-card">
       <div className={'ps-banner ps-banner-' + profile.banner_theme} style={bannerStyle}>
+        {bannerAppearance.pattern !== 'none' && <span aria-hidden="true" className={'ps-banner-pattern ps-banner-pattern-' + bannerAppearance.pattern} />}
         {bannerKind && <BannerEffect kind={bannerKind} count={compact ? 8 : 18} paused={studio.motionPaused} intensity={0.16} />}
         <div className="absolute inset-0 z-[4] bg-gradient-to-b from-transparent via-transparent to-[#0e1a35]/65 pointer-events-none" />
         {!compact && <span className="absolute bottom-3 right-4 z-10 rounded-full border border-white/20 bg-slate-950/25 px-3 py-1 text-[9px] font-black tracking-[.2em] text-white/80">CAMPUSSYNC PROFILE</span>}
