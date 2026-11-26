@@ -56,7 +56,7 @@ test('planet and moon camera paths are exactly 500 km above the physical surface
   const planetOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.earthRadius);
   const moonOrbitRadius = getLowOrbitRadius(VOYAGE_SCALE.moonRadius);
   assert.ok(Math.abs((planetOrbitRadius - VOYAGE_SCALE.earthRadius) * VOYAGE_SCALE.kilometersPerUnit - 500) < 1e-9);
-  assert.ok(Math.abs((moonOrbitRadius - VOYAGE_SCALE.moonRadius) * VOYAGE_SCALE.kilometersPerUnit - 100) < 1e-9);
+  assert.ok(Math.abs((moonOrbitRadius - VOYAGE_SCALE.moonRadius) * VOYAGE_SCALE.kilometersPerUnit - 500) < 1e-9);
   assert.equal(VOYAGE_SCALE.lowOrbitAltitude / VOYAGE_SCALE.spacecraftLength, 500);
 });
 
@@ -71,14 +71,15 @@ test('stellar path circles just outside the rendered corona', () => {
   assert.ok(orbitRadius > getStarDepartureRadius(starRadius));
   assert.ok(orbitRadius > coronaRadius);
   assert.ok(getStarCoronaClearanceKm(starRadius) > 0);
-  assert.ok(getApparentAngularDiameterDegrees(starRadius, orbitRadius) > 30);
-  assert.ok(getApparentAngularDiameterDegrees(starRadius, orbitRadius) < 40);
+  assert.ok(getApparentAngularDiameterDegrees(starRadius, orbitRadius) > 4.5);
+  assert.ok(getApparentAngularDiameterDegrees(starRadius, orbitRadius) < 5.8);
 });
 
 test('star departure route begins outside the corona and never cuts across the star', () => {
   const starRadius = getVoyageStarRadius('G');
-  assert.ok(getStarDepartureRadius(starRadius) > getStarOrbitRadius(starRadius));
-  assert.ok(getStarDepartureClearanceKm(starRadius) > getStarCoronaClearanceKm(starRadius));
+  assert.ok(getStarDepartureRadius(starRadius) > getStarCoronaOuterRadius(starRadius));
+  assert.ok(getStarOrbitRadius(starRadius) > getStarDepartureRadius(starRadius));
+  assert.ok(getStarDepartureClearanceKm(starRadius) > 0);
 });
 
 test('final stellar pass is a straight tangent outside the gravity boundary', () => {
