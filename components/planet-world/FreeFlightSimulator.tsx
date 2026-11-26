@@ -148,6 +148,7 @@ function makeAtmosphere(radius: number, color: string) {
     new THREE.ShaderMaterial({
       uniforms: { uAtmosphereColor: { value: new THREE.Color(color) } },
       vertexShader: [
+        '#include <common>',
         '#include <logdepthbuf_pars_vertex>',
         'varying vec3 vNormal;',
         'varying vec3 vViewDirection;',
@@ -160,6 +161,7 @@ function makeAtmosphere(radius: number, color: string) {
         '}',
       ].join('\n'),
       fragmentShader: [
+        '#include <common>',
         '#include <logdepthbuf_pars_fragment>',
         'uniform vec3 uAtmosphereColor;',
         'varying vec3 vNormal;',
