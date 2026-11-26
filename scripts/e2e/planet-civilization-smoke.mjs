@@ -313,11 +313,22 @@ try {
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
-  // The voyage itself lasts 342 seconds. The flight HUD and both camera
-  // modes have been exercised above; reload the explicit planet route instead
-  // of waiting for the full cinematic timer in this independent smoke test.
-  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  // The voyage itself lasts 342 seconds. The free-flight HUD and camera
+  // modes have been exercised above; reload the current document to reset the
+  // local view-mode state instead of revisiting the identical hash URL.
+  const planetReloadResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+  try {
+    await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
+  } catch (error) {
+    const debug = {
+      status: planetReloadResponse?.status(),
+      url: page.url(),
+      title: await page.title().catch(() => ''),
+      body: (await page.locator('body').innerText().catch(() => '')).slice(0, 1800),
+      pageErrors,
+    };
+    throw new Error(`Planet panel did not return after browser reload: ${error.message}; state=${JSON.stringify(debug)}`);
+  }
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
