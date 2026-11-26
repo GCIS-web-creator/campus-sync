@@ -355,7 +355,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
         // 惑星軌道画面でも航行画面と同じ自発光・粒状斑シェーダーを使う。
         // 表面に昼夜境界を作らず、画面上でも対流模様を視認できる大きさにする。
-        const starCoreRadius = 30 * profile.radius;
+        const starCoreRadius = 36 * profile.radius;
         const starGeometry = new THREE.SphereGeometry(starCoreRadius, 256, 192);
         const starMaterial = createStellarSurfaceMaterial(profile.lightColor, numericId * 37 + index);
         stellarSurfaceMaterials.push(starMaterial);
