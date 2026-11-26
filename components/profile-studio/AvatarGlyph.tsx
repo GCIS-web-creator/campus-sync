@@ -2,7 +2,7 @@
 
 import React from 'react';
 import {
-  Flower2, Moon, Star, Orbit, Cat, Fish, Bird, Butterfly,
+  Flower2, Moon, Star, Orbit, Cat, Fish, Bird, Butterfly, PawPrint, Waves,
   Sun, Headphones, BookOpen, Gamepad2, Clover, Cloud, Diamond, Leaf,
 } from 'lucide-react';
 
@@ -12,8 +12,8 @@ const GLYPHS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: 
   '⭐': Star,
   '🪐': Orbit,
   '🐈': Cat,
-  '🦊': Bird,
-  '🐬': Fish,
+  '🦊': PawPrint,
+  '🐬': Waves,
   '🐧': Bird,
   '🦋': Butterfly,
   '🌻': Sun,
