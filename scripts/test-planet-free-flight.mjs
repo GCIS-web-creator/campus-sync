@@ -100,6 +100,6 @@ test('the piloted explorer remains a small spacecraft at the simulation scale', 
   assert.match(simulator, /'arrowup'/);
   assert.match(simulator, /keyName: 'w'/);
   assert.match(simulator, /keyName: 'q'/);
-  assert.match(simulator, /keyName: ' '/);
+  assert.match(simulator, /keyName=" "/);
   assert.match(simulator, /NON-COMBAT EXPLORATION SIMULATOR/);
 });
