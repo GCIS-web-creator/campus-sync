@@ -244,6 +244,29 @@ try {
   await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
 
+  // Exercise the new free-flight mode in a real WebGL browser session.
+  await page.getByRole('button', { name: '自由航行 · 無料', exact: true }).click();
+  await page.locator('[aria-label="小型宇宙艇の自由航行3Dシミュレーター"]').waitFor({ state: 'visible' });
+  await page.getByText('CAMPUSSYNC · FREE FLIGHT', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('NON-COMBAT EXPLORATION SIMULATOR', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('VELOCITY', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('ALTITUDE', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('ACCELERATION', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('PROPULSION RESERVE', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '操縦席', exact: true }).click();
+  await page.getByRole('button', { name: '360°観察', exact: true }).click();
+  await page.getByRole('button', { name: '追跡視点', exact: true }).click();
+  await page.keyboard.down('w');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('w');
+  await page.keyboard.down(' ');
+  await page.waitForTimeout(180);
+  await page.keyboard.up(' ');
+  const freeFlightCanvas = page.locator('[aria-label="小型宇宙艇の自由航行3Dシミュレーター"] canvas');
+  await freeFlightCanvas.waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
+  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible' });
+
   // Exercise the new Verdia terrain view and the star-voyage purchase flow.
   await page.getByRole('button', { name: '地上視点', exact: true }).click();
   await page.getByRole('button', { name: '選択した地点に降り立つ', exact: true }).waitFor({ state: 'visible', timeout: 15000 });
@@ -401,7 +424,7 @@ try {
   assert.deepEqual(pageErrors, [], 'Browser page should not throw uncaught JavaScript errors');
   assert.deepEqual(webglErrors, [], 'Stellar surface and corona shaders should compile without WebGL errors');
 
-  console.log('PASS: planet screen, Verdia ground landing, star-voyage 30 MP purchase handoff, cockpit flight entry, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed, XP handoff, and retry recovery');
+  console.log('PASS: planet screen, free-flight 6-DOF mode and camera controls, Verdia ground landing, star-voyage 30 MP purchase handoff, cockpit/inspection camera entry, linked XP evidence, 390px mobile layout, supplied song test path, focus/break/pause accounting, interrupted session saved and resumed, XP handoff, and retry recovery');
 } finally {
   await browser.close();
 }
