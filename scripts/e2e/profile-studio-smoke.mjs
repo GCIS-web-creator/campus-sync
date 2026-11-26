@@ -190,6 +190,7 @@ try {
   // Capture the real card at the requested mobile widths in light mode.
   for (const width of [320, 375, 414]) {
     await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await page.locator('.ps-card').screenshot({ path: artifactDir + '/profile-light-' + width + '.png' });
     const previewBox = await page.locator('#profile-preview').boundingBox();
     const editorBox = await page.locator('#profile-basic').boundingBox();
