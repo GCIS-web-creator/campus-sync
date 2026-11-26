@@ -255,13 +255,12 @@ try {
   assert.ok(travelPurchasePayload?.action === 'purchase-star-system-travel', 'Voyage start should use the dedicated MP purchase API action');
   assert.match(travelPurchasePayload?.travel_id || '', /^[0-9a-f-]{36}$/i, 'Voyage purchase should send an idempotency UUID');
 
-  const manualExit = page.getByTestId('flight-exit-button');
-  if (await manualExit.isVisible().catch(() => false)) {
-    await manualExit.click();
-  } else {
-    // The 342-second voyage may already be complete on a slow CI runner.
-    await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
-  }
+  await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible' });
+
+  // Reload to restore the initial Planet Civilization screen for the
+  // remaining independent checks; the voyage itself is intentionally 342s.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 30000 });
 
   const firstLoadCount = planetGetCalls;
   const planetHeader = page.locator('header').filter({ has: page.getByRole('heading', { name: '惑星・文明', exact: true }) }).first();
