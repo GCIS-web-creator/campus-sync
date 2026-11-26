@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
-import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
-import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
+import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
@@ -14,6 +13,7 @@ import {
   MOON_ORBIT_COCKPIT_FOV_DEGREES,
   MOON_ORBIT_VIEW_BISECTOR_DEGREES,
   getStarCoronaClearanceKm,
+  getStarCoronaOuterRadius,
   getStarTangentFlybyGeometry,
   getStarOrbitRadius,
   getVoyageStarRadius,
@@ -538,57 +538,19 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       resources.push(ring.geometry, ring.material);
     });
 
-    const galaxyBackdrop = createGalaxyBackdrop(Number.parseInt(system.id.slice(-3), 10) || 1, { radius: 116_000, starCount: 26_000 });
-    scene.add(galaxyBackdrop.group);
-    resources.push({ dispose: () => galaxyBackdrop.dispose() });
+    scene.add(makeDeepSky(Number.parseInt(system.id.slice(-3), 10) || 1, resources));
 
     const starSeed = Number.parseInt(system.id.slice(-3), 10) || 1;
     const starRadius = getVoyageStarRadius(starClass);
     const starGeometry = new THREE.SphereGeometry(starRadius, 384, 256);
-    // A dedicated, self-luminous plasma shader drives convection cells and
-    // granulation. It does not receive sunlight and cannot have a night side.
-    const starMaterial = createStellarSurfaceMaterial(starProfile.lightColor, starSeed);
-    const star = new THREE.Mesh(starGeometry, starMaterial);
+    const starSurface = makeStarSurfaceMaterial(starProfile.lightColor, starSeed, resources);
+    const star = new THREE.Mesh(starGeometry, starSurface.material);
     star.name = 'Self-luminous stellar photosphere';
     scene.add(star);
-    resources.push(starGeometry, starMaterial);
+    resources.push(starGeometry);
 
-    const coronaTexture = makeCorona(starProfile.color);
-    const coronaMaterial = new THREE.SpriteMaterial({
-      map: coronaTexture,
-      color: '#ffffff',
-      transparent: true,
-      opacity: 0.94,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    });
-    const corona = new THREE.Sprite(coronaMaterial);
-    corona.scale.setScalar(starRadius * 7.2);
-    scene.add(corona);
-    resources.push(coronaTexture, coronaMaterial);
-
-    const haloTexture = makeCorona(starProfile.lightColor);
-    const haloMaterial = new THREE.SpriteMaterial({
-      map: haloTexture,
-      color: starProfile.lightColor,
-      transparent: true,
-      opacity: 0.52,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    });
-    const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(starRadius * 8.4);
-    scene.add(halo);
-    resources.push(haloTexture, haloMaterial);
-
-    const coronaShellGeometry = new THREE.SphereGeometry(starRadius * 1.34, 192, 128);
-    const coronaShellMaterial = createStellarCoronaMaterial(starProfile.color, starSeed);
-    const coronaShell = new THREE.Mesh(coronaShellGeometry, coronaShellMaterial);
-    coronaShell.name = 'Animated stellar corona filaments';
-    scene.add(coronaShell);
-    resources.push(coronaShellGeometry, coronaShellMaterial);
+    const corona = makeStarCorona(starRadius, getStarCoronaOuterRadius(starRadius), starProfile.color, starSeed, resources);
+    scene.add(corona.mesh);
 
     const planetPosition = new THREE.Vector3(-VOYAGE_SCALE.astronomicalUnit, 0, 0);
     const moonPosition = planetPosition.clone().add(new THREE.Vector3(0, 0, VOYAGE_SCALE.earthMoonDistance));
@@ -631,13 +593,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(nightOverlay.mesh);
     resources.push(planetGeometry, planetMaterial, planetTexture, fallbackPlanetTexture, nightLightsTexture, nightOverlay.geometry, nightOverlay.material);
 
-    const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(VOYAGE_SCALE.earthRadius * 1.035, 256, 128),
-      new THREE.MeshBasicMaterial({ color: system.atmosphereColor, transparent: true, opacity: 0.14, side: THREE.BackSide, depthWrite: false }),
-    );
+    const atmosphere = makeAtmosphereShell(VOYAGE_SCALE.earthRadius, system.atmosphereColor, planetPosition.clone().negate(), resources);
     atmosphere.position.copy(planetPosition);
     scene.add(atmosphere);
-    resources.push(atmosphere.geometry, atmosphere.material);
 
     const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 384, 256);
     const moonMaterial = new THREE.MeshStandardMaterial({
@@ -839,7 +797,6 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const warpAmount = getWarpIntensity(phaseId, localProgress);
       const timeSeconds = current / 1_000;
       const cinematicEffectTime = timeSeconds / 3;
-      galaxyBackdrop.update(cinematicEffectTime);
       const desiredFov = viewModeRef.current === 'inspection'
         ? 48
         : viewModeRef.current === 'chase'
@@ -947,8 +904,8 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       // Granulation rotates with the stellar surface, rather than being a
       // static featureless emissive sphere. Delta time keeps it FPS-independent.
       star.rotation.y += deltaSeconds * 0.026;
-      starMaterial.uniforms.uTime.value = cinematicEffectTime;
-      coronaShellMaterial.uniforms.uTime.value = cinematicEffectTime;
+      starSurface.update(now / 1_000);
+      corona.update(now / 1_000);
       moon.rotation.y += deltaSeconds * 0.00016;
       renderer.render(scene, camera);
 

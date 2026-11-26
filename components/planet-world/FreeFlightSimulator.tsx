@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
-import { createGalaxyBackdrop } from '@/components/planet-world/galaxy-backdrop';
-import { createStellarCoronaMaterial, createStellarSurfaceMaterial } from '@/components/planet-world/stellar-surface-shader';
+import { makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
@@ -343,12 +342,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const camera = new THREE.PerspectiveCamera(72, width / height, 0.000000001, 340_000);
     camera.position.set(0, 0.5, 10);
     const resources: Array<{ dispose: () => void }> = [];
-    const backdrop = createGalaxyBackdrop(Number.parseInt(system.id.slice(-3), 10) || 1, {
-      radius: 170_000,
-      starCount: 18_000,
-    });
-    scene.add(backdrop.group);
-    resources.push({ dispose: () => backdrop.dispose() });
+    scene.add(makeDeepSky(Number.parseInt(system.id.slice(-3), 10) || 1, resources));
 
     const planetRadiusKm = FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM;
     const planetRadius = planetRadiusKm / KM_PER_SCENE_UNIT;
@@ -455,8 +449,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const starProfile = starClass ? STAR_PROFILES[starClass] : null;
     const starPosition = new THREE.Vector3(starPositionKm.x / KM_PER_SCENE_UNIT, starPositionKm.y / KM_PER_SCENE_UNIT, starPositionKm.z / KM_PER_SCENE_UNIT);
     let star: THREE.Mesh | null = null;
-    let starMaterial: THREE.ShaderMaterial | null = null;
-    let coronaMaterial: THREE.ShaderMaterial | null = null;
+    const stellarEffects: Array<{ update: (seconds: number) => void }> = [];
     if (starProfile && starClass) {
       const starMassSolar: Record<StarClass, number> = { M: 0.25, K: 0.7, G: 1, F: 1.35, A: 2.1, B: 7.5, DA: 0.6 };
       const starMu = 132_712_440_018 * starMassSolar[starClass];
@@ -464,18 +457,16 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       const starRadiusKm = 695_700 * (starClass === 'DA' ? 0.012 : starProfile.radius);
       const starRadius = starRadiusKm / KM_PER_SCENE_UNIT;
       const starGeometry = new THREE.SphereGeometry(starRadius, 160, 120);
-      starMaterial = createStellarSurfaceMaterial(starProfile.lightColor, 4_721);
-      star = new THREE.Mesh(starGeometry, starMaterial);
+      const starSurface = makeStarSurfaceMaterial(starProfile.lightColor, 4_721, resources);
+      star = new THREE.Mesh(starGeometry, starSurface.material);
       star.position.copy(starPosition);
       star.name = 'Distant self-luminous star';
       scene.add(star);
-      resources.push(starGeometry, starMaterial);
-      const coronaGeometry = new THREE.SphereGeometry(starRadius * 1.25, 96, 72);
-      coronaMaterial = createStellarCoronaMaterial(starProfile.color, 8_413);
-      const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
-      corona.position.copy(starPosition);
-      scene.add(corona);
-      resources.push(coronaGeometry, coronaMaterial);
+      resources.push(starGeometry);
+      const corona = makeStarCorona(starRadius, starRadius * 2.9, starProfile.color, 8_413, resources);
+      corona.mesh.position.copy(starPosition);
+      scene.add(corona.mesh);
+      stellarEffects.push(starSurface, corona);
       const starLight = new THREE.DirectionalLight(starProfile.lightColor, 1.55);
       starLight.position.copy(starPosition);
       scene.add(starLight);
@@ -638,12 +629,8 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       planet.rotation.y += dt * 0.00017;
       clouds.rotation.y += dt * 0.00019;
       moonMeshes.forEach((moon, index) => { moon.rotation.y += dt * (0.00018 + index * 0.00004); });
-      if (star && starMaterial && coronaMaterial) {
-        star.rotation.y += dt * 0.000025;
-        starMaterial.uniforms.uTime.value = elapsed;
-        coronaMaterial.uniforms.uTime.value = elapsed;
-      }
-      backdrop.update(elapsed);
+      if (star) star.rotation.y += dt * 0.000025;
+      stellarEffects.forEach(effect => effect.update(elapsed));
 
       const selectedCamera = cameraModeRef.current;
       if (selectedCamera === 'cockpit') {
@@ -669,7 +656,6 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         camera.up.set(0, 1, 0);
         camera.lookAt(cameraTarget);
       }
-      backdrop.group.position.copy(camera.position);
       renderer.render(scene, camera);
 
       if (now - lastHudTime > 160) {
