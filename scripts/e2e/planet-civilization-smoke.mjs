@@ -237,7 +237,7 @@ try {
   await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
   await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
   await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
-  await page.getByText(/地表500km上空/).first().waitFor({ state: 'visible' });
+  await page.getByText(/地表2,500km上空/).first().waitFor({ state: 'visible' });
   await page.getByText('約5分42秒', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '30 MPで航行開始', exact: true }).click();
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
