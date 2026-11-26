@@ -12,8 +12,20 @@ export type NameAppearance = {
   spacing: number;
 };
 
+export type BannerAppearance = {
+  enabled: boolean;
+  stops: string[];
+  angle: number;
+  pattern: 'none' | 'grid' | 'wave' | 'dots' | 'stars';
+  positionX: number;
+  positionY: number;
+  scale: number;
+};
+
 export type ProfileStudioSettings = {
   name_appearance: NameAppearance;
+  banner_appearance: BannerAppearance;
+  name_font_override: string | null;
   equipped: { avatar_deco: string | null; profile_effect: string | null };
   motionPaused: boolean;
 };
@@ -32,6 +44,8 @@ export const DEFAULT_NAME_APPEARANCE: NameAppearance = {
 
 export const DEFAULT_PROFILE_STUDIO: ProfileStudioSettings = {
   name_appearance: DEFAULT_NAME_APPEARANCE,
+  banner_appearance: { enabled: false, stops: ['#12386e', '#6d42a7', '#102344'], angle: 125, pattern: 'none', positionX: 50, positionY: 50, scale: 100 },
+  name_font_override: null,
   equipped: { avatar_deco: null, profile_effect: null },
   motionPaused: false,
 };
@@ -52,6 +66,13 @@ export function normalizeProfileStudio(raw: unknown): ProfileStudioSettings {
   const rawStops = Array.isArray(sourceName.stops) ? sourceName.stops : DEFAULT_NAME_APPEARANCE.stops;
   const stops = rawStops.slice(0, 8).map((c) => validHex(c, '#ffffff'));
   const cleanStops = stops.length ? stops : ['#ffffff'];
+  const sourceBanner = value.banner_appearance && typeof value.banner_appearance === 'object'
+    ? value.banner_appearance as Record<string, unknown> : {};
+  const rawBannerStops = Array.isArray(sourceBanner.stops) ? sourceBanner.stops : DEFAULT_PROFILE_STUDIO.banner_appearance.stops;
+  const bannerStops = rawBannerStops.slice(0, 8).map((color) => validHex(color, '#ffffff'));
+  const fontOverride = typeof value.name_font_override === 'string'
+    && ['m-plus-rounded','zen-maru','kiwi-maru','zen-kaku','shippori-mincho','mochiy-pop','dela-gothic','dotgothic16','yusei-magic'].includes(value.name_font_override)
+    ? value.name_font_override : null;
   const sourceEquipped = value.equipped && typeof value.equipped === 'object'
     ? value.equipped as Record<string, unknown> : {};
   const avatarDeco = typeof sourceEquipped.avatar_deco === 'string' ? sourceEquipped.avatar_deco : null;
@@ -68,6 +89,16 @@ export function normalizeProfileStudio(raw: unknown): ProfileStudioSettings {
       weight: bounded(sourceName.weight, 800, 300, 900),
       spacing: bounded(sourceName.spacing, 0, -2, 12),
     },
+    banner_appearance: {
+      enabled: sourceBanner.enabled === true,
+      stops: bannerStops.length ? bannerStops : DEFAULT_PROFILE_STUDIO.banner_appearance.stops,
+      angle: bounded(sourceBanner.angle, 125, 0, 360),
+      pattern: ['none','grid','wave','dots','stars'].includes(String(sourceBanner.pattern)) ? sourceBanner.pattern as BannerAppearance['pattern'] : 'none',
+      positionX: bounded(sourceBanner.positionX, 50, 0, 100),
+      positionY: bounded(sourceBanner.positionY, 50, 0, 100),
+      scale: bounded(sourceBanner.scale, 100, 100, 220),
+    },
+    name_font_override: fontOverride,
     equipped: { avatar_deco: avatarDeco, profile_effect: profileEffect },
     motionPaused: value.motionPaused === true,
   };

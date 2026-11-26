@@ -54,6 +54,10 @@ jobs:
         run: npm run test:chemistry-question-bank
       - name: Test planet MP technology tree catalog and prerequisites
         run: npm run test:planet-tree
+      - name: Test profile decoration catalog and approval boundary
+        run: node --test scripts/test-profile-studio-catalog.mjs
+      - name: Test math practice list search and pagination
+        run: node --experimental-strip-types --test scripts/test-math-practice-catalog.mjs
       # The LINE webhook imports getCloudflareContext directly, so this package is needed
       # even for the ordinary Next.js compile step.
       - name: Install OpenNext runtime and Playwright for browser smoke tests
@@ -93,6 +97,16 @@ jobs:
             exit 1
           fi
           node scripts/e2e/planet-civilization-smoke.mjs
+          node --check scripts/e2e/profile-studio-smoke.mjs
+          node scripts/e2e/profile-studio-smoke.mjs
+      - name: Upload Profile Studio responsive screenshots
+        if: always() && (github.ref == 'refs/heads/cloudflare-workers-migration' || (github.event_name == 'pull_request' && github.base_ref == 'cloudflare-workers-migration'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: campus-sync-profile-studio-screenshots
+          path: artifacts/profile-studio/
+          if-no-files-found: warn
+          retention-days: 7
       # PR/test builds keep the safe placeholder config above. Rebuild the production
       # artifact with the real public Supabase URL and publishable key before deployment.
       # The service_role key remains a Cloudflare secret and is never embedded in the bundle.

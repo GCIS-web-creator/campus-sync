@@ -8,6 +8,15 @@ type Props = {
   onChange: (stops: string[], angle: number) => void;
 };
 
+const PRESETS = [
+  { label: 'オーロラ', colors: ['#67e8f9','#a78bfa','#f0abfc'] },
+  { label: 'サンセット', colors: ['#f97316','#fb7185','#c084fc'] },
+  { label: 'オーシャン', colors: ['#0ea5e9','#22d3ee','#34d399'] },
+  { label: 'ゴールド', colors: ['#facc15','#fb923c','#fef3c7'] },
+  { label: 'ネオン', colors: ['#ec4899','#8b5cf6','#22d3ee'] },
+  { label: 'フォレスト', colors: ['#166534','#4ade80','#d9f99d'] },
+];
+
 export function GradientEditor({ stops, angle, onChange }: Props) {
   const colors = stops.length ? stops : ['#ffffff'];
   return (
@@ -23,7 +32,7 @@ export function GradientEditor({ stops, angle, onChange }: Props) {
               className="h-7 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
             />
             <span>{index + 1}</span>
-            {colors.length > 1 && (
+            {colors.length > 2 && (
               <button type="button" onClick={() => onChange(colors.filter((_, i) => i !== index), angle)} aria-label={'色 ' + (index + 1) + ' を削除'} className="ml-1 rounded px-1 text-rose-500">×</button>
             )}
           </label>
@@ -31,6 +40,12 @@ export function GradientEditor({ stops, angle, onChange }: Props) {
         {colors.length < 8 && (
           <button type="button" onClick={() => onChange([...colors, colors[colors.length - 1] || '#ffffff'], angle)} className="rounded-lg border border-dashed border-slate-400/50 px-3 py-2 text-[10px] font-black">＋ 色を追加</button>
         )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {PRESETS.map(preset => <button key={preset.label} type="button" onClick={() => onChange(preset.colors, angle)} className="rounded-lg border border-slate-300/30 px-2 py-1.5 text-[9px] font-bold hover:border-cyan-400">
+          <span className="mb-1 block h-2 w-20 rounded-full" style={{ background: 'linear-gradient(90deg,' + preset.colors.join(',') + ')' }} />
+          {preset.label}
+        </button>)}
       </div>
       <label className="block text-[10px] font-bold">
         グラデーションの角度：{angle}°

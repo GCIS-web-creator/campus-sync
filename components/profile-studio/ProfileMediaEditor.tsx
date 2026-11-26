@@ -131,7 +131,7 @@ export function ProfileMediaEditor({ kind, userId, currentUrl, hasImage, dark = 
         if (old) URL.revokeObjectURL(old);
         return '';
       });
-      setMessage('画像を登録しました。プロフィール保存も忘れずに行ってください。');
+      setMessage('画像を登録しました。プロフィールの変更も保存してください。');
     } catch (error) {
       console.error('プロフィール画像の登録に失敗:', error);
       setMessage(error instanceof Error ? error.message : '画像を登録できませんでした。');
@@ -155,7 +155,7 @@ export function ProfileMediaEditor({ kind, userId, currentUrl, hasImage, dark = 
       </div>
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => pickFile(e.target.files?.[0])} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture={isAvatar ? "user" : "environment"} className="hidden" onChange={e => pickFile(e.target.files?.[0])} />
-      <p className="text-[10px] leading-5 text-slate-500">{label}画像はJPEG・PNG・WebPに対応。元画像10MB以下、登録時はWebP・最大2MBに自動変換して非公開ストレージへ保存するよ。</p>
+      <p className="text-[10px] leading-5 text-slate-500">{label}画像はJPEG・PNG・WebPに対応。元画像10MB以下、登録時はWebP・最大2MBに自動変換して非公開ストレージへ保存します。</p>
       {preview && source && (
         <div className={'rounded-xl border p-3 ' + cardTone}>
           <p className="mb-2 text-xs font-black">切り抜き位置を調整</p>
