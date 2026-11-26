@@ -1161,11 +1161,15 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       {started && (
         <>
           <div className="pointer-events-none absolute inset-0 z-10" style={{ background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,5,15,.26) 78%, rgba(0,3,10,.88) 100%)' }} />
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[15%] bg-gradient-to-b from-slate-950/45 via-slate-900/15 to-transparent" />
-          <div className="pointer-events-none absolute left-0 top-[8%] z-10 h-[64%] w-[7%] border-r border-cyan-100/15 bg-gradient-to-r from-slate-950/65 to-transparent [clip-path:polygon(0_0,100%_8%,74%_100%,0_91%)] sm:w-[5%]" />
-          <div className="pointer-events-none absolute right-0 top-[8%] z-10 h-[64%] w-[7%] border-l border-cyan-100/15 bg-gradient-to-l from-slate-950/65 to-transparent [clip-path:polygon(0_8%,100%_0,100%_91%,26%_100%)] sm:w-[5%]" />
-          <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-[9%] w-[54%] -translate-x-1/2 rounded-b-[50%] border-b border-x border-cyan-100/20 bg-gradient-to-b from-slate-950/50 to-transparent" />
-          <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
+          {viewMode === 'cockpit' && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[15%] bg-gradient-to-b from-slate-950/45 via-slate-900/15 to-transparent" />
+              <div className="pointer-events-none absolute left-0 top-[8%] z-10 h-[64%] w-[7%] border-r border-cyan-100/15 bg-gradient-to-r from-slate-950/65 to-transparent [clip-path:polygon(0_0,100%_8%,74%_100%,0_91%)] sm:w-[5%]" />
+              <div className="pointer-events-none absolute right-0 top-[8%] z-10 h-[64%] w-[7%] border-l border-cyan-100/15 bg-gradient-to-l from-slate-950/65 to-transparent [clip-path:polygon(0_8%,100%_0,100%_91%,26%_100%)] sm:w-[5%]" />
+              <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-[9%] w-[54%] -translate-x-1/2 rounded-b-[50%] border-b border-x border-cyan-100/20 bg-gradient-to-b from-slate-950/50 to-transparent" />
+              <div className="pointer-events-none absolute bottom-[23%] left-1/2 z-10 h-[3%] w-[44%] -translate-x-1/2 rounded-t-full border-t border-cyan-100/20 bg-gradient-to-t from-slate-950/55 to-transparent sm:w-[35%]" />
+            </>
+          )}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-5">
             <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
               <p className="text-[9px] font-black tracking-[.22em] text-cyan-200">{viewMode === 'chase' ? 'EXTERIOR TRACKING CAMERA' : 'VESSEL SYSTEMS · AUTO PILOT'}</p>
@@ -1177,6 +1181,25 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               <p className="text-[9px] font-bold text-slate-400">MISSION ELAPSED</p>
               <p className="mt-0.5 font-mono text-sm font-black tabular-nums">{formatClock(elapsed)}</p>
             </div>
+          </div>
+
+          <div className="pointer-events-auto absolute right-3 top-[15%] z-30 flex flex-col items-end gap-1.5 sm:right-5">
+            <div className="flex overflow-hidden rounded-xl border border-cyan-100/20 bg-slate-950/75 shadow-lg backdrop-blur-md">
+              <button
+                type="button"
+                aria-pressed={viewMode === 'cockpit'}
+                onClick={() => selectViewMode('cockpit')}
+                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'cockpit' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >船内視点</button>
+              <button
+                type="button"
+                aria-pressed={viewMode === 'chase'}
+                onClick={() => selectViewMode('chase')}
+                className={`px-3 py-2 text-[10px] font-black transition ${viewMode === 'chase' ? 'bg-cyan-300 text-slate-950' : 'text-slate-200 hover:bg-white/10'}`}
+              >外部追跡カメラ</button>
+            </div>
+            <button type="button" onClick={resetFlightView} className="rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-[9px] font-bold text-slate-200 backdrop-blur-md">視点リセット</button>
+            <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">画面をドラッグ／スワイプして見回す</p>
           </div>
 
           <div className="pointer-events-none absolute left-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-xl border border-cyan-200/15 bg-slate-950/35 p-3 backdrop-blur-sm sm:block">
@@ -1210,13 +1233,17 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
           )}
 
-          <div className="pointer-events-none absolute inset-x-[8%] bottom-[22%] z-10 h-[1px] bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent sm:inset-x-[18%]" />
-          <div className="pointer-events-none absolute left-1/2 top-[46%] z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/35 opacity-65">
-            <span className="absolute left-1/2 top-0 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
-            <span className="absolute bottom-0 left-1/2 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
-            <span className="absolute left-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
-            <span className="absolute right-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
-          </div>
+          {viewMode === 'cockpit' && (
+            <>
+              <div className="pointer-events-none absolute inset-x-[8%] bottom-[22%] z-10 h-[1px] bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent sm:inset-x-[18%]" />
+              <div className="pointer-events-none absolute left-1/2 top-[46%] z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/35 opacity-65">
+                <span className="absolute left-1/2 top-0 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
+                <span className="absolute bottom-0 left-1/2 h-1 w-px -translate-x-1/2 bg-cyan-100/80" />
+                <span className="absolute left-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
+                <span className="absolute right-0 top-1/2 h-px w-1 -translate-y-1/2 bg-cyan-100/80" />
+              </div>
+            </>
+          )}
           {!completed && <button type="button" onClick={onExit} className="pointer-events-auto absolute bottom-[27%] right-3 z-30 rounded-lg border border-white/15 bg-slate-950/75 px-3 py-2 text-[10px] font-bold text-slate-200 backdrop-blur-md sm:right-5">航行を終了</button>}
         </>
       )}
