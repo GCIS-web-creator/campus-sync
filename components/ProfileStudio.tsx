@@ -556,6 +556,7 @@ export default function ProfileStudio({
         loading ? (
           <div className={'rounded-2xl border p-8 text-center text-sm ' + darkCard}><RefreshCw size={20} className="mx-auto mb-2 animate-spin" />プロフィールを読み込み中…</div>
         ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(330px,.9fr)]">
           <nav aria-label="プロフィール編集カテゴリ" className="ps-profile-category-nav -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {[
               ['基本情報','profile-basic'],['アイコン','profile-basic'],['フォント','profile-name'],['名前','profile-name'],
@@ -563,7 +564,7 @@ export default function ProfileStudio({
               ['ミニバッジ','profile-badges'],['公開設定','profile-privacy'],['実績','profile-achievements'],
             ].map(([label,id]) => <button key={label} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })} className="shrink-0 rounded-full border border-slate-300/35 bg-slate-500/5 px-3 py-2 text-[10px] font-black">{label}</button>)}
           </nav>
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(330px,.9fr)]">
+
             <div className="order-2 space-y-4 xl:order-1">
               <section id="profile-basic" className={'scroll-mt-3 rounded-2xl border p-4 sm:p-5 ' + darkCard}>
                 <div className="mb-4 flex items-center gap-2"><UserRound size={18} className="text-cyan-500" /><h3 className="text-sm font-black">基本プロフィール</h3></div>
