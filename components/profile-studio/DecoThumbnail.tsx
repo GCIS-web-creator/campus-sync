@@ -31,7 +31,7 @@ export function DecoThumbnail({ kind, slot, size = 'normal' }: { kind: DecoKind;
       <svg viewBox="0 0 64 44" preserveAspectRatio="xMidYMid meet">
         {banner ? (
           <>
-            <rect x="2" y="3" width="60" height="38" rx="8" fill="url(#thumbGradient)" />
+            <rect x="2" y="3" width="60" height="38" rx="8" fill="var(--thumb-a)" />
             <path d="M6 30Q18 18 29 29T58 23" fill="none" stroke="var(--thumb-c)" strokeWidth="2" opacity=".9" />
             <circle cx="17" cy="13" r="2" fill="var(--thumb-c)" /><circle cx="46" cy="11" r="1.5" fill="var(--thumb-c)" />
           </>
@@ -43,7 +43,7 @@ export function DecoThumbnail({ kind, slot, size = 'normal' }: { kind: DecoKind;
             <circle cx="32" cy="18" r="3.5" fill="var(--thumb-c)" />
           </>
         )}
-        <defs><linearGradient id="thumbGradient" x1="0" y1="0" x2="1" y2="1"><stop stopColor="var(--thumb-a)" /><stop offset="1" stopColor="var(--thumb-b)" /></linearGradient></defs>
+        <path d="M7 36h50" stroke="var(--thumb-b)" strokeWidth="1.4" opacity=".65" />
       </svg>
     </span>
   );
