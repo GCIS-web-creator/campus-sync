@@ -32,7 +32,10 @@ export function getStarDepartureClearanceKm(starRadius: number) {
 
 export function getWarpIntensity(phaseId: string, progress: number) {
   const t = Math.max(0, Math.min(1, progress));
-  const smooth = (value: number) => value * value * (3 - 2 * value);
+  const smooth = (value: number) => {
+    const x = Math.max(0, Math.min(1, value));
+    return x * x * (3 - 2 * x);
+  };
   if (phaseId === 'outer-cruise' || phaseId === 'planet-flyby-inbound' || phaseId === 'outer-departure') {
     return 0.96 * smooth(t / 0.28) * (1 - smooth((t - 0.72) / 0.28));
   }
