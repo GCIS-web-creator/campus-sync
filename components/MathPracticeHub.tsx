@@ -189,6 +189,7 @@ export default function MathPracticeHub({ userId, isDarkMode = false }: { userId
     setShowResult(false);
     setGradingResult(null);
     setLastCorrect(false);
+    setQuestionPage(1);
     questionStartedAt.current = Date.now();
     setSection('practice');
   };
