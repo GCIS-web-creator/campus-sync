@@ -263,7 +263,7 @@ try {
 
   // Navigate back to the explicit planet panel route for the remaining
   // independent checks; the voyage itself is intentionally 342 seconds.
-  await page.goto(origin + '/#planet', { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '惑星・文明', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
 
   const firstLoadCount = planetGetCalls;
