@@ -5,8 +5,8 @@ export const VOYAGE_SCALE = {
   kilometersPerUnit: 10_000,
   spacecraftLengthKm: 1,
   spacecraftLength: 1 / 10_000,
-  lowOrbitAltitudeKm: 500,
-  lowOrbitAltitude: 500 / 10_000,
+  lowOrbitAltitudeKm: 2_500,
+  lowOrbitAltitude: 2_500 / 10_000,
   earthRadius: 6_371 / 10_000,
   moonRadius: 1_737.4 / 10_000,
   earthMoonDistance: 384_400 / 10_000,
@@ -16,7 +16,7 @@ export const VOYAGE_SCALE = {
 
 // The star is deliberately enlarged slightly for cinematic readability.
 // A G-class star remains more than 130 Earth diameters across in the scene.
-export const STAR_VISUAL_RADIUS_MULTIPLIER = 1.25;
+export const STAR_VISUAL_RADIUS_MULTIPLIER = 1.4;
 export const STAR_CORONA_OUTER_RADIUS_SOLAR = 2.9;
 
 // Ten times the former stellar orbital altitude:
@@ -134,9 +134,9 @@ export const STAR_SYSTEM_VOYAGE_PHASES = [
   { id: 'planet-flyby-inbound', label: '惑星を横目に恒星へ向かう', durationMs: 24_000, laps: 0 },
   { id: 'star-orbit', label: '恒星コロナ外縁をゆっくり一周', durationMs: 48_000, laps: 1 },
   { id: 'planet-transfer', label: '惑星へフライバイ', durationMs: 30_000, laps: 0 },
-  { id: 'planet-orbit', label: '惑星の地表500km上空を二周', durationMs: 72_000, laps: 2 },
+  { id: 'planet-orbit', label: '惑星の地表2,500km上空を二周', durationMs: 72_000, laps: 2 },
   { id: 'moon-transfer', label: '衛星へフライバイ', durationMs: 30_000, laps: 0 },
-  { id: 'moon-orbit', label: '衛星の地表500km上空をゆっくり一周', durationMs: 42_000, laps: 1 },
+  { id: 'moon-orbit', label: '衛星の地表2,500km上空をゆっくり一周', durationMs: 42_000, laps: 1 },
   { id: 'star-skim', label: '恒星の重力境界外を直進フライバイ', durationMs: 30_000, laps: 0 },
   { id: 'outer-departure', label: '恒星の重力圏に入らず星系外へ離脱', durationMs: 36_000, laps: 0 },
 ] as const;
