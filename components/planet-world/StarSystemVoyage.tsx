@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
+  getLowOrbitLookAngle,
   getLowOrbitRadius,
+  MOON_ORBIT_COCKPIT_FOV_DEGREES,
   getStarCoronaClearanceKm,
   getStarTangentFlybyGeometry,
   getStarOrbitRadius,
@@ -1019,11 +1021,12 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
       const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
       const position = planetPosition.clone().addScaledVector(radial, planetOrbitRadius);
-      // At 2,500 km the camera looks ~31 degrees below the local horizon,
-      // revealing both the curved limb and the day/night terminator.
+      // Aim inside the true geometric horizon. The planet remains a huge,
+      // stable foreground body instead of slipping to the very edge of frame.
+      const lookAngle = getLowOrbitLookAngle(VOYAGE_SCALE.earthRadius, planetOrbitRadius);
       const target = position.clone()
-        .addScaledVector(tangent, 1.1)
-        .addScaledVector(radial, -0.66);
+        .addScaledVector(tangent, Math.sin(lookAngle))
+        .addScaledVector(radial, -Math.cos(lookAngle));
       return { position, target, up: radial };
     };
 
@@ -1033,12 +1036,18 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       const tangent = moonOrbitBasisA.clone().multiplyScalar(-Math.sin(angle))
         .addScaledVector(moonOrbitBasisB, Math.cos(angle)).normalize();
       const position = moonPosition.clone().addScaledVector(radial, moonOrbitRadius);
-      // The 2,500 km lunar orbit uses a steeper look angle so the Moon fills
-      // the frame, with its sunlit half and night-side terminator both visible.
-      const target = position.clone()
-        .addScaledVector(tangent, 0.45)
-        .addScaledVector(radial, -0.9);
-      return { position, target, up: radial };
+      // Keep the Moon's near limb below and the parent planet above it in a
+      // panoramic cockpit composition. The two directions are nearly
+      // perpendicular at physical Earth–Moon scale, so the 100° window shows
+      // both without enlarging either celestial body artificially.
+      const nadir = radial.clone().negate();
+      const towardParent = planetPosition.clone().sub(position).normalize();
+      const viewDirection = nadir.clone().add(towardParent).normalize();
+      const up = towardParent.clone()
+        .addScaledVector(viewDirection, -towardParent.dot(viewDirection))
+        .normalize();
+      const target = position.clone().addScaledVector(viewDirection, 1.2);
+      return { position, target, up };
     };
 
     const getStarOrbitPose = (angle: number) => {
@@ -1150,7 +1159,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
           : phaseId === 'planet-transfer' || phaseId === 'moon-transfer' ? 38
             : phaseId === 'star-orbit' ? 12
               : phaseId === 'star-skim' ? 20
-                : phaseId === 'moon-orbit' ? 42
+                : phaseId === 'moon-orbit' ? MOON_ORBIT_COCKPIT_FOV_DEGREES
                   : phaseId === 'planet-orbit' ? 48
                     : 46;
       if (camera.fov !== desiredFov) {
