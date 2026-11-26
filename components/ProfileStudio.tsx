@@ -209,8 +209,10 @@ function ProfileCard({
   const fontClass = 'ps-font-' + normalizedFont + (normalizedFont === 'modern' ? ' ps-font-modern-rainbow' : normalizedFont === 'sakura-pop' ? ' ps-font-sakura-pop-rainbow' : '');
   const frameClass = profile.frame_style === 'aurora' ? 'ps-frame-aurora' : profile.frame_style === 'prism' ? 'ps-frame-prism' : '';
   const badges = COSMETICS.filter(item => item.category === 'badge' && profile.equipped_badges.includes(item.id));
-  const avatarKind = previewAvatarKind === undefined ? studio.equipped.avatar_deco as DecoKind | null : previewAvatarKind;
-  const bannerKind = previewBannerKind === undefined ? studio.equipped.profile_effect as DecoKind | null : previewBannerKind;
+  const equippedAvatarItem = DECO_ITEMS.find(item => item.slot === 'avatar_deco' && (item.id === studio.equipped.avatar_deco || item.kind === studio.equipped.avatar_deco));
+  const equippedBannerItem = DECO_ITEMS.find(item => item.slot === 'profile_effect' && (item.id === studio.equipped.profile_effect || item.kind === studio.equipped.profile_effect));
+  const avatarKind = previewAvatarKind === undefined ? (equippedAvatarItem?.kind ?? null) : previewAvatarKind;
+  const bannerKind = previewBannerKind === undefined ? (equippedBannerItem?.kind ?? null) : previewBannerKind;
   const customNameStyle = studio.name_appearance.enabled ? nameCss(studio.name_appearance) : undefined;
   return (
     <div className="ps-card">
