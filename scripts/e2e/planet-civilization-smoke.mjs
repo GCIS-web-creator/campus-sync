@@ -243,9 +243,11 @@ try {
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible', timeout: 15000 });
   await page.getByText(/船体 1 km/).waitFor({ state: 'visible' });
   await page.getByText(/WARP \/ 0.27c/).waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: '外部追跡カメラ', exact: true }).click();
+  await page.getByTestId('flight-view-chase').click();
+  assert.equal(await page.getByTestId('flight-view-chase').getAttribute('aria-pressed'), 'true', 'External F1-style chase camera should activate');
   await page.getByText('EXTERIOR TRACKING CAMERA', { exact: true }).waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: '船内視点', exact: true }).click();
+  await page.getByTestId('flight-view-cockpit').click();
+  assert.equal(await page.getByTestId('flight-view-cockpit').getAttribute('aria-pressed'), 'true', 'Cockpit view should reactivate without changing the world-anchored warp frame');
   await page.getByText('VESSEL SYSTEMS · AUTO PILOT', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '視点リセット', exact: true }).click();
   await page.mouse.move(190, 410);
