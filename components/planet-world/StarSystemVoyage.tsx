@@ -7,8 +7,10 @@ import { STAR_PROFILES } from '@/lib/planet-system-catalog';
 import {
   getLowOrbitRadius,
   getStarCoronaClearanceKm,
+  getStarDepartureRadius,
   getStarOrbitRadius,
   getVoyageStarRadius,
+  getWarpIntensity,
   STAR_SYSTEM_VOYAGE_DURATION_MS,
   STAR_SYSTEM_VOYAGE_PHASES,
   VOYAGE_SCALE,
@@ -97,6 +99,120 @@ function makePlanetSurfaceTexture(seed: number, atmosphereColor: string) {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.anisotropy = 8;
   return texture;
+}
+
+function makeNightLightsTexture(seed: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.CanvasTexture(canvas);
+  const random = seeded(seed + 2_071);
+  const clusters = [
+    [0.18, 0.37, 0.105, 0.19], [0.31, 0.63, 0.075, 0.17],
+    [0.47, 0.33, 0.14, 0.22], [0.63, 0.62, 0.12, 0.2],
+    [0.79, 0.36, 0.12, 0.18], [0.9, 0.7, 0.06, 0.12],
+    [0.54, 0.79, 0.08, 0.1],
+  ];
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  for (const [cx, cy, rx, ry] of clusters) {
+    const centerX = cx * canvas.width;
+    const centerY = cy * canvas.height;
+    for (let city = 0; city < 58; city++) {
+      const angle = random() * Math.PI * 2;
+      const radius = Math.sqrt(random());
+      const x = centerX + Math.cos(angle) * rx * canvas.width * radius;
+      const y = centerY + Math.sin(angle) * ry * canvas.height * radius;
+      const glow = 1.5 + random() * 4.5;
+      const gradient = context.createRadialGradient(x, y, 0, x, y, glow * 4);
+      gradient.addColorStop(0, 'rgba(255,239,185,0.95)');
+      gradient.addColorStop(0.24, 'rgba(255,177,91,0.62)');
+      gradient.addColorStop(1, 'rgba(255,136,54,0)');
+      context.fillStyle = gradient;
+      context.beginPath();
+      context.arc(x, y, glow * 4, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = random() > 0.25 ? 'rgba(255,230,174,0.88)' : 'rgba(255,177,128,0.8)';
+      context.beginPath();
+      context.arc(x, y, 0.6 + random() * 1.1, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function makeWarpOverlay() {
+  const geometry = new THREE.PlaneGeometry(52, 32);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uWarp: { value: 0 },
+    },
+    vertexShader: [
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vUv = uv;',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+      '}',
+    ].join('\\n'),
+    fragmentShader: [
+      'uniform float uTime;',
+      'uniform float uWarp;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec2 p = (vUv - 0.5) * vec2(1.65, 1.0);',
+      '  float radius = length(p);',
+      '  float angle = atan(p.y, p.x);',
+      '  float twist = angle + radius * (9.0 + uWarp * 22.0) - uTime * (0.45 + uWarp * 4.2);',
+      '  float spiral = pow(max(0.0, cos(twist * 7.0 + sin(radius * 18.0 - uTime * 2.2))), 15.0);',
+      '  float radial = pow(max(0.0, cos(radius * 78.0 - uTime * 18.0 + angle * 4.0)), 18.0);',
+      '  float sweep = 0.5 + 0.5 * sin(uTime * 7.0 + radius * 34.0 - angle * 9.0);',
+      '  float edge = 1.0 - smoothstep(0.58, 0.98, radius);',
+      '  float center = smoothstep(0.045, 0.26, radius);',
+      '  float filaments = spiral * 0.34 + radial * 0.12 + sweep * 0.055;',
+      '  float alpha = clamp(filaments * edge * center * uWarp, 0.0, 0.42);',
+      '  vec3 cyan = vec3(0.18, 0.78, 1.0);',
+      '  vec3 violet = vec3(0.67, 0.34, 1.0);',
+      '  vec3 color = mix(cyan, violet, 0.5 + 0.5 * sin(twist + uTime));',
+      '  gl_FragColor = vec4(color, alpha);',
+      '}',
+    ].join('\\n'),
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(0, 0, -18);
+  mesh.renderOrder = 100;
+  return { mesh, geometry, material };
+}
+
+function makeWarpRings() {
+  return [0, 1, 2].map(index => {
+    const geometry = new THREE.TorusGeometry(3.6 + index * 2.2, 0.025 + index * 0.008, 6, 144);
+    const material = new THREE.MeshBasicMaterial({
+      color: index === 1 ? '#c39aff' : '#86eaff',
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, 0, -7 - index * 8);
+    mesh.rotation.set(0.16 * (index + 1), 0.27 * (index + 1), 0);
+    return { mesh, geometry, material, index };
+  });
 }
 
 function makeMoonTexture() {
