@@ -1221,6 +1221,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
             </div>
             <button type="button" onClick={resetFlightView} className="rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-[9px] font-bold text-slate-200 backdrop-blur-md">視点リセット</button>
             <p className="rounded-lg bg-slate-950/55 px-2 py-1 text-[9px] text-cyan-100/80 backdrop-blur-sm">画面をドラッグ／スワイプして見回す</p>
+            {!completed && <button type="button" data-testid="flight-exit-button" onClick={onExit} className="rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-md">航行を終了</button>}
           </div>
 
           <div className="pointer-events-none absolute left-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-xl border border-cyan-200/15 bg-slate-950/35 p-3 backdrop-blur-sm sm:block">
@@ -1265,7 +1266,6 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
               </div>
             </>
           )}
-          {!completed && <button type="button" onClick={onExit} className="pointer-events-auto absolute bottom-[27%] right-3 z-30 rounded-lg border border-white/15 bg-slate-950/75 px-3 py-2 text-[10px] font-bold text-slate-200 backdrop-blur-md sm:right-5">航行を終了</button>}
         </>
       )}
     </div>
