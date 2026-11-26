@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
@@ -342,30 +343,6 @@ function makeWarpRings() {
   });
 }
 
-function makeMoonTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-  if (!context) return new THREE.CanvasTexture(canvas);
-  context.fillStyle = '#8c8b83';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  const random = seeded(6419);
-  for (let index = 0; index < 420; index += 1) {
-    const x = random() * canvas.width;
-    const y = random() * canvas.height;
-    const radius = 1 + Math.pow(random(), 2) * 12;
-    context.fillStyle = random() > 0.5 ? 'rgba(235,231,217,0.22)' : 'rgba(26,31,37,0.25)';
-    context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fill();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  return texture;
-}
-
 function makeCorona(color: string) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -551,7 +528,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       setError('この端末では3D航行表示を初期化できませんでした。');
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.4));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(Math.max(1, mount.clientWidth), Math.max(1, mount.clientHeight));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -688,6 +665,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       roughness: 0.96,
       metalness: 0,
     });
+    applyPlanetSurfaceDetail(planetMaterial, Number.parseInt(system.id.slice(-3), 10) || 1);
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.copy(planetPosition);
     scene.add(planet);
@@ -708,14 +686,13 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     scene.add(atmosphere);
     resources.push(atmosphere.geometry, atmosphere.material);
 
-    const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 256, 128);
-    const moonTexture = makeMoonTexture();
+    const moonGeometry = new THREE.SphereGeometry(VOYAGE_SCALE.moonRadius, 384, 256);
     const moonMaterial = new THREE.MeshStandardMaterial({
-      map: moonTexture,
-      color: '#e3e5e9',
+      color: '#c9ccd2',
       roughness: 1,
       metalness: 0,
     });
+    applyMoonSurfaceDetail(moonMaterial, 6419);
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
     moon.position.copy(moonPosition);
     scene.add(moon);
@@ -733,7 +710,7 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
     moonGlow.position.copy(moonPosition);
     moonGlow.scale.setScalar(VOYAGE_SCALE.moonRadius * 3.6);
     scene.add(moonGlow);
-    resources.push(moonGeometry, moonMaterial, moonTexture, moonGlowTexture, moonGlowMaterial);
+    resources.push(moonGeometry, moonMaterial, moonGlowTexture, moonGlowMaterial);
 
     const sunlight = new THREE.DirectionalLight(starProfile.lightColor, 3.5);
     sunlight.position.set(0, 0, 0);
