@@ -47,11 +47,16 @@ function RankImage({ rank, size = 42 }: { rank: ContributionRank; size?: number 
   return <Image src={`/rank-icons/${rank.id}.svg`} width={size} height={size} alt={`${rank.name}の剣ランクアイコン`} unoptimized className="block max-w-full shrink-0 object-contain" />;
 }
 
-export function ContributionRankBadge({ points, compact = false }: { points: number; compact?: boolean }) {
+export function ContributionRankBadge({ points, compact = false, tone = 'default' }: { points: number; compact?: boolean; tone?: 'default' | 'onDark' }) {
   const rank = getContributionRank(Number(points) || 0);
   const safePoints = Math.max(0, Number(points) || 0);
   if (compact) {
-    return <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/70 bg-white/90 px-2 py-1 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100"><RankImage rank={rank} size={32} /><span className="text-left leading-tight"><span className="block text-xs opacity-70">貢献度ランク</span><span className="block text-sm font-bold">{rank.name}</span></span></span>;
+    return <span className={tone === 'onDark'
+      ? 'inline-flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/35 px-2.5 py-1.5 text-slate-50 shadow-sm'
+      : 'inline-flex items-center gap-2 rounded-xl border border-slate-200/70 bg-white/90 px-2 py-1 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100'}>
+      <RankImage rank={rank} size={32} />
+      <span className="text-left leading-tight"><span className="block text-xs opacity-80">貢献度ランク</span><span className="block text-sm font-bold">{rank.name}</span></span>
+    </span>;
   }
   return <div className="flex items-center gap-3"><RankImage rank={rank} size={56} /><div className="min-w-0"><div className="text-xs text-slate-500 dark:text-slate-400">現在の貢献度ランク</div><div className="text-lg font-bold text-slate-900 dark:text-white">{rank.name}</div><div className="text-sm text-slate-600 dark:text-slate-300">{safePoints.toLocaleString()} pt</div></div></div>;
 }
