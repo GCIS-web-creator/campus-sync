@@ -629,6 +629,35 @@ export default function ProfileStudio({
                    onUploaded={({ path, url }) => setProfile(prev => ({ ...prev, banner_path: path, banner_url: url }))}
                    onRemove={() => setProfile(prev => ({ ...prev, banner_path: '', banner_url: '' }))}
                  />
+                <div className="mt-4 rounded-xl border border-slate-300/25 p-3">
+                  <label className="flex items-center gap-2 text-xs font-black">
+                    <input type="checkbox" checked={profile.studio.banner_appearance.enabled} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, enabled: event.target.checked } } }))} className="h-4 w-4 accent-violet-500" />
+                    カスタムグラデーションを使う
+                  </label>
+                  {profile.studio.banner_appearance.enabled && (
+                    <div className="mt-3 space-y-3">
+                      <GradientEditor stops={profile.studio.banner_appearance.stops} angle={profile.studio.banner_appearance.angle} onChange={(stops, angle) => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, stops, angle } } }))} />
+                    </div>
+                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {([
+                      ['none','なし'],['grid','グリッド'],['wave','ウェーブ'],['dots','ドット'],['stars','星空'],
+                    ] as const).map(([value,label]) => <button key={value} type="button" onClick={() => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, pattern: value } } }))} aria-pressed={profile.studio.banner_appearance.pattern === value} className={'rounded-lg border px-2 py-2 text-[10px] font-bold ' + (profile.studio.banner_appearance.pattern === value ? 'border-cyan-400 bg-cyan-500/10 text-cyan-600' : 'border-slate-300/30')}>{label}</button>)}
+                  </div>
+                  {Boolean(profile.banner_url) && (
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <label className="text-[10px] font-bold">画像の左右位置：{profile.studio.banner_appearance.positionX}%
+                        <input type="range" min="0" max="100" value={profile.studio.banner_appearance.positionX} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, positionX: Number(event.target.value) } } }))} className="mt-1 w-full" />
+                      </label>
+                      <label className="text-[10px] font-bold">画像の上下位置：{profile.studio.banner_appearance.positionY}%
+                        <input type="range" min="0" max="100" value={profile.studio.banner_appearance.positionY} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, positionY: Number(event.target.value) } } }))} className="mt-1 w-full" />
+                      </label>
+                      <label className="col-span-2 text-[10px] font-bold">画像の拡大率：{profile.studio.banner_appearance.scale}%
+                        <input type="range" min="100" max="220" step="5" value={profile.studio.banner_appearance.scale} onChange={event => setProfile(prev => ({ ...prev, studio: { ...prev.studio, banner_appearance: { ...prev.studio.banner_appearance, scale: Number(event.target.value) } } }))} className="mt-1 w-full" />
+                      </label>
+                    </div>
+                  )}
+                </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className={'mb-2 text-[11px] font-bold ' + muted}>プロフィール枠</p>
