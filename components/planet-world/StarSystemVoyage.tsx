@@ -1026,6 +1026,9 @@ export default function StarSystemVoyage({ system, starClass, mpBalance, onPurch
       warpFrame.position.copy(pose.position);
       warpFrame.up.copy(pose.up);
       warpFrame.lookAt(flightFrameTarget);
+      // Object3D.lookAt aligns local +Z toward the target, while this ship's
+      // nose and the cockpit's forward axis are local -Z.
+      warpFrame.rotateY(Math.PI);
       const flightQuaternion = warpFrame.quaternion.clone();
 
       explorationVessel.position.copy(pose.position);
