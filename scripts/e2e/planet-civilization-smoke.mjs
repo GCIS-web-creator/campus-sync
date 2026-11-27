@@ -78,6 +78,11 @@ try {
   });
   const pageErrors = [];
   const webglErrors = [];
+  const planetKitAssetStatuses = [];
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.pathname === '/planet-assets/planets/planet-006/surface.svg') planetKitAssetStatuses.push(response.status());
+  });
   page.on('pageerror', error => pageErrors.push(error.message));
   page.on('console', message => {
     if (message.type() === 'error' && /shader|webgl|glsl|program/i.test(message.text())) webglErrors.push(message.text());
@@ -243,6 +248,25 @@ try {
   }
   await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
   assert.ok(planetGetCalls >= 1, 'Planet API should load on first view');
+
+  // Exercise the new 50-planet kit renderer and ensure its generated surface map is served.
+  await page.getByRole('button', { name: '360°惑星ビュー', exact: true }).click();
+  await page.getByText('PLANET KIT · 360° SURFACE', { exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+  await page.locator('canvas').last().waitFor({ state: 'visible', timeout: 15000 });
+  for (let attempt = 0; attempt < 60 && !planetKitAssetStatuses.includes(200); attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(planetKitAssetStatuses.includes(200), 'Planet Kit must load the generated planet-006 surface.svg asset: ' + JSON.stringify(planetKitAssetStatuses));
+  await page.getByRole('button', { name: '雲 ON', exact: true }).click();
+  await page.getByRole('button', { name: '雲 OFF', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '雲 OFF', exact: true }).click();
+  await page.getByRole('button', { name: '時間 1×', exact: true }).click();
+  await page.getByRole('button', { name: '時間 60×', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '一時停止', exact: true }).click();
+  await page.getByRole('button', { name: '再開', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '再開', exact: true }).click();
+  await page.getByRole('button', { name: '星系ビュー', exact: true }).click();
+  await page.locator('[aria-label="太陽光源・衛星を含む3D惑星表示"]').waitFor({ state: 'visible' });
 
   // Exercise the new free-flight mode in a real WebGL browser session.
   await page.getByRole('button', { name: '自由航行 · 無料', exact: true }).click();
