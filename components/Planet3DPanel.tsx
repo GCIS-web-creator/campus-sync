@@ -7,8 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
 import { getPlanetCatalogV50TextureUrl, getPlanetSurfaceTextureUrl, hasPlanetCatalogV50Texture } from '@/lib/planet-world/planet-catalog-v50';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
-import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
-import PlanetGroundView from '@/components/planet-world/PlanetGroundView';
+import CityGroundView from '@/components/planet-world/CityGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
 import FreeFlightSimulator from '@/components/planet-world/FreeFlightSimulator';
 import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
@@ -534,8 +533,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         </div>
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
-      {viewMode==='ground' && numericId !== 6 && <PlanetGroundView planetId={spec.id} planetName={spec.name} stage={stage} onBack={()=>setViewMode('orbit')}/>}
-      {viewMode==='ground' && numericId === 6 && <VerdiaGroundView atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>{setViewMode('orbit');}} />}
+      {viewMode==='ground' && <CityGroundView planetId={spec.id} planetName={spec.name} atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>setViewMode('orbit')}/>}
       {viewMode==='voyage' && <StarSystemVoyage system={spec} starClass={spec.starClasses[0] ?? null} mpBalance={mpBalance} onPurchase={onStartStarTravel} onExit={()=>setViewMode('orbit')}/>}
       {viewMode==='free-flight' && <FreeFlightSimulator system={spec} starClass={spec.starClasses[0] ?? null} onExit={()=>setViewMode('orbit')} />}
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}
