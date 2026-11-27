@@ -98,7 +98,8 @@ test('free-flight mode is separate from the existing MP cinematic voyage', () =>
 
 test('the piloted explorer remains a small spacecraft at the simulation scale', () => {
   const simulator = readFileSync(new URL('../components/planet-world/FreeFlightSimulator.tsx', import.meta.url), 'utf8');
-  assert.match(simulator, /CRAFT_VISUAL_LENGTH = 0\.00025/);
+  assert.match(simulator, /CRAFT_LENGTH_METERS = 100/);
+  assert.match(simulator, /makeExplorationVessel\(renderer, resources\)/);
   assert.match(simulator, /logarithmicDepthBuffer: true/);
   assert.match(simulator, /PerspectiveCamera\(72, width \/ height, 0\.000000001, 340_000\)/);
   assert.match(simulator, /const metersToSceneUnits = \(meters: number\) => meters \/ \(KM_PER_SCENE_UNIT \* 1_000\)/);

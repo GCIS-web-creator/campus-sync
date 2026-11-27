@@ -118,6 +118,7 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
+    uniforms: { uThrust: { value: 1 } },
     vertexShader: `
       #include <common>
       #include <logdepthbuf_pars_vertex>
@@ -132,6 +133,7 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
       }`,
     fragmentShader: `
       #include <logdepthbuf_pars_fragment>
+      uniform float uThrust;
       varying vec2 vUv;
       varying float vFacing;
       void main() {
@@ -140,7 +142,7 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
         float fade = pow(1.0 - along, 2.2);
         float diamonds = 0.78 + 0.22 * pow(abs(cos(along * 22.0)), 3.0);
         vec3 color = mix(vec3(1.0, 0.18, 0.04), vec3(1.0, 0.82, 0.62), pow(fade, 2.0));
-        gl_FragColor = vec4(color, fade * diamonds * pow(vFacing, 1.6) * 0.75);
+        gl_FragColor = vec4(color, fade * diamonds * pow(vFacing, 1.6) * 0.75 * uThrust);
       }`,
   });
   resources.push(plumeMaterial);
@@ -251,6 +253,11 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
     const sprite = glow(color, diameter * length, opacity);
     sprite.position.set(x * length, y * length, z * length);
     ship.add(sprite);
+    return sprite;
+  };
+  const driveHalos: Array<{ material: THREE.SpriteMaterial; opacity: number }> = [];
+  const driveHalo = (diameter: number, opacity: number, x: number, y: number) => {
+    driveHalos.push({ material: halo('#ff8a4a', diameter, opacity, x, y, 0.505).material, opacity });
   };
   // A thin lit strip between two outline points ([x, z] before SLIM).
   const strip = (from: Point, to: Point, y: number, material: THREE.Material) => {
@@ -273,9 +280,9 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
     edge([[0.032, 0.0], [0.04, 0.22], [0.018, 0.34]], 0.071, plasma);
     halo('#ff4b30', 0.05, 0.75, side * 0.04 * SLIM, 0, -0.498);
     halo('#ff4b30', 0.055, 0.8, side * 0.33 * SLIM, 0.014, 0.33);
-    for (const level of [-1, 1]) halo('#ff8a4a', 0.1, 0.55, side * 0.092, level * 0.052, 0.505);
+    for (const level of [-1, 1]) driveHalo(0.1, 0.55, side * 0.092, level * 0.052);
   }
-  halo('#ff8a4a', 0.13, 0.6, 0, 0, 0.505);
+  driveHalo(0.13, 0.6, 0, 0);
   halo('#7fe9ff', 0.045, 0.8, 0, 0, -0.463);
 
   // Main drive.
@@ -369,6 +376,12 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
       }
     }
   }
+
+  // 1 is full thrust (the default); lower values dim the plumes and drive halos.
+  ship.userData.setThrust = (intensity: number) => {
+    plumeMaterial.uniforms.uThrust.value = intensity;
+    driveHalos.forEach(({ material, opacity }) => { material.opacity = opacity * (0.35 + 0.65 * intensity); });
+  };
 
   return ship;
 }
