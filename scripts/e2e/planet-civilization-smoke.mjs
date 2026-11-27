@@ -277,6 +277,7 @@ try {
   await page.keyboard.down('l');
   await waitForSpeed(-1, cruiseSpeed - 2);
   await page.keyboard.up('l');
+  await page.getByTestId('planet-pointer').getByText(/km/).waitFor({ state: 'visible', timeout: 15000 });
   const freeFlightCanvas = page.locator('[aria-label="小型宇宙艇の自由航行3Dシミュレーター"] canvas');
   await freeFlightCanvas.waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();
