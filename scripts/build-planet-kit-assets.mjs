@@ -128,4 +128,6 @@ for (const id of expected) {
     throw new Error('惑星表面SVGが不正です: ' + id);
   }
 }
+// Generator recipes are build inputs, not application modules. Remove them before Next.js type-checks the app.
+await rm(resolve(sourceRoot, 'tools', 'generate'), { recursive: true, force: true });
 console.log('Planet Kit integrated: ' + extracted + ' source files; verified 50/50 planet SVG assets.');
