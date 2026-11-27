@@ -16,6 +16,7 @@ import {
   getCircularOrbitSpeedKmS,
   stepFreeFlightMotion,
 } from '../lib/planet-free-flight-physics.ts';
+import { getDirectionPointer } from '../lib/planet-free-flight-pointer.ts';
 
 const length = (value) => Math.hypot(value.x, value.y, value.z);
 
@@ -153,4 +154,20 @@ test('sub-light travel stops at a planet instead of tunnelling through it', () =
   const away = stepFreeFlightCruise(toward.state, { dtSeconds: 0.1, forward: { x: -1, y: 0, z: 0 }, command: 1 }, [planet]);
   assert.equal(away.impacted, false);
   assert.ok(away.state.positionKm.x < toward.state.positionKm.x);
+});
+
+test('the planet pointer marks a visible planet and otherwise points the way to turn', () => {
+  const ahead = getDirectionPointer({ x: 0, y: 0, z: -10 }, 72, 1.5);
+  assert.equal(ahead.onScreen, true);
+  assert.deepEqual([ahead.x, ahead.y], [0, 0]);
+  const right = getDirectionPointer({ x: 10, y: 0, z: -1 }, 72, 1.5);
+  assert.equal(right.onScreen, false);
+  assert.ok(Math.abs(right.angle) < 1e-12);
+  const below = getDirectionPointer({ x: 0, y: -10, z: -1 }, 72, 1.5);
+  assert.ok(Math.abs(below.angle - Math.PI / 2) < 1e-12);
+  const behindLeft = getDirectionPointer({ x: -2, y: 0, z: 10 }, 72, 1.5);
+  assert.equal(behindLeft.behind, true);
+  assert.equal(behindLeft.onScreen, false);
+  assert.ok(Math.abs(Math.abs(behindLeft.angle) - Math.PI) < 1e-12);
+  assert.ok(Math.abs(getDirectionPointer({ x: 0, y: 0, z: 10 }, 72, 1.5).angle - Math.PI / 2) < 1e-12);
 });

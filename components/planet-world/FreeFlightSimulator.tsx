@@ -27,6 +27,7 @@ import {
   type GravitySource,
   type SphereObstacle,
 } from '@/lib/planet-free-flight-physics';
+import { getDirectionPointer } from '@/lib/planet-free-flight-pointer';
 
 type Props = {
   system: PlanetSystemSpec;
@@ -242,6 +243,10 @@ function ControlButton({
 export default function FreeFlightSimulator({ system, starClass, onExit }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
+  const pointerRef = useRef<HTMLDivElement>(null);
+  const pointerArrowRef = useRef<HTMLSpanElement>(null);
+  const pointerRingRef = useRef<HTMLSpanElement>(null);
+  const pointerLabelRef = useRef<HTMLSpanElement>(null);
   const [cameraMode, setCameraMode] = useState<CameraMode>('chase');
   const [hud, setHud] = useState<HudState>({
     speed: 0,
@@ -448,6 +453,37 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const chaseForward = new THREE.Vector3();
     let cruising = false;
     let impactNoticeUntil = 0;
+    const planetInView = new THREE.Vector3();
+
+    // Moved directly in the DOM so the marker follows every frame without re-rendering React.
+    const updatePlanetPointer = () => {
+      const marker = pointerRef.current;
+      const arrow = pointerArrowRef.current;
+      const ring = pointerRingRef.current;
+      const label = pointerLabelRef.current;
+      if (!marker || !arrow || !ring || !label) return;
+      camera.updateMatrixWorld();
+      planetInView.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse);
+      const pointer = getDirectionPointer(planetInView, camera.fov, camera.aspect);
+      const width = mount.clientWidth;
+      const height = mount.clientHeight;
+      // Off screen, the arrow rides an ellipse around the ship, clear of the HUD panels.
+      const left = pointer.onScreen ? (pointer.x + 1) / 2 * width : width * (0.5 + Math.cos(pointer.angle) * 0.27);
+      const vertical = Math.sin(pointer.angle);
+      // Downward there is only a narrow gap between the ship and the controls.
+      const reach = vertical > 0 ? (height > width ? 0.17 : 0.27) : 0.24;
+      const top = pointer.onScreen ? (1 - pointer.y) / 2 * height : height * (0.45 + vertical * reach);
+      label.style.top = !pointer.onScreen && vertical > 0.5 ? '-38px' : '24px';
+      marker.style.transform = 'translate(' + left.toFixed(1) + 'px,' + top.toFixed(1) + 'px)';
+      marker.style.visibility = 'visible';
+      marker.dataset.state = pointer.onScreen ? 'onscreen' : 'offscreen';
+      ring.style.display = pointer.onScreen ? 'block' : 'none';
+      arrow.style.display = pointer.onScreen ? 'none' : 'block';
+      arrow.style.transform = 'translate(-50%,-50%) rotate(' + pointer.angle.toFixed(3) + 'rad)';
+      const altitude = Math.max(0, Math.hypot(motion.positionKm.x, motion.positionKm.y, motion.positionKm.z) - FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM);
+      const text = system.name + (pointer.behind ? '（後方）' : '') + ' ' + formatDistance(altitude);
+      if (label.textContent !== text) label.textContent = text;
+    };
 
     let frame = 0;
     let alive = true;
@@ -648,6 +684,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         camera.lookAt(cameraTarget);
       }
       renderer.render(scene, camera);
+      updatePlanetPointer();
 
       if (now - lastHudTime > 160) {
         const altitude = Math.max(0, Math.hypot(motion.positionKm.x, motion.positionKm.y, motion.positionKm.z) - planetRadiusKm);
@@ -729,6 +766,12 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     <div className="absolute inset-0 z-30 overflow-hidden bg-[#020611] text-white">
       <div ref={mountRef} className="absolute inset-0" aria-label="小型宇宙艇の自由航行3Dシミュレーター" />
       <div className="pointer-events-none absolute inset-0 z-10" style={{ background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,4,16,.18) 78%, rgba(0,2,8,.66) 100%)' }} />
+
+      <div ref={pointerRef} data-testid="planet-pointer" aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 z-[25] h-0 w-0">
+        <span ref={pointerRingRef} className="absolute left-0 top-0 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-amber-300 shadow-[0_0_10px_rgba(252,211,77,.8)]" />
+        <span ref={pointerArrowRef} className="absolute left-0 top-0 text-3xl font-black leading-none text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,.9)]">➤</span>
+        <span ref={pointerLabelRef} className="absolute left-0 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-black text-amber-200" />
+      </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3 sm:p-5">
         <div className="pointer-events-auto rounded-xl border border-cyan-200/20 bg-slate-950/75 px-3 py-2 backdrop-blur-md">
