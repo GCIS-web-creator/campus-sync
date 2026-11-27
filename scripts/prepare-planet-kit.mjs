@@ -93,7 +93,7 @@ while (addonOffset + 512 <= addonTar.length) {
 if (addonCount !== 10) throw new Error('追加惑星アセットの数が不正です: ' + addonCount + '/10');
 
 const requiredFiles = [
-  resolve(root, 'lib', 'planet-kit', 'react', 'PlanetCanvas.tsx'),
+  resolve(root, 'lib', 'planet-kit', 'src', 'react', 'PlanetCanvas.tsx'),
   resolve(root, 'components', 'Planet3DPanel.tsx'),
   resolve(publicPlanetAssets, 'manifest.json'),
   resolve(publicPlanetAssets, 'planets', 'planet-001', 'surface.jpg'),
