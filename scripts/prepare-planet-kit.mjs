@@ -102,3 +102,6 @@ const requiredFiles = [
 ];
 if (requiredFiles.some((path) => !existsSync(path))) throw new Error('惑星キットの展開結果が不完全です。');
 console.log('惑星キットを展開しました: ' + extracted + ' ファイル (' + extractedBytes.toLocaleString('ja-JP') + ' bytes)');
+await import('./build-planet-kit-assets.mjs');
+const integratedPlanetRenderer = resolve(root, 'lib', 'planet-kit', 'src', 'react', 'PlanetCanvas.tsx');
+if (!existsSync(integratedPlanetRenderer)) throw new Error('50惑星レンダラーのReactエントリが見つかりません。');
