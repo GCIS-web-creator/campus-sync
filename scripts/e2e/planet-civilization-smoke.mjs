@@ -262,6 +262,21 @@ try {
   await page.keyboard.down(' ');
   await page.waitForTimeout(180);
   await page.keyboard.up(' ');
+  // O engages the sub-light drive and L slows it again.
+  const readSpeed = async () => Number.parseFloat((await page.getByTestId('free-flight-speed').textContent()).replaceAll(',', ''));
+  const waitForSpeed = (direction, reference) => page.waitForFunction(([sign, value]) => {
+    const text = document.querySelector('[data-testid="free-flight-speed"]')?.textContent ?? '';
+    return (Number.parseFloat(text.replaceAll(',', '')) - value) * sign > 0;
+  }, [direction, reference], { timeout: 60000 });
+  const orbitSpeed = await readSpeed();
+  await page.keyboard.down('o');
+  await waitForSpeed(1, orbitSpeed + 5);
+  await page.keyboard.up('o');
+  await page.getByText('亜光速ドライブ · 巡航', { exact: true }).waitFor({ state: 'visible' });
+  const cruiseSpeed = await readSpeed();
+  await page.keyboard.down('l');
+  await waitForSpeed(-1, cruiseSpeed - 2);
+  await page.keyboard.up('l');
   const freeFlightCanvas = page.locator('[aria-label="小型宇宙艇の自由航行3Dシミュレーター"] canvas');
   await freeFlightCanvas.waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click();

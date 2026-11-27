@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyShipSelfLight, makeGlowFactory, type ShipSelfLight } from '@/components/planet-world/ship-self-lighting';
 import { VOYAGE_SCALE } from '@/lib/planet-star-voyage';
 
 type Point = [x: number, z: number];
@@ -42,24 +43,26 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
   const length = VOYAGE_SCALE.spacecraftLength;
 
   const envMap = makeReflectionMap(renderer, resources);
-  const paint = (color: string, metalness: number, roughness: number, glow = '#000000') => {
+  const paint = (color: string, metalness: number, roughness: number, glow = '#000000', selfLight: ShipSelfLight = {}) => {
     const material = new THREE.MeshPhysicalMaterial({
       color, metalness, roughness, emissive: glow, envMap, envMapIntensity: 0.9,
       clearcoat: 1, clearcoatRoughness: 0.08, flatShading: true,
     });
+    applyShipSelfLight(material, selfLight);
     resources.push(material);
     return material;
   };
-  // A faint emissive keeps the red and black readable on the night side.
-  const red = paint('#b80d1c', 0.55, 0.24, '#1c0104');
-  const deepRed = paint('#6c0711', 0.6, 0.28, '#100102');
-  const black = paint('#08090d', 0.7, 0.16, '#020203');
-  const gunmetal = paint('#454952', 0.92, 0.26, '#050506');
+  // The hull lights itself so the red and black read clearly even without a star.
+  const red = paint('#b80d1c', 0.55, 0.24, '#26020a', { fill: 0.3, key: 0.75, rim: '#ff5a46', rimStrength: 0.45 });
+  const deepRed = paint('#6c0711', 0.6, 0.28, '#160104', { fill: 0.34, key: 0.8, rim: '#ff4a3a', rimStrength: 0.35 });
+  const black = paint('#08090d', 0.7, 0.16, '#030406', { fill: 0.6, key: 1.6, rim: '#6f9dff', rimStrength: 0.3 });
+  const gunmetal = paint('#454952', 0.92, 0.26, '#08090b');
   const metal = (color: string, roughness: number, glow = '#000000', glowIntensity = 1) => {
     const material = new THREE.MeshStandardMaterial({
       color, metalness: 0.95, roughness, emissive: glow, emissiveIntensity: glowIntensity,
       envMap, side: THREE.DoubleSide,
     });
+    applyShipSelfLight(material, { fill: 0.16, key: 0.4 });
     resources.push(material);
     return material;
   };
@@ -241,6 +244,39 @@ export function makeExplorationVessel(renderer: THREE.WebGLRenderer, resources: 
       box(0.02, 0.004, 0.011, black, side * 0.066, 0.056, 0.1 + index * 0.034);
     }
   }
+
+  // Self-luminous hull lines and halos that trace the silhouette in the dark.
+  const glow = makeGlowFactory(resources);
+  const halo = (color: string, diameter: number, opacity: number, x: number, y: number, z: number) => {
+    const sprite = glow(color, diameter * length, opacity);
+    sprite.position.set(x * length, y * length, z * length);
+    ship.add(sprite);
+  };
+  // A thin lit strip between two outline points ([x, z] before SLIM).
+  const strip = (from: Point, to: Point, y: number, material: THREE.Material) => {
+    const dx = (to[0] - from[0]) * SLIM;
+    const dz = to[1] - from[1];
+    const mesh = addPart(
+      new THREE.BoxGeometry(0.0028 * length, 0.0028 * length, Math.hypot(dx, dz) * length),
+      material, (from[0] + to[0]) / 2 * SLIM, y, (from[1] + to[1]) / 2,
+    );
+    mesh.rotation.y = Math.atan2(dx, dz);
+  };
+  for (const side of [-1, 1]) {
+    const edge = (points: Point[], y: number, material: THREE.Material) => {
+      const line = mirrored(points, side);
+      line.slice(1).forEach((point, index) => strip(line[index], point, y, material));
+    };
+    edge([[0.04, -0.5], [0.062, -0.43], [0.098, -0.2], [0.1, -0.05]], 0.0185, light);
+    edge([[0.095, 0.03], [0.31, 0.25], [0.33, 0.36]], 0.0045, light);
+    edge([[0.33, 0.36], [0.22, 0.31], [0.105, 0.33]], -0.006, plasma);
+    edge([[0.032, 0.0], [0.04, 0.22], [0.018, 0.34]], 0.071, plasma);
+    halo('#ff4b30', 0.05, 0.75, side * 0.04 * SLIM, 0, -0.498);
+    halo('#ff4b30', 0.055, 0.8, side * 0.33 * SLIM, 0.014, 0.33);
+    for (const level of [-1, 1]) halo('#ff8a4a', 0.1, 0.55, side * 0.092, level * 0.052, 0.505);
+  }
+  halo('#ff8a4a', 0.13, 0.6, 0, 0, 0.505);
+  halo('#7fe9ff', 0.045, 0.8, 0, 0, -0.463);
 
   // Main drive.
   tube(0.05, 0.044, 0.06, gunmetal, 0, 0, 0.39, 32);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
+import { applyShipSelfLight, makeGlowFactory } from '@/components/planet-world/ship-self-lighting';
 import { makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
@@ -15,10 +16,15 @@ import {
   FREE_FLIGHT_REFERENCE_PLANET_MU_KM3_S2,
   FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM,
   FREE_FLIGHT_START_ALTITUDE_KM,
+  FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S,
+  FREE_FLIGHT_SPEED_OF_LIGHT_KM_S,
   createInitialFreeFlightMotionState,
+  findSphereImpactKm,
+  stepFreeFlightCruise,
   stepFreeFlightMotion,
   type FreeFlightMotionState,
   type GravitySource,
+  type SphereObstacle,
 } from '@/lib/planet-free-flight-physics';
 
 type Props = {
@@ -34,7 +40,6 @@ type HudState = {
   acceleration: number;
   moonDistance: number | null;
   deltaV: number;
-  throttle: number;
   status: string;
 };
 
@@ -190,6 +195,7 @@ function makeFreeFlightCraft(resources: Array<{ dispose: () => void }>) {
     roughness: 0.26,
     clearcoat: 0.9,
     clearcoatRoughness: 0.14,
+    emissive: '#240208',
   });
   const dark = new THREE.MeshStandardMaterial({ color: '#111923', metalness: 0.78, roughness: 0.32 });
   const trim = new THREE.MeshStandardMaterial({ color: '#9ca9b9', metalness: 0.92, roughness: 0.28 });
@@ -203,7 +209,13 @@ function makeFreeFlightCraft(resources: Array<{ dispose: () => void }>) {
   });
   const lights = new THREE.MeshBasicMaterial({ color: '#9ff6ff', toneMapped: false });
   const exhaustMaterials: THREE.MeshBasicMaterial[] = [];
-  resources.push(hull, dark, trim, glass, lights);
+  const accent = new THREE.MeshBasicMaterial({ color: '#ff5a3c', toneMapped: false });
+  resources.push(hull, dark, trim, glass, lights, accent);
+  applyShipSelfLight(hull, { fill: 0.38, key: 0.85, rim: '#ff6a52', rimStrength: 0.55 });
+  applyShipSelfLight(dark, { fill: 0.55, key: 1.3, rim: '#6fa8ff', rimStrength: 0.45 });
+  applyShipSelfLight(trim, { fill: 0.25, key: 0.6 });
+  applyShipSelfLight(glass, { fill: 0.5, key: 0.6 });
+  const glow = makeGlowFactory(resources);
 
   const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(geometry, material);
@@ -246,13 +258,28 @@ function makeFreeFlightCraft(resources: Array<{ dispose: () => void }>) {
     resources.push(plumeMaterial);
     const plume = add(new THREE.ConeGeometry(0.017, 0.105, 16, 1, true), plumeMaterial, side * 0.034, -0.018, 0.22);
     plume.rotation.x = Math.PI / 2;
+    const driveGlow = glow('#79eaff', 0.075, 0.55);
+    driveGlow.position.set(side * 0.034, -0.018, 0.178);
+    craft.add(driveGlow);
+
+    // Lit lines along the wing edges and flanks trace the hull in the dark.
+    const leading = add(new THREE.BoxGeometry(0.15, 0.004, 0.004), accent, side * 0.083, 0.002, -0.0155);
+    leading.rotation.y = side * -0.16;
+    const trailing = add(new THREE.BoxGeometry(0.11, 0.003, 0.003), lights, side * 0.094, 0.002, 0.065);
+    trailing.rotation.y = side * -0.16;
+    const flank = add(new THREE.BoxGeometry(0.003, 0.003, 0.17), lights, side * 0.027, 0.004, 0.01);
+    flank.rotation.y = side * 0.062;
   }
+  add(new THREE.BoxGeometry(0.004, 0.003, 0.12), accent, 0, 0.0335, 0.02);
 
   const dorsalFin = add(new THREE.BoxGeometry(0.009, 0.038, 0.062), dark, 0, 0.026, 0.075);
   dorsalFin.rotation.x = 0.12;
   for (const side of [-1, 1]) {
     const navigationLight = add(new THREE.SphereGeometry(0.004, 10, 8), lights, side * 0.158, 0.006, 0.038);
     navigationLight.scale.set(1.2, 0.8, 1.2);
+    const beacon = glow(side < 0 ? '#ff5a3c' : '#9ff6ff', 0.045, 0.85);
+    beacon.position.copy(navigationLight.position);
+    craft.add(beacon);
   }
 
   craft.scale.setScalar(CRAFT_VISUAL_LENGTH);
@@ -266,7 +293,22 @@ function formatDistance(km: number) {
 }
 
 function formatSpeed(speedKmS: number) {
+  if (speedKmS >= 1_000) return Math.round(speedKmS).toLocaleString('ja-JP') + ' km/s';
   return speedKmS.toFixed(2) + ' km/s';
+}
+
+function formatLightFraction(speedKmS: number) {
+  return (speedKmS / FREE_FLIGHT_SPEED_OF_LIGHT_KM_S).toFixed(3) + ' c';
+}
+
+function formatAcceleration(metersPerSecond2: number) {
+  if (metersPerSecond2 >= 10_000) return Math.round(metersPerSecond2 / 1_000).toLocaleString('ja-JP') + ' km/s²';
+  return metersPerSecond2.toFixed(2) + ' m/s²';
+}
+
+// Letters are read from the physical key so Japanese input modes do not swallow them.
+function flightKey(event: KeyboardEvent) {
+  return /^Key[A-Z]$/.test(event.code) ? event.code.slice(3).toLowerCase() : event.key.toLowerCase();
 }
 
 function ControlButton({
@@ -306,11 +348,10 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     acceleration: 0,
     moonDistance: system.moonCount > 0 ? FREE_FLIGHT_REFERENCE_MOON_DISTANCE_KM : null,
     deltaV: FREE_FLIGHT_DELTA_V_BUDGET_KM_S,
-    throttle: 0,
     status: '軌道投入済み · 慣性飛行',
   });
   const cameraModeRef = useRef<CameraMode>('chase');
-  const inspectionRef = useRef({ yaw: 0.4, pitch: 0.18, distance: metersToSceneUnits(650) });
+  const inspectionRef = useRef({ yaw: 0.6, pitch: 0.35, distance: metersToSceneUnits(210) });
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -471,6 +512,16 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       starLight.position.copy(starPosition);
       scene.add(starLight);
     }
+    const obstacles: SphereObstacle[] = [
+      { positionKm: { x: 0, y: 0, z: 0 }, radiusKm: FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM + 0.5 },
+      ...moonMeshes.map((_, index) => ({
+        positionKm: moonPositionsKm[index],
+        radiusKm: [FREE_FLIGHT_REFERENCE_MOON_RADIUS_KM, 1_120, 780][index] + 0.5,
+      })),
+    ];
+    if (starProfile && starClass) {
+      obstacles.push({ positionKm: starPositionKm, radiusKm: 695_700 * (starClass === 'DA' ? 0.012 : starProfile.radius) * 1.05 });
+    }
     scene.add(new THREE.AmbientLight('#92a8c8', system.rogue ? 0.42 : 0.22));
 
     const { craft, exhaustMaterials } = makeFreeFlightCraft(resources);
@@ -483,27 +534,34 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const localThrust = new THREE.Vector3();
     const cameraTarget = new THREE.Vector3();
     const cameraOffset = new THREE.Vector3();
-    const unitRadial = new THREE.Vector3();
     const acceleration = new THREE.Vector3();
-    const initialVelocity = new THREE.Vector3(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z);
-    craft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), initialVelocity.normalize());
+    // Nose along the orbital velocity, belly toward the planet.
+    const initialForward = new THREE.Vector3(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z).normalize();
+    const initialUp = new THREE.Vector3(motion.positionKm.x, motion.positionKm.y, motion.positionKm.z).normalize();
+    const initialRight = new THREE.Vector3().crossVectors(initialForward, initialUp);
+    craft.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(initialRight, initialUp, initialForward.clone().negate()));
+    const chaseOrientation = craft.quaternion.clone();
+    const chaseUp = new THREE.Vector3();
+    const chaseForward = new THREE.Vector3();
+    let cruising = false;
+    let impactNoticeUntil = 0;
 
     let frame = 0;
     let alive = true;
     let lastFrameTime = performance.now();
     let lastHudTime = 0;
     let elapsed = 0;
-    let lastThrottle = 0;
     let activePointer: number | null = null;
     let pointerX = 0;
     let pointerY = 0;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const key = flightKey(event);
       if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) event.preventDefault();
       keysRef.current.add(key);
     };
-    const onKeyUp = (event: KeyboardEvent) => keysRef.current.delete(event.key.toLowerCase());
+    const onKeyUp = (event: KeyboardEvent) => keysRef.current.delete(flightKey(event));
     const onWindowBlur = () => keysRef.current.clear();
 
     const onPointerDown = (event: PointerEvent) => {
@@ -530,7 +588,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     const onWheel = (event: WheelEvent) => {
       if (cameraModeRef.current !== 'inspection') return;
       event.preventDefault();
-      inspectionRef.current.distance = Math.max(metersToSceneUnits(280), Math.min(metersToSceneUnits(2_500), inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
+      inspectionRef.current.distance = Math.max(metersToSceneUnits(110), Math.min(metersToSceneUnits(2_500), inspectionRef.current.distance * (event.deltaY > 0 ? 1.12 : 0.89)));
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -559,8 +617,9 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
       const keys = keysRef.current;
       const pitchInput = (keys.has('arrowup') ? 1 : 0) - (keys.has('arrowdown') ? 1 : 0);
-      const yawInput = (keys.has('arrowright') ? 1 : 0) - (keys.has('arrowleft') ? 1 : 0);
-      const rollInput = (keys.has('e') ? 1 : 0) - (keys.has('q') ? 1 : 0);
+      // Positive rotation about local +Y turns the nose left; about +Z it rolls left.
+      const yawInput = (keys.has('arrowleft') ? 1 : 0) - (keys.has('arrowright') ? 1 : 0);
+      const rollInput = (keys.has('q') ? 1 : 0) - (keys.has('e') ? 1 : 0);
       if (pitchInput || yawInput || rollInput) {
         const axis = new THREE.Vector3(pitchInput, yawInput, rollInput).normalize();
         const amount = Math.hypot(pitchInput, yawInput, rollInput) > 1 ? 1 : Math.hypot(pitchInput, yawInput, rollInput);
@@ -579,20 +638,47 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       } else {
         thrustDirection.set(0, 0, 0);
       }
-      lastThrottle = throttle;
+      // O / L hand control to the sub-light drive; the manoeuvring thrusters hand it back.
+      const accelerating = keys.has('o');
+      const decelerating = keys.has('l');
+      if (throttle > 0) cruising = false;
+      else if (accelerating || decelerating) cruising = true;
+      const driveCommand = cruising
+        ? (keys.has(' ') ? -3 : (accelerating ? 1 : 0) - (decelerating ? 1 : 0))
+        : 0;
 
-      const stepped = stepFreeFlightMotion(motion, {
-        dtSeconds: dt,
-        thrustDirection: { x: thrustDirection.x, y: thrustDirection.y, z: thrustDirection.z },
-        throttle,
-        brake: keys.has(' '),
-      }, gravitySources);
-      motion = stepped.state;
-      acceleration.set(
-        stepped.gravityAccelerationKmS2.x + stepped.thrustAccelerationKmS2.x,
-        stepped.gravityAccelerationKmS2.y + stepped.thrustAccelerationKmS2.y,
-        stepped.gravityAccelerationKmS2.z + stepped.thrustAccelerationKmS2.z,
-      );
+      forward.set(0, 0, -1).applyQuaternion(craft.quaternion).normalize();
+      let impacted = false;
+      if (cruising) {
+        const cruised = stepFreeFlightCruise(motion, {
+          dtSeconds: dt,
+          forward: { x: forward.x, y: forward.y, z: forward.z },
+          command: driveCommand,
+        }, obstacles);
+        motion = cruised.state;
+        impacted = cruised.impacted;
+        acceleration.copy(forward).multiplyScalar(cruised.accelerationKmS2);
+      } else {
+        const stepped = stepFreeFlightMotion(motion, {
+          dtSeconds: dt,
+          thrustDirection: { x: thrustDirection.x, y: thrustDirection.y, z: thrustDirection.z },
+          throttle,
+          brake: keys.has(' '),
+        }, gravitySources);
+        // Fast coasting after leaving the drive must not tunnel through a body.
+        const fast = Math.hypot(stepped.state.velocityKmS.x, stepped.state.velocityKmS.y, stepped.state.velocityKmS.z) > 50;
+        const impact = fast ? findSphereImpactKm(motion.positionKm, stepped.state.positionKm, obstacles) : null;
+        motion = impact
+          ? { ...stepped.state, positionKm: impact.positionKm, velocityKmS: { x: 0, y: 0, z: 0 } }
+          : stepped.state;
+        impacted = Boolean(impact);
+        acceleration.set(
+          stepped.gravityAccelerationKmS2.x + stepped.thrustAccelerationKmS2.x,
+          stepped.gravityAccelerationKmS2.y + stepped.thrustAccelerationKmS2.y,
+          stepped.gravityAccelerationKmS2.z + stepped.thrustAccelerationKmS2.z,
+        );
+      }
+      if (impacted) impactNoticeUntil = elapsed + 2.5;
 
       // The simulator uses a spherical reference planet. Prevent the craft from
       // falling through the surface; a separate atmospheric landing model can be added later.
@@ -620,9 +706,10 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         motion.positionKm.z / KM_PER_SCENE_UNIT,
       );
       craft.position.copy(shipPosition);
-      forward.set(0, 0, -1).applyQuaternion(craft.quaternion).normalize();
 
-      const thrustIntensity = throttle > 0 && motion.deltaVRemainingKmS > 0 ? 0.18 + throttle * 0.82 : 0.035;
+      const thrustIntensity = driveCommand > 0 ? 1
+        : throttle > 0 && motion.deltaVRemainingKmS > 0 ? 0.18 + throttle * 0.82
+          : cruising && driveCommand === 0 ? 0.2 : 0.06;
       exhaustMaterials.forEach((material) => {
         material.opacity = thrustIntensity;
       });
@@ -632,6 +719,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       if (star) star.rotation.y += dt * 0.000025;
       stellarEffects.forEach(effect => effect.update(elapsed));
 
+      chaseOrientation.slerp(craft.quaternion, 1 - Math.exp(-dt * 7));
       const selectedCamera = cameraModeRef.current;
       if (selectedCamera === 'cockpit') {
         camera.position.copy(shipPosition).add(new THREE.Vector3(0, metersToSceneUnits(7), 0).applyQuaternion(craft.quaternion));
@@ -648,12 +736,13 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         camera.up.set(0, 1, 0).applyQuaternion(craft.quaternion);
         camera.lookAt(shipPosition);
       } else {
-        unitRadial.set(shipPosition.x, shipPosition.y, shipPosition.z).normalize();
-        const trailingDirection = forward.clone().negate();
-        cameraOffset.copy(unitRadial).multiplyScalar(metersToSceneUnits(600)).addScaledVector(trailingDirection, metersToSceneUnits(1_400));
+        // Follow slightly behind the ship's attitude so each turn is visible.
+        chaseUp.set(0, 1, 0).applyQuaternion(chaseOrientation);
+        chaseForward.set(0, 0, -1).applyQuaternion(chaseOrientation);
+        cameraOffset.copy(chaseUp).multiplyScalar(metersToSceneUnits(75)).addScaledVector(chaseForward, metersToSceneUnits(-170));
         camera.position.copy(shipPosition).add(cameraOffset);
-        cameraTarget.copy(shipPosition).addScaledVector(forward, metersToSceneUnits(1_300)).addScaledVector(unitRadial, -metersToSceneUnits(250));
-        camera.up.set(0, 1, 0);
+        cameraTarget.copy(shipPosition).addScaledVector(chaseForward, metersToSceneUnits(130)).addScaledVector(chaseUp, metersToSceneUnits(-35));
+        camera.up.copy(chaseUp);
         camera.lookAt(cameraTarget);
       }
       renderer.render(scene, camera);
@@ -668,18 +757,25 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
           )
           : null;
         const totalAcceleration = acceleration.length();
+        const speed = Math.hypot(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z);
         setHud({
-          speed: Math.hypot(motion.velocityKmS.x, motion.velocityKmS.y, motion.velocityKmS.z),
+          speed,
           altitude,
           acceleration: totalAcceleration * 1_000,
           moonDistance,
           deltaV: motion.deltaVRemainingKmS,
-          throttle: lastThrottle,
-          status: motion.deltaVRemainingKmS <= 0
-            ? 'Δv残量なし · 慣性航行'
-            : keys.has(' ') ? '逆噴射 · 減速中'
-              : throttle > 0 ? '推進中 · 慣性航行'
-                : 'エンジン停止 · 慣性航行',
+          status: elapsed < impactNoticeUntil ? '衝突回避 · 緊急停止'
+            : cruising
+              ? driveCommand > 0
+                ? speed >= FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S - 1
+                  ? '亜光速ドライブ · 最大速度'
+                  : '亜光速ドライブ · 加速中'
+                : driveCommand < 0 ? '亜光速ドライブ · 減速中' : '亜光速ドライブ · 巡航'
+              : motion.deltaVRemainingKmS <= 0
+                ? 'Δv残量なし · 慣性航行'
+                : keys.has(' ') ? '逆噴射 · 減速中'
+                  : throttle > 0 ? '推進中 · 慣性航行'
+                    : 'エンジン停止 · 慣性航行',
         });
         lastHudTime = now;
       }
@@ -769,7 +865,8 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       <div className="pointer-events-none absolute left-3 top-[25%] z-20 grid grid-cols-2 gap-1.5 sm:left-5 sm:grid-cols-1">
         <div className="min-w-[108px] rounded-lg border border-cyan-200/15 bg-slate-950/65 p-2 backdrop-blur-md">
           <p className="text-[8px] font-bold tracking-wide text-slate-400">VELOCITY</p>
-          <p className="mt-1 font-mono text-sm font-black tabular-nums text-cyan-100">{formatSpeed(hud.speed)}</p>
+          <p className="mt-1 font-mono text-sm font-black tabular-nums text-cyan-100" data-testid="free-flight-speed">{formatSpeed(hud.speed)}</p>
+          <p className="mt-0.5 font-mono text-[10px] font-bold tabular-nums text-slate-300">{formatLightFraction(hud.speed)}</p>
         </div>
         <div className="min-w-[108px] rounded-lg border border-white/10 bg-slate-950/65 p-2 backdrop-blur-md">
           <p className="text-[8px] font-bold tracking-wide text-slate-400">ALTITUDE</p>
@@ -777,7 +874,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         </div>
         <div className="min-w-[108px] rounded-lg border border-white/10 bg-slate-950/65 p-2 backdrop-blur-md">
           <p className="text-[8px] font-bold tracking-wide text-slate-400">ACCELERATION</p>
-          <p className="mt-1 font-mono text-xs font-black tabular-nums">{hud.acceleration.toFixed(2)} m/s²</p>
+          <p className="mt-1 font-mono text-xs font-black tabular-nums">{formatAcceleration(hud.acceleration)}</p>
         </div>
         {hud.moonDistance !== null && (
           <div className="min-w-[108px] rounded-lg border border-white/10 bg-slate-950/65 p-2 backdrop-blur-md">
@@ -795,7 +892,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
           <div className="h-full rounded-full bg-cyan-300 transition-[width]" style={{ width: (hud.deltaV / FREE_FLIGHT_DELTA_V_BUDGET_KM_S * 100) + '%' }} />
         </div>
-        <p className="mt-2 text-[8px] text-slate-400">初期Δv {FREE_FLIGHT_DELTA_V_BUDGET_KM_S} km/s · 推力加速度 {FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2 * 1_000} m/s²</p>
+        <p className="mt-2 text-[8px] text-slate-400">姿勢制御スラスター用 Δv {FREE_FLIGHT_DELTA_V_BUDGET_KM_S} km/s · {FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2 * 1_000} m/s²（亜光速ドライブは消費なし）</p>
       </div>
 
       <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-20 flex items-end justify-between gap-2 sm:bottom-4 sm:left-5 sm:right-5">
@@ -806,9 +903,13 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
               <ControlButton key={control.keyName} label={control.label} keyName={control.keyName} keysRef={keysRef} />
             ))}
           </div>
-          <p className="mt-1.5 text-[8px] leading-4 text-slate-400">Space：速度と逆向きにブレーキ · 360°観察中はドラッグで回転・ホイールでズーム</p>
+          <p className="mt-1.5 text-[8px] leading-4 text-slate-400">矢印：機首の向き · O：加速 / L：減速（最大0.9c） · Space：ブレーキ · W/A/S/D/R/Fで慣性飛行に戻る · 360°観察中はドラッグで回転・ホイールでズーム</p>
         </div>
         <div className="pointer-events-auto flex shrink-0 flex-col items-end gap-1">
+          <div className="flex gap-1">
+            <ControlButton label="O 加速" keyName="o" keysRef={keysRef} />
+            <ControlButton label="L 減速" keyName="l" keysRef={keysRef} />
+          </div>
           <ControlButton label="SPACE ブレーキ" keyName=" " keysRef={keysRef} />
           <p className="rounded-lg bg-slate-950/70 px-2 py-1 text-[8px] text-slate-400">PC：キーボード / タッチ：ボタン長押し</p>
         </div>
