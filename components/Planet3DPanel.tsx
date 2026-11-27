@@ -8,6 +8,7 @@ import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog'
 import { getPlanetCatalogV50TextureUrl, getPlanetSurfaceTextureUrl, hasPlanetCatalogV50Texture } from '@/lib/planet-world/planet-catalog-v50';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
 import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
+import PlanetGroundView from '@/components/planet-world/PlanetGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
 import FreeFlightSimulator from '@/components/planet-world/FreeFlightSimulator';
 import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
@@ -119,8 +120,6 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
   const [viewMode, setViewMode] = useState<'orbit'|'ground'|'voyage'|'free-flight'>('orbit');
   const viewModeRef = useRef<'orbit'|'ground'|'voyage'|'free-flight'>('orbit');
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
-  const [selectedCity, setSelectedCity] = useState<string>('');
-  const [groundLanding, setGroundLanding] = useState(false);
   const [selectedCelestial, setSelectedCelestial] = useState<CelestialDetail | null>(null);
   const returnToPlanetRef = useRef<() => void>(() => {});
   const spec = getPlanetSystemSpec(planetAssetId);
@@ -522,8 +521,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
           <p className="text-[9px] font-black tracking-[.2em] text-cyan-300">STELLAR SYSTEM</p>
           <p className="mt-1 text-xs font-bold text-white">{spec.name}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 pointer-events-auto">
-            <button type="button" onClick={()=>{setViewMode('orbit');setGroundLanding(false);setSelectedCity('');}} className={'rounded-lg px-2 py-1 text-[10px] font-bold '+(viewMode==='orbit'?'bg-cyan-500 text-slate-950':'bg-white/10 text-white')}>惑星視点</button>
-            <button type="button" onClick={()=>{setViewMode('ground');setGroundLanding(false);}} className={'rounded-lg px-2 py-1 text-[10px] font-bold '+(viewMode==='ground'?'bg-cyan-500 text-slate-950':'bg-white/10 text-white')}>地上視点</button>
+            <button type="button" onClick={()=>{setViewMode('orbit');}} className={'rounded-lg px-2 py-1 text-[10px] font-bold '+(viewMode==='orbit'?'bg-cyan-500 text-slate-950':'bg-white/10 text-white')}>惑星視点</button>
+            <button type="button" onClick={()=>{setViewMode('ground');}} className={'rounded-lg px-2 py-1 text-[10px] font-bold '+(viewMode==='ground'?'bg-cyan-500 text-slate-950':'bg-white/10 text-white')}>地上視点</button>
             <button type="button" onClick={()=>{setSelectedCelestial(null);setViewMode('free-flight');}} className={'rounded-lg px-2 py-1 text-[10px] font-black '+(viewMode==='free-flight'?'bg-emerald-300 text-slate-950':'bg-emerald-300/15 text-emerald-100')}>自由航行 · 無料</button>
             <button type="button" onClick={()=>{setSelectedCelestial(null);setViewMode('voyage');}} className={'rounded-lg px-2 py-1 text-[10px] font-black '+(viewMode==='voyage'?'bg-cyan-300 text-slate-950':'bg-cyan-300/15 text-cyan-100')}>星系旅行 · 30MP</button>
             <span className="rounded-lg border border-white/10 bg-slate-950/50 px-2 py-1 text-[9px] font-bold text-cyan-100">所持 {mpBalance.toLocaleString('ja-JP')} MP</span>
@@ -535,25 +534,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         </div>
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
-      {viewMode==='ground' && numericId !== 6 && <div className="absolute inset-0 z-20 overflow-hidden" style={{background:'linear-gradient(180deg, '+spec.atmosphereColor+' 0%, '+spec.atmosphereColor+'99 28%, #14202b 52%, #0a1119 100%)'}}>
-        <div className="absolute inset-0 opacity-60" style={{background:'radial-gradient(circle at 70% 20%, rgba(255,255,255,.35), transparent 30%),linear-gradient(180deg,transparent 55%,rgba(0,0,0,.35))'}}/>
-        <div className="absolute left-[12%] top-[26%] h-[35%] w-[20%] rounded-t-[40%] bg-black/20 blur-3xl"/>
-        <div className="absolute right-[10%] top-[18%] h-[38%] w-[30%] rounded-full bg-white/10 blur-3xl"/>
-        <div className="absolute inset-x-0 bottom-0 h-[43%] perspective-[900px]">
-          <div className="absolute inset-x-[-20%] bottom-[-18%] h-[130%] origin-bottom rotate-x-[62deg]" style={{background:'repeating-linear-gradient(90deg,rgba(255,255,255,.06) 0 1px,transparent 1px 55px),repeating-linear-gradient(0deg,rgba(255,255,255,.06) 0 1px,transparent 1px 42px),linear-gradient(180deg,#263746,#101820)',boxShadow:'inset 0 18px 90px rgba(0,0,0,.65)'}}/>
-        </div>
-        <div className="absolute inset-x-0 bottom-[26%] flex items-end justify-center gap-1 px-2" style={{filter:'drop-shadow(0 14px 18px rgba(0,0,0,.4))'}}>
-          {Array.from({length:24},(_,i)=>{const height=45+(i*37+numericId*13)%140;return <div key={i} className="relative flex-1 max-w-[48px] rounded-t-sm border border-white/10" style={{height,background:'linear-gradient(90deg,#101d2b,#334b60,#172538)',opacity:.82}}><div className="absolute inset-x-1 top-2 grid grid-cols-2 gap-1">{Array.from({length:Math.max(2,Math.floor(height/16))},(_,w)=><i key={w} className="h-1 rounded-sm" style={{background:spec.atmosphereColor,opacity:.85}}/>)}</div></div>})}
-        </div>
-        <div className="absolute inset-x-0 bottom-0 h-[25%]" style={{background:'linear-gradient(180deg,#263746,#111b23)'}}/>
-        <div className="absolute left-3 bottom-3 right-3 z-30 rounded-2xl border border-white/15 bg-slate-950/70 p-3 backdrop-blur-md">
-          <p className="text-xs font-black">地上の都市を選択</p><p className="mt-1 text-[10px] text-slate-300">大気の色・重力・地表環境を反映した景観プレビュー。都市へ降り立つ準備。</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">{["Aurora Reach","Glassfield","Ember Haven","Tidal Arc","Nova Suburb"].map(city=><button key={city} type="button" onClick={()=>setSelectedCity(city)} className={'rounded-lg border px-2 py-1.5 text-[10px] font-bold '+(selectedCity===city?'border-cyan-400 bg-cyan-400/20 text-cyan-100':'border-white/10 bg-white/5 text-slate-200')}>{city}</button>)}</div>
-          <button type="button" disabled={!selectedCity} onClick={()=>setGroundLanding(true)} className="mt-2 w-full rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">{selectedCity?selectedCity+' に降り立つ':'都市を選んでください'}</button>
-          {groundLanding&&<p className="mt-2 rounded-lg bg-white/10 px-2 py-1.5 text-[10px]">降下先：{selectedCity} ・ {spec.rogue?'恒星光のない環境に合わせた人工照明と断熱居住区':'近未来の郊外居住区'}（景観プレビュー）</p>}
-        </div>
-      </div>}
-      {viewMode==='ground' && numericId === 6 && <VerdiaGroundView atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>{setViewMode('orbit');setGroundLanding(false);setSelectedCity('');}} />}
+      {viewMode==='ground' && numericId !== 6 && <PlanetGroundView planetId={spec.id} planetName={spec.name} stage={stage} onBack={()=>setViewMode('orbit')}/>}
+      {viewMode==='ground' && numericId === 6 && <VerdiaGroundView atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>{setViewMode('orbit');}} />}
       {viewMode==='voyage' && <StarSystemVoyage system={spec} starClass={spec.starClasses[0] ?? null} mpBalance={mpBalance} onPurchase={onStartStarTravel} onExit={()=>setViewMode('orbit')}/>}
       {viewMode==='free-flight' && <FreeFlightSimulator system={spec} starClass={spec.starClasses[0] ?? null} onExit={()=>setViewMode('orbit')} />}
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}
