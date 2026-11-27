@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
-import { applyShipSelfLight, makeGlowFactory } from '@/components/planet-world/ship-self-lighting';
+import { makeExplorationVessel } from '@/components/planet-world/crimson-exploration-vessel';
 import { makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
 import type { PlanetSystemSpec, StarClass } from '@/lib/planet-system-catalog';
 import { STAR_PROFILES } from '@/lib/planet-system-catalog';
+import { VOYAGE_SCALE } from '@/lib/planet-star-voyage';
 import {
   FREE_FLIGHT_DELTA_V_BUDGET_KM_S,
   FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2,
@@ -45,7 +46,7 @@ type HudState = {
 
 const KM_PER_SCENE_UNIT = 1_000;
 const metersToSceneUnits = (meters: number) => meters / (KM_PER_SCENE_UNIT * 1_000);
-const CRAFT_VISUAL_LENGTH = 0.00025; // Approximately 100 m nose-to-tail at the current geometry scale.
+const CRAFT_LENGTH_METERS = 100; // Nose to nozzle.
 
 function seeded(seed: number) {
   let value = seed >>> 0;
@@ -184,106 +185,6 @@ function makeAtmosphere(radius: number, color: string) {
       blending: THREE.AdditiveBlending,
     }),
   );
-}
-
-function makeFreeFlightCraft(resources: Array<{ dispose: () => void }>) {
-  const craft = new THREE.Group();
-  craft.name = 'CampusSync non-combat free-flight explorer';
-  const hull = new THREE.MeshPhysicalMaterial({
-    color: '#b80d1c',
-    metalness: 0.56,
-    roughness: 0.26,
-    clearcoat: 0.9,
-    clearcoatRoughness: 0.14,
-    emissive: '#240208',
-  });
-  const dark = new THREE.MeshStandardMaterial({ color: '#111923', metalness: 0.78, roughness: 0.32 });
-  const trim = new THREE.MeshStandardMaterial({ color: '#9ca9b9', metalness: 0.92, roughness: 0.28 });
-  const glass = new THREE.MeshPhysicalMaterial({
-    color: '#72d9ef',
-    metalness: 0.28,
-    roughness: 0.08,
-    transparent: true,
-    opacity: 0.8,
-    clearcoat: 1,
-  });
-  const lights = new THREE.MeshBasicMaterial({ color: '#9ff6ff', toneMapped: false });
-  const exhaustMaterials: THREE.MeshBasicMaterial[] = [];
-  const accent = new THREE.MeshBasicMaterial({ color: '#ff5a3c', toneMapped: false });
-  resources.push(hull, dark, trim, glass, lights, accent);
-  applyShipSelfLight(hull, { fill: 0.38, key: 0.85, rim: '#ff6a52', rimStrength: 0.55 });
-  applyShipSelfLight(dark, { fill: 0.55, key: 1.3, rim: '#6fa8ff', rimStrength: 0.45 });
-  applyShipSelfLight(trim, { fill: 0.25, key: 0.6 });
-  applyShipSelfLight(glass, { fill: 0.5, key: 0.6 });
-  const glow = makeGlowFactory(resources);
-
-  const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(x, y, z);
-    craft.add(mesh);
-    resources.push(geometry);
-    return mesh;
-  };
-
-  // The nose points along local -Z. The airframe is an exploration vehicle;
-  // no weapon, targeting or combat systems are created in this mode.
-  const fuselage = add(new THREE.CylinderGeometry(0.018, 0.031, 0.205, 16, 1), hull, 0, 0, 0.005);
-  fuselage.rotation.x = Math.PI / 2;
-  const nose = add(new THREE.ConeGeometry(0.021, 0.095, 16), trim, 0, 0, -0.145);
-  nose.rotation.x = -Math.PI / 2;
-  const dorsal = add(new THREE.BoxGeometry(0.018, 0.012, 0.16), dark, 0, 0.026, 0.025);
-  dorsal.rotation.x = 0.025;
-
-  const canopy = add(new THREE.SphereGeometry(0.029, 20, 14), glass, 0, 0.025, -0.045);
-  canopy.scale.set(0.74, 0.5, 1.55);
-
-  for (const side of [-1, 1]) {
-    const wing = add(new THREE.BoxGeometry(0.155, 0.008, 0.085), hull, side * 0.082, -0.004, 0.025);
-    wing.rotation.y = side * -0.16;
-    const wingEdge = add(new THREE.BoxGeometry(0.13, 0.003, 0.007), trim, side * 0.084, 0.002, 0.056);
-    wingEdge.rotation.y = side * -0.16;
-    const engine = add(new THREE.CylinderGeometry(0.018, 0.023, 0.105, 16), dark, side * 0.034, -0.018, 0.115);
-    engine.rotation.x = Math.PI / 2;
-    const nozzle = add(new THREE.TorusGeometry(0.018, 0.003, 8, 20), trim, side * 0.034, -0.018, 0.171);
-    nozzle.rotation.x = Math.PI / 2;
-    const plumeMaterial = new THREE.MeshBasicMaterial({
-      color: '#79eaff',
-      transparent: true,
-      opacity: 0.05,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    exhaustMaterials.push(plumeMaterial);
-    resources.push(plumeMaterial);
-    const plume = add(new THREE.ConeGeometry(0.017, 0.105, 16, 1, true), plumeMaterial, side * 0.034, -0.018, 0.22);
-    plume.rotation.x = Math.PI / 2;
-    const driveGlow = glow('#79eaff', 0.075, 0.55);
-    driveGlow.position.set(side * 0.034, -0.018, 0.178);
-    craft.add(driveGlow);
-
-    // Lit lines along the wing edges and flanks trace the hull in the dark.
-    const leading = add(new THREE.BoxGeometry(0.15, 0.004, 0.004), accent, side * 0.083, 0.002, -0.0155);
-    leading.rotation.y = side * -0.16;
-    const trailing = add(new THREE.BoxGeometry(0.11, 0.003, 0.003), lights, side * 0.094, 0.002, 0.065);
-    trailing.rotation.y = side * -0.16;
-    const flank = add(new THREE.BoxGeometry(0.003, 0.003, 0.17), lights, side * 0.027, 0.004, 0.01);
-    flank.rotation.y = side * 0.062;
-  }
-  add(new THREE.BoxGeometry(0.004, 0.003, 0.12), accent, 0, 0.0335, 0.02);
-
-  const dorsalFin = add(new THREE.BoxGeometry(0.009, 0.038, 0.062), dark, 0, 0.026, 0.075);
-  dorsalFin.rotation.x = 0.12;
-  for (const side of [-1, 1]) {
-    const navigationLight = add(new THREE.SphereGeometry(0.004, 10, 8), lights, side * 0.158, 0.006, 0.038);
-    navigationLight.scale.set(1.2, 0.8, 1.2);
-    const beacon = glow(side < 0 ? '#ff5a3c' : '#9ff6ff', 0.045, 0.85);
-    beacon.position.copy(navigationLight.position);
-    craft.add(beacon);
-  }
-
-  craft.scale.setScalar(CRAFT_VISUAL_LENGTH);
-  return { craft, exhaustMaterials };
 }
 
 function formatDistance(km: number) {
@@ -524,7 +425,9 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
     }
     scene.add(new THREE.AmbientLight('#92a8c8', system.rogue ? 0.42 : 0.22));
 
-    const { craft, exhaustMaterials } = makeFreeFlightCraft(resources);
+    // The same vessel as the star voyage, scaled down for piloting.
+    const craft = makeExplorationVessel(renderer, resources);
+    craft.scale.setScalar(metersToSceneUnits(CRAFT_LENGTH_METERS) / VOYAGE_SCALE.spacecraftLength);
     scene.add(craft);
 
     let motion: FreeFlightMotionState = createInitialFreeFlightMotionState();
@@ -710,9 +613,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
       const thrustIntensity = driveCommand > 0 ? 1
         : throttle > 0 && motion.deltaVRemainingKmS > 0 ? 0.18 + throttle * 0.82
           : cruising && driveCommand === 0 ? 0.2 : 0.06;
-      exhaustMaterials.forEach((material) => {
-        material.opacity = thrustIntensity;
-      });
+      craft.userData.setThrust(thrustIntensity);
       planet.rotation.y += dt * 0.00017;
       clouds.rotation.y += dt * 0.00019;
       moonMeshes.forEach((moon, index) => { moon.rotation.y += dt * (0.00018 + index * 0.00004); });
@@ -721,6 +622,7 @@ export default function FreeFlightSimulator({ system, starClass, onExit }: Props
 
       chaseOrientation.slerp(craft.quaternion, 1 - Math.exp(-dt * 7));
       const selectedCamera = cameraModeRef.current;
+      craft.visible = selectedCamera !== 'cockpit';
       if (selectedCamera === 'cockpit') {
         camera.position.copy(shipPosition).add(new THREE.Vector3(0, metersToSceneUnits(7), 0).applyQuaternion(craft.quaternion));
         camera.quaternion.copy(craft.quaternion);
