@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { applyMoonSurfaceDetail, applyPlanetSurfaceDetail } from '@/components/planet-world/celestial-surface-detail';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
+import { getPlanetCatalogV50TextureUrl, getPlanetSurfaceTextureUrl, hasPlanetCatalogV50Texture } from '@/lib/planet-world/planet-catalog-v50';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
 import VerdiaGroundView from '@/components/planet-world/VerdiaGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
@@ -170,6 +171,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     controls.autoRotate = false;
 
     const resources: Array<{ dispose: () => void }> = [];
+    let active = true;
     const stellarEffects: Array<{ update: (seconds: number) => void }> = [];
     const interactiveTargets: THREE.Object3D[] = [];
     let cameraTransition: {
@@ -214,7 +216,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     const fallbackTexture = createFallbackSurfaceTexture(numericId, spec.atmosphereColor);
     let surfaceMaterial: THREE.MeshStandardMaterial;
     const surfaceTexture = loader.load(
-      '/planet-assets/planets/' + spec.id + (numericId >= 11 && numericId <= 20 ? '/surface.webp' : '/surface.jpg'),
+      getPlanetSurfaceTextureUrl(spec.id),
       (loaded) => {
         loaded.colorSpace = THREE.SRGBColorSpace;
         loaded.wrapS = THREE.RepeatWrapping;
@@ -230,6 +232,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     surfaceTexture.wrapT = THREE.ClampToEdgeWrapping;
 
     const cityTexture = createCityLightsTexture(numericId);
+    let cityLightsTexture: THREE.Texture = cityTexture;
     surfaceMaterial = new THREE.MeshStandardMaterial({
       map: surfaceTexture, roughness: 0.9, metalness: 0.025,
       emissive: spec.rogue ? '#291c48' : '#000000',
@@ -297,7 +300,8 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
       shader.uniforms.uCampusSunDirectionA = { value: primarySunDirection.clone() };
       shader.uniforms.uCampusSunDirectionB = { value: secondarySunDirection.clone() };
       shader.uniforms.uCampusHasSecondSun = { value: sunPositions.length > 1 ? 1 : 0 };
-      shader.uniforms.uCampusCityLights = { value: cityTexture };
+      shader.uniforms.uCampusCityLights = { value: cityLightsTexture };
+      surfaceMaterial.userData.campusShader = shader;
       shader.uniforms.uCampusNightGlow = { value: spec.rogue ? 0 : Math.max(0, Math.min(1.5, stage * 0.22)) };
       shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCampusWorldNormal;');
       shader.vertexShader = shader.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvCampusWorldNormal = normalize(mat3(modelMatrix) * normal);');
@@ -320,6 +324,19 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
     };
     surfaceMaterial.customProgramCacheKey = () => 'campussync-distant-star-corona-wide-moon-orbits-v2';
 
+    if (hasPlanetCatalogV50Texture(spec.id, 'emissive')) {
+      loader.load(getPlanetCatalogV50TextureUrl(spec.id, 'emissive'), (loaded) => {
+        if (!active) { loaded.dispose(); return; }
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.wrapS = THREE.RepeatWrapping;
+        loaded.wrapT = THREE.ClampToEdgeWrapping;
+        cityLightsTexture = loaded;
+        const compiled = surfaceMaterial.userData.campusShader as { uniforms?: Record<string, { value: unknown }> } | undefined;
+        if (compiled?.uniforms?.uCampusCityLights) compiled.uniforms.uCampusCityLights.value = loaded;
+        resources.push(loaded);
+      }, undefined, () => {});
+    }
+
     applyPlanetSurfaceDetail(surfaceMaterial, numericId);
     const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
     system.add(surface);
@@ -327,6 +344,17 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
     const cloudTexture = createCloudTexture(numericId);
     const cloudMaterial = new THREE.MeshStandardMaterial({ map: cloudTexture, transparent: true, opacity: 0.5, roughness: 1, metalness: 0, depthWrite: false, side: THREE.FrontSide });
+    if (hasPlanetCatalogV50Texture(spec.id, 'clouds')) {
+      loader.load(getPlanetCatalogV50TextureUrl(spec.id, 'clouds'), (loaded) => {
+        if (!active) { loaded.dispose(); return; }
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.wrapS = THREE.RepeatWrapping;
+        loaded.wrapT = THREE.ClampToEdgeWrapping;
+        cloudMaterial.map = loaded;
+        cloudMaterial.needsUpdate = true;
+        resources.push(loaded);
+      }, undefined, () => {});
+    }
     const clouds = new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.012, 192, 128), cloudMaterial);
     clouds.rotation.set(0.1, numericId * 0.31, 0.03);
     system.add(clouds);
@@ -336,7 +364,16 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
     if (spec.hasRings) {
       const ringGeometry = new THREE.RingGeometry(planetRadius * 1.58, planetRadius * 2.45, 144);
-      const ringMaterial = new THREE.MeshStandardMaterial({ color: '#b8c4da', side: THREE.DoubleSide, transparent: true, opacity: 0.48, roughness: 0.9, metalness: 0.12, depthWrite: false });
+      const ringMap = hasPlanetCatalogV50Texture(spec.id, 'ring')
+        ? loader.load(getPlanetCatalogV50TextureUrl(spec.id, 'ring'), (loaded) => {
+            if (!active) { loaded.dispose(); return; }
+            loaded.colorSpace = THREE.SRGBColorSpace;
+            loaded.wrapS = THREE.ClampToEdgeWrapping;
+            loaded.wrapT = THREE.ClampToEdgeWrapping;
+          }, undefined, () => {})
+        : null;
+      const ringMaterial = new THREE.MeshStandardMaterial({ color: ringMap ? '#ffffff' : '#b8c4da', map: ringMap, side: THREE.DoubleSide, transparent: true, opacity: 0.48, roughness: 0.9, metalness: 0.12, depthWrite: false });
+      if (ringMap) resources.push(ringMap);
       const rings = new THREE.Mesh(ringGeometry, ringMaterial);
       rings.rotation.x = Math.PI * 0.42;
       rings.rotation.y = 0.18;
@@ -413,7 +450,6 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
 
     const clock = new THREE.Clock();
     let frame = 0;
-    let active = true;
     const render = () => {
       if (!active) return;
       const delta = Math.min(clock.getDelta(), 0.05);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPlanetSystemSpec } from '@/lib/planet-system-catalog';
+import { getPlanetSurfaceTextureUrl } from '@/lib/planet-world/planet-catalog-v50';
 import { Orbit, RefreshCw, Search, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 
 type AssignedPlanet = {
@@ -21,7 +22,7 @@ type PlanetUser = {
   planet: AssignedPlanet | null;
 };
 
-const PLANET_OPTIONS = Array.from({ length: 20 }, (_, index) => {
+const PLANET_OPTIONS = Array.from({ length: 50 }, (_, index) => {
   const id = 'planet-' + String(index + 1).padStart(3, '0');
   return { id, spec: getPlanetSystemSpec(id) };
 });
@@ -125,7 +126,7 @@ export default function AdminPlanetManagement() {
       <div className="grid gap-3 sm:grid-cols-3">
         <div className={`${panel} p-4`}><p className="text-[10px] font-bold text-slate-500">登録ユーザー</p><p className="mt-1 text-2xl font-black tabular-nums text-white">{users.length.toLocaleString('ja-JP')}</p></div>
         <div className={`${panel} p-4`}><p className="text-[10px] font-bold text-slate-500">惑星割り当て済み</p><p className="mt-1 text-2xl font-black tabular-nums text-cyan-300">{currentCount.toLocaleString('ja-JP')}</p></div>
-        <div className={`${panel} p-4`}><p className="text-[10px] font-bold text-slate-500">選択可能な惑星</p><p className="mt-1 text-2xl font-black tabular-nums text-white">20</p></div>
+        <div className={`${panel} p-4`}><p className="text-[10px] font-bold text-slate-500">選択可能な惑星</p><p className="mt-1 text-2xl font-black tabular-nums text-white">50</p></div>
       </div>
 
       <div className={`${panel} p-3 sm:p-4`}>
@@ -144,7 +145,6 @@ export default function AdminPlanetManagement() {
           : visibleUsers.length === 0 ? <div className={`${panel} p-10 text-center text-sm text-slate-500`}>該当するユーザーが見つかりません。</div>
           : visibleUsers.map(user => {
             const selectedId = drafts[user.auth_user_id] || user.planet?.planet_asset_id || 'planet-001';
-            const selectedOption = PLANET_OPTIONS.find(option => option.id === selectedId) || PLANET_OPTIONS[0];
             const changed = user.planet?.planet_asset_id !== selectedId;
             const currentOption = PLANET_OPTIONS.find(option => option.id === user.planet?.planet_asset_id);
             const displayName = user.student_name || '氏名未登録';
@@ -152,8 +152,8 @@ export default function AdminPlanetManagement() {
               <article key={user.auth_user_id} className={`${panel} grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(260px,.9fr)] sm:items-center sm:p-4`}>
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
-                    {user.planet?.planet_asset_id && Number(user.planet.planet_asset_id.slice(-3)) >= 11
-                      ? <img src={`/planet-assets/planets/${user.planet.planet_asset_id}/surface.webp`} alt="" className="h-full w-full object-cover"/>
+                    {user.planet?.planet_asset_id
+                      ? <img src={getPlanetSurfaceTextureUrl(user.planet.planet_asset_id)} alt="" className="h-full w-full object-cover"/>
                       : <Orbit size={22} className="text-cyan-300"/>}
                   </div>
                   <div className="min-w-0">
@@ -164,9 +164,7 @@ export default function AdminPlanetManagement() {
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-900">
-                    {Number(selectedId.slice(-3)) >= 11
-                      ? <img src={`/planet-assets/planets/${selectedId}/surface.webp`} alt="" className="h-full w-full object-cover"/>
-                      : <span className="h-3 w-3 rounded-full" style={{ background: selectedOption.spec.atmosphereColor, boxShadow: `0 0 16px ${selectedOption.spec.atmosphereColor}` }}/>}
+                    <img src={getPlanetSurfaceTextureUrl(selectedId)} alt="" className="h-full w-full object-cover"/>
                   </div>
                   <select value={selectedId} onChange={event => setDrafts(previous => ({ ...previous, [user.auth_user_id]: event.target.value }))} className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-cyan-500">
                     {PLANET_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.id.slice(-3)} · {option.spec.name}</option>)}

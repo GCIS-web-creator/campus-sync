@@ -179,8 +179,8 @@ export async function POST(request: Request) {
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
           return jsonError('対象ユーザーを確認してください。', 400);
         }
-        if (!/^planet-(00[1-9]|01[0-9]|020)$/.test(planetAssetId)) {
-          return jsonError('惑星は001〜020から選択してください。', 400);
+        if (!/^planet-(00[1-9]|0[1-4][0-9]|050)$/.test(planetAssetId)) {
+          return jsonError('惑星は001〜050から選択してください。', 400);
         }
         const { data, error } = await admin.from('campus_planets')
           .upsert({
