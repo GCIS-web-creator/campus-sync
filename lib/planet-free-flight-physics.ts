@@ -33,6 +33,22 @@ export const FREE_FLIGHT_START_ALTITUDE_KM = 2_500;
 export const FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2 = 0.003; // 3 m/s²: fictional craft rating, not a real aircraft specification.
 export const FREE_FLIGHT_DELTA_V_BUDGET_KM_S = 18;
 
+export const FREE_FLIGHT_SPEED_OF_LIGHT_KM_S = 299_792.458;
+// Fictional sub-light drive: acceleration grows with speed so one held key covers
+// everything from orbital speed to 0.9c in under twenty seconds.
+export const FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S = FREE_FLIGHT_SPEED_OF_LIGHT_KM_S * 0.9;
+export const FREE_FLIGHT_CRUISE_BASE_ACCELERATION_KM_S2 = 4;
+export const FREE_FLIGHT_CRUISE_RESPONSE_PER_S = 0.6;
+
+export type SphereObstacle = { positionKm: Vector3Km; radiusKm: number };
+
+export type FreeFlightCruiseInput = {
+  dtSeconds: number;
+  forward: Vector3Km;
+  /** 1 accelerates, -1 decelerates, values below -1 brake harder, 0 holds speed. */
+  command: number;
+};
+
 const magnitude = (value: Vector3Km) => Math.hypot(value.x, value.y, value.z);
 const add = (a: Vector3Km, b: Vector3Km): Vector3Km => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
 const scale = (value: Vector3Km, amount: number): Vector3Km => ({ x: value.x * amount, y: value.y * amount, z: value.z * amount });
@@ -112,5 +128,62 @@ export function stepFreeFlightMotion(
     },
     gravityAccelerationKmS2,
     thrustAccelerationKmS2,
+  };
+}
+
+export function stepCruiseSpeedKmS(speedKmS: number, command: number, dtSeconds: number) {
+  const speed = Math.max(0, speedKmS);
+  const dt = Math.max(0, Math.min(1, dtSeconds));
+  const rate = FREE_FLIGHT_CRUISE_BASE_ACCELERATION_KM_S2 + FREE_FLIGHT_CRUISE_RESPONSE_PER_S * speed;
+  return Math.max(0, Math.min(FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S, speed + command * rate * dt));
+}
+
+/**
+ * First point where the straight path from start to end enters an obstacle.
+ * Needed because at sub-light speed one frame can cross a whole planet.
+ */
+export function findSphereImpactKm(startKm: Vector3Km, endKm: Vector3Km, obstacles: SphereObstacle[]) {
+  const path = add(endKm, scale(startKm, -1));
+  const a = path.x ** 2 + path.y ** 2 + path.z ** 2;
+  if (a <= 0) return null;
+  let first: { fraction: number; obstacle: SphereObstacle } | null = null;
+  for (const obstacle of obstacles) {
+    const offset = add(startKm, scale(obstacle.positionKm, -1));
+    const b = offset.x * path.x + offset.y * path.y + offset.z * path.z;
+    if (b >= 0) continue; // moving away
+    const c = magnitude(offset) ** 2 - obstacle.radiusKm ** 2;
+    const discriminant = b * b - a * c;
+    if (discriminant < 0) continue;
+    const fraction = Math.max(0, (-b - Math.sqrt(discriminant)) / a);
+    if (fraction <= 1 && (!first || fraction < first.fraction)) first = { fraction, obstacle };
+  }
+  if (!first) return null;
+  const point = add(startKm, scale(path, first.fraction));
+  const outward = add(point, scale(first.obstacle.positionKm, -1));
+  const surface = scale(outward, first.obstacle.radiusKm / Math.max(magnitude(outward), 1e-8));
+  return { positionKm: add(first.obstacle.positionKm, surface), obstacle: first.obstacle };
+}
+
+/** Flight-assisted sub-light travel: velocity always follows the nose. */
+export function stepFreeFlightCruise(
+  state: FreeFlightMotionState,
+  input: FreeFlightCruiseInput,
+  obstacles: SphereObstacle[] = [],
+) {
+  const dtSeconds = Math.max(0, Math.min(1, input.dtSeconds));
+  const length = magnitude(input.forward);
+  const forward = length > 1e-8 ? scale(input.forward, 1 / length) : { x: 0, y: 0, z: 0 };
+  const speedBefore = magnitude(state.velocityKmS);
+  const speed = stepCruiseSpeedKmS(speedBefore, input.command, dtSeconds);
+  const end = add(state.positionKm, scale(forward, speed * dtSeconds));
+  const impact = findSphereImpactKm(state.positionKm, end, obstacles);
+  return {
+    state: {
+      positionKm: impact ? impact.positionKm : end,
+      velocityKmS: impact ? { x: 0, y: 0, z: 0 } : scale(forward, speed),
+      deltaVRemainingKmS: state.deltaVRemainingKmS,
+    } satisfies FreeFlightMotionState,
+    accelerationKmS2: dtSeconds > 0 ? (speed - speedBefore) / dtSeconds : 0,
+    impacted: Boolean(impact),
   };
 }

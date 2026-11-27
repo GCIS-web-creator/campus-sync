@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   FREE_FLIGHT_DELTA_V_BUDGET_KM_S,
+  FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S,
+  FREE_FLIGHT_SPEED_OF_LIGHT_KM_S,
+  stepCruiseSpeedKmS,
+  stepFreeFlightCruise,
   FREE_FLIGHT_ENGINE_ACCELERATION_KM_S2,
   FREE_FLIGHT_REFERENCE_PLANET_MU_KM3_S2,
   FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM,
@@ -98,14 +102,54 @@ test('the piloted explorer remains a small spacecraft at the simulation scale', 
   assert.match(simulator, /logarithmicDepthBuffer: true/);
   assert.match(simulator, /PerspectiveCamera\(72, width \/ height, 0\.000000001, 340_000\)/);
   assert.match(simulator, /const metersToSceneUnits = \(meters: number\) => meters \/ \(KM_PER_SCENE_UNIT \* 1_000\)/);
-  assert.match(simulator, /distance: metersToSceneUnits\(650\)/);
-  assert.match(simulator, /Math\.max\(metersToSceneUnits\(280\), Math\.min\(metersToSceneUnits\(2_500\)/);
-  assert.match(simulator, /multiplyScalar\(metersToSceneUnits\(600\)\)\.addScaledVector\(trailingDirection, metersToSceneUnits\(1_400\)\)/);
-  assert.match(simulator, /addScaledVector\(forward, metersToSceneUnits\(1_300\)\)\.addScaledVector\(unitRadial, -metersToSceneUnits\(250\)\)/);
-  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.4, pitch: 0\.18, distance: metersToSceneUnits\(650\) \}\)/);
+  assert.match(simulator, /Math\.max\(metersToSceneUnits\(110\), Math\.min\(metersToSceneUnits\(2_500\)/);
+  assert.match(simulator, /multiplyScalar\(metersToSceneUnits\(75\)\)\.addScaledVector\(chaseForward, metersToSceneUnits\(-170\)\)/);
+  assert.match(simulator, /inspectionRef = useRef\(\{ yaw: 0\.6, pitch: 0\.35, distance: metersToSceneUnits\(210\) \}\)/);
   assert.match(simulator, /'arrowup'/);
   assert.match(simulator, /keyName: 'w'/);
   assert.match(simulator, /keyName: 'q'/);
   assert.match(simulator, /keyName=" "/);
   assert.match(simulator, /NON-COMBAT EXPLORATION SIMULATOR/);
+});
+
+test('arrow keys point the nose the pressed way and O / L drive the sub-light engine', () => {
+  const simulator = readFileSync(new URL('../components/planet-world/FreeFlightSimulator.tsx', import.meta.url), 'utf8');
+  assert.match(simulator, /pitchInput = \(keys\.has\('arrowup'\) \? 1 : 0\) - \(keys\.has\('arrowdown'\)/);
+  assert.match(simulator, /yawInput = \(keys\.has\('arrowleft'\) \? 1 : 0\) - \(keys\.has\('arrowright'\)/);
+  assert.match(simulator, /keyName="o"/);
+  assert.match(simulator, /keyName="l"/);
+});
+
+test('the sub-light drive reaches 0.9c within twenty seconds and returns to a stop', () => {
+  let speed = getCircularOrbitSpeedKmS(FREE_FLIGHT_START_ALTITUDE_KM);
+  for (let frame = 0; frame < 20 * 60; frame += 1) speed = stepCruiseSpeedKmS(speed, 1, 1 / 60);
+  assert.equal(speed, FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S);
+  assert.ok(speed < FREE_FLIGHT_SPEED_OF_LIGHT_KM_S);
+  assert.equal(stepCruiseSpeedKmS(speed, 0, 1), speed);
+  for (let frame = 0; frame < 20 * 60; frame += 1) speed = stepCruiseSpeedKmS(speed, -1, 1 / 60);
+  assert.equal(speed, 0);
+});
+
+test('cruise velocity follows the nose without spending thruster delta-v', () => {
+  const start = createInitialFreeFlightMotionState();
+  const result = stepFreeFlightCruise(start, { dtSeconds: 0.05, forward: { x: 0, y: 2, z: 0 }, command: 1 });
+  assert.equal(result.state.velocityKmS.x, 0);
+  assert.ok(result.state.velocityKmS.y > length(start.velocityKmS));
+  assert.equal(result.state.deltaVRemainingKmS, FREE_FLIGHT_DELTA_V_BUDGET_KM_S);
+});
+
+test('sub-light travel stops at a planet instead of tunnelling through it', () => {
+  const planet = { positionKm: { x: 0, y: 0, z: 0 }, radiusKm: FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM };
+  const state = {
+    positionKm: { x: -10_000, y: 0, z: 0 },
+    velocityKmS: { x: FREE_FLIGHT_MAX_CRUISE_SPEED_KM_S, y: 0, z: 0 },
+    deltaVRemainingKmS: 18,
+  };
+  const toward = stepFreeFlightCruise(state, { dtSeconds: 0.1, forward: { x: 1, y: 0, z: 0 }, command: 0 }, [planet]);
+  assert.equal(toward.impacted, true);
+  assert.ok(Math.abs(toward.state.positionKm.x + FREE_FLIGHT_REFERENCE_PLANET_RADIUS_KM) < 1e-6);
+  assert.equal(length(toward.state.velocityKmS), 0);
+  const away = stepFreeFlightCruise(toward.state, { dtSeconds: 0.1, forward: { x: -1, y: 0, z: 0 }, command: 1 }, [planet]);
+  assert.equal(away.impacted, false);
+  assert.ok(away.state.positionKm.x < toward.state.positionKm.x);
 });
