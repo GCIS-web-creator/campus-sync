@@ -93,7 +93,7 @@ while (addonOffset + 512 <= addonTar.length) {
 if (addonCount !== 10) throw new Error('追加惑星アセットの数が不正です: ' + addonCount + '/10');
 
 const requiredFiles = [
-  resolve(root, 'lib', 'planet-kit', 'src', 'react', 'PlanetCanvas.tsx'),
+  resolve(root, 'lib', 'planet-kit', 'react', 'PlanetCanvas.tsx'),
   resolve(root, 'components', 'Planet3DPanel.tsx'),
   resolve(publicPlanetAssets, 'manifest.json'),
   resolve(publicPlanetAssets, 'planets', 'planet-001', 'surface.jpg'),
@@ -103,3 +103,5 @@ const requiredFiles = [
 if (requiredFiles.some((path) => !existsSync(path))) throw new Error('惑星キットの展開結果が不完全です。');
 console.log('惑星キットを展開しました: ' + extracted + ' ファイル (' + extractedBytes.toLocaleString('ja-JP') + ' bytes)');
 await import('./build-planet-kit-assets.mjs');
+const integratedPlanetRenderer = resolve(root, 'lib', 'planet-kit', 'src', 'react', 'PlanetCanvas.tsx');
+if (!existsSync(integratedPlanetRenderer)) throw new Error('50惑星レンダラーのReactエントリが見つかりません。');
