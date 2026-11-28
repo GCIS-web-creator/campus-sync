@@ -54,7 +54,7 @@ function verifyLineSignature(rawBody: string, signature: string, channelSecret: 
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
-async function getCampusAiAnswer(question: string, lineUserId?: string): Promise<CampusAiResponse> {
+async function getCampusAiAnswer(question: string, lineUserId?: string, internalSecret?: string): Promise<CampusAiResponse> {
   const endpoint = new URL('/api/campus-ai', getCampusSyncBaseUrl()).toString();
 
   try {
@@ -62,7 +62,7 @@ async function getCampusAiAnswer(question: string, lineUserId?: string): Promise
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(lineUserId && process.env.CRON_SECRET ? { 'x-campussync-internal-secret': process.env.CRON_SECRET } : {}),
+        ...(lineUserId && internalSecret ? { 'x-campussync-internal-secret': internalSecret } : {}),
       },
       body: JSON.stringify({ question: question.trim().slice(0, 100), ...(lineUserId ? { lineUserId } : {}) }),
       cache: 'no-store',
@@ -2120,6 +2120,7 @@ async function handleLineEvents(
   channelAccessToken: string,
   botSlot: 0 | 1 | 2 | 3 | 4 | 5,
   ai: WorkersAiBinding | undefined,
+  internalSecret: string,
 ): Promise<void> {
   await Promise.all(events.map(async event => {
     if (event.source?.type === 'group' || event.source?.type === 'room') {
@@ -2413,7 +2414,7 @@ async function handleLineEvents(
       return;
     }
 
-    const answer = await getCampusAiAnswer(question, event.source?.userId || undefined);
+    const answer = await getCampusAiAnswer(question, event.source?.userId || undefined, internalSecret);
     await replyToLine(
       event.replyToken,
       answer,
@@ -2479,14 +2480,21 @@ export async function POST(request: Request) {
   // Capture request-scoped Cloudflare bindings before scheduling Next.js after().
   // The deferred callback must not resolve request context for the first time.
   let workersAi: WorkersAiBinding | undefined;
+  let internalSecret = process.env.CRON_SECRET || '';
   try {
-    workersAi = (getCloudflareContext() as unknown as { env?: { AI?: WorkersAiBinding } }).env?.AI;
+    const workerEnv = (getCloudflareContext() as unknown as {
+      env?: { AI?: WorkersAiBinding; CRON_SECRET?: string };
+    }).env;
+    workersAi = workerEnv?.AI;
+    if (typeof workerEnv?.CRON_SECRET === 'string' && workerEnv.CRON_SECRET) {
+      internalSecret = workerEnv.CRON_SECRET;
+    }
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     console.error('LINE webhook Cloudflare context lookup failed:', detail.slice(0, 300));
   }
   after(async () => {
-    await handleLineEvents(events, matchedCredentials.accessToken, matchedCredentials.slot, workersAi);
+    await handleLineEvents(events, matchedCredentials.accessToken, matchedCredentials.slot, workersAi, internalSecret);
   });
 
   return new Response('OK', {
