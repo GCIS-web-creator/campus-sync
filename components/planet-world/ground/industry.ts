@@ -7,7 +7,7 @@ export function buildIndustry(context: GroundContext): GroundScene {
   const kit = makeKit(context, 307);
   const { between, random, put, keep, flush, instances, texture, strut } = kit;
   const { scene } = context;
-  scene.fog = new THREE.Fog('#0a1844', 150, 560);
+  scene.fog = new THREE.Fog(context.tone('#0a1844', 0.5), 150, 560);
   const sky = addSky(context, {
     zenith: '#04103c', middle: '#0b2a7c', horizon: '#2a55ac',
     cloudLight: '#1d3568', cloudShade: '#0a1840', cover: 0.18, puff: 0,
@@ -17,7 +17,7 @@ export function buildIndustry(context: GroundContext): GroundScene {
     { color: '#ffd9a8', position: [30, 4, 20], size: 2.4 }, { color: '#ffe9d0', position: [-26, 10, 24], size: 3 },
     { color: '#a8c4ff', position: [-10, 30, -30], size: 3 }, { color: '#ff9a50', position: [20, -6, -34], size: 5 },
   ]);
-  scene.add(new THREE.HemisphereLight('#42589c', '#4a2410', 0.55));
+  scene.add(new THREE.HemisphereLight(context.tone('#42589c', 0.6), '#4a2410', 0.55));
   const moon = new THREE.DirectionalLight('#9fb8ff', 0.55);
   moon.position.set(-0.4, 0.8, 0.5);
   const sodium = new THREE.DirectionalLight('#ffb069', 0.75);

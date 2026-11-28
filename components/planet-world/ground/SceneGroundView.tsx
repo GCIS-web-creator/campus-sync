@@ -6,11 +6,13 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { getPlanetSky } from '@/lib/planet-ground-climate';
 import type { GroundSceneKind } from '@/lib/planet-ground-stage';
 import type { Disposable, GroundContext, GroundScene } from './kit';
 import { buildIndustry } from './industry';
 import { buildStellar } from './stellar';
 import { buildTown } from './town';
+import { makeSkyTone } from './tone';
 import { buildVillage } from './village';
 
 const BUILDERS: Record<Exclude<GroundSceneKind, 'cyber'>, (context: GroundContext) => GroundScene> = {
@@ -60,6 +62,7 @@ export default function SceneGroundView({ kind, stage, stageName, planetId, plan
       resources,
       planetNumber: Number.parseInt(planetId.slice(-3), 10) || 1,
       atmosphere: new THREE.Color(atmosphereColor),
+      tone: makeSkyTone(getPlanetSky(planetId)),
       pixels: { width: width() * pixelRatio, height: height() * pixelRatio },
       compact: mount.clientWidth < 700,
     });

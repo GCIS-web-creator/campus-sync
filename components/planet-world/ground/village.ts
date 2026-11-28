@@ -33,7 +33,8 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
   const { scene } = context;
   const sunDirection = new THREE.Vector3(-0.55, 0.62, 0.38).normalize();
   const horizon = new THREE.Color('#bfdcec').lerp(context.atmosphere, 0.18);
-  scene.fog = new THREE.Fog(horizon.clone(), 120, 620);
+  const haze = context.tone(horizon, 0);
+  scene.fog = new THREE.Fog(haze.clone(), 120, 620);
 
   const sky = addSky(context, {
     zenith: '#1d5fae', middle: '#5b9fd8', horizon: '#' + horizon.getHexString(),
@@ -41,7 +42,7 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
     sunDirection, sunColor: '#fff0c8', sunStrength: 0.5, stars: 0,
   }, 1_500);
 
-  scene.add(new THREE.HemisphereLight('#cfe6ff', '#62703a', 1.25));
+  scene.add(new THREE.HemisphereLight(context.tone('#cfe6ff', 0.5), '#62703a', 1.25));
   addSun(context, '#fff0d0', 2.5, sunDirection, [0, 0, -45], 95);
 
   // ---- Houses and fields are placed first so the ground can avoid them. ----
@@ -116,10 +117,10 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
   water.setIndex(riverIndex);
   const waterMaterial = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
-    uniforms: { uTime: { value: 0 }, uFog: { value: horizon.clone() }, uSun: { value: sunDirection } },
+    uniforms: { uTime: { value: 0 }, uFog: { value: haze.clone() }, uSun: { value: sunDirection }, uDeep: { value: new THREE.Color().setRGB(0.012, 0.11, 0.13).lerp(context.tone(new THREE.Color().setRGB(0.012, 0.11, 0.13), 0.8), 0.45) }, uShine: { value: new THREE.Color().setRGB(0.2, 0.5, 0.66).lerp(context.tone(new THREE.Color().setRGB(0.2, 0.5, 0.66), 0.6), 0.6) } },
     vertexShader: 'varying vec2 vUv; varying vec3 vWorld; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: /* glsl */ `
-      uniform float uTime; uniform vec3 uFog; uniform vec3 uSun;
+      uniform float uTime; uniform vec3 uFog; uniform vec3 uSun; uniform vec3 uDeep; uniform vec3 uShine;
       varying vec2 vUv; varying vec3 vWorld;
       ${NOISE_GLSL}
       void main() {
@@ -128,7 +129,7 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
         vec3 view = normalize(cameraPosition - vWorld);
         vec3 normal = normalize(vec3(ripple * 0.9, 1.0, ripple * 0.5));
         float fresnel = pow(1.0 - max(dot(view, normal), 0.0), 3.0);
-        vec3 color = mix(vec3(0.012, 0.11, 0.13), vec3(0.2, 0.5, 0.66), clamp(fresnel * 0.9 + 0.12 + ripple * 1.3, 0.0, 1.0));
+        vec3 color = mix(uDeep, uShine, clamp(fresnel * 0.9 + 0.12 + ripple * 1.3, 0.0, 1.0));
         color += vec3(1.0, 0.95, 0.8) * pow(max(dot(reflect(-uSun, normal), view), 0.0), 60.0) * 0.8;
         float foam = smoothstep(0.66, 0.95, abs(vUv.x) * 0.86 + noise21(vWorld.xz * 2.2 + uTime * 0.4) * 0.22);
         color = mix(color, vec3(0.55, 0.72, 0.7), foam * 0.36);
@@ -388,7 +389,7 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
     const geometry = new THREE.ConeGeometry(radius, height, 48, 24, true);
     const position = geometry.getAttribute('position');
     const tint = new Float32Array(position.count * 3);
-    const rockColor = new THREE.Color(color), peak = new THREE.Color('#cdd8e4'), forest = new THREE.Color('#3f6a55');
+    const rockColor = new THREE.Color(color).lerp(context.tone(color, 0.3), 0.3), peak = new THREE.Color('#cdd8e4'), forest = new THREE.Color('#3f6a55');
     for (let index = 0; index < position.count; index += 1) {
       const px = position.getX(index), py = position.getY(index), pz = position.getZ(index);
       const level = py / height + 0.5;
@@ -401,7 +402,7 @@ export function buildVillage(context: GroundContext, settled: boolean): GroundSc
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(tint, 3));
     geometry.computeVertexNormals();
-    const material = keep(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false, emissive: '#16283c' }));
+    const material = keep(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false, emissive: new THREE.Color('#16283c').lerp(context.tone('#16283c', 0.4), 0.4) }));
     const mesh = new THREE.Mesh(keep(geometry), material);
     mesh.position.set(x, height / 2 - 8, z);
     scene.add(mesh);

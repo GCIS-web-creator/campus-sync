@@ -9,31 +9,43 @@ export function buildStellar(context: GroundContext): GroundScene {
   const { between, random, put, keep, flush, instances } = kit;
   const { scene } = context;
   const time = { value: 0 };
-  const haze = new THREE.Color('#9a5cc4').lerp(context.atmosphere, 0.12);
+  const haze = context.tone(new THREE.Color('#9a5cc4').lerp(context.atmosphere, 0.12), 0.1);
+  const band = (r: number, g: number, b: number, height: number) => ({ value: context.tone(new THREE.Color().setRGB(r, g, b), height) });
 
   // ---- Sunset sky with pink cloud banks and stars ----
   const skyMaterial = keep(new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: { uTime: time },
+    uniforms: {
+      uTime: time,
+      uLow: band(0.95, 0.52, 0.8, 0),
+      uMid: band(0.42, 0.18, 0.62, 0.35),
+      uHigh: band(0.07, 0.055, 0.27, 0.75),
+      uTop: band(0.008, 0.01, 0.07, 1),
+      uGlow: band(0.9, 0.75, 0.95, 0),
+      uCloudShade: band(0.3, 0.12, 0.45, 0.4),
+      uCloudWarm: band(1.0, 0.27, 0.55, 0.05),
+      uCloudSoft: band(1.0, 0.62, 0.75, 0.15),
+    },
     vertexShader: 'varying vec3 vDirection; void main(){ vDirection = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: /* glsl */ `
       uniform float uTime; varying vec3 vDirection;
+      uniform vec3 uLow, uMid, uHigh, uTop, uGlow, uCloudShade, uCloudWarm, uCloudSoft;
       ${NOISE_GLSL}
       void main() {
         vec3 d = normalize(vDirection);
         float up = max(d.y, 0.0);
         float centre = pow(max(-d.z, 0.0), 6.0);
-        vec3 color = mix(vec3(0.95, 0.52, 0.8), vec3(0.42, 0.18, 0.62), smoothstep(0.01, 0.16, up));
-        color = mix(color, vec3(0.07, 0.055, 0.27), smoothstep(0.1, 0.36, up));
-        color = mix(color, vec3(0.008, 0.01, 0.07), smoothstep(0.32, 0.8, up));
-        color += vec3(0.9, 0.75, 0.95) * centre * exp(-up * 11.0);
+        vec3 color = mix(uLow, uMid, smoothstep(0.01, 0.16, up));
+        color = mix(color, uHigh, smoothstep(0.1, 0.36, up));
+        color = mix(color, uTop, smoothstep(0.32, 0.8, up));
+        color += uGlow * centre * exp(-up * 11.0);
         vec2 p = vec2(atan(d.x, -d.z) * 2.6 + uTime * 0.003, d.y * 8.0);
         float banks = fbm(p * vec2(1.0, 1.25) + fbm(p * 2.2) * 1.4);
         float side = smoothstep(0.12, 0.75, abs(d.x));
         float cloud = smoothstep(0.5, 0.72, banks + side * 0.08) * smoothstep(0.03, 0.12, up) * (1.0 - smoothstep(0.34, 0.55, up));
         float rim = smoothstep(0.5, 0.82, fbm(p * 3.4 + 4.0));
-        vec3 cloudColor = mix(vec3(0.3, 0.12, 0.45), mix(vec3(1.0, 0.27, 0.55), vec3(1.0, 0.62, 0.75), rim), clamp(rim * 0.8 + side * 0.4, 0.0, 1.0));
+        vec3 cloudColor = mix(uCloudShade, mix(uCloudWarm, uCloudSoft, rim), clamp(rim * 0.8 + side * 0.4, 0.0, 1.0));
         color = mix(color, cloudColor, cloud * (0.35 + side * 0.65));
         vec2 cell = floor(d.xz / (abs(d.y) + 0.35) * 520.0);
         color += vec3(step(0.9966, hash21(cell))) * hash21(cell + 5.0) * smoothstep(0.18, 0.45, d.y);
@@ -44,12 +56,13 @@ export function buildStellar(context: GroundContext): GroundScene {
 
   // ---- The great planet and its companions ----
   const worldMaterial = (seed: number, detail: number, glow: number) => keep(new THREE.ShaderMaterial({
-    uniforms: { uTime: time, uSeed: { value: seed }, uDetail: { value: detail }, uGlow: { value: glow } },
+    uniforms: { uTime: time, uHorizonTone: { value: context.tone(new THREE.Color().setRGB(0.7, 0.4, 0.82), 0.05) }, uSeed: { value: seed }, uDetail: { value: detail }, uGlow: { value: glow } },
     transparent: true,
     depthWrite: false,
     vertexShader: 'varying vec3 vNormalW; varying vec3 vLocal; varying vec3 vWorld; void main(){ vLocal = normalize(position); vNormalW = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: /* glsl */ `
       uniform float uTime, uSeed, uDetail, uGlow;
+      uniform vec3 uHorizonTone;
       varying vec3 vNormalW; varying vec3 vLocal; varying vec3 vWorld;
       ${NOISE_GLSL}
       float hash31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -80,7 +93,7 @@ export function buildStellar(context: GroundContext): GroundScene {
         color += mix(vec3(0.55, 0.45, 1.0), vec3(0.35, 0.82, 1.0), smoothstep(-0.2, 0.7, n.y)) * rim * 1.15;
         // The lower limb dissolves into the evening haze.
         float fade = smoothstep(0.0, 420.0, vWorld.y);
-        color = mix(vec3(0.7, 0.4, 0.82), color, 0.25 + fade * 0.75);
+        color = mix(uHorizonTone, color, 0.25 + fade * 0.75);
         gl_FragColor = vec4(color, 0.4 + fade * 0.6);
       }`,
   }));
@@ -268,7 +281,7 @@ export function buildStellar(context: GroundContext): GroundScene {
       shade.set([s, s, s], index * 3);
     }
     ridge.setAttribute('color', new THREE.BufferAttribute(shade, 3));
-    const mesh = new THREE.Mesh(keep(ridge), mountainMaterial(color));
+    const mesh = new THREE.Mesh(keep(ridge), mountainMaterial('#' + context.tone(color, 0.15).getHexString()));
     mesh.position.z = z;
     scene.add(mesh);
   }

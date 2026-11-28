@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { groundRandom } from '@/lib/planet-ground-stage';
+import type { SkyTone } from './tone';
+
 
 export type Disposable = { dispose: () => void };
 
@@ -10,6 +12,8 @@ export type GroundContext = {
   resources: Disposable[];
   planetNumber: number;
   atmosphere: THREE.Color;
+  /** Recolours sky, haze and reflections to the planet's motif. */
+  tone: SkyTone;
   /** Backing-store size of the canvas when the scene is built. */
   pixels: { width: number; height: number };
   /** Phone-sized screens get lighter vegetation. */
@@ -197,11 +201,11 @@ export function addSky(context: GroundContext, options: SkyOptions, radius: numb
     depthWrite: false,
     uniforms: {
       uTime: { value: 0 },
-      uZenith: { value: new THREE.Color(options.zenith) },
-      uMiddle: { value: new THREE.Color(options.middle) },
-      uHorizon: { value: new THREE.Color(options.horizon) },
-      uLight: { value: new THREE.Color(options.cloudLight) },
-      uShade: { value: new THREE.Color(options.cloudShade) },
+      uZenith: { value: context.tone(options.zenith, 1) },
+      uMiddle: { value: context.tone(options.middle, 0.5) },
+      uHorizon: { value: context.tone(options.horizon, 0) },
+      uLight: { value: context.tone(options.cloudLight, 0.15) },
+      uShade: { value: context.tone(options.cloudShade, 0.4) },
       uCover: { value: options.cover },
       uPuff: { value: options.puff },
       uSun: { value: options.sunDirection.clone().normalize() },
@@ -276,7 +280,7 @@ export function addEnvironment(context: GroundContext, sky: string, ground: stri
   const geometry = new THREE.SphereGeometry(50, 24, 16);
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
-    uniforms: { uSky: { value: new THREE.Color(sky) }, uGround: { value: new THREE.Color(ground) } },
+    uniforms: { uSky: { value: context.tone(sky, 0.7) }, uGround: { value: new THREE.Color(ground) } },
     vertexShader: 'varying vec3 v; void main(){ v = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: 'uniform vec3 uSky, uGround; varying vec3 v; void main(){ float h = normalize(v).y; gl_FragColor = vec4(mix(uGround, uSky, smoothstep(-0.35, 0.45, h)), 1.0); }',
   });

@@ -12,13 +12,13 @@ export function buildTown(context: GroundContext): GroundScene {
   const { scene } = context;
   // The sun hangs low behind the castle, a little to the right, and rakes the street.
   const glowDirection = new THREE.Vector3(0.24, 0.3, -0.92).normalize();
-  scene.fog = new THREE.FogExp2(new THREE.Color('#f0c58a').lerp(context.atmosphere, 0.08), 0.0048);
+  scene.fog = new THREE.FogExp2(context.tone(new THREE.Color('#f0c58a').lerp(context.atmosphere, 0.08), 0), 0.0048);
   const sky = addSky(context, {
     zenith: '#4f78b4', middle: '#e6c08a', horizon: '#ffcd80',
     cloudLight: '#fff1cf', cloudShade: '#d9a878', cover: 0.38, puff: 0.35,
     sunDirection: glowDirection, sunColor: '#ffd58a', sunStrength: 0.72, stars: 0,
   }, 900);
-  scene.add(new THREE.HemisphereLight('#bcc8e6', '#6a4a30', 1.05));
+  scene.add(new THREE.HemisphereLight(context.tone('#bcc8e6', 0.6), '#6a4a30', 1.05));
   addSun(context, '#ffc06a', 4.2, new THREE.Vector3(0.62, 0.55, -0.5), [0, 0, -34], 62);
   const fill = new THREE.DirectionalLight('#ffd9b0', 0.55);
   fill.position.set(-0.3, 0.5, 1);
@@ -368,7 +368,7 @@ export function buildTown(context: GroundContext): GroundScene {
   // Warm haze where the evening light pours down the street, drifting dust and birds.
   const glow = kit.glowMap();
   const haze = (x: number, y: number, z: number, size: number, opacity: number) => {
-    const material = keep(new THREE.SpriteMaterial({ map: glow, color: '#ffcf85', opacity, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    const material = keep(new THREE.SpriteMaterial({ map: glow, color: context.tone('#ffcf85', 0), opacity, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
     const sprite = new THREE.Sprite(material);
     sprite.position.set(x, y, z);
     sprite.scale.setScalar(size);

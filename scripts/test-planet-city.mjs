@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { CITY_STREET_HALF_WIDTH, CITY_VIEWPOINT, buildCityLayout } from '../lib/planet-city.ts';
 import { GROUND_STAGES, getGroundStage } from '../lib/planet-ground-stage.ts';
+import { getGroundClimate, getPlanetSky } from '../lib/planet-ground-climate.ts';
 
 test('every planet gets a very dense city that keeps the street clear', () => {
   for (let planet = 1; planet <= 50; planet += 1) {
@@ -37,4 +38,14 @@ test('each civilization stage has its own ground view and the cyber city is stag
   assert.match(dispatch, /info\.kind === 'cyber'\) return <CityGroundView/);
   for (const kind of ['wilderness', 'village', 'town', 'industry', 'stellar']) assert.match(scenes, new RegExp('\\b' + kind + ':'));
   assert.equal(CITY_VIEWPOINT.y, 1.65);
+});
+
+test('only temperate planets get stage views, each under its own sky', () => {
+  const ids = Array.from({ length: 50 }, (_, index) => 'planet-' + String(index + 1).padStart(3, '0'));
+  const temperate = ids.filter((id) => getGroundClimate(id) === 'temperate');
+  assert.deepEqual(temperate, ['planet-001', 'planet-002', 'planet-006', 'planet-041', 'planet-049', 'planet-050']);
+  assert.equal(new Set(temperate.map((id) => JSON.stringify(getPlanetSky(id)))).size, temperate.length);
+  for (const id of ['planet-003', 'planet-004', 'planet-005', 'planet-007', 'planet-010']) assert.equal(getGroundClimate(id), 'unsuitable');
+  const dispatch = readFileSync(new URL('../components/planet-world/StageGroundView.tsx', import.meta.url), 'utf8');
+  assert.match(dispatch, /!== 'temperate'\) return <CityGroundView/);
 });
