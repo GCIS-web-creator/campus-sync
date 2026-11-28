@@ -1,5 +1,6 @@
 // CampusSync AI v3: TypeScript上で推論し、回答スロットには画面と同じSupabaseデータを埋め込む。
 import { NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
@@ -80,6 +81,19 @@ const DEFAULT_ROOMS = [
 
 
 export async function POST(req: Request) {
+  // OpenNext on Workers exposes runtime secrets through the request-scoped env binding.
+  // Capture them here instead of relying exclusively on process.env in the Node shim.
+  let runtimeEnv: Record<string, unknown> = {};
+  try {
+    runtimeEnv = (getCloudflareContext() as unknown as { env?: Record<string, unknown> }).env ?? {};
+  } catch {
+    runtimeEnv = {};
+  }
+  const runtimeValue = (name: string): string => {
+    const bound = runtimeEnv[name];
+    return typeof bound === 'string' && bound ? bound : process.env[name] || '';
+  };
+
   const body = await req.json().catch(() => null) as {
     question?: unknown;
     voterId?: unknown;
@@ -90,7 +104,7 @@ export async function POST(req: Request) {
   if (!question) return NextResponse.json({ error: '質問を入力してください。' }, { status: 400 });
   const voterId = typeof body?.voterId === 'string' ? body.voterId.trim().slice(0, 128) : '';
   // LINEユーザーIDはWebhookからの内部認証が成功した場合だけ信頼する。
-  const configuredInternalSecret = process.env.CRON_SECRET || '';
+  const configuredInternalSecret = runtimeValue('CRON_SECRET');
   const suppliedInternalSecret = req.headers.get('x-campussync-internal-secret') || '';
   const isTrustedLineWebhook = Boolean(configuredInternalSecret && suppliedInternalSecret === configuredInternalSecret);
   const trustedLineUserId = isTrustedLineWebhook && typeof body?.lineUserId === 'string'
@@ -1212,8 +1226,8 @@ export async function POST(req: Request) {
       let reporterId = userResult?.data?.user?.id || '';
       let reportClient: any = reporterId && authed ? authed : null;
       if (!reporterId && trustedLineUserId) {
-        const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+        const serviceUrl = runtimeValue('NEXT_PUBLIC_SUPABASE_URL') || runtimeValue('SUPABASE_URL');
+        const serviceKey = runtimeValue('SUPABASE_SERVICE_ROLE_KEY');
         if (serviceUrl && serviceKey) {
           const admin = createClient(serviceUrl, serviceKey, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
