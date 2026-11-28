@@ -38,7 +38,8 @@ const isCrowdQuestion = (q: string) => /(学食|食堂)/.test(q) && /混雑|混�
 const isMealQuestion = (q: string) => /メニュー|学食|食堂|ランチ|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事|カロリー|アレルギー|食べられる/.test(q);
 const isDailyMealQuestion = (q: string) => /今日|本日|現在|今|きょう|明日|あした|あす|翌日|明後日|あさって|給食|献立|昼食|昼ごはん|昼ご飯|昼飯|お昼|ご飯|ごはん|食事/.test(q);
 const isSoldQuestion = (q: string) => /売り切れ|売切れ|売り切|売切/.test(q);
-const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
+const isSoldListQuestion = (q: string) => /売り切れのメニュー|売り切れメニュー|売り切れたメニュー|売り切れてるのは|今売り切れのもの|売り切れ教えて|売り切れてるメニュー|売り切れ一覧|売切れメニュー/.test(q);
+const isSoldReportQuestion = (q: string) => /(?:売り切れ|売切れ|売り切|売切)(?:た|てた|ました|です|になった|になりました)|完売(?:した|してた|しました|です)/.test(q);
 const isTaskQuestion = (q: string) => /課題|宿題|提出|期限|締切|ワーク|プリント|やること|今日中|本日中|今日が期限|本日まで|提出済み?|提出完了|完了|済み?|終わったこと/.test(q);
 const isExamQuestion = (q: string) => /定期テスト|定期考査|中間考査|期末考査|中間テスト|期末テスト|考査|試験範囲|テスト範囲|考査範囲|定期試験/.test(q) || (/英コミュ|コミ英|コミュ英|論表|アクティブリスニング|Active Listening|音読テスト|メイクアップテスト|Speaking test/i.test(q) && /テスト|範囲|日程|試験|実施|提出|内容|いつ|対象|欠席/i.test(q)) || (/提出物/.test(q) && /化学|数学|数C|数３|国語|古典|公共|物理|生物|英コミュ|コミ英|コミュ英|論表|情報/.test(q));
 const isTrainQuestion = (q: string) => /電車|何分後|何本目|何本後|何時発|何時来る|駅/.test(q);
@@ -54,7 +55,7 @@ const isQueueQuestion = (q: string) => /行列|並び|並んで|待ち時間|列
 
 // 日別献立5区分を、既存のcafeteria_votesの区分コードに対応させる。
 const DAILY_QUEUE_CATEGORIES = [
-  { field: 'soka_lunch', voteId: 'soka', label: '創価ランチ', aliases: /創価ランチ|創価/ },
+  { field: 'soka_lunch', voteId: 'soka', label: '創価ランチ', aliases: /創価ランチ|創作ランチ|創価|創作/ },
   { field: 'healthy_lunch', voteId: 'healthy', label: 'ヘルシーランチ', aliases: /ヘルシーランチ|ヘルシー/ },
   { field: 'snack_lunch', voteId: 'snack', label: 'スナックランチ', aliases: /スナックランチ|スナック/ },
   { field: 'curry', voteId: 'curry', label: 'カレー', aliases: /カレー/ },
@@ -82,11 +83,20 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as {
     question?: unknown;
     voterId?: unknown;
+    lineUserId?: unknown;
     history?: Array<{ role?: unknown; content?: unknown; queueMenuId?: unknown; quickReplies?: unknown }>;
   } | null;
   let question = typeof body?.question === 'string' ? body.question.trim().slice(0, 100) : '';
   if (!question) return NextResponse.json({ error: '質問を入力してください。' }, { status: 400 });
   const voterId = typeof body?.voterId === 'string' ? body.voterId.trim().slice(0, 128) : '';
+  // LINEユーザーIDはWebhookからの内部認証が成功した場合だけ信頼する。
+  const configuredInternalSecret = process.env.CRON_SECRET || '';
+  const suppliedInternalSecret = req.headers.get('x-campussync-internal-secret') || '';
+  const isTrustedLineWebhook = Boolean(configuredInternalSecret && suppliedInternalSecret === configuredInternalSecret);
+  const trustedLineUserId = isTrustedLineWebhook && typeof body?.lineUserId === 'string'
+    && /^U[A-Za-z0-9]{20,40}$/.test(body.lineUserId)
+      ? body.lineUserId
+      : '';
   const history = Array.isArray(body?.history) ? body.history.slice(-12).filter((m) =>
     (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string'
   ) as Array<{ role: 'user' | 'assistant'; content: string; queueMenuId?: string; quickReplies?: unknown }> : [];
@@ -661,7 +671,7 @@ export async function POST(req: Request) {
         String(daily[item.key]).trim(),
         String(daily[item.price] || '').trim() || '未登録',
         String(daily[item.calorie] || '').trim() || '未登録',
-        String(daily[item.allergy] || '').trim() || '未登録',
+        (() => { const value = String(daily[item.allergy] || '').trim(); return !value || /^例(?:[：:]|$)|^(?:サンプル|入力例)$/u.test(value) ? '未登録' : value; })(),
       ]);
     if (!dailyRows.length) {
       return NextResponse.json({ answer: requestedMealDayLabel + '（' + requestedMealDateKey + '）の献立レコードはありますが、メニュー名がまだ入力されていません。Adminの月間献立表を確認してください。' + (String(daily.note || '').trim() ? ' 備考：' + String(daily.note).trim() : '') });
@@ -732,7 +742,12 @@ export async function POST(req: Request) {
   const menuForList = allMenus.slice(0, 5);
   const soldRows = (soldRes.data ?? []) as Array<{ menu_id: string | number | null; is_sold_out: boolean | null }>;
   const soldIds = new Set(soldRows.filter(r => r.is_sold_out).map(r => String(r.menu_id)));
-  const soldNames = allMenus.filter(m => soldIds.has(String(m.id))).map(m => m.name);
+  // 売り切れの照合は、今日のAdmin月間献立表を優先し、同じ5区分IDで状態を確認する。
+  const soldMenuCandidates: Menu[] = dailyQueueMenus.length
+    ? dailyQueueMenus.map(item => ({ id: item.voteId, name: item.name, calorie: null, allergy: null, is_active: true }))
+    : allMenus;
+  const soldMenuDataIsLive = (!requestedMenuRes.error && dailyQueueMenus.length > 0) || menuDataIsLive;
+  const soldNames = soldMenuCandidates.filter(m => soldIds.has(String(m.id))).map(m => m.name);
 
   const nextOccurrenceMinute = (time: string, after: number) => {
     let minute = toMin(time);
@@ -1040,12 +1055,16 @@ export async function POST(req: Request) {
 
   const menuIndex = findTarget(question, allMenus.map(m => m.name), 3);
   const normalizedQueueQuestion = normalize(question);
-  const dailyQueueMenuByName = wantsQueue
+  const dailyQueueMenuByName = (wantsQueue || wantsSold)
     ? [...dailyQueueMenus]
         .sort((a, b) => normalize(b.name).length - normalize(a.name).length)
-        .find(item => normalizedQueueQuestion.includes(normalize(item.name)))
+        .find(item => {
+          const normalizedName = normalize(item.name);
+          return normalizedQueueQuestion.includes(normalizedName)
+            || commonSub(normalizedQueueQuestion, normalizedName).length >= 3;
+        })
     : undefined;
-  const requestedDailyQueueCategory = wantsQueue
+  const requestedDailyQueueCategory = (wantsQueue || wantsSold)
     ? DAILY_QUEUE_CATEGORIES.find(category => category.aliases.test(question))
     : undefined;
   const dailyQueueMenu = dailyQueueMenuByName
@@ -1053,7 +1072,7 @@ export async function POST(req: Request) {
       ? dailyQueueMenus.find(item => item.voteId === requestedDailyQueueCategory.voteId)
       : undefined);
 
-  if (wantsQueue && dailyQueueMenu) {
+  if ((wantsQueue || wantsSold) && dailyQueueMenu) {
     // 投票データのmenu_id/scope_key（soka, healthy, snack, curry, noodles）は変更しない。
     targetMenu = {
       id: dailyQueueMenu.voteId,
@@ -1168,12 +1187,83 @@ export async function POST(req: Request) {
     });
   }
 
-  // 売り切れは直接データから判定し、相反する文をモデルに生成させない。
+  // 売り切れは今日のAdmin献立表と5区分IDで照合する。生徒の報告は別テーブルへ保存し、Admin確認前に正式状態は変更しない。
   if (wantsSold) {
-    if (!menuDataIsLive) return NextResponse.json({ answer: '学食メニューが登録されていないため、売り切れ情報と照合できません。' });
-    if (isSoldListQuestion(question) || !targetMenu) {
-      const rows = allMenus.filter(m => soldIds.has(String(m.id))).map(m => [m.name, '売り切れ']);
-      return NextResponse.json({ answer: rows.length ? '現在売り切れのメニューです。' : '現在、売り切れのメニューはありません。', table: rows.length ? table(['メニュー', '状態'], rows) : undefined });
+    if (!soldMenuDataIsLive) {
+      return NextResponse.json({ answer: '今日の献立または売り切れ対象メニューを確認できませんでした。Adminの月間献立表を確認してください。' });
+    }
+
+    if (isSoldListQuestion(question)) {
+      const rows = soldMenuCandidates.filter(m => soldIds.has(String(m.id))).map(m => [m.name, '売り切れ']);
+      return NextResponse.json({
+        answer: rows.length ? '現在売り切れのメニューです。' : '現在、売り切れのメニューはありません。',
+        table: rows.length ? table(['メニュー', '状態'], rows) : undefined,
+      });
+    }
+
+    if (isSoldReportQuestion(question)) {
+      if (requestedMealOffset !== 0) {
+        return NextResponse.json({ answer: '売り切れ報告は本日分のみ受け付けています。今日のメニュー名を指定して、もう一度送信してください。' });
+      }
+      if (!dailyQueueMenu) {
+        return NextResponse.json({ answer: '報告するメニューを特定できませんでした。今日の献立に表示されているメニュー名、または「創作ランチ」「カレー」「麺類」などのカテゴリを付けて送信してください。' });
+      }
+
+      let reporterId = userResult?.data?.user?.id || '';
+      let reportClient: any = reporterId && authed ? authed : null;
+      if (!reporterId && trustedLineUserId) {
+        const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+        if (serviceUrl && serviceKey) {
+          const admin = createClient(serviceUrl, serviceKey, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          });
+          const { data: link, error: linkError } = await admin
+            .from('line_student_links')
+            .select('auth_user_id')
+            .eq('line_user_id', trustedLineUserId)
+            .not('linked_at', 'is', null)
+            .maybeSingle();
+          if (linkError) {
+            console.error('Cafeteria sold-out report LINE link lookup failed:', linkError.message);
+            return NextResponse.json({ answer: 'LINE連携情報を確認できませんでした。少し待ってからもう一度お試しください。' });
+          }
+          reporterId = typeof link?.auth_user_id === 'string' ? link.auth_user_id : '';
+          if (reporterId) reportClient = admin;
+        }
+      }
+
+      if (!reporterId || !reportClient) {
+        return NextResponse.json({ answer: '売り切れ報告を送信するには、CampusSync学校アカウントとこのLINEアカウントを連携してください。CampusSyncの設定からLINE連携を完了すると報告できます。' });
+      }
+
+      const { data: report, error: reportError } = await reportClient
+        .from('cafeteria_sold_out_reports')
+        .upsert({
+          service_date: requestedMealDateKey,
+          menu_id: dailyQueueMenu.voteId,
+          reporter_id: reporterId,
+        }, { onConflict: 'service_date,menu_id,reporter_id', ignoreDuplicates: true })
+        .select('id')
+        .maybeSingle();
+
+      if (reportError) {
+        console.error('Cafeteria sold-out report save failed:', reportError.message);
+        return NextResponse.json({ answer: '売り切れ報告を保存できませんでした。少し待ってからもう一度お試しください。' });
+      }
+      return NextResponse.json({
+        answer: report?.id
+          ? `「${dailyQueueMenu.name}」の売り切れ報告を受け付けました。Adminで確認後、正式な売り切れ情報に反映されます。`
+          : `「${dailyQueueMenu.name}」の売り切れ報告は本日すでに送信済みです。Adminでの確認をお待ちください。`,
+      });
+    }
+
+    if (!targetMenu) {
+      const rows = soldMenuCandidates.filter(m => soldIds.has(String(m.id))).map(m => [m.name, '売り切れ']);
+      return NextResponse.json({
+        answer: rows.length ? '現在売り切れのメニューです。' : '現在、売り切れのメニューはありません。',
+        table: rows.length ? table(['メニュー', '状態'], rows) : undefined,
+      });
     }
     const isSold = soldIds.has(String(targetMenu.id));
     return NextResponse.json({ answer: isSold ? `${targetMenu.name}は売り切れています。現在は注文できません。` : `${targetMenu.name}は売り切れていません。現在の売り切れ情報では注文可能です。` });
