@@ -1,3 +1,4 @@
+-- A LINE identity can report each daily menu category at most once per service date.
 alter table public.cafeteria_sold_out_reports
   alter column reporter_id drop not null;
 
