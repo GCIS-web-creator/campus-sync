@@ -763,13 +763,13 @@ export function buildCampusAiFlexMessage(input: {
               type: 'box', layout: 'vertical', flex: 1, spacing: 'xs',
               contents: [
                 { type: 'text', text: 'CAMPUSSYNC  /  AI ASSISTANT', size: 'xxs', color: AI_ACCENT, weight: 'bold', wrap: true },
-                { type: 'text', text: 'CampusSync AI', size: 'xl', color: '#FFFFFF', weight: 'bold', wrap: true },
+                { type: 'text', text: 'CampusSync AI', size: 'lg', color: '#FFFFFF', weight: 'bold', wrap: false },
                 { type: 'text', text: 'SOKA HIGH SCHOOL  •  SCHOOL LIFE SUPPORT', size: 'xxs', color: '#D5E6E3', wrap: true },
               ],
             },
             {
-              type: 'box', layout: 'vertical', backgroundColor: '#315D60',
-              cornerRadius: '9px', paddingAll: '8px',
+              type: 'box', layout: 'vertical', width: '48px', flex: 0, backgroundColor: '#315D60',
+              cornerRadius: '9px', paddingAll: '6px',
               contents: [{ type: 'text', text: '✦ AI', size: 'xs', color: '#FFFFFF', weight: 'bold', align: 'center' }],
             },
           ],
