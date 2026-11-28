@@ -2138,13 +2138,13 @@ async function handleLineEvents(
     // 学校情報AI・会話AIは、メッセージ先頭が「CSAI」のときだけ起動する。
     // LINE公式アカウントへの通常の投稿には、BotからAI返信しない。
     const normalizedMessage = messageText.normalize('NFKC').trim();
-    const hasTrigger = /^CSAI(?=$|[\\s:：、,])/iu.test(normalizedMessage);
+    const hasTrigger = /^CSAI(?=$|[\s:：、,])/iu.test(normalizedMessage);
     const isDirectChat = event.source?.type === 'user';
     const isGroupOrRoom = event.source?.type === 'group' || event.source?.type === 'room';
     if (!isDirectChat && !isGroupOrRoom) return;
 
     const question = hasTrigger
-      ? normalizedMessage.replace(/^CSAI/iu, '').replace(/^[\\sへ:：,、-]+/u, '').replace(/[\\s,、:：-]+$/u, '').trim()
+      ? normalizedMessage.replace(/^CSAI/iu, '').replace(/^[\sへ:：,、-]+/u, '').replace(/[\s,、:：-]+$/u, '').trim()
       : messageText;
     if (!hasTrigger) return;
 
