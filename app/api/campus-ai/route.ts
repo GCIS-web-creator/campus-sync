@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createClient } from '@supabase/supabase-js';
+import { createHmac } from 'node:crypto';
 import { supabase } from '@/lib/supabase';
 import { LEGACY_SAMPLE_NOTIFICATION_TITLES } from '@/lib/school-notification-utils';
 type Direction = '国分寺方面' | '東村山方面' | '両方';
@@ -1224,40 +1225,46 @@ export async function POST(req: Request) {
       }
 
       let reporterId = userResult?.data?.user?.id || '';
+      let reporterKey = '';
       let reportClient: any = reporterId && authed ? authed : null;
-      if (!reporterId && trustedLineUserId) {
+
+      // LINEからの売り切れ報告はCampusSyncログイン不要。
+      // LINE userIdそのものは保存せず、サーバー秘密鍵でHMAC化した匿名キーだけを保存する。
+      if (!reportClient && trustedLineUserId) {
         const serviceUrl = runtimeValue('NEXT_PUBLIC_SUPABASE_URL') || runtimeValue('SUPABASE_URL');
         const serviceKey = runtimeValue('SUPABASE_SERVICE_ROLE_KEY');
-        if (serviceUrl && serviceKey) {
-          const admin = createClient(serviceUrl, serviceKey, {
+        if (serviceUrl && serviceKey && configuredInternalSecret) {
+          reportClient = createClient(serviceUrl, serviceKey, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
           });
-          const { data: link, error: linkError } = await admin
-            .from('line_student_links')
-            .select('auth_user_id')
-            .eq('line_user_id', trustedLineUserId)
-            .not('linked_at', 'is', null)
-            .maybeSingle();
-          if (linkError) {
-            console.error('Cafeteria sold-out report LINE link lookup failed:', linkError.message);
-            return NextResponse.json({ answer: 'LINE連携情報を確認できませんでした。少し待ってからもう一度お試しください。' });
-          }
-          reporterId = typeof link?.auth_user_id === 'string' ? link.auth_user_id : '';
-          if (reporterId) reportClient = admin;
+          reporterKey = createHmac('sha256', configuredInternalSecret)
+            .update(trustedLineUserId, 'utf8')
+            .digest('hex');
         }
       }
 
-      if (!reporterId || !reportClient) {
-        return NextResponse.json({ answer: '売り切れ報告を送信するには、CampusSync学校アカウントとこのLINEアカウントを連携してください。CampusSyncの設定からLINE連携を完了すると報告できます。' });
+      if (!reportClient || (!reporterId && !reporterKey)) {
+        return NextResponse.json({
+          answer: trustedLineUserId
+            ? '売り切れ報告を保存できませんでした。少し待ってからもう一度お試しください。'
+            : 'LINEアカウントを識別できませんでした。CampusSync公式アカウントとの1対1トークから報告してください。',
+        });
       }
 
-      const { data: report, error: reportError } = await reportClient
-        .from('cafeteria_sold_out_reports')
-        .upsert({
-          service_date: requestedMealDateKey,
-          menu_id: dailyQueueMenu.voteId,
-          reporter_id: reporterId,
-        }, { onConflict: 'service_date,menu_id,reporter_id', ignoreDuplicates: true })
+      const reportQuery = reporterId
+        ? reportClient.from('cafeteria_sold_out_reports').upsert({
+            service_date: requestedMealDateKey,
+            menu_id: dailyQueueMenu.voteId,
+            reporter_id: reporterId,
+          }, { onConflict: 'service_date,menu_id,reporter_id', ignoreDuplicates: true })
+        : reportClient.from('cafeteria_sold_out_reports').upsert({
+            service_date: requestedMealDateKey,
+            menu_id: dailyQueueMenu.voteId,
+            reporter_id: null,
+            reporter_key: reporterKey,
+          }, { onConflict: 'service_date,menu_id,reporter_key', ignoreDuplicates: true });
+
+      const { data: report, error: reportError } = await reportQuery
         .select('id')
         .maybeSingle();
 
@@ -1267,8 +1274,8 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({
         answer: report?.id
-          ? `「${dailyQueueMenu.name}」の売り切れ報告を受け付けました。Adminで確認後、正式な売り切れ情報に反映されます。`
-          : `「${dailyQueueMenu.name}」の売り切れ報告は本日すでに送信済みです。Adminでの確認をお待ちください。`,
+          ? `「${dailyQueueMenu.name}」の売り切れ報告を受け付けました。アカウント登録は不要です。Adminで確認後、正式な売り切れ情報に反映されます。`
+          : `「${dailyQueueMenu.name}」の売り切れ報告は本日すでに送信済みです。重複報告はまとめて管理しています。`,
       });
     }
 
