@@ -7,7 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getPlanetSystemSpec, STAR_PROFILES } from '@/lib/planet-system-catalog';
 import { getPlanetCatalogV50TextureUrl, getPlanetSurfaceTextureUrl, hasPlanetCatalogV50Texture } from '@/lib/planet-world/planet-catalog-v50';
 import { createMoonCelestialDetail, createStarCelestialDetail, type CelestialDetail } from '@/lib/planet-celestial-details';
-import CityGroundView from '@/components/planet-world/CityGroundView';
+import StageGroundView from '@/components/planet-world/StageGroundView';
 import StarSystemVoyage from '@/components/planet-world/StarSystemVoyage';
 import FreeFlightSimulator from '@/components/planet-world/FreeFlightSimulator';
 import { makeAtmosphereShell, makeDeepSky, makeStarCorona, makeStarSurfaceMaterial } from '@/components/planet-world/space-effects';
@@ -514,7 +514,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
   const starSummary = spec.rogue ? '自由浮遊惑星 · 近傍恒星なし' : spec.starClasses.map((starClass) => STAR_PROFILES[starClass].label).join(' ＋ ');
 
   return (
-    <section className={'relative '+(viewMode==='free-flight'?'h-[min(82vh,900px)] min-h-[560px] ':'min-h-[340px] ')+'overflow-hidden rounded-[26px] border border-slate-700/80 bg-[#050914] text-white shadow-[0_18px_60px_rgba(2,6,23,0.26)]'}>
+    <section className={'relative '+(viewMode==='free-flight'||viewMode==='ground'?'h-[min(82vh,900px)] min-h-[560px] ':'min-h-[340px] ')+'overflow-hidden rounded-[26px] border border-slate-700/80 bg-[#050914] text-white shadow-[0_18px_60px_rgba(2,6,23,0.26)]'}>
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4">
         <div className="rounded-xl border border-white/10 bg-slate-950/65 px-3 py-2 backdrop-blur-md">
           <p className="text-[9px] font-black tracking-[.2em] text-cyan-300">STELLAR SYSTEM</p>
@@ -533,7 +533,7 @@ export default function Planet3DPanel({ stage, planetAssetId = 'planet-001', mpB
         </div>
       </div>
       <div ref={mountRef} className="absolute inset-0" aria-label="太陽光源・衛星を含む3D惑星表示" />
-      {viewMode==='ground' && <CityGroundView planetId={spec.id} planetName={spec.name} atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>setViewMode('orbit')}/>}
+      {viewMode==='ground' && <StageGroundView planetId={spec.id} planetName={spec.name} atmosphereColor={spec.atmosphereColor} stage={stage} onBack={()=>setViewMode('orbit')}/>}
       {viewMode==='voyage' && <StarSystemVoyage system={spec} starClass={spec.starClasses[0] ?? null} mpBalance={mpBalance} onPurchase={onStartStarTravel} onExit={()=>setViewMode('orbit')}/>}
       {viewMode==='free-flight' && <FreeFlightSimulator system={spec} starClass={spec.starClasses[0] ?? null} onExit={()=>setViewMode('orbit')} />}
       {rendererFailed && <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-300">この端末では3D表示を初期化できませんでした。ブラウザのWebGL設定を確認してください。</div>}

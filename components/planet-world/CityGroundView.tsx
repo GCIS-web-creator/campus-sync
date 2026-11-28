@@ -279,12 +279,12 @@ export default function CityGroundView({ planetId, planetName, atmosphereColor, 
   const choose = (next: Mood) => { moodRef.current = next; setMood(next); };
   return (
     <div className="absolute inset-0 z-20 overflow-hidden bg-[#070a24] text-white">
-      <div ref={mountRef} className="absolute inset-0" aria-label={planetName + 'の近未来都市を地上から見上げる3D景観'} />
+      <div ref={mountRef} className="absolute inset-0" data-ground-stage={stage} aria-label={planetName + 'の近未来都市を地上から見上げる3D景観'} />
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, transparent 58%, rgba(4,2,20,.42) 100%)' }} />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
         <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
           <p className="text-[9px] font-black tracking-[.2em] text-cyan-200">CITY STREET VIEW</p>
-          <p className="mt-0.5 text-xs font-bold">{planetName} · 近未来都市</p>
+          <p className="mt-0.5 text-xs font-bold">{planetName} · 高度文明</p>
           <p className="mt-0.5 text-[9px] text-slate-300">文明 Stage {stage}</p>
         </div>
         <button type="button" onClick={onBack} className="pointer-events-auto rounded-xl border border-white/20 bg-slate-950/65 px-3 py-2 text-[10px] font-bold backdrop-blur-md">惑星視点へ戻る</button>
