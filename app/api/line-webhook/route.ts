@@ -54,14 +54,17 @@ function verifyLineSignature(rawBody: string, signature: string, channelSecret: 
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
-async function getCampusAiAnswer(question: string): Promise<CampusAiResponse> {
+async function getCampusAiAnswer(question: string, lineUserId?: string): Promise<CampusAiResponse> {
   const endpoint = new URL('/api/campus-ai', getCampusSyncBaseUrl()).toString();
 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question.trim().slice(0, 100) }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(lineUserId && process.env.CRON_SECRET ? { 'x-campussync-internal-secret': process.env.CRON_SECRET } : {}),
+      },
+      body: JSON.stringify({ question: question.trim().slice(0, 100), ...(lineUserId ? { lineUserId } : {}) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(25000),
     });
@@ -2132,17 +2135,18 @@ async function handleLineEvents(
     const assignmentHandled = await handleLineAssignmentContribution(event, event.replyToken, messageText, channelAccessToken);
     if (assignmentHandled) return;
 
-    // 「CSAI」を文中のどこに含んでいても学校情報AIへ。含まないグループ投稿は会話AIへ。
-    const normalizedMessage = messageText.normalize('NFKC');
-    const trigger = 'CSAI';
-    const hasTrigger = normalizedMessage.toUpperCase().includes(trigger);
+    // 学校情報AI・会話AIは、メッセージ先頭が「CSAI」のときだけ起動する。
+    // LINE公式アカウントへの通常の投稿には、BotからAI返信しない。
+    const normalizedMessage = messageText.normalize('NFKC').trim();
+    const hasTrigger = /^CSAI(?=$|[\\s:：、,])/iu.test(normalizedMessage);
     const isDirectChat = event.source?.type === 'user';
     const isGroupOrRoom = event.source?.type === 'group' || event.source?.type === 'room';
     if (!isDirectChat && !isGroupOrRoom) return;
 
     const question = hasTrigger
-      ? normalizedMessage.replace(/CSAI/giu, '').replace(/^[\sへ:：,、-]+/u, '').replace(/[\s,、:：-]+$/u, '').trim()
+      ? normalizedMessage.replace(/^CSAI/iu, '').replace(/^[\\sへ:：,、-]+/u, '').replace(/[\\s,、:：-]+$/u, '').trim()
       : messageText;
+    if (!hasTrigger) return;
 
     // 「CSAI ミニアプリ」は1対1トークとグループの両方で本番用ミニアプリへの案内を返す。
     if (hasTrigger && isLineMiniAppCommand(question)) {
@@ -2267,7 +2271,7 @@ async function handleLineEvents(
       }
     }
 
-    if ((hasTrigger || isDirectChat) && question) {
+    if (hasTrigger && question) {
       const destinationType = event.source?.type === 'room' ? 'room' : event.source?.type === 'group' ? 'group' : 'user';
       const destinationId = event.source?.type === 'room'
         ? event.source.roomId || null
@@ -2409,7 +2413,7 @@ async function handleLineEvents(
       return;
     }
 
-    const answer = await getCampusAiAnswer(question);
+    const answer = await getCampusAiAnswer(question, event.source?.userId || undefined);
     await replyToLine(
       event.replyToken,
       answer,
