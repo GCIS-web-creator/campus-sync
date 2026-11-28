@@ -16,12 +16,20 @@ import {
   type CityUniforms,
 } from '@/components/planet-world/city-shaders';
 import { makeCityProps } from '@/components/planet-world/city-props';
+import { makeSkyTone } from '@/components/planet-world/ground/tone';
+import type { PlanetSky } from '@/lib/planet-ground-climate';
 import { CITY_VIEWPOINT, buildCityLayout, type CityShape } from '@/lib/planet-city';
 
-type Props = { planetId: string; planetName: string; atmosphereColor: string; stage: number; onBack: () => void };
+type Props = {
+  planetId: string; planetName: string; atmosphereColor: string; stage: number; onBack: () => void;
+  /** Shown beside the planet name. */
+  title?: string;
+  /** Planet motif for the sky; omit to keep the standard colours. */
+  sky?: PlanetSky;
+};
 type Mood = 'neon' | 'green';
 
-export default function CityGroundView({ planetId, planetName, atmosphereColor, stage, onBack }: Props) {
+export default function CityGroundView({ planetId, planetName, atmosphereColor, stage, onBack, title = '近未来都市', sky: planetSky = null }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const moodRef = useRef<Mood>('neon');
   const [mood, setMood] = useState<Mood>('neon');
@@ -54,15 +62,20 @@ export default function CityGroundView({ planetId, planetName, atmosphereColor, 
     const accentA = new THREE.Color(number % 3 === 0 ? '#ff3d8a' : number % 3 === 1 ? '#ff35d0' : '#b44cff');
     const accentB = new THREE.Color(number % 2 ? '#22d8ff' : '#2f8bff');
     const accentC = tint.clone().lerp(new THREE.Color('#7a5cff'), 0.35);
-    const nightHaze = new THREE.Color('#0c1048').lerp(tint, 0.12);
-    const nightLow = new THREE.Color('#2a1260').lerp(tint, 0.18);
-    const dayHaze = new THREE.Color('#9cc8ea').lerp(tint, 0.2);
-    const dayLow = new THREE.Color('#d4e8ee').lerp(tint, 0.15);
+    const tone = makeSkyTone(planetSky);
+    const nightHaze = tone(new THREE.Color('#0c1048').lerp(tint, 0.12), 0.55);
+    const nightLow = tone(new THREE.Color('#2a1260').lerp(tint, 0.18), 0.1);
+    const dayHaze = tone(new THREE.Color('#9cc8ea').lerp(tint, 0.2), 0.2);
+    const dayLow = tone(new THREE.Color('#d4e8ee').lerp(tint, 0.15), 0);
     const uniforms: CityUniforms = {
       uTime: { value: 0 },
       uDay: { value: 0 },
       uHaze: { value: nightHaze.clone() },
       uHazeLow: { value: nightLow.clone() },
+      uSkyNightMid: { value: tone(new THREE.Color().setRGB(0.012, 0.02, 0.085), 0.7) },
+      uSkyNightTop: { value: tone(new THREE.Color().setRGB(0.002, 0.003, 0.018), 1) },
+      uSkyDayLow: { value: tone(new THREE.Color().setRGB(0.62, 0.82, 0.95), 0.1) },
+      uSkyDayTop: { value: tone(new THREE.Color().setRGB(0.05, 0.27, 0.72), 1) },
       uSunDirection: { value: new THREE.Vector3(0.45, 0.6, 0.35).normalize() },
       uAccentA: { value: accentA },
       uAccentB: { value: accentB },
@@ -274,17 +287,17 @@ export default function CityGroundView({ planetId, planetName, atmosphereColor, 
       renderer.dispose();
       if (canvas.parentElement === mount) mount.removeChild(canvas);
     };
-  }, [planetId, atmosphereColor, stage]);
+  }, [planetId, atmosphereColor, stage, planetSky]);
 
   const choose = (next: Mood) => { moodRef.current = next; setMood(next); };
   return (
     <div className="absolute inset-0 z-20 overflow-hidden bg-[#070a24] text-white">
-      <div ref={mountRef} className="absolute inset-0" aria-label={planetName + 'の近未来都市を地上から見上げる3D景観'} />
+      <div ref={mountRef} className="absolute inset-0" data-ground-stage={stage} aria-label={planetName + 'の近未来都市を地上から見上げる3D景観'} />
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, transparent 58%, rgba(4,2,20,.42) 100%)' }} />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
         <div className="rounded-xl border border-cyan-200/20 bg-slate-950/55 px-3 py-2 backdrop-blur-md">
           <p className="text-[9px] font-black tracking-[.2em] text-cyan-200">CITY STREET VIEW</p>
-          <p className="mt-0.5 text-xs font-bold">{planetName} · 近未来都市</p>
+          <p className="mt-0.5 text-xs font-bold">{planetName} · {title}</p>
           <p className="mt-0.5 text-[9px] text-slate-300">文明 Stage {stage}</p>
         </div>
         <button type="button" onClick={onBack} className="pointer-events-auto rounded-xl border border-white/20 bg-slate-950/65 px-3 py-2 text-[10px] font-bold backdrop-blur-md">惑星視点へ戻る</button>

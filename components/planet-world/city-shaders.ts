@@ -7,6 +7,10 @@ export type CityUniforms = {
   uDay: { value: number };
   uHaze: { value: THREE.Color };
   uHazeLow: { value: THREE.Color };
+  uSkyNightMid: { value: THREE.Color };
+  uSkyNightTop: { value: THREE.Color };
+  uSkyDayLow: { value: THREE.Color };
+  uSkyDayTop: { value: THREE.Color };
   uSunDirection: { value: THREE.Vector3 };
   uAccentA: { value: THREE.Color };
   uAccentB: { value: THREE.Color };
@@ -197,6 +201,7 @@ export function makeSkyMaterial(uniforms: CityUniforms) {
       uniform vec3 uSunDirection;
       uniform vec3 uAccentA;
       uniform vec3 uAccentB;
+      uniform vec3 uSkyNightMid, uSkyNightTop, uSkyDayLow, uSkyDayTop;
       varying vec3 vDirection;
       ${NOISE}
       void main() {
@@ -207,14 +212,14 @@ export function makeSkyMaterial(uniforms: CityUniforms) {
         float wisps = fbm(plane * 4.1 - vec2(uTime * 0.011, 3.0));
         float cover = smoothstep(0.46, 0.82, cloud * 0.75 + wisps * 0.35);
 
-        vec3 night = mix(uHazeLow * 1.25, vec3(0.012, 0.02, 0.085), smoothstep(0.0, 0.55, up));
-        night = mix(night, vec3(0.002, 0.003, 0.018), smoothstep(0.45, 1.0, up));
+        vec3 night = mix(uHazeLow * 1.25, uSkyNightMid, smoothstep(0.0, 0.55, up));
+        night = mix(night, uSkyNightTop, smoothstep(0.45, 1.0, up));
         vec3 lit = mix(uAccentA, uAccentB, fbm(plane * 0.7)) * 0.1 * (1.0 - up) + vec3(0.025, 0.035, 0.11);
         night = mix(night, lit, cover * 0.75);
         vec2 starCell = floor(d.xz / (abs(d.y) + 0.35) * 520.0);
         night += vec3(step(0.9975, hash21(starCell))) * hash21(starCell + 5.0) * (1.0 - cover) * smoothstep(0.2, 0.6, up);
 
-        vec3 day = mix(vec3(0.62, 0.82, 0.95), vec3(0.05, 0.27, 0.72), pow(max(up, 1e-5), 0.62));
+        vec3 day = mix(uSkyDayLow, uSkyDayTop, pow(max(up, 1e-5), 0.62));
         day = mix(day, vec3(1.0), cover * 0.82 * smoothstep(0.0, 0.14, up));
         float sun = max(dot(d, uSunDirection), 0.0);
         day += vec3(1.0, 0.86, 0.6) * (pow(sun, 60.0) * 0.5 + smoothstep(0.9993, 0.9997, sun) * 3.0);

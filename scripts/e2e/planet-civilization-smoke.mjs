@@ -286,11 +286,10 @@ try {
   // Exercise the street-level city view and the star-voyage purchase flow.
   await page.getByRole('button', { name: '地上視点', exact: true }).click();
   await page.getByText(/文明 Stage 1/).waitFor({ state: 'visible', timeout: 15000 });
-  await page.locator('[aria-label$="の近未来都市を地上から見上げる3D景観"][data-ready="true"]').waitFor({ timeout: 90000 });
-  // The dense city renders slowly on the software GPU used in CI.
-  for (const name of ['昼 · グリーン', '夜 · ネオン', '惑星視点へ戻る']) {
-    await page.getByRole('button', { name, exact: true }).click({ timeout: 120000 });
-  }
+  // The mock planet is at stage 1, so the village scene is shown.
+  await page.locator('[data-ground-stage="1"][aria-label$="の集落時代を地上から眺める3D景観"][data-ready="true"]').waitFor({ timeout: 90000 });
+  // Detailed scenes render slowly on the software GPU used in CI.
+  await page.getByRole('button', { name: '惑星視点へ戻る', exact: true }).click({ timeout: 120000 });
   await page.getByRole('button', { name: /星系旅行 · 30MP/ }).click();
   await page.getByRole('heading', { name: '星系周遊航行', exact: true }).waitFor({ state: 'visible' });
   await page.getByText(/地表2,500km上空/).first().waitFor({ state: 'visible' });
